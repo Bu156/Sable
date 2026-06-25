@@ -1,5 +1,5 @@
 import type { CryptoCallbacks, MatrixClient } from '$types/matrix-sdk';
-import { createClient, IndexedDBStore, IndexedDBCryptoStore, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
+import { createClient, IndexedDBStore, IndexedDBCryptoStore } from '$types/matrix-sdk';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, Sessions, SessionStoreName } from '$state/sessions';
@@ -30,24 +30,16 @@ function installStartupFetchRoomEventPatch(mx: MatrixClient, slidingSyncManager:
 
   const mxWritable = mx as MatrixClientWithWritableFetchRoomEvent;
   const origFetchRoomEvent = mx.fetchRoomEvent.bind(mx);
-  let restored = false;
 
   const restore = () => {
-    if (restored) return;
-    restored = true;
     fetchRoomEventStartupCleanupByClient.delete(mx);
     mxWritable.fetchRoomEvent = origFetchRoomEvent;
-    slidingSyncManager.slidingSync.removeListener(SlidingSyncEvent.Lifecycle, onLifecycle);
-  };
-
-  const onLifecycle = (state: SlidingSyncState) => {
-    if (state === SlidingSyncState.Complete) {
-      restore();
-    }
   };
 
   mxWritable.fetchRoomEvent = (roomId: string, eventId: string) => {
-    if (restored) return origFetchRoomEvent(roomId, eventId);
+    if (slidingSyncManager.isRoomActive(roomId)) {
+      return origFetchRoomEvent(roomId, eventId);
+    }
     const cachedEvent = mx.getRoom(roomId)?.findEventById(eventId);
     const payload: FetchRoomEventResult = cachedEvent?.event ?? {
       event_id: eventId,
@@ -56,7 +48,6 @@ function installStartupFetchRoomEventPatch(mx: MatrixClient, slidingSyncManager:
     return Promise.resolve(payload);
   };
 
-  slidingSyncManager.slidingSync.on(SlidingSyncEvent.Lifecycle, onLifecycle);
   fetchRoomEventStartupCleanupByClient.set(mx, restore);
 }
 

@@ -592,6 +592,10 @@ export class SlidingSyncManager {
     });
   }
 
+  public isRoomActive(roomId: string): boolean {
+    return this.activeRoomSubscriptions.has(roomId);
+  }
+
   public subscribeToRoom(roomId: string): void {
     if (this.disposed) return;
     const room = this.mx.getRoom(roomId);
