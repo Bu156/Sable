@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomEventHandlerMap } from '$types/matrix-sdk';
+import { getPresenceSyncManager, getSlidingSyncManager } from '$client/initMatrix';
 import {
   MatrixEvent,
   MatrixEventEvent,
@@ -853,6 +854,8 @@ function PresenceFeature() {
     // Classic sync / MSC4186 presence: set_presence query param on every /sync poll.
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
     mx.setSyncPresence(sendPresence ? undefined : SetPresence.Offline);
+    getSlidingSyncManager(mx)?.setPresenceEnabled(sendPresence);
+    getPresenceSyncManager(mx)?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
 
   return null;

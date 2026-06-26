@@ -12,10 +12,12 @@ import { pushSessionToSW } from '../sw-session';
 import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncConfig, SlidingSyncDiagnostics } from './slidingSync';
 import { SlidingSyncManager } from './slidingSync';
+import { PresenceSyncManager } from './presenceSync';
 
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
 const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
+const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
 const SLIDING_SYNC_POLL_TIMEOUT_MS = 20000;
 
 type FetchRoomEventResult = Awaited<ReturnType<MatrixClient['fetchRoomEvent']>>;
@@ -25,7 +27,10 @@ type MatrixClientWithWritableFetchRoomEvent = MatrixClient & {
 
 const fetchRoomEventStartupCleanupByClient = new WeakMap<MatrixClient, () => void>();
 
-function installStartupFetchRoomEventPatch(mx: MatrixClient, slidingSyncManager: SlidingSyncManager): void {
+function installStartupFetchRoomEventPatch(
+  mx: MatrixClient,
+  slidingSyncManager: SlidingSyncManager
+): void {
   fetchRoomEventStartupCleanupByClient.get(mx)?.();
 
   const mxWritable = mx as MatrixClientWithWritableFetchRoomEvent;
@@ -339,12 +344,23 @@ const disposeSlidingSync = (mx: MatrixClient): void => {
   slidingSyncByClient.delete(mx);
 };
 
+const disposePresenceSync = (mx: MatrixClient): void => {
+  const manager = presenceSyncByClient.get(mx);
+  if (!manager) return;
+  manager.dispose();
+  presenceSyncByClient.delete(mx);
+};
+
 export const getSlidingSyncManager = (mx: MatrixClient): SlidingSyncManager | undefined =>
   slidingSyncByClient.get(mx);
+
+export const getPresenceSyncManager = (mx: MatrixClient): PresenceSyncManager | undefined =>
+  presenceSyncByClient.get(mx);
 
 export const startClient = async (mx: MatrixClient, config?: StartClientConfig): Promise<void> => {
   debugLog.info('sync', 'Starting Matrix client', { userId: mx.getUserId() });
   disposeSlidingSync(mx);
+  disposePresenceSync(mx);
   const slidingConfig = config?.slidingSync;
   const proxyBaseUrl = slidingConfig?.proxyBaseUrl ?? config?.baseUrl ?? mx.baseUrl;
 
@@ -353,9 +369,14 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     includeInviteList: true,
     pollTimeoutMs: slidingConfig?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
   });
-  
+
+  const presenceManager = new PresenceSyncManager(mx);
+  presenceSyncByClient.set(mx, presenceManager);
+
+  presenceManager.start();
+
   installStartupFetchRoomEventPatch(mx, manager);
-  
+
   manager.attach();
   slidingSyncByClient.set(mx, manager);
 

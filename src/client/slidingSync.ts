@@ -351,6 +351,11 @@ export class SlidingSyncManager {
     };
   }
 
+  public setPresenceEnabled(): void {
+    // We do nothing because PresenceExtension doesn't exist?
+    // Idk someone else fix this in the future
+  }
+
   public attach(): void {
     debugLog.info('sync', 'Attaching sliding sync listeners', {
       proxyBaseUrl: this.proxyBaseUrl,
