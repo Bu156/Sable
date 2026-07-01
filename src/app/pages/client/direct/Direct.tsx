@@ -387,7 +387,7 @@ export function Direct() {
           setCurWidth={setCurWidth}
           sidebarWidth={roomSidebarWidth}
           setSidebarWidth={setRoomSidebarWidth}
-          instep={80}
+          instep={50}
           outstep={190}
           minValue={50}
           maxValue={500}

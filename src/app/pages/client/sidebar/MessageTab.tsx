@@ -3,15 +3,18 @@ import { getPhosphorIconSize } from '$components/icons/phosphor';
 import { matchPath, useNavigate } from 'react-router-dom';
 import { HOME_PATH, SETTINGS_PATH } from '$pages/paths';
 import { ChatTextIcon } from '@phosphor-icons/react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { searchModalAtom } from '$state/searchModal';
 import { useInboxSelected } from '$hooks/router/useInbox';
 import { Box, color, Text } from 'folds';
 import { useNavigateSelected } from '$hooks/router/useNavigateSelected';
 import { useProfileSelected } from '$hooks/router/useProfileSelected';
+import { getSpacePath } from '$pages/pathUtils';
+import { lastVisitedSpaceIdAtom } from '$state/room/lastSpace';
 
 export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?: boolean }) {
   const navigate = useNavigate();
+  const lastSpaceId = useAtomValue(lastVisitedSpaceIdAtom);
   const [searchSelected] = useAtom(searchModalAtom);
   const navigateRouteActive = useNavigateSelected();
   const profileRouteActive = useProfileSelected();
@@ -23,7 +26,14 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
     profileRouteActive ||
     inboxSelected
   );
-  const openSettings = () => navigate(HOME_PATH);
+  const onBack = () => {
+    if (!lastSpaceId) {
+      navigate(HOME_PATH);
+      return;
+    }
+
+    navigate(getSpacePath(lastSpaceId));
+  };
 
   return (
     <SidebarItem active={opened} isBottom={isBottom}>
@@ -34,7 +44,7 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
               as="button"
               ref={triggerRef}
               outlined={!isMobile}
-              onClick={openSettings}
+              onClick={onBack}
               size={'400'}
             >
               <ChatTextIcon
