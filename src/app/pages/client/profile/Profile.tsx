@@ -1,6 +1,6 @@
-import { Box, Scroll, toRem, Text, color, config, Menu, Icon, Icons, Line, MenuItem } from 'folds';
+import { Box, toRem, Text, color, config, Menu, Icon, Icons, Line, MenuItem } from 'folds';
 import { SquaresFour, sizedIcon } from '$components/icons/phosphor';
-import { Page, PageHeroSection, PageNav, PageNavHeader } from '$components/page';
+import { PageNav, PageNavHeader } from '$components/page';
 import { useEffect, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useSetting } from '$state/hooks/settings';
@@ -16,11 +16,13 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useUserPresence } from '$hooks/useUserPresence';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useOpenSettings } from '$features/settings';
+import { UserQuickTools } from '../sidebar/UserQuickTools';
 
 export function ProfileMobile() {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const openSettings = useOpenSettings();
+  const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
 
   const userId = mx.getUserId() ?? '';
   const profile = useUserProfile(userId);
@@ -86,48 +88,46 @@ export function ProfileMobile() {
               setAnnouncement={setIsResizingSidebar}
             />
           </PageNav>
+          {!oldSidebar && !isMobile && <UserQuickTools width={curWidth + 66} compact={false} />}
         </Box>
       )}
-      <Page>
-        <Box grow="Yes" style={{ width: '100%', padding: '0' }}>
-          <Scroll hideTrack visibility="Hover" style={{ width: '100%', padding: '0' }}>
-            <PageHeroSection style={{ width: '100%', padding: '0' }}>
-              <Box direction="Column" gap="0" alignItems="Center" style={{ width: '100%' }}>
-                <Menu style={{ minWidth: '100%' }}>
-                  <UserHero
-                    userId={userId}
-                    avatarUrl={heroAvatarUrl}
-                    bannerUrl={heroBannerUrl}
-                    presence={presence}
-                    showColor={false}
-                    allowEditing={true}
-                  />
+      <Box
+        direction="Column"
+        gap="0"
+        alignItems="Center"
+        style={{ width: '100%', minWidth: '100%' }}
+      >
+        <Menu style={{ minWidth: '100%', overflowY: 'scroll' }}>
+          <UserHero
+            userId={userId}
+            avatarUrl={heroAvatarUrl}
+            bannerUrl={heroBannerUrl}
+            presence={presence}
+            showColor={false}
+            allowEditing={true}
+          />
 
-                  <Box style={{ padding: `0 ${config.space.S200} ${config.space.S200}` }}>
-                    <GlobalUserHeroName displayName={displayName} userId={userId} />
-                  </Box>
-                  <Line variant="Surface" size="300" />
-                  <PresenceMenuOption initialOpen />
-                  <AccountMenuOption />
+          <Box style={{ padding: `0 ${config.space.S200} ${config.space.S200}` }}>
+            <GlobalUserHeroName displayName={displayName} userId={userId} />
+          </Box>
+          <Line variant="Surface" size="300" />
+          <PresenceMenuOption initialOpen isMobile />
+          <AccountMenuOption isMobile />
 
-                  <Line variant="Surface" size="300" />
+          <Line variant="Surface" size="300" />
 
-                  <MenuItem
-                    size="300"
-                    radii="300"
-                    before={<Icon size="100" src={Icons.Setting} />}
-                    onClick={() => openSettings()}
-                  >
-                    <Text style={{ flexGrow: 1 }} size="T300">
-                      Settings
-                    </Text>
-                  </MenuItem>
-                </Menu>
-              </Box>
-            </PageHeroSection>
-          </Scroll>
-        </Box>
-      </Page>
+          <MenuItem
+            size="300"
+            radii="300"
+            before={<Icon size="100" src={Icons.Setting} />}
+            onClick={() => openSettings()}
+          >
+            <Text style={{ flexGrow: 1 }} size="T300">
+              Settings
+            </Text>
+          </MenuItem>
+        </Menu>
+      </Box>
     </>
   );
 }

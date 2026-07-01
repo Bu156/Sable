@@ -20,8 +20,6 @@ import {
   SPACE_ROOM_PATH,
 } from '$pages/paths';
 import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
-import { lastVisitedSpaceIdAtom } from '$state/room/lastSpace';
-import { useSpaceOptionally } from '$hooks/useSpace';
 
 type BackRouteHandlerProps = {
   children: (onBack: () => void) => ReactNode;
@@ -30,8 +28,6 @@ export function BackRouteHandler({ children }: BackRouteHandlerProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const setLastRoomId = useSetAtom(lastVisitedRoomIdAtom);
-  const setLastSpaceId = useSetAtom(lastVisitedSpaceIdAtom);
-  const space = useSpaceOptionally();
 
   const goBack = useCallback(() => {
     const roomPaths = [HOME_ROOM_PATH, DIRECT_ROOM_PATH, SPACE_ROOM_PATH];
@@ -43,7 +39,6 @@ export function BackRouteHandler({ children }: BackRouteHandlerProps) {
     const currentRoomIdOrAlias = roomMatch?.params.roomIdOrAlias;
     if (currentRoomIdOrAlias) {
       setLastRoomId(decodeURIComponent(currentRoomIdOrAlias));
-      if (space) setLastSpaceId(space.roomId);
     }
 
     if (
@@ -113,7 +108,7 @@ export function BackRouteHandler({ children }: BackRouteHandlerProps) {
     ) {
       navigate(getInboxPath());
     }
-  }, [navigate, location, setLastRoomId, setLastSpaceId, space]);
+  }, [navigate, location, setLastRoomId]);
 
   return children(goBack);
 }

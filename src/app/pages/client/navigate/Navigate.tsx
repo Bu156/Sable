@@ -17,11 +17,13 @@ import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
 import { ListMagnifyingGlassIcon } from '@phosphor-icons/react';
 import { RoomSearchModal } from '$features/navigate';
+import { UserQuickTools } from '../sidebar/UserQuickTools';
 
 export function Navigate() {
   const setIsResizingSidebar = useSetAtom(isResizingSidebarAtom);
   const [roomSidebarWidth, setRoomSidebarWidth] = useSetting(settingsAtom, 'roomSidebarWidth');
   const [curWidth, setCurWidth] = useState(roomSidebarWidth);
+  const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
 
   useEffect(() => {
     setCurWidth(roomSidebarWidth);
@@ -68,6 +70,7 @@ export function Navigate() {
               setAnnouncement={setIsResizingSidebar}
             />
           </PageNav>
+          {!oldSidebar && !isMobile && <UserQuickTools width={curWidth + 66} compact={false} />}
         </Box>
       )}
       <Page>
@@ -76,8 +79,9 @@ export function Navigate() {
             <PageContent style={{ height: '100%', paddingBottom: '0' }}>
               <PageContentCenter style={{ height: '100%' }}>
                 <PageHeroSection style={{ height: '100%', paddingBottom: '0' }}>
-                  <Box direction="Column" gap="700" alignItems="Center" style={{ height: '100%' }}>
+                  <Box direction="Column" gap="100" alignItems="Center" style={{ height: '100%' }}>
                     {sizedIcon(ListMagnifyingGlassIcon, '600')}
+                    <Text size="H1"> Navigate </Text>
                     <RoomSearchModal />
                   </Box>
                 </PageHeroSection>

@@ -44,7 +44,6 @@ import { initClient, logoutClient, stopClient } from '$client/initMatrix';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { useFocusWithin, useHover } from 'react-aria';
-import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { setUserPresence } from '$utils/presence';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
@@ -141,7 +140,7 @@ function AccountRow({
   );
 }
 
-export function AccountMenuOption() {
+export function AccountMenuOption({ isMobile }: { isMobile: boolean }) {
   const mx = useMatrixClient();
   const navigate = useNavigate();
   const sessions = useAtomValue(sessionsAtom);
@@ -150,8 +149,6 @@ export function AccountMenuOption() {
   const useAuthentication = useMediaAuthentication();
   const backgroundUnreads = useAtomValue(backgroundUnreadCountsAtom);
   const setBackgroundUnreads = useSetAtom(backgroundUnreadCountsAtom);
-  const screenSize = useScreenSizeContext();
-  const isMobile = screenSize === ScreenSize.Mobile;
 
   const [isOpen, setIsOpen] = useState(false);
   const { hoverProps } = useHover({
@@ -378,14 +375,18 @@ const PresenceOptions: Array<{ value: Presence; label: string }> = [
   { value: Presence.Offline, label: 'Offline' },
 ];
 
-export function PresenceMenuOption({ initialOpen }: { initialOpen: boolean }) {
+export function PresenceMenuOption({
+  initialOpen,
+  isMobile,
+}: {
+  initialOpen: boolean;
+  isMobile: boolean;
+}) {
   const mx = useMatrixClient();
   const [sendPresence] = useSetting(settingsAtom, 'sendPresence');
 
   const userId = mx.getUserId() ?? '';
   const presence = useUserPresence(userId);
-  const screenSize = useScreenSizeContext();
-  const isMobile = screenSize === ScreenSize.Mobile;
   const currentPresence = presence?.presence ?? Presence.Online;
 
   const [isOpen, setIsOpen] = useState(initialOpen);
@@ -651,10 +652,10 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                     </Text>
                   </MenuItem>
 
-                  <PresenceMenuOption initialOpen={false} />
+                  <PresenceMenuOption initialOpen={false} isMobile={isMobile ?? false} />
                 </Box>
 
-                <AccountMenuOption />
+                <AccountMenuOption isMobile={isMobile ?? false} />
 
                 <Line variant="Surface" size="300" />
 
