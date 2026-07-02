@@ -80,7 +80,9 @@ export class PresenceSyncManager {
               return;
             const presenceEvent = mapper(rawEvent);
 
-            const userId = presenceEvent.getSender();
+            const userId =
+              presenceEvent.getSender() ??
+              (presenceEvent.getContent().user_id as string | undefined);
             if (!userId) return;
 
             let user = this.mx.store.getUser(userId);

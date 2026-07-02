@@ -3,6 +3,7 @@ import type {
   MSC3575List,
   MSC3575RoomData,
   MSC3575RoomSubscription,
+  MSC3575SlidingSyncResponse,
 } from '$types/matrix-sdk';
 import {
   KnownMembership,
@@ -14,11 +15,7 @@ import {
   MSC3575_STATE_KEY_LAZY,
   MSC3575_STATE_KEY_ME,
   EventType,
-  User,
-  ClientEvent,
 } from '$types/matrix-sdk';
-import { ExtensionState } from 'matrix-js-sdk/lib/sliding-sync';
-import type { Extension } from 'matrix-js-sdk/lib/sliding-sync';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import { CustomStateEvent } from '$types/matrix/room';
@@ -29,7 +26,6 @@ const debugLog = createDebugLogger('slidingSync');
 
 export const LIST_JOINED = 'joined';
 export const LIST_INVITES = 'invites';
-export const LIST_DMS = 'dms';
 export const LIST_SEARCH = 'search';
 export const LIST_ROOM_SEARCH = 'room_search';
 export const LIST_SPACE = 'space';
@@ -118,7 +114,7 @@ const ACTIVE_ROOM_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
 
 const buildEncryptedSubscription = (timelineLimit: number): MSC3575RoomSubscription => ({
   timeline_limit: timelineLimit,
-  required_state: ACTIVE_ROOM_REQUIRED_STATE,
+  required_state: [[MSC3575_WILDCARD, MSC3575_WILDCARD]],
 });
 
 const buildUnencryptedSubscription = (timelineLimit: number): MSC3575RoomSubscription => ({
@@ -150,14 +146,6 @@ const buildLists = (pageSize: number, includeInviteList: boolean): Map<string, M
     });
   }
 
-  lists.set(LIST_DMS, {
-    ranges: [[0, Math.max(0, initialRange - 1)]],
-    sort: LIST_SORT_ORDER,
-    timeline_limit: LIST_TIMELINE_LIMIT,
-    required_state: listRequiredState,
-    filters: { is_dm: true },
-  });
-
   return lists;
 };
 
@@ -179,7 +167,11 @@ export class SlidingSyncManager {
 
   private readonly roomTimelineLimit: number;
 
-  private readonly onLifecycle: (state: SlidingSyncState, resp: unknown, err?: Error) => void;
+  private readonly onLifecycle: (
+    state: SlidingSyncState,
+    resp: MSC3575SlidingSyncResponse | null,
+    err?: Error
+  ) => void;
 
   private readonly onMembershipLeave: (
     event: unknown,
@@ -351,11 +343,6 @@ export class SlidingSyncManager {
     };
   }
 
-  public setPresenceEnabled(): void {
-    // We do nothing because PresenceExtension doesn't exist?
-    // Idk someone else fix this in the future
-  }
-
   public attach(): void {
     debugLog.info('sync', 'Attaching sliding sync listeners', {
       proxyBaseUrl: this.proxyBaseUrl,
@@ -371,8 +358,6 @@ export class SlidingSyncManager {
       op: 'matrix.sync',
       attributes: { 'sync.transport': 'sliding', 'sync.proxy': this.proxyBaseUrl },
     });
-
-    this.slidingSync.registerExtension(new PresenceExtension(this.mx, this));
 
     this.slidingSync.on(SlidingSyncEvent.Lifecycle, this.onLifecycle);
     this.mx.on(RoomMemberEvent.Membership, this.onMembershipLeave);
@@ -457,8 +442,7 @@ export class SlidingSyncManager {
 
       allListsComplete = false;
 
-      const chunkSize = 100;
-      const desiredEnd = Math.min(currentEnd + chunkSize, maxEnd);
+      const desiredEnd = maxEnd;
 
       if (desiredEnd === currentEnd) {
         expansionDetails[key] = {
@@ -679,64 +663,6 @@ export class SlidingSyncManager {
     debugLog.info('sync', 'Room subscription removed (sliding)', {
       remainingSubscriptions: this.activeRoomSubscriptions.size,
       syncCycle: this.syncCount,
-    });
-  }
-}
-
-export type ExtensionPresenceRequest = {
-  enabled: boolean;
-  lists?: string[];
-};
-
-export type ExtensionPresenceResponse = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  events?: any[];
-};
-
-class PresenceExtension implements Extension<ExtensionPresenceRequest, ExtensionPresenceResponse> {
-  public constructor(
-    private readonly client: MatrixClient,
-    private readonly manager: SlidingSyncManager
-  ) {}
-
-  public name(): string {
-    return 'presence';
-  }
-
-  public when(): ExtensionState {
-    return ExtensionState.PostProcess;
-  }
-
-  public async onRequest(): Promise<ExtensionPresenceRequest> {
-    const lists: string[] = [];
-    if (this.manager.slidingSync.getListParams(LIST_JOINED)) lists.push(LIST_JOINED);
-    if (this.manager.slidingSync.getListParams(LIST_DMS)) lists.push(LIST_DMS);
-
-    return {
-      enabled: true,
-      lists: lists.length > 0 ? lists : undefined,
-    };
-  }
-
-  public async onResponse(data: ExtensionPresenceResponse): Promise<void> {
-    if (!data?.events || !Array.isArray(data.events)) {
-      return;
-    }
-
-    const mapper = this.client.getEventMapper();
-    data.events.forEach((rawEvent) => {
-      if (rawEvent.type !== 'm.presence') return;
-      const presenceEvent = mapper(rawEvent);
-
-      let user = this.client.store.getUser(presenceEvent.getContent().user_id);
-      if (user) {
-        user.setPresenceEvent(presenceEvent);
-      } else {
-        user = User.createUser(presenceEvent.getContent().user_id, this.client);
-        user.setPresenceEvent(presenceEvent);
-        this.client.store.storeUser(user);
-      }
-      this.client.emit(ClientEvent.Event, presenceEvent);
     });
   }
 }

@@ -1,4 +1,9 @@
-import type { CryptoCallbacks, MatrixClient } from '$types/matrix-sdk';
+import type {
+  CryptoCallbacks,
+  MatrixClient,
+  MSC3575SlidingSyncRequest,
+  MSC3575SlidingSyncResponse,
+} from '$types/matrix-sdk';
 import { createClient, IndexedDBStore, IndexedDBCryptoStore } from '$types/matrix-sdk';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
@@ -26,6 +31,42 @@ type MatrixClientWithWritableFetchRoomEvent = MatrixClient & {
 };
 
 const fetchRoomEventStartupCleanupByClient = new WeakMap<MatrixClient, () => void>();
+
+const slidingSyncConnIdCleanupByClient = new WeakMap<MatrixClient, () => void>();
+
+type SlidingSyncMethod = (
+  reqBody: MSC3575SlidingSyncRequest,
+  proxyBaseUrl?: string,
+  abortSignal?: AbortSignal
+) => Promise<MSC3575SlidingSyncResponse>;
+
+type MatrixClientWithWritableSlidingSync = MatrixClient & {
+  slidingSync: SlidingSyncMethod;
+};
+
+type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & { conn_id?: string };
+
+const SLIDING_SYNC_CONN_ID = 'sable-main';
+
+function installSlidingSyncConnId(mx: MatrixClient): void {
+  slidingSyncConnIdCleanupByClient.get(mx)?.();
+
+  const mxWritable = mx as MatrixClientWithWritableSlidingSync;
+  const original = mx.slidingSync.bind(mx) as SlidingSyncMethod;
+
+  mxWritable.slidingSync = (reqBody, proxyBaseUrl, abortSignal) => {
+    const req = reqBody as SlidingSyncRequestWithConnId;
+    if (req.conn_id === undefined) {
+      req.conn_id = SLIDING_SYNC_CONN_ID;
+    }
+    return original(reqBody, proxyBaseUrl, abortSignal);
+  };
+
+  slidingSyncConnIdCleanupByClient.set(mx, () => {
+    slidingSyncConnIdCleanupByClient.delete(mx);
+    mxWritable.slidingSync = original;
+  });
+}
 
 function installStartupFetchRoomEventPatch(
   mx: MatrixClient,
@@ -376,6 +417,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
   presenceManager.start();
 
   installStartupFetchRoomEventPatch(mx, manager);
+  installSlidingSyncConnId(mx);
 
   manager.attach();
   slidingSyncByClient.set(mx, manager);
@@ -394,6 +436,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       stack: err instanceof Error ? err.stack : undefined,
     });
     disposeSlidingSync(mx);
+    disposePresenceSync(mx);
     throw err;
   }
 };
@@ -401,7 +444,9 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 export const stopClient = (mx: MatrixClient): void => {
   log.log('stopClient', mx.getUserId());
   debugLog.info('sync', 'Stopping client', { userId: mx.getUserId() });
+  slidingSyncConnIdCleanupByClient.get(mx)?.();
   disposeSlidingSync(mx);
+  disposePresenceSync(mx);
   mx.stopClient();
 };
 
