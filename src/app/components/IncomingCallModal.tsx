@@ -124,14 +124,6 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
       notificationType: incomingCall.notificationType,
       intent: incomingCall.intentRaw,
     });
-    Sentry.addBreadcrumb({
-      category: 'call.signal',
-      message: 'Incoming call answered',
-      data: {
-        roomId: room.roomId,
-        notificationEventId: incomingCall.notificationEventId,
-      },
-    });
     Sentry.metrics.count('sable.call.answered', 1, {
       attributes: {
         type: incomingCall.notificationType,
@@ -155,14 +147,6 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
       action,
       notificationEventId: incomingCall.notificationEventId,
       notificationType: incomingCall.notificationType,
-    });
-    Sentry.addBreadcrumb({
-      category: 'call.signal',
-      message: `Incoming call ${action}`,
-      data: {
-        roomId: room.roomId,
-        notificationEventId: incomingCall.notificationEventId,
-      },
     });
     Sentry.metrics.count(`sable.call.${action}d`, 1, {
       attributes: {
@@ -195,14 +179,6 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
       action,
       notificationEventId: incomingCall.notificationEventId,
       notificationType: incomingCall.notificationType,
-    });
-    Sentry.addBreadcrumb({
-      category: 'call.signal',
-      message: `Incoming call ${action}`,
-      data: {
-        roomId: room.roomId,
-        notificationEventId: incomingCall.notificationEventId,
-      },
     });
     Sentry.metrics.count(`sable.call.${action}d`, 1, {
       attributes: {

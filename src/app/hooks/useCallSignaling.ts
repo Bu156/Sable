@@ -254,15 +254,6 @@ export function useIncomingCallSignaling() {
         notificationType: nextIncomingCall.notificationType,
         intent: nextIncomingCall.intentRaw,
       });
-      Sentry.addBreadcrumb({
-        category: 'call.signal',
-        message: 'Incoming RTC notification',
-        data: {
-          roomId: nextIncomingCall.roomId,
-          notificationType: nextIncomingCall.notificationType,
-          intent: nextIncomingCall.intentRaw,
-        },
-      });
       Sentry.metrics.count('sable.call.incoming.shown', 1, {
         attributes: {
           type: nextIncomingCall.notificationType,
