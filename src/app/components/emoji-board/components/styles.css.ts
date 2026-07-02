@@ -230,9 +230,9 @@ export const GifImg = style({
 });
 
 export const TextLink = style({
-  color: color.Secondary.Main,
+  color: 'var(--tc-link)',
+  cursor: 'pointer',
   ':hover': {
     textDecoration: 'underline',
-    cursor: 'pointer',
   },
 });
