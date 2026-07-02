@@ -109,7 +109,7 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
       : 'Incoming voice call'
     : 'Incoming room call notification';
   const dismissLabel = isDirectRing ? 'Decline' : 'Ignore';
-  const closeLabel = isDirectRing ? 'Close and decline call' : 'Close and ignore notification';
+  const closeLabel = 'Close';
   const showCallerAvatar = incomingCall.isDirect;
   const title = showCallerAvatar ? callerDisplayName : roomName;
   const subtitle = showCallerAvatar ? roomName : callerDisplayName;
@@ -187,11 +187,40 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
     }
   };
 
+  const handleClose = () => {
+    setCallSoundBlocked(false);
+    const action = 'ignore';
+    debugLog.info('call', 'Incoming call dismissed', {
+      roomId: room.roomId,
+      action,
+      notificationEventId: incomingCall.notificationEventId,
+      notificationType: incomingCall.notificationType,
+    });
+    Sentry.addBreadcrumb({
+      category: 'call.signal',
+      message: `Incoming call ${action}`,
+      data: {
+        roomId: room.roomId,
+        notificationEventId: incomingCall.notificationEventId,
+      },
+    });
+    Sentry.metrics.count(`sable.call.${action}d`, 1, {
+      attributes: {
+        type: incomingCall.notificationType,
+        dm: String(incomingCall.isDirect),
+      },
+    });
+
+    setMutedRoomId(room.roomId);
+    void dismissSystemCallNotifications(room.roomId);
+    onClose();
+  };
+
   const handleModalKeyDown = (evt: ReactKeyboardEvent<HTMLDivElement>) => {
     if (evt.key === 'Escape') {
       evt.preventDefault();
       evt.stopPropagation();
-      handleDeclineOrIgnore();
+      handleClose();
       return;
     }
     if (evt.key === 'Enter' && canAnswer) {
@@ -221,7 +250,7 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
         </Box>
         <IconButton
           size="300"
-          onClick={handleDeclineOrIgnore}
+          onClick={handleClose}
           radii="300"
           aria-label={closeLabel}
           title={closeLabel}
