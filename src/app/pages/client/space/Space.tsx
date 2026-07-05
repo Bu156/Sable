@@ -1050,7 +1050,7 @@ export function Space() {
                 })}
                 {getConnectorSVG(hierarchy, virtualizedItems)}
               </NavCategory>
-              <div style={{ height: toRem(40) }} />
+              {!isMobile && <div style={{ height: toRem(40) }} />}
             </Box>
           </PageNavContent>
         </SwipeableOverlayWrapper>

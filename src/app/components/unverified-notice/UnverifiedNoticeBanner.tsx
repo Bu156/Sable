@@ -4,35 +4,42 @@ import * as css from './UnverifiedNoticeBanner.css';
 import { useOpenSettings } from '$features/settings';
 import { ShieldWarningIcon } from '@phosphor-icons/react';
 import { useIsUnverified, useUnverifiedDevices } from '$pages/client/sidebar/UserMenuTab';
-import { atom, useAtom } from 'jotai';
+import { getLocalStorageItem, setLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { useEffect, useState } from 'react';
-
-const dismissedNotice = atom<boolean>(false);
 
 export function UnverifiedNoticeBanner() {
   const openSettings = useOpenSettings();
-  const [isDismissedNotice, setDismissedNotice] = useAtom(dismissedNotice);
 
   const isUnverified = useIsUnverified();
-  const unverifiedDeviceCount = useUnverifiedDevices() ?? 0;
+  const unverifiedDeviceCount = useUnverifiedDevices();
   const hasUnverified =
     isUnverified || (unverifiedDeviceCount !== undefined && unverifiedDeviceCount > 0);
   const [dismissCount, setDismissCount] = useState(unverifiedDeviceCount);
 
+  const [isDismissedNotice, setIsDismissedNotice] = useState(
+    getLocalStorageItem('dismissNotice', false)
+  );
   useEffect(() => {
-    if (unverifiedDeviceCount > 0 && dismissCount < unverifiedDeviceCount)
-      setDismissedNotice(false);
+    if (
+      unverifiedDeviceCount &&
+      dismissCount &&
+      unverifiedDeviceCount > 0 &&
+      dismissCount < unverifiedDeviceCount
+    ) {
+      setLocalStorageItem('dismissNotice', false);
+      setIsDismissedNotice(false);
+    }
     setDismissCount(unverifiedDeviceCount);
-  }, [unverifiedDeviceCount, setDismissedNotice, dismissCount]);
+  }, [unverifiedDeviceCount, dismissCount]);
 
   if (!hasUnverified || isDismissedNotice) return null;
 
   const handleVerify = () => {
     openSettings('devices');
   };
-
   const handleDismiss = () => {
-    setDismissedNotice(true);
+    setLocalStorageItem('dismissNotice', true);
+    setIsDismissedNotice(true);
   };
 
   return (

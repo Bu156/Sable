@@ -34,8 +34,8 @@ export function GlobalModalManager() {
           focusTrapOptions={{
             initialFocus: false,
             onDeactivate: close,
-            allowOutsideClick: (e) => {
-              e.preventDefault();
+            allowOutsideClick: (e: { preventDefault?: () => void }) => {
+              if (e.preventDefault) e.preventDefault();
               close();
               return false;
             },

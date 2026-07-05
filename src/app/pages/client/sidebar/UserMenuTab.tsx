@@ -20,7 +20,7 @@ import {
   config,
   toRem,
 } from 'folds';
-import FocusTrap from 'focus-trap-react';
+import { FocusTrap } from 'focus-trap-react';
 import { SidebarAvatar, SidebarItem, SidebarItemBadge } from '../../../components/sidebar';
 import { UserAvatar } from '../../../components/user-avatar';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -150,7 +150,7 @@ function AccountRow({
   );
 }
 
-export function AccountMenuOption({ isMobile }: { isMobile: boolean }) {
+export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; isRight?: boolean }) {
   const mx = useMatrixClient();
   const navigate = useNavigate();
   const sessions = useAtomValue(sessionsAtom);
@@ -286,7 +286,8 @@ export function AccountMenuOption({ isMobile }: { isMobile: boolean }) {
               : {
                   minWidth: toRem(240),
                   position: 'absolute',
-                  left: '98%',
+                  left: isRight ? undefined : '98%',
+                  right: isRight ? '98%' : undefined,
                   padding: toRem(15),
                   bottom: toRem(-15),
                 }
@@ -389,9 +390,11 @@ const PresenceOptions: Array<{ value: Presence; label: string }> = [
 export function PresenceMenuOption({
   initialOpen,
   isMobile,
+  isRight,
 }: {
   initialOpen: boolean;
   isMobile: boolean;
+  isRight?: boolean;
 }) {
   const mx = useMatrixClient();
   const [sendPresence] = useSetting(settingsAtom, 'sendPresence');
@@ -488,7 +491,8 @@ export function PresenceMenuOption({
               : {
                   minWidth: toRem(240),
                   position: 'absolute',
-                  left: '98%',
+                  left: isRight ? undefined : '98%',
+                  right: isRight ? '98%' : undefined,
                   padding: toRem(15),
                   bottom: toRem(25),
                 }
@@ -751,10 +755,17 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                     </Text>
                   </MenuItem>
 
-                  <PresenceMenuOption initialOpen={false} isMobile={isMobile ?? false} />
+                  <PresenceMenuOption
+                    initialOpen={false}
+                    isMobile={isMobile ?? false}
+                    isRight={(menuAnchor?.x ?? 0) > window.innerWidth / 2}
+                  />
                 </Box>
 
-                <AccountMenuOption isMobile={isMobile ?? false} />
+                <AccountMenuOption
+                  isMobile={isMobile ?? false}
+                  isRight={(menuAnchor?.x ?? 0) > window.innerWidth / 2}
+                />
                 {(oldSidebar || isMobile) && (
                   <>
                     <Line variant="Surface" size="300" />
