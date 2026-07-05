@@ -63,6 +63,7 @@ import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
+import { UnverifiedNoticeBanner } from '$components/unverified-notice';
 
 const pushRelayLog = createDebugLogger('push-relay');
 
@@ -882,6 +883,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <HandleDecryptPushEvent />
       <NotificationBanner />
       <TelemetryConsentBanner />
+      <UnverifiedNoticeBanner />
       <ThemeMigrationBanner />
       <SlidingSyncActiveRoomSubscriber />
       <PresenceFeature />

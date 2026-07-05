@@ -6,7 +6,7 @@ import { stopPropagation } from '$utils/keyboard';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { Sidebar, SidebarContent, SidebarStack } from '$components/sidebar';
-import { DirectTab, DirectDMsList, HomeTab, SpaceTabs, InboxTab, UnverifiedTab } from './sidebar';
+import { DirectTab, DirectDMsList, HomeTab, SpaceTabs, InboxTab } from './sidebar';
 import { CreateTab } from './sidebar/CreateTab';
 import { NavigateTab } from './sidebar/NavigateTab';
 import { SettingsTab } from './sidebar/SettingsTab';
@@ -137,7 +137,6 @@ export function SidebarNav() {
             <>
               {(oldSidebar || isCollapsed) && (
                 <SidebarStack>
-                  <UnverifiedTab />
                   {oldSidebar ? (
                     <>
                       <NavigateTab />

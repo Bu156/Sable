@@ -8,7 +8,11 @@ import { settingsAtom } from '$state/settings';
 import { SidebarResizer } from '../sidebar/SidebarResizer';
 import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
-import { AccountMenuOption, PresenceMenuOption } from '../sidebar/UserMenuTab';
+import {
+  AccountMenuOption,
+  PresenceMenuOption,
+  UnverifiedMenuOption,
+} from '../sidebar/UserMenuTab';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { GlobalUserHeroName, UserHero } from '$components/user-profile/UserHero';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
@@ -110,22 +114,28 @@ export function ProfileMobile() {
           <Box style={{ padding: `0 ${config.space.S200} ${config.space.S200}` }}>
             <GlobalUserHeroName displayName={displayName} userId={userId} />
           </Box>
+
+          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+            <UnverifiedMenuOption />
+          </Box>
           <Line variant="Surface" size="300" />
           <PresenceMenuOption initialOpen isMobile />
           <AccountMenuOption isMobile />
 
           <Line variant="Surface" size="300" />
 
-          <MenuItem
-            size="300"
-            radii="300"
-            before={<Icon size="100" src={Icons.Setting} />}
-            onClick={() => openSettings()}
-          >
-            <Text style={{ flexGrow: 1 }} size="T300">
-              Settings
-            </Text>
-          </MenuItem>
+          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+            <MenuItem
+              size="300"
+              radii="300"
+              before={<Icon size="100" src={Icons.Setting} />}
+              onClick={() => openSettings()}
+            >
+              <Text style={{ flexGrow: 1 }} size="T300">
+                Settings
+              </Text>
+            </MenuItem>
+          </Box>
         </Menu>
       </Box>
     </>
