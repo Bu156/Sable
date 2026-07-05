@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomEventHandlerMap } from '$types/matrix-sdk';
+import { getPresenceSyncManager } from '$client/initMatrix';
 import {
   MatrixEvent,
   MatrixEventEvent,
@@ -53,14 +54,16 @@ import {
 import { mobileOrTablet } from '$utils/user-agent';
 import { createDebugLogger } from '$utils/debugLogger';
 import { useSlidingSyncActiveRoom } from '$hooks/useSlidingSyncActiveRoom';
-import { getSlidingSyncManager } from '$client/initMatrix';
 import { NotificationBanner } from '$components/notification-banner';
 import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
-import { useCallSignaling } from '$hooks/useCallSignaling';
+import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
 import { getBlobCacheStats } from '$hooks/useBlobCache';
 import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
+import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
+import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
+import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
@@ -615,6 +618,13 @@ type ClientNonUIFeaturesProps = {
 export function HandleNotificationClick() {
   const setPending = useSetAtom(pendingNotificationAtom);
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
+  const setIncomingCall = useSetAtom(incomingCallAtom);
+  const mutedRoomId = useAtomValue(mutedCallRoomIdAtom);
+  const [incomingVoiceRoomCallSoundEnabled] = useSetting(
+    settingsAtom,
+    'incomingVoiceRoomCallSoundEnabled'
+  );
+  const mDirects = useAtomValue(mDirectAtom);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -640,11 +650,30 @@ export function HandleNotificationClick() {
 
       if (!roomId) return;
       setPending({ roomId, eventId, targetSessionId: userId });
+
+      const incomingCall = resolveIncomingCallFromNotificationData(
+        data as Record<string, unknown>,
+        mDirects.has(roomId)
+      );
+      if (
+        incomingCall &&
+        !isIncomingCallSuppressed(incomingCall, mutedRoomId, incomingVoiceRoomCallSoundEnabled)
+      ) {
+        setIncomingCall(incomingCall);
+      }
     };
 
     navigator.serviceWorker.addEventListener('message', handleMessage);
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
-  }, [setPending, setActiveSessionId, navigate]);
+  }, [
+    mDirects,
+    mutedRoomId,
+    navigate,
+    setActiveSessionId,
+    setIncomingCall,
+    setPending,
+    incomingVoiceRoomCallSoundEnabled,
+  ]);
 
   return null;
 }
@@ -852,11 +881,10 @@ function PresenceFeature() {
   const [sendPresence] = useSetting(settingsAtom, 'sendPresence');
 
   useEffect(() => {
-    // Classic sync: set_presence query param on every /sync poll.
+    // Classic sync / MSC4186 presence: set_presence query param on every /sync poll.
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
     mx.setSyncPresence(sendPresence ? undefined : SetPresence.Offline);
-    // Sliding sync: enable/disable the presence extension on the next poll.
-    getSlidingSyncManager(mx)?.setPresenceEnabled(sendPresence);
+    getPresenceSyncManager(mx)?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
 
   return null;
@@ -868,7 +896,7 @@ function SettingsSyncFeature() {
 }
 
 export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
-  useCallSignaling();
+  useIncomingCallSignaling();
   return (
     <>
       <SettingsSyncFeature />

@@ -30,6 +30,7 @@ import {
   CREATE_PATH,
   NAVIGATE_PATH,
   PROFILE_PATH,
+  INBOX_BOOKMARKS_PATH,
 } from './paths';
 
 export const joinPathComponent = (path: Path): string => path.pathname + path.search + path.hash;
@@ -162,6 +163,7 @@ export const getProfilePath = (): string => PROFILE_PATH;
 export const getInboxPath = (): string => INBOX_PATH;
 export const getInboxNotificationsPath = (): string => INBOX_NOTIFICATIONS_PATH;
 export const getInboxInvitesPath = (): string => INBOX_INVITES_PATH;
+export const getInboxBookmarksPath = (): string => INBOX_BOOKMARKS_PATH;
 
 export const getSettingsPath = (section?: string, focus?: string): string => {
   const path = trimTrailingSlash(generatePath(SETTINGS_PATH, { section: section ?? null }));

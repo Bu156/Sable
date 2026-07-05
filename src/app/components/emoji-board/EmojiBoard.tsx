@@ -507,7 +507,7 @@ export function EmojiBoard({
   );
 
   const searchedItems = emojiResult?.items.slice(0, 100);
-  const searchedGifItems = gifResult?.items.slice(0, 100) ?? favoriteGifs;
+  const searchedGifItems = gifResult?.items.slice(0, 100) ?? favoriteGifs.toReversed();
 
   function useGifSearch() {
     const [gifs, setGifs] = useState<{
@@ -764,7 +764,7 @@ export function EmojiBoard({
         initialFocus: false,
         onDeactivate: requestClose,
 
-        allowOutsideClick: (e) => {
+        allowOutsideClick: (e: MouseEvent | TouchEvent) => {
           e.preventDefault();
           requestClose();
           return false;

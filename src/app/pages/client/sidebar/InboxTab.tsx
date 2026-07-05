@@ -12,13 +12,19 @@ import {
   getInboxPath,
   joinPathComponent,
 } from '$pages/pathUtils';
-import { useInboxSelected } from '$hooks/router/useInbox';
+import {
+  useInboxBookmarksSelected,
+  useInboxInvitesSelected,
+  useInboxNotificationsSelected,
+  useInboxSelected,
+} from '$hooks/router/useInbox';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useNavToActivePathAtom } from '$state/hooks/navToActivePath';
 import { useInviteCount } from '$hooks/useInviteCount';
-import { getPhosphorIconSize, Tray } from '$components/icons/phosphor';
-import { Text, Box, color } from 'folds';
+import { Text, Box } from 'folds';
 import { searchModalAtom } from '$state/searchModal';
+import { EnvelopeSimple, getPhosphorIconSize, Tray } from '$components/icons/phosphor';
+import { BookmarkIcon, ChatCircleDotsIcon } from '@phosphor-icons/react';
 
 export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?: boolean }) {
   const screenSize = useScreenSizeContext();
@@ -28,6 +34,11 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
   const inviteCount = useInviteCount();
   const isSearch = useAtomValue(searchModalAtom);
   const opened = inboxSelected && !isSearch;
+  const InboxIconSize = getPhosphorIconSize(isBottom ? 'inline' : 'toolbar');
+
+  const notificationsSelected = useInboxNotificationsSelected();
+  const bookmarksSelected = useInboxBookmarksSelected();
+  const invitesSelected = useInboxInvitesSelected();
 
   const handleInboxClick = () => {
     if (screenSize === ScreenSize.Mobile) {
@@ -56,11 +67,13 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
               onClick={handleInboxClick}
               size={'400'}
             >
-              <Tray
-                size={getPhosphorIconSize(isBottom ? 'inline' : 'toolbar')}
-                weight={opened ? 'fill' : 'regular'}
-                color={opened && isMobile ? color.Primary.Main : color.Background.OnContainer}
-              />
+              {(notificationsSelected && (
+                <ChatCircleDotsIcon size={InboxIconSize} weight="fill" />
+              )) ||
+                (bookmarksSelected && <BookmarkIcon size={InboxIconSize} weight="fill" />) ||
+                (invitesSelected && <EnvelopeSimple size={InboxIconSize} weight="fill" />) || (
+                  <Tray size={InboxIconSize} weight={inboxSelected ? 'fill' : 'regular'} />
+                )}
             </SidebarAvatar>
             {isMobile && (
               <Text size="O400" priority="300">
