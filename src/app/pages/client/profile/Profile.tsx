@@ -1,7 +1,21 @@
-import { Box, toRem, Text, color, config, Menu, Icon, Icons, Line, MenuItem } from 'folds';
-import { SquaresFour, sizedIcon } from '$components/icons/phosphor';
+import {
+  Box,
+  toRem,
+  Text,
+  color,
+  config,
+  Menu,
+  Icon,
+  Icons,
+  Line,
+  MenuItem,
+  OverlayBackdrop,
+  Overlay,
+  OverlayCenter,
+} from 'folds';
+import { SquaresFour, menuIcon, settingsNavIcon, sizedIcon } from '$components/icons/phosphor';
 import { PageNav, PageNavHeader } from '$components/page';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
@@ -19,8 +33,14 @@ import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useUserPresence } from '$hooks/useUserPresence';
 import { useUserProfile } from '$hooks/useUserProfile';
-import { useOpenSettings } from '$features/settings';
+import type { SettingsMenuItem } from '$features/settings';
+import { settingsMenuIcons, settingsSections, useOpenSettings } from '$features/settings';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
+import { SignOutIcon } from '@phosphor-icons/react';
+import { UseStateProvider } from '$components/UseStateProvider';
+import { FocusTrap } from 'focus-trap-react';
+import { LogoutDialog } from '$components/LogoutDialog';
+import { stopPropagation } from '$utils/keyboard';
 
 export function ProfileMobile() {
   const mx = useMatrixClient();
@@ -31,6 +51,7 @@ export function ProfileMobile() {
   const userId = mx.getUserId() ?? '';
   const profile = useUserProfile(userId);
   const presence = useUserPresence(userId);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
 
   const displayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
   const heroAvatarUrl = profile.avatarUrl
@@ -53,6 +74,18 @@ export function ProfileMobile() {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
   const hideText = curWidth <= 80 && !isMobile;
+
+  const [showPersona] = useSetting(settingsAtom, 'showPersonaSetting');
+  const menuItems = useMemo<SettingsMenuItem[]>(
+    () =>
+      settingsSections
+        .filter((section) => showPersona || section.id !== 'persona')
+        .map((section) => {
+          const icon = settingsMenuIcons[section.id];
+          return { id: section.id, name: section.label, ...icon };
+        }),
+    [showPersona]
+  );
 
   return (
     <>
@@ -99,9 +132,18 @@ export function ProfileMobile() {
         direction="Column"
         gap="0"
         alignItems="Center"
+        justifyContent="SpaceBetween"
         style={{ width: '100%', minWidth: '100%' }}
       >
-        <Menu style={{ minWidth: '100%', overflowY: 'scroll' }}>
+        <Menu
+          style={{
+            minWidth: '100%',
+            minHeight: '100%',
+            overflowY: 'scroll',
+            border: 'none',
+            background: color.Background.Container,
+          }}
+        >
           <UserHero
             userId={userId}
             avatarUrl={heroAvatarUrl}
@@ -119,7 +161,10 @@ export function ProfileMobile() {
             <UnverifiedMenuOption />
           </Box>
           <Line variant="Surface" size="300" />
-          <PresenceMenuOption initialOpen isMobile />
+
+          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+            <PresenceMenuOption isMobile />
+          </Box>
           <AccountMenuOption isMobile />
 
           <Line variant="Surface" size="300" />
@@ -128,13 +173,73 @@ export function ProfileMobile() {
             <MenuItem
               size="300"
               radii="300"
+              variant="Background"
               before={<Icon size="100" src={Icons.Setting} />}
-              onClick={() => openSettings()}
+              after={
+                <Icon
+                  size="100"
+                  src={isSettingsOpen && isMobile ? Icons.ChevronBottom : Icons.ChevronRight}
+                />
+              }
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
             >
               <Text style={{ flexGrow: 1 }} size="T300">
                 Settings
               </Text>
             </MenuItem>
+            {isSettingsOpen && (
+              <div style={{ paddingLeft: config.space.S100 }}>
+                {menuItems.map((item) => {
+                  const IconComponent = item.icon;
+
+                  return (
+                    <MenuItem
+                      key={item.id}
+                      radii="400"
+                      size="300"
+                      variant="Background"
+                      before={settingsNavIcon(IconComponent, false)}
+                      onClick={() => openSettings(item.id)}
+                    >
+                      <Text size="T300" truncate>
+                        {item.name}
+                      </Text>
+                    </MenuItem>
+                  );
+                })}
+
+                <UseStateProvider initial={false}>
+                  {(logout, setLogout) => (
+                    <>
+                      <MenuItem
+                        size="300"
+                        variant="Background"
+                        style={{ color: color.Critical.OnContainer }}
+                        before={menuIcon(SignOutIcon)}
+                        onClick={() => setLogout(true)}
+                      >
+                        <Text size="B400">Logout</Text>
+                      </MenuItem>
+                      {logout && (
+                        <Overlay open backdrop={<OverlayBackdrop />}>
+                          <OverlayCenter>
+                            <FocusTrap
+                              focusTrapOptions={{
+                                onDeactivate: () => setLogout(false),
+                                clickOutsideDeactivates: true,
+                                escapeDeactivates: stopPropagation,
+                              }}
+                            >
+                              <LogoutDialog handleClose={() => setLogout(false)} />
+                            </FocusTrap>
+                          </OverlayCenter>
+                        </Overlay>
+                      )}
+                    </>
+                  )}
+                </UseStateProvider>
+              </div>
+            )}
           </Box>
         </Menu>
       </Box>

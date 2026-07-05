@@ -654,22 +654,6 @@ export function OptionMenu({
                   Reply
                 </Text>
               </MenuItem>
-              {!isThreadedMessage && (
-                <MenuItem
-                  size="300"
-                  after={menuIcon(ChatCircleDots)}
-                  radii="300"
-                  data-event-id={mEvent.getId()}
-                  onClick={(evt) => {
-                    onReplyClick(evt, true);
-                    onTotalClose();
-                  }}
-                >
-                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-                    Reply in Thread
-                  </Text>
-                </MenuItem>
-              )}
               {canEditEvent(mx, mEvent) && onEditId && (
                 <MenuItem
                   size="300"
@@ -683,6 +667,22 @@ export function OptionMenu({
                 >
                   <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
                     Edit Message
+                  </Text>
+                </MenuItem>
+              )}
+              {!isThreadedMessage && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(ChatCircleDots)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={(evt) => {
+                    onReplyClick(evt, true);
+                    onTotalClose();
+                  }}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Reply in Thread
                   </Text>
                 </MenuItem>
               )}

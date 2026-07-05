@@ -19,7 +19,7 @@ export function NavigateTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
   };
 
   return (
-    <SidebarItem active={opened} isBottom={isBottom}>
+    <SidebarItem active={opened && !isMobile} isBottom={isBottom}>
       <SidebarItemTooltip tooltip="Search" position={isBottom ? 'Top' : 'Right'}>
         {(triggerRef) => (
           <Box direction="Column" alignItems="Center">
@@ -37,7 +37,7 @@ export function NavigateTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
               />
             </SidebarAvatar>
             {isMobile && (
-              <Text size="O400" priority="300">
+              <Text size="B300" priority="300">
                 Navigate
               </Text>
             )}

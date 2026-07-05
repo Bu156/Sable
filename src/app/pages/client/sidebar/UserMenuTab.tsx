@@ -67,6 +67,7 @@ function AccountRow({
   displayName,
   avatarUrl,
   isBusy,
+  isMobile,
   unread,
   onSwitch,
   onSignOut,
@@ -76,6 +77,7 @@ function AccountRow({
   displayName?: string;
   avatarUrl?: string;
   isBusy?: boolean;
+  isMobile?: boolean;
   unread?: { total: number; highlight: number };
   onSwitch: (session: Session) => void;
   onSignOut: (session: Session) => void;
@@ -91,6 +93,7 @@ function AccountRow({
       style={{
         opacity: isBusy ? 0.6 : undefined,
         height: 'auto',
+        background: isMobile ? color.Background.Container : undefined,
       }}
       before={
         <SidebarAvatar size="200" style={{ width: toRem(28), height: toRem(28) }}>
@@ -265,7 +268,11 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
           }
           style={{
             position: 'relative',
-            background: isOpen && !isMobile ? color.Secondary.Container : color.Surface.Container,
+            background: isMobile
+              ? color.Background.Container
+              : isOpen
+                ? color.Secondary.Container
+                : color.Surface.Container,
           }}
           onClick={() => isMobile && setIsOpen(!isOpen)}
           {...hoverProps}
@@ -300,6 +307,7 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
                     border: 0,
                     boxShadow: 'none',
                     gap: 0,
+                    background: color.Background.Container,
                   }
                 : {}
             }
@@ -330,10 +338,17 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
                     onSignOut={(pendingSession) => {
                       setConfirmSignOutSession(pendingSession);
                     }}
+                    isMobile={isMobile}
                   />
                 );
               })}
-              <MenuItem size="300" radii="300" before={chipIcon(Plus)} onClick={handleAddAccount}>
+              <MenuItem
+                size="300"
+                radii="300"
+                before={chipIcon(Plus)}
+                onClick={handleAddAccount}
+                style={{ background: isMobile ? color.Background.Container : undefined }}
+              >
                 <Text size="T300">Add Account</Text>
               </MenuItem>
             </Box>
@@ -388,11 +403,9 @@ const PresenceOptions: Array<{ value: Presence; label: string }> = [
 ];
 
 export function PresenceMenuOption({
-  initialOpen,
   isMobile,
   isRight,
 }: {
-  initialOpen: boolean;
   isMobile: boolean;
   isRight?: boolean;
 }) {
@@ -403,7 +416,7 @@ export function PresenceMenuOption({
   const presence = useUserPresence(userId);
   const currentPresence = presence?.presence ?? Presence.Online;
 
-  const [isOpen, setIsOpen] = useState(initialOpen);
+  const [isOpen, setIsOpen] = useState(false);
 
   const { hoverProps } = useHover({
     onHoverChange: (h) => {
@@ -471,7 +484,11 @@ export function PresenceMenuOption({
         }
         style={{
           position: 'relative',
-          background: isOpen && !isMobile ? color.Secondary.Container : color.Surface.Container,
+          background: isMobile
+            ? color.Background.Container
+            : isOpen
+              ? color.Secondary.Container
+              : color.Surface.Container,
         }}
         onClick={() => isMobile && setIsOpen(!isOpen)}
         {...hoverProps}
@@ -505,6 +522,7 @@ export function PresenceMenuOption({
                     border: 0,
                     boxShadow: 'none',
                     gap: 0,
+                    background: color.Background.Container,
                   }
                 : {}
             }
@@ -657,7 +675,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
   const handleCloseMenu = () => setMenuAnchor(undefined);
 
   return (
-    <SidebarItem active={!!menuAnchor || profileSelected} isBottom={isBottom}>
+    <SidebarItem active={(!!menuAnchor || profileSelected) && !isMobile} isBottom={isBottom}>
       <Box direction="Column" alignItems="Center" onClick={handleToggle}>
         <SidebarAvatar
           as="button"
@@ -683,7 +701,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
           </AvatarPresence>
         </SidebarAvatar>
         {isMobile && (
-          <Text size="O400" priority="300">
+          <Text size="B300" priority="300">
             Account
           </Text>
         )}
@@ -756,7 +774,6 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                   </MenuItem>
 
                   <PresenceMenuOption
-                    initialOpen={false}
                     isMobile={isMobile ?? false}
                     isRight={(menuAnchor?.x ?? 0) > window.innerWidth / 2}
                   />

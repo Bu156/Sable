@@ -63,7 +63,7 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
     : undefined;
 
   return (
-    <SidebarItem active={opened} isBottom={isBottom}>
+    <SidebarItem active={opened && !isMobile} isBottom={isBottom}>
       <SidebarItemTooltip tooltip="Messages" position={isBottom ? 'Top' : 'Right'}>
         {(triggerRef) => (
           <Box direction="Column" alignItems="Center">
@@ -96,7 +96,7 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
               </Box>
             )}
             {isMobile && (
-              <Text size="O400" priority="300">
+              <Text size="B300" priority="300">
                 Messages
               </Text>
             )}

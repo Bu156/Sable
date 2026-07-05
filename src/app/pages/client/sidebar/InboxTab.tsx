@@ -21,7 +21,7 @@ import {
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useNavToActivePathAtom } from '$state/hooks/navToActivePath';
 import { useInviteCount } from '$hooks/useInviteCount';
-import { Text, Box } from 'folds';
+import { Text, Box, color } from 'folds';
 import { searchModalAtom } from '$state/searchModal';
 import { EnvelopeSimple, getPhosphorIconSize, Tray } from '$components/icons/phosphor';
 import { BookmarkIcon, ChatCircleDotsIcon } from '@phosphor-icons/react';
@@ -56,7 +56,7 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
   };
 
   return (
-    <SidebarItem active={opened} isBottom={isBottom}>
+    <SidebarItem active={opened && !isMobile} isBottom={isBottom}>
       <SidebarItemTooltip tooltip="Inbox" position={isBottom ? 'Top' : 'Right'}>
         {(triggerRef) => (
           <Box direction="Column" alignItems="Center">
@@ -68,15 +68,35 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
               size={'400'}
             >
               {(notificationsSelected && (
-                <ChatCircleDotsIcon size={InboxIconSize} weight="fill" />
+                <ChatCircleDotsIcon
+                  size={InboxIconSize}
+                  weight="fill"
+                  color={opened && isMobile ? color.Primary.Main : color.Background.OnContainer}
+                />
               )) ||
-                (bookmarksSelected && <BookmarkIcon size={InboxIconSize} weight="fill" />) ||
-                (invitesSelected && <EnvelopeSimple size={InboxIconSize} weight="fill" />) || (
-                  <Tray size={InboxIconSize} weight={inboxSelected ? 'fill' : 'regular'} />
+                (bookmarksSelected && (
+                  <BookmarkIcon
+                    size={InboxIconSize}
+                    weight="fill"
+                    color={opened && isMobile ? color.Primary.Main : color.Background.OnContainer}
+                  />
+                )) ||
+                (invitesSelected && (
+                  <EnvelopeSimple
+                    size={InboxIconSize}
+                    weight="fill"
+                    color={opened && isMobile ? color.Primary.Main : color.Background.OnContainer}
+                  />
+                )) || (
+                  <Tray
+                    size={InboxIconSize}
+                    weight={inboxSelected ? 'fill' : 'regular'}
+                    color={opened && isMobile ? color.Primary.Main : color.Background.OnContainer}
+                  />
                 )}
             </SidebarAvatar>
             {isMobile && (
-              <Text size="O400" priority="300">
+              <Text size="B300" priority="300">
                 Inbox
               </Text>
             )}
