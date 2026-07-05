@@ -71,15 +71,11 @@ export function Navigate() {
         <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
           <PageNavHeader size="600">
             <Box grow="Yes" gap="300" justifyContent="Center">
-              {!hideText ? (
-                <Box grow="Yes">
-                  <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-                    Navigate
-                  </Text>
-                </Box>
-              ) : (
-                sizedIcon(SquaresFour, '200', { filled: true })
-              )}
+              <Box grow="Yes">
+                <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                  Navigate
+                </Text>
+              </Box>
             </Box>
           </PageNavHeader>
           <Scroll hideTrack visibility="Hover">

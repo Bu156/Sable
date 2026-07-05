@@ -34,7 +34,12 @@ import { useUserProfile } from '$hooks/useUserProfile';
 import type { SettingsMenuItem } from '$features/settings';
 import { settingsMenuIcons, settingsSections, useOpenSettings } from '$features/settings';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
-import { CaretDownIcon, CaretRightIcon, SignOutIcon } from '@phosphor-icons/react';
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  PencilSimpleIcon,
+  SignOutIcon,
+} from '@phosphor-icons/react';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { FocusTrap } from 'focus-trap-react';
 import { LogoutDialog } from '$components/LogoutDialog';
@@ -133,6 +138,15 @@ export function ProfileMobile() {
         justifyContent="SpaceBetween"
         style={{ width: '100%', minWidth: '100%' }}
       >
+        <PageNavHeader size="600">
+          <Box grow="Yes" gap="300" justifyContent="Center">
+            <Box grow="Yes">
+              <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                Account
+              </Text>
+            </Box>
+          </Box>
+        </PageNavHeader>
         <Menu
           style={{
             minWidth: '100%',
@@ -159,10 +173,23 @@ export function ProfileMobile() {
 
           <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
             <UnverifiedMenuOption />
+            <MenuItem
+              size="300"
+              radii="300"
+              before={menuIcon(PencilSimpleIcon)}
+              style={{
+                background: isSettingsOpen ? color.Surface.Container : color.Background.Container,
+              }}
+              onClick={() => openSettings('account')}
+            >
+              <Text style={{ flexGrow: 1 }} size="T300">
+                Edit profile
+              </Text>
+            </MenuItem>
           </Box>
           <Line variant="Surface" size="300" />
 
-          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <Box direction="Column" style={{ padding: config.space.S100 }}>
             <PresenceMenuOption isMobile />
           </Box>
           <AccountMenuOption isMobile />
@@ -209,7 +236,8 @@ export function ProfileMobile() {
 
             <UseStateProvider initial={false}>
               {(logout, setLogout) => (
-                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                <>
+                  <Line variant="Surface" size="300" />
                   <MenuItem
                     size="300"
                     variant="Background"
@@ -217,7 +245,7 @@ export function ProfileMobile() {
                     before={menuIcon(SignOutIcon)}
                     onClick={() => setLogout(true)}
                   >
-                    <Text size="B400">Logout</Text>
+                    <Text size="T300">Logout</Text>
                   </MenuItem>
                   {logout && (
                     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -234,9 +262,10 @@ export function ProfileMobile() {
                       </OverlayCenter>
                     </Overlay>
                   )}
-                </Box>
+                </>
               )}
             </UseStateProvider>
+            <div style={{ height: toRem(60) }} />
           </Box>
         </Menu>
       </Box>

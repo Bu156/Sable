@@ -8,8 +8,6 @@ import {
   Chip,
   Dialog,
   Header,
-  Icon,
-  Icons,
   Line,
   Menu,
   MenuItem,
@@ -38,7 +36,7 @@ import { createLogger } from '$utils/debug';
 import type { Session } from '$state/sessions';
 import { activeSessionIdAtom, backgroundUnreadCountsAtom, sessionsAtom } from '$state/sessions';
 import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
-import { Check, chipIcon, Plus } from '$components/icons/phosphor';
+import { Check, chipIcon, menuIcon, Plus } from '$components/icons/phosphor';
 import { useSessionProfiles } from '$hooks/useSessionProfiles';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { getHomePath, getLoginPath, getProfilePath, withSearchParam } from '$pages/pathUtils';
@@ -56,7 +54,14 @@ import {
   useUnverifiedDeviceCount,
   VerificationStatus,
 } from '$hooks/useDeviceVerificationStatus';
-import { ShieldWarningIcon } from '@phosphor-icons/react';
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  GearSixIcon,
+  PencilSimpleIcon,
+  ShieldWarningIcon,
+  UserIcon,
+} from '@phosphor-icons/react';
 import * as css from './UserMenuTab.css';
 
 const log = createLogger('AccountSwitcherTab');
@@ -262,10 +267,8 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
         <MenuItem
           size="300"
           radii="300"
-          before={<Icon size="100" src={Icons.User} />}
-          after={
-            <Icon size="100" src={isOpen && isMobile ? Icons.ChevronBottom : Icons.ChevronRight} />
-          }
+          before={menuIcon(UserIcon)}
+          after={isOpen && isMobile ? menuIcon(CaretDownIcon) : menuIcon(CaretRightIcon)}
           style={{
             position: 'relative',
             background: isMobile
@@ -465,7 +468,7 @@ export function PresenceMenuOption({
               display: 'flex',
               justifyContent: 'center',
               alignContent: 'center',
-              width: 18,
+              width: toRem(20),
             }}
           >
             {savingStatus ? (
@@ -479,9 +482,7 @@ export function PresenceMenuOption({
             )}
           </div>
         }
-        after={
-          <Icon size="100" src={isOpen && isMobile ? Icons.ChevronBottom : Icons.ChevronRight} />
-        }
+        after={isOpen && isMobile ? menuIcon(CaretDownIcon) : menuIcon(CaretRightIcon)}
         style={{
           position: 'relative',
           background: isMobile
@@ -766,7 +767,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                     onClick={() => openSettings('account')}
                     size="300"
                     radii="300"
-                    before={<Icon size="100" src={Icons.Pencil} />}
+                    before={menuIcon(PencilSimpleIcon)}
                   >
                     <Text style={{ flexGrow: 1 }} size="T300">
                       Edit Profile
@@ -790,7 +791,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                       <MenuItem
                         size="300"
                         radii="300"
-                        before={<Icon size="100" src={Icons.Setting} />}
+                        before={menuIcon(GearSixIcon)}
                         onClick={() => openSettings()}
                       >
                         <Text style={{ flexGrow: 1 }} size="T300">
