@@ -91,7 +91,12 @@ export function Inbox() {
           <Box grow="Yes" gap="300" justifyContent="Center">
             {!hideText ? (
               <Box grow="Yes">
-                <Text size="H4" truncate>
+                <Text
+                  size="H4"
+                  truncate
+                  align={isMobile ? 'Center' : undefined}
+                  style={{ width: '100%' }}
+                >
                   Inbox
                 </Text>
               </Box>

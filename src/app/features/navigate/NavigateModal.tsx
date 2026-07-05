@@ -2,6 +2,7 @@ import FocusTrap from 'focus-trap-react';
 import {
   Avatar,
   Box,
+  color,
   config,
   IconButton,
   Input,
@@ -133,9 +134,10 @@ export type RoomSearchPickRoomConfig = {
 export type RoomSearchModalProps = {
   requestClose?: () => void;
   pickRoom?: RoomSearchPickRoomConfig;
+  isMobile?: boolean;
 };
 
-export function RoomSearchModal({ requestClose, pickRoom }: RoomSearchModalProps) {
+export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearchModalProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -307,7 +309,10 @@ export function RoomSearchModal({ requestClose, pickRoom }: RoomSearchModalProps
       <Box
         shrink="No"
         grow="Yes"
-        style={{ padding: config.space.S400, paddingBottom: 0, width: '100%' }}
+        style={{
+          padding: `${config.space.S400} ${isMobile ? config.space.S0 : config.space.S400} 0`,
+          width: '100%',
+        }}
         direction="Column"
       >
         <Input
@@ -396,7 +401,7 @@ export function RoomSearchModal({ requestClose, pickRoom }: RoomSearchModalProps
                     data-space={room.isSpaceRoom()}
                     onClick={handleRoomClick}
                     disabled={pickRoom?.busy}
-                    variant={listFocus.index === index ? 'Primary' : 'Surface'}
+                    variant={listFocus.index === index ? 'Primary' : 'Background'}
                     aria-pressed={listFocus.index === index}
                     radii="400"
                     style={{ width: '100%' }}
@@ -534,7 +539,14 @@ export function SearchWrapper({ requestClose, pickRoom }: RoomSearchModalProps) 
             },
           }}
         >
-          <Modal size="400" style={{ maxHeight: toRem(400), borderRadius: config.radii.R500 }}>
+          <Modal
+            size="400"
+            style={{
+              maxHeight: toRem(400),
+              borderRadius: config.radii.R500,
+              background: color.Background.Container,
+            }}
+          >
             <RoomSearchModal requestClose={requestClose} pickRoom={pickRoom} />
           </Modal>
         </FocusTrap>

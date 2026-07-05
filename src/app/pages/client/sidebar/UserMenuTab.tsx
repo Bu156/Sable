@@ -416,7 +416,7 @@ export function PresenceMenuOption({
   const presence = useUserPresence(userId);
   const currentPresence = presence?.presence ?? Presence.Online;
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(isMobile);
 
   const { hoverProps } = useHover({
     onHoverChange: (h) => {

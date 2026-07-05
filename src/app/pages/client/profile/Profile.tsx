@@ -5,15 +5,13 @@ import {
   color,
   config,
   Menu,
-  Icon,
-  Icons,
   Line,
   MenuItem,
   OverlayBackdrop,
   Overlay,
   OverlayCenter,
 } from 'folds';
-import { SquaresFour, menuIcon, settingsNavIcon, sizedIcon } from '$components/icons/phosphor';
+import { GearSix, SquaresFour, menuIcon, sizedIcon } from '$components/icons/phosphor';
 import { PageNav, PageNavHeader } from '$components/page';
 import { useEffect, useMemo, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -36,7 +34,7 @@ import { useUserProfile } from '$hooks/useUserProfile';
 import type { SettingsMenuItem } from '$features/settings';
 import { settingsMenuIcons, settingsSections, useOpenSettings } from '$features/settings';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
-import { SignOutIcon } from '@phosphor-icons/react';
+import { CaretDownIcon, CaretRightIcon, SignOutIcon } from '@phosphor-icons/react';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { FocusTrap } from 'focus-trap-react';
 import { LogoutDialog } from '$components/LogoutDialog';
@@ -51,7 +49,7 @@ export function ProfileMobile() {
   const userId = mx.getUserId() ?? '';
   const profile = useUserProfile(userId);
   const presence = useUserPresence(userId);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const displayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
   const heroAvatarUrl = profile.avatarUrl
@@ -144,17 +142,19 @@ export function ProfileMobile() {
             background: color.Background.Container,
           }}
         >
-          <UserHero
-            userId={userId}
-            avatarUrl={heroAvatarUrl}
-            bannerUrl={heroBannerUrl}
-            presence={presence}
-            showColor={false}
-            allowEditing={true}
-          />
+          <Box direction="Column" gap="200">
+            <UserHero
+              userId={userId}
+              avatarUrl={heroAvatarUrl}
+              bannerUrl={heroBannerUrl}
+              presence={presence}
+              showColor={false}
+              allowEditing={true}
+            />
 
-          <Box style={{ padding: `0 ${config.space.S200} ${config.space.S200}` }}>
-            <GlobalUserHeroName displayName={displayName} userId={userId} />
+            <Box style={{ padding: `0 ${config.space.S400}` }}>
+              <GlobalUserHeroName displayName={displayName} userId={userId} />
+            </Box>
           </Box>
 
           <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
@@ -169,18 +169,15 @@ export function ProfileMobile() {
 
           <Line variant="Surface" size="300" />
 
-          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <Box direction="Column" style={{ padding: config.space.S100 }}>
             <MenuItem
               size="300"
               radii="300"
-              variant="Background"
-              before={<Icon size="100" src={Icons.Setting} />}
-              after={
-                <Icon
-                  size="100"
-                  src={isSettingsOpen && isMobile ? Icons.ChevronBottom : Icons.ChevronRight}
-                />
-              }
+              before={menuIcon(GearSix)}
+              style={{
+                background: isSettingsOpen ? color.Surface.Container : color.Background.Container,
+              }}
+              after={menuIcon(isSettingsOpen && isMobile ? CaretDownIcon : CaretRightIcon)}
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
             >
               <Text style={{ flexGrow: 1 }} size="T300">
@@ -188,17 +185,17 @@ export function ProfileMobile() {
               </Text>
             </MenuItem>
             {isSettingsOpen && (
-              <div style={{ paddingLeft: config.space.S100 }}>
+              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                 {menuItems.map((item) => {
                   const IconComponent = item.icon;
 
                   return (
                     <MenuItem
                       key={item.id}
-                      radii="400"
+                      radii="300"
                       size="300"
                       variant="Background"
-                      before={settingsNavIcon(IconComponent, false)}
+                      before={menuIcon(IconComponent)}
                       onClick={() => openSettings(item.id)}
                     >
                       <Text size="T300" truncate>
@@ -207,39 +204,39 @@ export function ProfileMobile() {
                     </MenuItem>
                   );
                 })}
-
-                <UseStateProvider initial={false}>
-                  {(logout, setLogout) => (
-                    <>
-                      <MenuItem
-                        size="300"
-                        variant="Background"
-                        style={{ color: color.Critical.OnContainer }}
-                        before={menuIcon(SignOutIcon)}
-                        onClick={() => setLogout(true)}
-                      >
-                        <Text size="B400">Logout</Text>
-                      </MenuItem>
-                      {logout && (
-                        <Overlay open backdrop={<OverlayBackdrop />}>
-                          <OverlayCenter>
-                            <FocusTrap
-                              focusTrapOptions={{
-                                onDeactivate: () => setLogout(false),
-                                clickOutsideDeactivates: true,
-                                escapeDeactivates: stopPropagation,
-                              }}
-                            >
-                              <LogoutDialog handleClose={() => setLogout(false)} />
-                            </FocusTrap>
-                          </OverlayCenter>
-                        </Overlay>
-                      )}
-                    </>
-                  )}
-                </UseStateProvider>
-              </div>
+              </Box>
             )}
+
+            <UseStateProvider initial={false}>
+              {(logout, setLogout) => (
+                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                  <MenuItem
+                    size="300"
+                    variant="Background"
+                    style={{ color: color.Critical.OnContainer }}
+                    before={menuIcon(SignOutIcon)}
+                    onClick={() => setLogout(true)}
+                  >
+                    <Text size="B400">Logout</Text>
+                  </MenuItem>
+                  {logout && (
+                    <Overlay open backdrop={<OverlayBackdrop />}>
+                      <OverlayCenter>
+                        <FocusTrap
+                          focusTrapOptions={{
+                            onDeactivate: () => setLogout(false),
+                            clickOutsideDeactivates: true,
+                            escapeDeactivates: stopPropagation,
+                          }}
+                        >
+                          <LogoutDialog handleClose={() => setLogout(false)} />
+                        </FocusTrap>
+                      </OverlayCenter>
+                    </Overlay>
+                  )}
+                </Box>
+              )}
+            </UseStateProvider>
           </Box>
         </Menu>
       </Box>

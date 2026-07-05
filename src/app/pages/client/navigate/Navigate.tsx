@@ -1,13 +1,6 @@
 import { Box, Scroll, toRem, Text, color, config } from 'folds';
 import { SquaresFour, sizedIcon } from '$components/icons/phosphor';
-import {
-  Page,
-  PageContent,
-  PageContentCenter,
-  PageHeroSection,
-  PageNav,
-  PageNavHeader,
-} from '$components/page';
+import { Page, PageContent, PageContentCenter, PageNav, PageNavHeader } from '$components/page';
 import { useEffect, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useSetting } from '$state/hooks/settings';
@@ -15,7 +8,6 @@ import { settingsAtom } from '$state/settings';
 import { SidebarResizer } from '../sidebar/SidebarResizer';
 import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
-import { ListMagnifyingGlassIcon } from '@phosphor-icons/react';
 import { RoomSearchModal } from '$features/navigate';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
 
@@ -41,8 +33,9 @@ export function Navigate() {
             position: 'relative',
             width: toRem(curWidth),
             borderRight: 'solid',
-            borderColor: color.SurfaceVariant.ContainerLine,
+            borderColor: color.Background.ContainerLine,
             borderWidth: `0 ${config.borderWidth.B300} 0 0`,
+            background: color.Background.Container,
           }}
         >
           <PageNav>
@@ -50,8 +43,8 @@ export function Navigate() {
               <Box grow="Yes" gap="300" justifyContent="Center">
                 {!hideText ? (
                   <Box grow="Yes">
-                    <Text size="H4" truncate align="Center">
-                      Navigate
+                    <Text size="H4" truncate>
+                      Inbox
                     </Text>
                   </Box>
                 ) : (
@@ -59,6 +52,7 @@ export function Navigate() {
                 )}
               </Box>
             </PageNavHeader>
+
             <SidebarResizer
               setCurWidth={setCurWidth}
               sidebarWidth={roomSidebarWidth}
@@ -74,17 +68,26 @@ export function Navigate() {
         </Box>
       )}
       <Page>
-        <Box grow="Yes">
+        <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
+          <PageNavHeader size="600">
+            <Box grow="Yes" gap="300" justifyContent="Center">
+              {!hideText ? (
+                <Box grow="Yes">
+                  <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                    Navigate
+                  </Text>
+                </Box>
+              ) : (
+                sizedIcon(SquaresFour, '200', { filled: true })
+              )}
+            </Box>
+          </PageNavHeader>
           <Scroll hideTrack visibility="Hover">
             <PageContent style={{ height: '100%', paddingBottom: '0' }}>
               <PageContentCenter style={{ height: '100%' }}>
-                <PageHeroSection style={{ height: '100%', paddingBottom: '0' }}>
-                  <Box direction="Column" gap="100" alignItems="Center" style={{ height: '100%' }}>
-                    {sizedIcon(ListMagnifyingGlassIcon, '600')}
-                    <Text size="H1"> Navigate </Text>
-                    <RoomSearchModal />
-                  </Box>
-                </PageHeroSection>
+                <Box direction="Column" gap="100" alignItems="Center" style={{ height: '100%' }}>
+                  <RoomSearchModal isMobile />
+                </Box>
               </PageContentCenter>
             </PageContent>
           </Scroll>
