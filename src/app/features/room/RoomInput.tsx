@@ -60,6 +60,7 @@ import {
   getLinks,
   MarkdownFormattingToolbarBottom,
   MarkdownFormattingToolbarToggle,
+  focusEditor,
   replaceWithElement,
   BlockType,
 } from '$components/editor';
@@ -752,8 +753,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     };
 
     const handleCloseAutocomplete = useCallback(() => {
-      setAutocompleteQuery(undefined);
-      ReactEditor.focus(editor);
+      setAutocompleteQuery((prev) => {
+        if (prev !== undefined) {
+          focusEditor(editor);
+        }
+        return undefined;
+      });
     }, [editor]);
 
     const handleQuickReact = useCallback(
