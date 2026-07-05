@@ -599,7 +599,7 @@ export function UnverifiedMenuOption() {
           onClick={() => openSettings('devices')}
         >
           <Text style={{ flexGrow: 1 }} size="T300">
-            {`Verify ${unverified ? 'this' : 'another'} device${!unverified && (unverifiedDeviceCount ?? 0) > 1 ? 's' : ''}`}
+            {`Verify ${unverified ? 'this' : 'your'} device${!unverified && (unverifiedDeviceCount ?? 0) > 1 ? 's' : ''}`}
           </Text>
         </MenuItem>
       )}
