@@ -670,37 +670,45 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
     }
 
     const cords = evt.currentTarget.getBoundingClientRect();
-    setMenuAnchor((cur) => (cur ? undefined : cords));
+    setMenuAnchor(() => cords);
   };
 
   const handleCloseMenu = () => setMenuAnchor(undefined);
 
+  const isActive = (!!menuAnchor || profileSelected) && !isMobile;
+
   return (
-    <SidebarItem active={(!!menuAnchor || profileSelected) && !isMobile} isBottom={isBottom}>
-      <Box direction="Column" alignItems="Center" onClick={handleToggle}>
-        <SidebarAvatar
-          as="button"
-          onClick={handleToggle}
-          size="400"
-          style={{ overflow: 'visible' }}
-          outlined={!isMobile}
-        >
-          <AvatarPresence badge={<PresenceBadge presence={currentPresence} size="200" />}>
-            <SidebarAvatar
-              size={isMobile ? '300' : '400'}
-              as="button"
-              onClick={handleToggle}
-              outlined={!isMobile}
-            >
-              <UserAvatar
-                userId={userId}
-                src={avatarUrl}
-                alt={userId}
-                renderFallback={() => <Text size="H4">{nameInitials(displayName)}</Text>}
-              />
-            </SidebarAvatar>
-          </AvatarPresence>
-        </SidebarAvatar>
+    <SidebarItem active={isActive} isBottom={isBottom}>
+      <Box
+        direction="Column"
+        alignItems="Center"
+        onClick={handleToggle}
+        style={
+          isMobile
+            ? {
+                height: '100%',
+                justifyContent: 'Center',
+                paddingTop: config.space.S100,
+                gap: config.space.S100,
+              }
+            : {}
+        }
+      >
+        <AvatarPresence badge={<PresenceBadge presence={currentPresence} size="200" />}>
+          <SidebarAvatar
+            size={isMobile ? '300' : '400'}
+            as="button"
+            onClick={handleToggle}
+            outlined={!isMobile}
+          >
+            <UserAvatar
+              userId={userId}
+              src={avatarUrl}
+              alt={userId}
+              renderFallback={() => <Text size="H4">{nameInitials(displayName)}</Text>}
+            />
+          </SidebarAvatar>
+        </AvatarPresence>
         {isMobile && (
           <Text size="B300" priority="300">
             Account

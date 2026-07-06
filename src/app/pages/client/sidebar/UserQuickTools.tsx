@@ -38,6 +38,7 @@ export function UserQuickTools({
                     width: toRem(width ?? 100),
                     position: 'absolute',
                     right: '0',
+                    padding: `0 ${config.space.S300}`,
                   }
             }
           >
@@ -46,7 +47,9 @@ export function UserQuickTools({
                 <MessageTab isBottom isMobile />
                 <InboxTab isBottom isMobile />
                 <NavigateTab isBottom isMobile />
-                <UserMenuTab isBottom isMobile />
+                <Box style={{ paddingTop: config.space.S0 }}>
+                  <UserMenuTab isBottom isMobile />
+                </Box>
               </>
             ) : (
               <>
