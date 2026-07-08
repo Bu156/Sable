@@ -1001,13 +1001,13 @@ export function RoomTimeline({
 
       {showBackPaginationSpinner && (
         <TimelineFloat position="Top" style={timelineTopFloatLift}>
-          <Spinner variant="Secondary" size="400" />
+          <Spinner variant="Secondary" size="400" style={{ backgroundColor: 'transparent' }} />
         </TimelineFloat>
       )}
 
       {showFrontPaginationSpinner && (
         <TimelineFloat position="Bottom" style={timelineBottomFloatLift}>
-          <Spinner variant="Secondary" size="400" />
+          <Spinner variant="Secondary" size="400" style={{ backgroundColor: 'transparent' }} />
         </TimelineFloat>
       )}
 
