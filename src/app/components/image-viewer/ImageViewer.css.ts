@@ -58,4 +58,5 @@ export const ImageViewerImg = style([
 
 export const ImageViewerImgPixelated = style({
   imageRendering: 'pixelated',
+  willChange: 'auto',
 });

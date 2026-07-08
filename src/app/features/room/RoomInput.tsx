@@ -718,7 +718,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         let content = await uploadToContent(upload);
         handleCancelUpload(uploads);
 
-        content.body = caption;
+        content.body = caption ?? '';
         content.formatted_body = undefined;
 
         if (formattedCaption) {
