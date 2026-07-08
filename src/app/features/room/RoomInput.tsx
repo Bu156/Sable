@@ -1814,6 +1814,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
+                        style={{ backgroundColor: 'transparent' }}
                       >
                         {composerIcon(GifIcon, {
                           weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
