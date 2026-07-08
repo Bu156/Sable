@@ -1,16 +1,6 @@
 import { Box, Scroll, toRem, Text, color, config } from 'folds';
 import { SquaresFour, sizedIcon } from '$components/icons/phosphor';
-import {
-  Page,
-  PageContent,
-  PageContentCenter,
-  PageHero,
-  PageHeroSection,
-  PageNav,
-  PageNavHeader,
-} from '$components/page';
-import { CreateSpaceForm } from '$features/create-space';
-import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { Page, PageContent, PageContentCenter, PageNav, PageNavHeader } from '$components/page';
 import { useEffect, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useSetting } from '$state/hooks/settings';
@@ -18,14 +8,14 @@ import { settingsAtom } from '$state/settings';
 import { SidebarResizer } from '../sidebar/SidebarResizer';
 import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
+import { RoomSearchModal } from '$features/navigate';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
 
-export function Create() {
-  const { navigateSpace } = useRoomNavigate();
-
+export function Navigate() {
   const setIsResizingSidebar = useSetAtom(isResizingSidebarAtom);
   const [roomSidebarWidth, setRoomSidebarWidth] = useSetting(settingsAtom, 'roomSidebarWidth');
   const [curWidth, setCurWidth] = useState(roomSidebarWidth);
+  const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
 
   useEffect(() => {
     setCurWidth(roomSidebarWidth);
@@ -33,7 +23,6 @@ export function Create() {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
   const hideText = curWidth <= 80 && !isMobile;
-  const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
 
   return (
     <>
@@ -44,8 +33,9 @@ export function Create() {
             position: 'relative',
             width: toRem(curWidth),
             borderRight: 'solid',
-            borderColor: color.SurfaceVariant.ContainerLine,
+            borderColor: color.Background.ContainerLine,
             borderWidth: `0 ${config.borderWidth.B300} 0 0`,
+            background: color.Background.Container,
           }}
         >
           <PageNav>
@@ -53,8 +43,8 @@ export function Create() {
               <Box grow="Yes" gap="300" justifyContent="Center">
                 {!hideText ? (
                   <Box grow="Yes">
-                    <Text size="H4" truncate align="Center">
-                      Create Space
+                    <Text size="H4" truncate>
+                      Inbox
                     </Text>
                   </Box>
                 ) : (
@@ -62,6 +52,7 @@ export function Create() {
                 )}
               </Box>
             </PageNavHeader>
+
             <SidebarResizer
               setCurWidth={setCurWidth}
               sidebarWidth={roomSidebarWidth}
@@ -77,20 +68,22 @@ export function Create() {
         </Box>
       )}
       <Page>
-        <Box grow="Yes">
+        <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
+          <PageNavHeader size="600">
+            <Box grow="Yes" gap="300" justifyContent="Center">
+              <Box grow="Yes">
+                <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                  Navigate
+                </Text>
+              </Box>
+            </Box>
+          </PageNavHeader>
           <Scroll hideTrack visibility="Hover">
-            <PageContent>
-              <PageContentCenter>
-                <PageHeroSection>
-                  <Box direction="Column" gap="700">
-                    <PageHero
-                      icon={sizedIcon(SquaresFour, '600')}
-                      title="Create Space"
-                      subTitle="Build a space for your community."
-                    />
-                    <CreateSpaceForm onCreate={navigateSpace} />
-                  </Box>
-                </PageHeroSection>
+            <PageContent style={{ height: '100%', paddingBottom: '0' }}>
+              <PageContentCenter style={{ height: '100%' }}>
+                <Box direction="Column" gap="100" alignItems="Center" style={{ height: '100%' }}>
+                  <RoomSearchModal isMobile />
+                </Box>
               </PageContentCenter>
             </PageContent>
           </Scroll>

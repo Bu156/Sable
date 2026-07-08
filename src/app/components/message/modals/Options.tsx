@@ -599,7 +599,7 @@ export function OptionMenu({
                   onReactionToggle(mEvent.getId() ?? '', key, shortcode);
                   onTotalClose();
                 }}
-                count={isModal ? 6 : 4}
+                count={isModal ? 8 : 4}
               />
             )}
             <Box direction="Column" gap="100" className={css.MessageMenuGroup}>
@@ -612,6 +612,23 @@ export function OptionMenu({
                 >
                   <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
                     Add Reaction
+                  </Text>
+                </MenuItem>
+              )}
+
+              {canEditEvent(mx, mEvent) && onEditId && isModal && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(PencilSimple)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={() => {
+                    onEditId(mEvent.getId());
+                    onTotalClose();
+                  }}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Edit Message
                   </Text>
                 </MenuItem>
               )}
@@ -670,7 +687,7 @@ export function OptionMenu({
                   </Text>
                 </MenuItem>
               )}
-              {canEditEvent(mx, mEvent) && onEditId && (
+              {canEditEvent(mx, mEvent) && onEditId && !isModal && (
                 <MenuItem
                   size="300"
                   after={menuIcon(PencilSimple)}
