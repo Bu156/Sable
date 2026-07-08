@@ -310,9 +310,10 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         (mx
           .getAccountData(CustomAccountDataEvent.ImagePackRooms)
           ?.getContent<EmoteRoomsContent>() ||
-        mx
-          .getAccountData(CustomAccountDataEvent.PoniesEmoteRooms)
-          ?.getContent<EmoteRoomsContent>()) ?? {};
+          mx
+            .getAccountData(CustomAccountDataEvent.PoniesEmoteRooms)
+            ?.getContent<EmoteRoomsContent>()) ??
+        {};
       const updatedContent: EmoteRoomsContent = JSON.parse(JSON.stringify(content));
 
       selectedPacks.forEach((addr) => {

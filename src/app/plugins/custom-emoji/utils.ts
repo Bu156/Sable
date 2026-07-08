@@ -81,10 +81,10 @@ export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
     const room = mx.getRoom(roomId);
     if (!room) return [];
     const packStateKeyToUnknown = roomIdToPackInfo[roomId];
-    
+
     const packEventsStable = getStateEvents(room, CustomStateEvent.ImagePack);
     const packEventsUnstable = getStateEvents(room, CustomStateEvent.PoniesRoomEmotes);
-    
+
     const uniquePackEvents = new Map<string, MatrixEvent>();
     packEventsUnstable.forEach((ev) => {
       const key = ev.getStateKey();
@@ -98,7 +98,7 @@ export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
         uniquePackEvents.set(key, ev);
       }
     });
-    
+
     return makeImagePacks(Array.from(uniquePackEvents.values()));
   });
 
