@@ -402,37 +402,46 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
   debugLog.info('sync', 'Starting Matrix client', { userId: mx.getUserId() });
   disposeSlidingSync(mx);
   disposePresenceSync(mx);
+
   const slidingConfig = config?.slidingSync;
   const proxyBaseUrl = slidingConfig?.proxyBaseUrl ?? config?.baseUrl ?? mx.baseUrl;
-
-  const manager = new SlidingSyncManager(mx, proxyBaseUrl, {
-    ...slidingConfig,
-    includeInviteList: true,
-    pollTimeoutMs: slidingConfig?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
-  });
+  const useSliding =
+    config?.sessionSlidingSyncOptIn === true &&
+    !!slidingConfig &&
+    resolveSlidingEnabled(slidingConfig?.enabled);
 
   const presenceManager = new PresenceSyncManager(mx);
   presenceSyncByClient.set(mx, presenceManager);
 
   presenceManager.start();
 
-  installStartupFetchRoomEventPatch(mx, manager);
-  installSlidingSyncConnId(mx);
+  let manager: SlidingSyncManager | undefined;
 
-  manager.attach();
-  slidingSyncByClient.set(mx, manager);
+  if (useSliding) {
+    manager = new SlidingSyncManager(mx, proxyBaseUrl, {
+      ...slidingConfig,
+      includeInviteList: true,
+      pollTimeoutMs: slidingConfig?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
+    });
+
+    installStartupFetchRoomEventPatch(mx, manager);
+    installSlidingSyncConnId(mx);
+
+    manager.attach();
+    slidingSyncByClient.set(mx, manager);
+  }
 
   try {
     await mx.startClient({
       lazyLoadMembers: true,
-      slidingSync: manager.slidingSync,
+      slidingSync: manager?.slidingSync,
       threadSupport: true,
     });
   } catch (err) {
     debugLog.error('network', 'Failed to start client with sliding sync', {
       error: err instanceof Error ? err.message : String(err),
       userId: mx.getUserId(),
-      proxyBaseUrl: proxyBaseUrl,
+      proxyBaseUrl: useSliding ? proxyBaseUrl : undefined,
       stack: err instanceof Error ? err.stack : undefined,
     });
     disposeSlidingSync(mx);
