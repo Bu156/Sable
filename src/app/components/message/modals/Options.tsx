@@ -656,7 +656,9 @@ export function OptionMenu({
                     </Text>
                   </MenuItem>
                 )}
-              {relations && <MessageAllReactionItem room={room} relations={relations} />}
+              {relations && (
+                <MessageAllReactionItem room={room} relations={relations} closeMenu={closeMenu} />
+              )}
               <MenuItem
                 size="300"
                 after={menuIcon(ArrowBendUpLeftIcon)}
