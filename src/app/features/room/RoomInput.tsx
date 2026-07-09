@@ -1592,6 +1592,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         }
                       }}
                       variant="SurfaceVariant"
+                      style={{ background: 'transparent' }}
                       size="300"
                       radii="300"
                       aria-label="Cancel reply"
@@ -1622,6 +1623,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
+                        style={{ background: 'transparent' }}
                         title={
                           silentReply ? 'Unmute reply notifications' : 'Mute reply notifications'
                         }

@@ -136,7 +136,7 @@ export function ProfileMobile() {
         gap="0"
         alignItems="Center"
         justifyContent="SpaceBetween"
-        style={{ width: '100%', minWidth: '100%' }}
+        style={{ width: '100%', minWidth: '100%', height: '100vh' }}
       >
         <PageNavHeader size="600">
           <Box grow="Yes" gap="300" justifyContent="Center">
@@ -265,7 +265,7 @@ export function ProfileMobile() {
                 </>
               )}
             </UseStateProvider>
-            <div style={{ height: toRem(60) }} />
+            <div style={{ height: toRem(132) }} />
           </Box>
         </Menu>
       </Box>

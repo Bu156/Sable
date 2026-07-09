@@ -11,6 +11,9 @@ import {
   Line,
   Menu,
   MenuItem,
+  Overlay,
+  OverlayBackdrop,
+  OverlayCenter,
   PopOut,
   Spinner,
   Text,
@@ -27,7 +30,6 @@ import { nameInitials } from '../../../utils/common';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useOpenSettings } from '../../../features/settings';
 import { useUserProfile } from '../../../hooks/useUserProfile';
-import { Modal500 } from '../../../components/Modal500';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useUserPresence, Presence } from '../../../hooks/useUserPresence';
 import { UserHero, GlobalUserHeroName } from '../../../components/user-profile/UserHero';
@@ -359,41 +361,51 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
         </div>
       )}
       {confirmSignOutSession && (
-        <Modal500 requestClose={() => setConfirmSignOutSession(undefined)}>
-          <Dialog variant="Surface">
-            <Header
-              style={{
-                padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                borderBottomWidth: config.borderWidth.B300,
+        <Overlay open backdrop={<OverlayBackdrop />}>
+          <OverlayCenter>
+            <FocusTrap
+              focusTrapOptions={{
+                initialFocus: false,
+                onDeactivate: () => setConfirmSignOutSession(undefined),
+                clickOutsideDeactivates: true,
               }}
-              variant="Surface"
-              size="500"
             >
-              <Box grow="Yes">
-                <Text size="H4">Sign out</Text>
-              </Box>
-            </Header>
-            <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
-              <Text priority="400">
-                Are you sure you want to sign out of <b>{confirmSignOutSession.userId}</b>?
-              </Text>
-              <Box direction="Column" gap="200">
-                <Button
-                  variant="Critical"
-                  onClick={() => {
-                    handleSignOut(confirmSignOutSession);
-                    setConfirmSignOutSession(undefined);
+              <Dialog variant="Surface">
+                <Header
+                  style={{
+                    padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                    borderBottomWidth: config.borderWidth.B300,
                   }}
+                  variant="Surface"
+                  size="500"
                 >
-                  <Text size="B400">Sign out</Text>
-                </Button>
-                <Button variant="Secondary" onClick={() => setConfirmSignOutSession(undefined)}>
-                  <Text size="B400">Cancel</Text>
-                </Button>
-              </Box>
-            </Box>
-          </Dialog>
-        </Modal500>
+                  <Box grow="Yes">
+                    <Text size="H4">Sign out</Text>
+                  </Box>
+                </Header>
+                <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
+                  <Text priority="400">
+                    Are you sure you want to sign out of <b>{confirmSignOutSession.userId}</b>?
+                  </Text>
+                  <Box direction="Column" gap="200">
+                    <Button
+                      variant="Critical"
+                      onClick={() => {
+                        handleSignOut(confirmSignOutSession);
+                        setConfirmSignOutSession(undefined);
+                      }}
+                    >
+                      <Text size="B400">Sign out</Text>
+                    </Button>
+                    <Button variant="Secondary" onClick={() => setConfirmSignOutSession(undefined)}>
+                      <Text size="B400">Cancel</Text>
+                    </Button>
+                  </Box>
+                </Box>
+              </Dialog>
+            </FocusTrap>
+          </OverlayCenter>
+        </Overlay>
       )}
     </>
   );
@@ -760,7 +772,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                     showColor={false}
                     allowEditing={true}
                   />
-                  <Box style={{ padding: `0 ${config.space.S200} ${config.space.S200}` }}>
+                  <Box style={{ padding: `0 ${config.space.S400} ${config.space.S200}` }}>
                     <GlobalUserHeroName displayName={displayName} userId={userId} />
                   </Box>
                 </Box>
