@@ -1,5 +1,17 @@
 # Sable Client Changelog
 
+## 1.19.2 (2026-07-09)
+
+### Fixes
+
+* Fix right click menu not closing when viewing reactions. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Send gifs with proper file extensions in body. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Fix crash in autocomplete menu when editing messages. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Ensure call buttons appear/disappear when relevant state events occur. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Fix format for recent emojis and related crash. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Fix sliding sync debug saying sliding when it is in fact not sliding. ([#1045](<https://github.com/SableClient/Sable/pull/1045>) by @7w1)
+* Fix very small little visual issues you probably didnt even notice 🙏 ([#1038](<https://github.com/SableClient/Sable/pull/1038>) by @nushea)
+
 ## 1.19.1 (2026-07-09)
 
 ### Fixes
