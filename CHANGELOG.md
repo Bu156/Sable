@@ -1,5 +1,12 @@
 # Sable Client Changelog
 
+## 1.19.3 (2026-07-09)
+
+### Fixes
+
+* Fix crash with some embed links. ([#1047](<https://github.com/SableClient/Sable/pull/1047>) by @7w1)
+* Fix even more visual stuffs. ([#1049](<https://github.com/SableClient/Sable/pull/1049>) by @nushea)
+
 ## 1.19.2 (2026-07-09)
 
 ### Fixes
