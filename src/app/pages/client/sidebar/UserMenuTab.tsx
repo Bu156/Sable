@@ -630,7 +630,7 @@ export function UnverifiedMenuOption() {
           }
           size="300"
           radii="300"
-          before={<ShieldWarningIcon />}
+          before={<ShieldWarningIcon size={20} />}
           onClick={() => openSettings('devices')}
         >
           <Text style={{ flexGrow: 1 }} size="T300">
@@ -772,17 +772,13 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                     showColor={false}
                     allowEditing={true}
                   />
-                  <Box style={{ padding: `0 ${config.space.S400} ${config.space.S200}` }}>
+                  <Box style={{ padding: `0 ${config.space.S400} 0` }}>
                     <GlobalUserHeroName displayName={displayName} userId={userId} />
                   </Box>
                 </Box>
 
                 <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                   <UnverifiedMenuOption />
-                </Box>
-                <Line variant="Surface" size="300" />
-
-                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                   <MenuItem
                     onClick={() => openSettings('account')}
                     size="300"
@@ -793,7 +789,9 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
                       Edit Profile
                     </Text>
                   </MenuItem>
-
+                </Box>
+                <Line variant="Surface" size="300" />
+                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                   <PresenceMenuOption
                     isMobile={isMobile ?? false}
                     isRight={(menuAnchor?.x ?? 0) > window.innerWidth / 2}
