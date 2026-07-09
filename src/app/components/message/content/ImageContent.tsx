@@ -442,6 +442,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                                   width: imageW,
                                   height: imageH,
                                   size: info?.size,
+                                  mimetype: info?.mimetype,
                                 },
                               ],
                             })

@@ -373,7 +373,7 @@ export type StartClientConfig = {
 };
 
 export type ClientSyncDiagnostics = {
-  transport: 'sliding';
+  transport: 'sliding' | 'classic';
   syncState: string | null;
   sliding?: SlidingSyncDiagnostics;
 };
@@ -468,10 +468,11 @@ export const clearCacheAndReload = async (mx: MatrixClient) => {
 };
 
 export const getClientSyncDiagnostics = (mx: MatrixClient): ClientSyncDiagnostics => {
+  const slidingManager = slidingSyncByClient.get(mx);
   return {
-    transport: 'sliding',
+    transport: slidingManager ? 'sliding' : 'classic',
     syncState: mx.getSyncState(),
-    sliding: slidingSyncByClient.get(mx)?.getDiagnostics(),
+    sliding: slidingManager?.getDiagnostics(),
   };
 };
 
