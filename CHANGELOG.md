@@ -1,5 +1,11 @@
 # Sable Client Changelog
 
+## 1.19.1 (2026-07-09)
+
+### Fixes
+
+* Fix sliding sync being enabled when setting is disabled. ([#1036](<https://github.com/SableClient/Sable/pull/1036>) by @7w1)
+
 ## 1.19.0 (2026-07-09)
 
 ### Features
