@@ -317,7 +317,7 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
       >
         <Input
           size="500"
-          variant="Background"
+          variant={isMobile ? 'Background' : 'SurfaceVariant'}
           radii="400"
           outlined
           placeholder={pickRoom ? 'Search rooms' : 'Search'}
@@ -401,10 +401,13 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
                     data-space={room.isSpaceRoom()}
                     onClick={handleRoomClick}
                     disabled={pickRoom?.busy}
-                    variant={listFocus.index === index ? 'Primary' : 'Background'}
+                    variant={listFocus.index === index ? 'Primary' : undefined}
                     aria-pressed={listFocus.index === index}
                     radii="400"
-                    style={{ width: '100%' }}
+                    style={{
+                      width: '100%',
+                      background: listFocus.index !== index ? 'transparent' : undefined,
+                    }}
                     after={
                       <Box gap="100">
                         {dmUserServer && (
@@ -544,7 +547,7 @@ export function SearchWrapper({ requestClose, pickRoom }: RoomSearchModalProps) 
             style={{
               maxHeight: toRem(400),
               borderRadius: config.radii.R500,
-              background: color.Background.Container,
+              background: color.SurfaceVariant.Container,
             }}
           >
             <RoomSearchModal requestClose={requestClose} pickRoom={pickRoom} />
