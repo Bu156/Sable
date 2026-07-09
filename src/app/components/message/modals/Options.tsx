@@ -50,6 +50,7 @@ import {
   useIsBookmarked,
 } from '$features/bookmarks';
 import { CopyIcon } from '@phosphor-icons/react';
+import * as OptionsCss from './Options.css';
 
 function WrappedMessage({
   isModal,
@@ -368,6 +369,7 @@ export function OptionQuickMenu({
               size="300"
               radii="300"
               aria-pressed={!!emojiBoardAnchor}
+              className={OptionsCss.UserQuickMenuButton}
             >
               {menuIcon(Smiley)}
             </IconButton>
@@ -382,6 +384,7 @@ export function OptionQuickMenu({
           variant="SurfaceVariant"
           size="300"
           radii="300"
+          className={OptionsCss.UserQuickMenuButton}
         >
           {menuIcon(ArrowBendUpLeftIcon)}
         </IconButton>
@@ -395,6 +398,7 @@ export function OptionQuickMenu({
             variant="SurfaceVariant"
             size="300"
             radii="300"
+            className={OptionsCss.UserQuickMenuButton}
           >
             {menuIcon(ChatCircleDots)}
           </IconButton>
@@ -408,6 +412,7 @@ export function OptionQuickMenu({
             variant="SurfaceVariant"
             size="300"
             radii="300"
+            className={OptionsCss.UserQuickMenuButton}
           >
             {menuIcon(PencilSimple)}
           </IconButton>
@@ -442,6 +447,7 @@ export function OptionQuickMenu({
             radii="300"
             onClick={handleOpenMenu}
             aria-pressed={!!menuAnchor}
+            className={OptionsCss.UserQuickMenuButton}
           >
             {menuIcon(DotsThreeOutlineVerticalIcon, {
               weight: menuAnchor ? 'fill' : 'regular',
