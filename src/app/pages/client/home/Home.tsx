@@ -539,6 +539,7 @@ export function Home() {
                   })}
                 </div>
               </NavCategory>
+              {!isMobile && <div style={{ height: toRem(40) }} />}
             </Box>
           </PageNavContent>
         )}

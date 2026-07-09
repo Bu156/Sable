@@ -695,12 +695,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
         }
       >
         <AvatarPresence badge={<PresenceBadge presence={currentPresence} size="200" />}>
-          <SidebarAvatar
-            size={isMobile ? '300' : '400'}
-            as="button"
-            onClick={handleToggle}
-            outlined={!isMobile}
-          >
+          <SidebarAvatar size={isMobile ? '300' : '400'} as="button" onClick={handleToggle}>
             <UserAvatar
               userId={userId}
               src={avatarUrl}

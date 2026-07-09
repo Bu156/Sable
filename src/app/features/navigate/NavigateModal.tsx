@@ -493,8 +493,6 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
             <>
               Type <b>#</b> for rooms, <b>@</b> for DMs and <b>*</b> for spaces. Hotkey:{' '}
               <b>{isMacOS() ? KeySymbol.Command : 'Ctrl'} + k</b>
-              {' / '}
-              <b>{isMacOS() ? KeySymbol.Command : 'Ctrl'} + f</b>
             </>
           )}
         </Text>
