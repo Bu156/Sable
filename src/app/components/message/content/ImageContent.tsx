@@ -269,7 +269,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                 >
                   {renderViewer({
                     src: viewerFullSrc ?? srcState.data,
-                    alt: body,
+                    alt: body ?? '',
                     requestClose: () => setViewer(false),
                     info: info,
                   })}
@@ -315,8 +315,8 @@ export const ImageContent = as<'div', ImageContentProps>(
             style={{ width: '100%' }}
           >
             {renderImage({
-              alt: body,
-              title: body,
+              alt: body ?? '',
+              title: body ?? '',
               src: srcState.data,
               onLoad: handleLoad,
               onError: handleError,
@@ -437,7 +437,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                               gifs: [
                                 ...favoritedContent.gifs,
                                 {
-                                  title: body,
+                                  title: body ?? '',
                                   url: url,
                                   width: imageW,
                                   height: imageH,
