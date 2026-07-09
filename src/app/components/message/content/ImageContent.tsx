@@ -83,7 +83,7 @@ type RenderImageProps = {
   tabIndex: number;
 };
 export type ImageContentProps = {
-  body: string;
+  body?: string;
   mimeType?: string;
   url: string;
   info?: IImageInfo;
@@ -141,9 +141,9 @@ export const ImageContent = as<'div', ImageContentProps>(
       info?.mimetype === 'image/gif' ||
       info?.mimetype === 'image/apng' ||
       info?.mimetype === 'image/webp' ||
-      body.toLowerCase().endsWith('.gif') ||
-      body.toLowerCase().endsWith('.apng') ||
-      body.toLowerCase().endsWith('.webp') ||
+      (body ?? '').toLowerCase().endsWith('.gif') ||
+      (body ?? '').toLowerCase().endsWith('.apng') ||
+      (body ?? '').toLowerCase().endsWith('.webp') ||
       url.toLowerCase().endsWith('.gif') ||
       url.toLowerCase().endsWith('.apng') ||
       url.toLowerCase().endsWith('.webp');
