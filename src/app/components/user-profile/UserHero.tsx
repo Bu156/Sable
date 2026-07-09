@@ -242,7 +242,6 @@ export function UserHero({
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
                       overflow: 'hidden',
-                      fontStyle: allowEditing && !status ? 'italic' : 'normal',
                       opacity: allowEditing && !status ? config.opacity.Placeholder : 1,
                     }}
                     truncate={allowEditing}
