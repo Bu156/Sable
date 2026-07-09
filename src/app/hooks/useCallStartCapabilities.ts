@@ -37,15 +37,14 @@ export const useCallStartCapabilities = (room: Room): CallStartCapabilities => {
     )
   );
 
-  return useMemo(
-    () =>
-      evaluateCallStartCapabilities({
-        room,
-        myUserId,
-        activeCallRoomId: callEmbed?.roomId,
-        livekitSupported,
-        rtcSupported,
-      }),
-    [room, myUserId, callEmbed?.roomId, livekitSupported, rtcSupported, updateCount]
-  );
+  return useMemo(() => {
+    void updateCount;
+    return evaluateCallStartCapabilities({
+      room,
+      myUserId,
+      activeCallRoomId: callEmbed?.roomId,
+      livekitSupported,
+      rtcSupported,
+    });
+  }, [room, myUserId, callEmbed?.roomId, livekitSupported, rtcSupported, updateCount]);
 };
