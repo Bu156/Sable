@@ -12,8 +12,8 @@ env:
   TF_VAR_workers_message: ${{ github.event_name == 'pull_request' && github.event.pull_request.title || github.ref_name }}
   TF_VAR_account_id: ${{ secrets.TF_VAR_ACCOUNT_ID }}
   TF_VAR_zone_id: ${{ secrets.TF_VAR_ZONE_ID }}
-  TF_VAR_custom_domain: "dev.sable.moe"
-  TF_VAR_worker_name: "sable-dev"
+  TF_VAR_custom_domain: 'dev.sable.moe'
+  TF_VAR_worker_name: 'sable-dev'
   TF_HTTP_ADDRESS: ${{ secrets.TF_HTTP_ADDRESS_DEV }}
   TF_HTTP_LOCK_ADDRESS: ${{ secrets.TF_HTTP_LOCK_ADDRESS_DEV }}
   TF_HTTP_UNLOCK_ADDRESS: ${{ secrets.TF_HTTP_UNLOCK_ADDRESS_DEV }}
