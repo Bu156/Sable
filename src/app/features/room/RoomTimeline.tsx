@@ -104,116 +104,153 @@ const getDayDividerText = (ts: number) => {
   return timeDayMonthYear(ts);
 };
 
-const MemoizedTimelineItem = memo(function MemoizedTimelineItem({
-  eventData,
-  index,
-  showLoadingPlaceholders,
-  canPaginateBack,
-  backPaginationJSX,
-  room,
-  messageLayout,
-  messageSpacing,
-  renderMatrixEvent,
-}: {
-  eventData: ProcessedEvent | undefined;
-  index: number;
-  showLoadingPlaceholders: boolean;
-  canPaginateBack: boolean;
-  backPaginationJSX: ReactNode | undefined;
-  room: Room;
-  messageLayout: MessageLayout;
-  messageSpacing: MessageSpacing;
-  renderMatrixEvent: ReturnType<typeof useTimelineEventRenderer>;
-}) {
-  if (showLoadingPlaceholders) {
-    return (
-      <MessageBase key={`placeholder-${index}`}>
-        {messageLayout === MessageLayout.Compact ? <CompactPlaceholder /> : <DefaultPlaceholder />}
-      </MessageBase>
-    );
-  }
-
-  if (!eventData) {
-    if (index === 0 && !canPaginateBack) {
+const MemoizedTimelineItem = memo(
+  function MemoizedTimelineItem({
+    eventData,
+    index,
+    showLoadingPlaceholders,
+    canPaginateBack,
+    backPaginationJSX,
+    room,
+    messageLayout,
+    messageSpacing,
+    renderMatrixEvent,
+  }: {
+    eventData: ProcessedEvent | undefined;
+    index: number;
+    showLoadingPlaceholders: boolean;
+    canPaginateBack: boolean;
+    backPaginationJSX: ReactNode | undefined;
+    room: Room;
+    messageLayout: MessageLayout;
+    messageSpacing: MessageSpacing;
+    renderMatrixEvent: ReturnType<typeof useTimelineEventRenderer>;
+    focusItem: unknown;
+    editId: string | undefined;
+    activeReplyId: string | undefined | null;
+    openThreadId: string | undefined;
+  }) {
+    if (showLoadingPlaceholders) {
       return (
-        <Fragment key="intro-and-first">
+        <MessageBase key={`placeholder-${index}`}>
+          {messageLayout === MessageLayout.Compact ? (
+            <CompactPlaceholder />
+          ) : (
+            <DefaultPlaceholder />
+          )}
+        </MessageBase>
+      );
+    }
+
+    if (!eventData) {
+      if (index === 0 && !canPaginateBack) {
+        return (
+          <Fragment key="intro-and-first">
+            {backPaginationJSX}
+            <div
+              style={{
+                padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+              }}
+            >
+              <RoomIntro room={room} />
+            </div>
+          </Fragment>
+        );
+      }
+      if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
+      return <Fragment key={index} />;
+    }
+
+    const renderedEvent = renderMatrixEvent(
+      eventData.mEvent.getType(),
+      typeof eventData.mEvent.getStateKey() === 'string',
+      eventData.id,
+      eventData.mEvent,
+      eventData.itemIndex,
+      eventData.timelineSet,
+      eventData.collapsed
+    );
+
+    const showDividers = renderedEvent !== null;
+
+    const dividers = showDividers ? (
+      <>
+        {eventData.willRenderDayDivider && (
+          <MessageBase space={messageSpacing}>
+            <TimelineDivider variant="Surface">
+              <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
+                <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
+              </Badge>
+            </TimelineDivider>
+          </MessageBase>
+        )}
+        {eventData.willRenderNewDivider && (
+          <MessageBase space={messageSpacing}>
+            <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
+              <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
+                <Text size="L400">New Messages</Text>
+              </Badge>
+            </TimelineDivider>
+          </MessageBase>
+        )}
+      </>
+    ) : null;
+
+    if (index === 0) {
+      return (
+        <Fragment key="first-item-block">
+          {!canPaginateBack && (
+            <div
+              style={{
+                padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+              }}
+            >
+              <RoomIntro room={room} />
+            </div>
+          )}
           {backPaginationJSX}
-          <div
-            style={{
-              padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-            }}
-          >
-            <RoomIntro room={room} />
-          </div>
+          {dividers}
+          {renderedEvent}
         </Fragment>
       );
     }
-    if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
-    return <Fragment key={index} />;
-  }
 
-  const renderedEvent = renderMatrixEvent(
-    eventData.mEvent.getType(),
-    typeof eventData.mEvent.getStateKey() === 'string',
-    eventData.id,
-    eventData.mEvent,
-    eventData.itemIndex,
-    eventData.timelineSet,
-    eventData.collapsed
-  );
-
-  const showDividers = renderedEvent !== null;
-
-  const dividers = showDividers ? (
-    <>
-      {eventData.willRenderDayDivider && (
-        <MessageBase space={messageSpacing}>
-          <TimelineDivider variant="Surface">
-            <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
-              <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
-            </Badge>
-          </TimelineDivider>
-        </MessageBase>
-      )}
-      {eventData.willRenderNewDivider && (
-        <MessageBase space={messageSpacing}>
-          <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
-            <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
-              <Text size="L400">New Messages</Text>
-            </Badge>
-          </TimelineDivider>
-        </MessageBase>
-      )}
-    </>
-  ) : null;
-
-  if (index === 0) {
     return (
-      <Fragment key="first-item-block">
-        {!canPaginateBack && (
-          <div
-            style={{
-              padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-            }}
-          >
-            <RoomIntro room={room} />
-          </div>
-        )}
-        {backPaginationJSX}
+      <Fragment key={eventData.id}>
         {dividers}
         {renderedEvent}
       </Fragment>
     );
+  },
+  (prev, next) => {
+    if (prev.index !== next.index) return false;
+    if (prev.showLoadingPlaceholders !== next.showLoadingPlaceholders) return false;
+    if (prev.canPaginateBack !== next.canPaginateBack) return false;
+    if (prev.room !== next.room) return false;
+    if (prev.messageLayout !== next.messageLayout) return false;
+    if (prev.messageSpacing !== next.messageSpacing) return false;
+    if (prev.renderMatrixEvent !== next.renderMatrixEvent) return false;
+
+    if (prev.focusItem !== next.focusItem) return false;
+    if (prev.editId !== next.editId) return false;
+    if (prev.activeReplyId !== next.activeReplyId) return false;
+    if (prev.openThreadId !== next.openThreadId) return false;
+
+    if (prev.index === 0 && prev.backPaginationJSX !== next.backPaginationJSX) return false;
+
+    if (prev.eventData === next.eventData) return true;
+    if (!prev.eventData || !next.eventData) return false;
+
+    return (
+      prev.eventData.id === next.eventData.id &&
+      prev.eventData.collapsed === next.eventData.collapsed &&
+      prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
+      prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
+      prev.eventData.mEvent === next.eventData.mEvent &&
+      prev.eventData.eventSender === next.eventData.eventSender
+    );
   }
-
-  return (
-    <Fragment key={eventData.id}>
-      {dividers}
-      {renderedEvent}
-    </Fragment>
-  );
-});
-
+);
 export type RoomTimelineProps = {
   room: Room;
   eventId?: string;
@@ -1026,6 +1063,10 @@ export function RoomTimeline({
               messageLayout={messageLayout}
               messageSpacing={messageSpacing}
               renderMatrixEvent={renderMatrixEvent}
+              focusItem={timelineSync.focusItem}
+              editId={editId}
+              activeReplyId={activeReplyId}
+              openThreadId={openThreadId}
             />
           )}
         </VList>
