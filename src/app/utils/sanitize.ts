@@ -283,13 +283,22 @@ const pruneInvalidEmptyElements = (
   });
 };
 
+let purifyInstance: DOMPurify.DOMPurifyI | undefined;
+function getPurify(): DOMPurify.DOMPurifyI {
+  if (!purifyInstance) {
+    purifyInstance = DOMPurify(window);
+  }
+  return purifyInstance;
+}
+
 export const sanitizeCustomHtml = (customHtml: string): string => {
   if (typeof window === 'undefined') {
     return sanitizeText(customHtml);
   }
 
   const { protectedHtml, protectedSources } = protectImageSources(customHtml);
-  const purify = DOMPurify(window);
+  const purify = getPurify();
+  purify.removeAllHooks();
   const allowedHtmlAttributes = [...permittedHtmlAttributes, INTERNAL_IMG_SRC_ATTR];
 
   purify.addHook('uponSanitizeAttribute', (currentNode, hookEvent) => {
