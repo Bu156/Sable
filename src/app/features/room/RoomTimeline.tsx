@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
 } from 'react';
 import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom } from 'jotai';
@@ -48,7 +49,7 @@ import { useSpaceOptionally } from '$hooks/useSpace';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useIgnoredUsers } from '$hooks/useIgnoredUsers';
 import { useImagePackRooms } from '$hooks/useImagePackRooms';
-import { settingsAtom, MessageLayout } from '$state/settings';
+import { settingsAtom, MessageLayout, type MessageSpacing } from '$state/settings';
 import { useHiddenEventSettings, useSetting } from '$state/hooks/settings';
 import { nicknamesAtom } from '$state/nicknames';
 import { useRoomAbbreviationsContext } from '$hooks/useRoomAbbreviations';
@@ -102,6 +103,116 @@ const getDayDividerText = (ts: number) => {
   if (yesterday(ts)) return 'Yesterday';
   return timeDayMonthYear(ts);
 };
+
+const MemoizedTimelineItem = memo(function MemoizedTimelineItem({
+  eventData,
+  index,
+  showLoadingPlaceholders,
+  canPaginateBack,
+  backPaginationJSX,
+  room,
+  messageLayout,
+  messageSpacing,
+  renderMatrixEvent,
+}: {
+  eventData: ProcessedEvent | undefined;
+  index: number;
+  showLoadingPlaceholders: boolean;
+  canPaginateBack: boolean;
+  backPaginationJSX: ReactNode | undefined;
+  room: Room;
+  messageLayout: MessageLayout;
+  messageSpacing: MessageSpacing;
+  renderMatrixEvent: ReturnType<typeof useTimelineEventRenderer>;
+}) {
+  if (showLoadingPlaceholders) {
+    return (
+      <MessageBase key={`placeholder-${index}`}>
+        {messageLayout === MessageLayout.Compact ? <CompactPlaceholder /> : <DefaultPlaceholder />}
+      </MessageBase>
+    );
+  }
+
+  if (!eventData) {
+    if (index === 0 && !canPaginateBack) {
+      return (
+        <Fragment key="intro-and-first">
+          {backPaginationJSX}
+          <div
+            style={{
+              padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+            }}
+          >
+            <RoomIntro room={room} />
+          </div>
+        </Fragment>
+      );
+    }
+    if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
+    return <Fragment key={index} />;
+  }
+
+  const renderedEvent = renderMatrixEvent(
+    eventData.mEvent.getType(),
+    typeof eventData.mEvent.getStateKey() === 'string',
+    eventData.id,
+    eventData.mEvent,
+    eventData.itemIndex,
+    eventData.timelineSet,
+    eventData.collapsed
+  );
+
+  const showDividers = renderedEvent !== null;
+
+  const dividers = showDividers ? (
+    <>
+      {eventData.willRenderDayDivider && (
+        <MessageBase space={messageSpacing}>
+          <TimelineDivider variant="Surface">
+            <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
+              <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
+            </Badge>
+          </TimelineDivider>
+        </MessageBase>
+      )}
+      {eventData.willRenderNewDivider && (
+        <MessageBase space={messageSpacing}>
+          <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
+            <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
+              <Text size="L400">New Messages</Text>
+            </Badge>
+          </TimelineDivider>
+        </MessageBase>
+      )}
+    </>
+  ) : null;
+
+  if (index === 0) {
+    return (
+      <Fragment key="first-item-block">
+        {!canPaginateBack && (
+          <div
+            style={{
+              padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+            }}
+          >
+            <RoomIntro room={room} />
+          </div>
+        )}
+        {backPaginationJSX}
+        {dividers}
+        {renderedEvent}
+      </Fragment>
+    );
+  }
+
+  return (
+    <Fragment key={eventData.id}>
+      {dividers}
+      {renderedEvent}
+    </Fragment>
+  );
+});
 
 export type RoomTimelineProps = {
   room: Room;
@@ -903,99 +1014,20 @@ export function RoomTimeline({
           }}
           onScroll={handleVListScroll}
         >
-          {(eventData, index) => {
-            if (showLoadingPlaceholders) {
-              return (
-                <MessageBase key={`placeholder-${index}`}>
-                  {messageLayout === MessageLayout.Compact ? (
-                    <CompactPlaceholder />
-                  ) : (
-                    <DefaultPlaceholder />
-                  )}
-                </MessageBase>
-              );
-            }
-
-            if (!eventData) {
-              if (index === 0 && !timelineSync.canPaginateBack) {
-                return (
-                  <Fragment key="intro-and-first">
-                    {backPaginationJSX}
-                    <div
-                      style={{
-                        padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-                      }}
-                    >
-                      <RoomIntro room={room} />
-                    </div>
-                  </Fragment>
-                );
-              }
-              if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
-              return <Fragment key={index} />;
-            }
-
-            const renderedEvent = renderMatrixEvent(
-              eventData.mEvent.getType(),
-              typeof eventData.mEvent.getStateKey() === 'string',
-              eventData.id,
-              eventData.mEvent,
-              eventData.itemIndex,
-              eventData.timelineSet,
-              eventData.collapsed
-            );
-
-            const showDividers = renderedEvent !== null;
-
-            const dividers = showDividers ? (
-              <>
-                {eventData.willRenderDayDivider && (
-                  <MessageBase space={messageSpacing}>
-                    <TimelineDivider variant="Surface">
-                      <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
-                        <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
-                      </Badge>
-                    </TimelineDivider>
-                  </MessageBase>
-                )}
-                {eventData.willRenderNewDivider && (
-                  <MessageBase space={messageSpacing}>
-                    <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
-                      <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
-                        <Text size="L400">New Messages</Text>
-                      </Badge>
-                    </TimelineDivider>
-                  </MessageBase>
-                )}
-              </>
-            ) : null;
-
-            if (index === 0) {
-              return (
-                <Fragment key="first-item-block">
-                  {!timelineSync.canPaginateBack && (
-                    <div
-                      style={{
-                        padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-                      }}
-                    >
-                      <RoomIntro room={room} />
-                    </div>
-                  )}
-                  {backPaginationJSX}
-                  {dividers}
-                  {renderedEvent}
-                </Fragment>
-              );
-            }
-
-            return (
-              <Fragment key={eventData.id}>
-                {dividers}
-                {renderedEvent}
-              </Fragment>
-            );
-          }}
+          {(eventData, index) => (
+            <MemoizedTimelineItem
+              key={eventData ? eventData.id : `placeholder-${index}`}
+              eventData={eventData}
+              index={index}
+              showLoadingPlaceholders={showLoadingPlaceholders}
+              canPaginateBack={timelineSync.canPaginateBack}
+              backPaginationJSX={backPaginationJSX}
+              room={room}
+              messageLayout={messageLayout}
+              messageSpacing={messageSpacing}
+              renderMatrixEvent={renderMatrixEvent}
+            />
+          )}
         </VList>
       </div>
 
