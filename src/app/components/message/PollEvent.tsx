@@ -114,7 +114,7 @@ export function PollEvent({ content, mEvent, mx, room }: PollEventProps) {
   const [updateCounter, setUpdateCounter] = useState(0);
 
   useEffect(() => {
-    const handleUpdate = () => setUpdateCounter(c => c + 1);
+    const handleUpdate = () => setUpdateCounter((c) => c + 1);
     room.on(RoomEvent.Timeline, handleUpdate);
     return () => {
       room.off(RoomEvent.Timeline, handleUpdate);
@@ -127,7 +127,7 @@ export function PollEvent({ content, mEvent, mx, room }: PollEventProps) {
       ?.getUnfilteredTimelineSet()
       .relations.getAllChildEventsForEvent(eventId ?? '')
       .filter((event) => event.getRelation()?.rel_type === REFERENCE_RELATION.name);
-      
+
     let newChildEvents = latestChildEvents ? sortChildEvents(latestChildEvents) : [];
     const newEndIndex = getEndIndex(newChildEvents);
 
