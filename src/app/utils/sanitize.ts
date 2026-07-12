@@ -283,8 +283,8 @@ const pruneInvalidEmptyElements = (
   });
 };
 
-let purifyInstance: DOMPurify.DOMPurifyI | undefined;
-function getPurify(): DOMPurify.DOMPurifyI {
+let purifyInstance: ReturnType<typeof DOMPurify> | undefined;
+function getPurify(): ReturnType<typeof DOMPurify> {
   if (!purifyInstance) {
     purifyInstance = DOMPurify(window);
   }
