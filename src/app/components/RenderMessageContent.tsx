@@ -177,7 +177,7 @@ function RenderMessageContentInternal({
             const { url } = item;
             if (themeToRender.includes(url)) return null;
             if (tweakCandidateUrls.includes(url)) return null;
-            
+
             if (!themeChatSableWidgets && isSableChatEmbedCandidate(url)) return null;
             if (clientUrlPreview && youtubeUrl(url)) {
               return <ClientPreview key={url} url={url} />;
