@@ -598,14 +598,8 @@ export function useUnverifiedDevices() {
   const crypto = mx.getCrypto();
   const [devices] = useDeviceList();
 
-  const [, otherDevices] = useSplitCurrentDevice(devices);
-
-  const otherDevicesId = useDeviceIds(otherDevices);
-  const unverifiedDeviceCount = useUnverifiedDeviceCount(
-    crypto,
-    mx.getSafeUserId(),
-    otherDevicesId
-  );
+  const devicesId = useDeviceIds(devices);
+  const unverifiedDeviceCount = useUnverifiedDeviceCount(crypto, mx.getSafeUserId(), devicesId);
   return unverifiedDeviceCount;
 }
 
@@ -616,8 +610,7 @@ export function UnverifiedMenuOption() {
   const unverifiedDeviceCount = useUnverifiedDevices();
   const unverified = useIsUnverified();
 
-  const hasUnverified =
-    unverified || (unverifiedDeviceCount !== undefined && unverifiedDeviceCount > 0);
+  const hasUnverified = (unverifiedDeviceCount ?? 0) > 0;
 
   return (
     <>
@@ -659,7 +652,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
 
   const unverifiedDeviceCount = useUnverifiedDevices();
   const unverified = useIsUnverified();
-  const hasUnverified = unverified || (unverifiedDeviceCount ?? 0) > 0;
+  const hasUnverified = (unverifiedDeviceCount ?? 0) > 0;
 
   const displayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
   const avatarUrl = profile.avatarUrl
