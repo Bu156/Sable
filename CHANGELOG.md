@@ -1,5 +1,19 @@
 # Sable Client Changelog
 
+## 1.19.4 (2026-07-12)
+
+### Fixes
+
+* Fix some image embeds not creating embeds. ([#1062](<https://github.com/SableClient/Sable/pull/1062>) by @7w1)
+* Allow rooms with empty local parts to be viewed. ([#1062](<https://github.com/SableClient/Sable/pull/1062>) by @7w1)
+* Fix the account button showing you 0 sessions active and the verify this device showing when you have zero devices to verify ([#1064](<https://github.com/SableClient/Sable/pull/1064>) by @nushea)
+* Various performance optimizations ([#1062](<https://github.com/SableClient/Sable/pull/1062>) by @7w1)
+* Fixed the entire timeline being rerendered every time you scroll :P ([#1055](<https://github.com/SableClient/Sable/pull/1055>) by @7w1)
+
+### Notes
+
+* Added a new workflow that automatically previews dev on [dev.sable.moe](https://dev.sable.moe) ([#1059](<https://github.com/SableClient/Sable/pull/1059>) by @7w1)
+
 ## 1.19.3 (2026-07-09)
 
 ### Fixes
