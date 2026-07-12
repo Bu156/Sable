@@ -124,6 +124,7 @@ const MemoizedTimelineItem = memo(
     room: Room;
     messageLayout: MessageLayout;
     messageSpacing: MessageSpacing;
+    settings: Record<string, unknown>;
     renderMatrixEvent: ReturnType<typeof useTimelineEventRenderer>;
     focusItem: unknown;
     editId: string | undefined;
@@ -231,6 +232,16 @@ const MemoizedTimelineItem = memo(
     if (prev.messageSpacing !== next.messageSpacing) return false;
     if (prev.renderMatrixEvent !== next.renderMatrixEvent) return false;
 
+    // Shallow compare settings since it contains primitive toggles
+    const pSettings = prev.settings as Record<string, unknown>;
+    const nSettings = next.settings as Record<string, unknown>;
+    if (pSettings !== nSettings) {
+      if (Object.keys(pSettings).length !== Object.keys(nSettings).length) return false;
+      for (const key in pSettings) {
+        if (pSettings[key] !== nSettings[key]) return false;
+      }
+    }
+
     if (prev.focusItem !== next.focusItem) return false;
     if (prev.editId !== next.editId) return false;
     if (prev.activeReplyId !== next.activeReplyId) return false;
@@ -247,7 +258,10 @@ const MemoizedTimelineItem = memo(
       prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
       prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
       prev.eventData.mEvent === next.eventData.mEvent &&
-      prev.eventData.eventSender === next.eventData.eventSender
+      prev.eventData.eventSender === next.eventData.eventSender &&
+      prev.eventData.editId === next.eventData.editId &&
+      prev.eventData.reactionsKey === next.eventData.reactionsKey &&
+      prev.eventData.content === next.eventData.content
     );
   }
 );
@@ -306,20 +320,62 @@ export function RoomTimeline({
     ? clientUrlPreview && encClientUrlPreview
     : clientUrlPreview;
 
-  const nicknames = useAtomValue(nicknamesAtom);
-  const globalProfiles = useAtomValue(profilesCacheAtom);
-  const ignoredUsersList = useIgnoredUsers();
-  const ignoredUsersSet = useMemo(() => new Set(ignoredUsersList), [ignoredUsersList]);
-
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
-  const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
-  const permissions = useRoomPermissions(creators, powerLevels);
   const isReadOnly = useMemo(() => {
     const myPowerLevel = powerLevels?.users?.[mx.getUserId()!] ?? powerLevels?.users_default ?? 0;
     const sendLevel = powerLevels?.events?.['m.room.message'] ?? powerLevels?.events_default ?? 0;
     return myPowerLevel < sendLevel;
   }, [powerLevels, mx]);
+
+  const settings = useMemo(
+    () => ({
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    }),
+    [
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    ]
+  );
+
+  const nicknames = useAtomValue(nicknamesAtom);
+  const globalProfiles = useAtomValue(profilesCacheAtom);
+  const ignoredUsersList = useIgnoredUsers();
+  const ignoredUsersSet = useMemo(() => new Set(ignoredUsersList), [ignoredUsersList]);
+
+  const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
+  const permissions = useRoomPermissions(creators, powerLevels);
 
   const [unreadInfo, setUnreadInfo] = useState(() => getRoomUnreadInfo(room, true));
 
@@ -737,25 +793,7 @@ export function RoomTimeline({
     pushProcessor,
     nicknames,
     imagePackRooms,
-    settings: {
-      messageLayout,
-      messageSpacing,
-      hideReads,
-      showDeveloperTools,
-      hour24Clock,
-      dateFormatString,
-      mediaAutoLoad,
-      showBundledPreview,
-      showUrlPreview,
-      showClientUrlPreview,
-      showMaps,
-      autoplayStickers,
-      hideMemberInReadOnly,
-      isReadOnly,
-      hideMembershipEvents,
-      hideNickAvatarEvents,
-      hiddenEvents,
-    },
+    settings,
     state: { focusItem: timelineSync.focusItem, editId, activeReplyId, openThreadId },
     permissions: {
       canRedact: permissions.action('redact', mx.getSafeUserId()),
@@ -1062,6 +1100,7 @@ export function RoomTimeline({
               room={room}
               messageLayout={messageLayout}
               messageSpacing={messageSpacing}
+              settings={settings}
               renderMatrixEvent={renderMatrixEvent}
               focusItem={timelineSync.focusItem}
               editId={editId}
