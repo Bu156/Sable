@@ -12,8 +12,7 @@ export function UnverifiedNoticeBanner() {
 
   const isUnverified = useIsUnverified();
   const unverifiedDeviceCount = useUnverifiedDevices();
-  const hasUnverified =
-    isUnverified || (unverifiedDeviceCount !== undefined && unverifiedDeviceCount > 0);
+  const hasUnverified = (unverifiedDeviceCount ?? 0) > 0;
   const [dismissCount, setDismissCount] = useState(unverifiedDeviceCount);
 
   const [isDismissedNotice, setIsDismissedNotice] = useState(
