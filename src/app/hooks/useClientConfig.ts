@@ -28,7 +28,6 @@ export type ClientConfig = {
   };
 
   slidingSync?: {
-    enabled?: boolean;
     proxyBaseUrl?: string;
     bootstrapClassicOnColdCache?: boolean;
     listPageSize?: number;

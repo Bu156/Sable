@@ -60,11 +60,51 @@ const isClientReady = (syncState: string | null): boolean =>
   syncState === 'PREPARED' || syncState === 'SYNCING' || syncState === 'CATCHUP';
 
 function ClientRootLoading() {
+  const sessions = useAtomValue(sessionsAtom);
+  const activeSessionId = useAtomValue(activeSessionIdAtom);
+  const setSessions = useSetAtom(sessionsAtom);
+
+  const activeSession: Session | undefined =
+    sessions.find((s) => s.userId === activeSessionId) ?? sessions[0];
+
+  const usingSlidingSync = activeSession?.slidingSyncOptIn === true;
+
+  const handleSwap = () => {
+    if (!activeSession) return;
+    setSessions({
+      type: 'PUT',
+      session: {
+        ...activeSession,
+        slidingSyncOptIn: !usingSlidingSync,
+      },
+    });
+    window.location.reload();
+  };
+
   return (
     <SplashScreen>
       <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
         <Spinner variant="Secondary" size="600" />
         <Text>Petting cats</Text>
+        {activeSession && (
+          <Text
+            as="button"
+            type="button"
+            onClick={handleSwap}
+            size="T200"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'inherit',
+              cursor: 'pointer',
+              opacity: 0.7,
+              textDecoration: 'underline',
+            }}
+          >
+            {usingSlidingSync ? 'Swap to classic sync' : 'Swap to sliding sync'}
+          </Text>
+        )}
       </Box>
     </SplashScreen>
   );

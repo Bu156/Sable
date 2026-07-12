@@ -12,7 +12,7 @@ import {
   getAfterLoginRedirectPath,
 } from '$pages/afterLoginRedirectPath';
 import { getHomePath } from '$pages/pathUtils';
-import { activeSessionIdAtom, sessionsAtom } from '$state/sessions';
+import { activeSessionIdAtom, sessionsAtom, type Session } from '$state/sessions';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import { ErrorCode } from '../../../cs-errorcode';
@@ -145,7 +145,7 @@ export const login = async (
   );
 };
 
-export const useLoginComplete = (data?: CustomLoginResponse) => {
+export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: boolean) => {
   const navigate = useNavigate();
   const setSessions = useSetAtom(sessionsAtom);
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
@@ -157,12 +157,15 @@ export const useLoginComplete = (data?: CustomLoginResponse) => {
         userId: loginRes.user_id,
         baseUrl: loginBaseUrl,
       });
-      const newSession = {
+      const newSession: Session = {
         baseUrl: loginBaseUrl,
         userId: loginRes.user_id,
         deviceId: loginRes.device_id,
         accessToken: loginRes.access_token,
       };
+      if (slidingSyncOptIn !== undefined) {
+        newSession.slidingSyncOptIn = slidingSyncOptIn;
+      }
       setSessions({ type: 'PUT', session: newSession });
       setActiveSessionId(loginRes.user_id);
       const afterLoginRedirectUrl = getAfterLoginRedirectPath();
@@ -171,5 +174,5 @@ export const useLoginComplete = (data?: CustomLoginResponse) => {
       log.log('useLoginComplete: navigating to', destination);
       navigate(destination, { replace: true });
     }
-  }, [data, navigate, setSessions, setActiveSessionId]);
+  }, [data, slidingSyncOptIn, navigate, setSessions, setActiveSessionId]);
 };

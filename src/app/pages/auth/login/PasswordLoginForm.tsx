@@ -13,6 +13,7 @@ import {
   OverlayCenter,
   PopOut,
   Spinner,
+  Switch,
   Text,
   config,
 } from 'folds';
@@ -120,7 +121,12 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     Parameters<typeof login>
   >(useCallback(login, []));
 
-  useLoginComplete(loginState.status === AsyncStatus.Success ? loginState.data : undefined);
+  const [useSlidingSync, setUseSlidingSync] = useState(false);
+
+  useLoginComplete(
+    loginState.status === AsyncStatus.Success ? loginState.data : undefined,
+    useSlidingSync
+  );
 
   const handleUsernameLogin = (username: string, password: string) => {
     startLogin(baseUrl, {
@@ -265,6 +271,18 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           </Box>
         </Box>
       </Box>
+      <Box alignItems="Center" gap="200">
+        <Switch
+          variant="Primary"
+          value={useSlidingSync}
+          onChange={setUseSlidingSync}
+          id="login-sliding-sync"
+        />
+        <Text as="label" htmlFor="login-sliding-sync" size="T300" priority="300">
+          Use sliding sync (faster, but buggier)
+        </Text>
+      </Box>
+
       <Button type="submit" variant="Primary" size="500">
         <Text as="span" size="B500">
           Login

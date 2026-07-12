@@ -97,17 +97,6 @@ function installStartupFetchRoomEventPatch(
   fetchRoomEventStartupCleanupByClient.set(mx, restore);
 }
 
-export const resolveSlidingEnabled = (enabled: SlidingSyncConfig['enabled']): boolean => {
-  if (enabled === undefined) return false;
-  if (typeof enabled === 'boolean') return enabled;
-  const normalized = String(enabled).trim().toLowerCase();
-  if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no')
-    return false;
-  if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes')
-    return true;
-  return false;
-};
-
 const deleteDatabase = (name: string): Promise<void> =>
   new Promise((resolve) => {
     const req = window.indexedDB.deleteDatabase(name);
@@ -405,10 +394,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 
   const slidingConfig = config?.slidingSync;
   const proxyBaseUrl = slidingConfig?.proxyBaseUrl ?? config?.baseUrl ?? mx.baseUrl;
-  const useSliding =
-    config?.sessionSlidingSyncOptIn === true &&
-    !!slidingConfig &&
-    resolveSlidingEnabled(slidingConfig?.enabled);
+  const useSliding = config?.sessionSlidingSyncOptIn === true && !!slidingConfig;
 
   const presenceManager = new PresenceSyncManager(mx);
   presenceSyncByClient.set(mx, presenceManager);
