@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 export type EventRenderer<T extends unknown[]> = (...args: T) => ReactNode;
@@ -18,9 +18,7 @@ export const useMatrixEventRenderer = <T extends unknown[]>(
 ): RenderMatrixEvent<T> => {
   const latestRef = useRef({ typeToRenderer, renderStateEvent, renderEvent });
 
-  useLayoutEffect(() => {
-    latestRef.current = { typeToRenderer, renderStateEvent, renderEvent };
-  });
+  latestRef.current = { typeToRenderer, renderStateEvent, renderEvent };
 
   return useCallback((eventType: string, isStateEvent: boolean, ...args: T) => {
     const renderer = latestRef.current.typeToRenderer[eventType];
