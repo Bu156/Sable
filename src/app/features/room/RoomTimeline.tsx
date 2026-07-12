@@ -258,7 +258,10 @@ const MemoizedTimelineItem = memo(
       prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
       prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
       prev.eventData.mEvent === next.eventData.mEvent &&
-      prev.eventData.eventSender === next.eventData.eventSender
+      prev.eventData.eventSender === next.eventData.eventSender &&
+      prev.eventData.editId === next.eventData.editId &&
+      prev.eventData.reactionsKey === next.eventData.reactionsKey &&
+      prev.eventData.content === next.eventData.content
     );
   }
 );
@@ -325,43 +328,46 @@ export function RoomTimeline({
     return myPowerLevel < sendLevel;
   }, [powerLevels, mx]);
 
-  const settings = useMemo(() => ({
-    messageLayout,
-    messageSpacing,
-    hideReads,
-    showDeveloperTools,
-    hour24Clock,
-    dateFormatString,
-    mediaAutoLoad,
-    showBundledPreview,
-    showUrlPreview,
-    showClientUrlPreview,
-    showMaps,
-    autoplayStickers,
-    hideMemberInReadOnly,
-    isReadOnly,
-    hideMembershipEvents,
-    hideNickAvatarEvents,
-    hiddenEvents,
-  }), [
-    messageLayout,
-    messageSpacing,
-    hideReads,
-    showDeveloperTools,
-    hour24Clock,
-    dateFormatString,
-    mediaAutoLoad,
-    showBundledPreview,
-    showUrlPreview,
-    showClientUrlPreview,
-    showMaps,
-    autoplayStickers,
-    hideMemberInReadOnly,
-    isReadOnly,
-    hideMembershipEvents,
-    hideNickAvatarEvents,
-    hiddenEvents,
-  ]);
+  const settings = useMemo(
+    () => ({
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    }),
+    [
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    ]
+  );
 
   const nicknames = useAtomValue(nicknamesAtom);
   const globalProfiles = useAtomValue(profilesCacheAtom);
