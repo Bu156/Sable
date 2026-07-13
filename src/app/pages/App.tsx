@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Provider as JotaiProvider } from 'jotai';
 import { createStore } from 'jotai/vanilla';
 import { OverlayContainerProvider, PopOutContainerProvider, TooltipContainerProvider } from 'folds';
@@ -6,19 +6,21 @@ import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 
-import { ClientConfigLoader } from '$components/ClientConfigLoader';
 import type { ClientConfig } from '$hooks/useClientConfig';
-import { ClientConfigProvider } from '$hooks/useClientConfig';
+import { ClientConfigLoadedProvider, ClientConfigProvider } from '$hooks/useClientConfig';
 import { setMatrixToBase } from '$plugins/matrix-to';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider, useScreenSize } from '$hooks/useScreenSize';
 import { useCompositionEndTracking } from '$hooks/useComposingCheck';
 import { ErrorPage } from '$components/DefaultErrorPage';
-import { ConfigConfigError } from './ConfigConfig';
 import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
 import { bootstrapSettingsStore } from '$state/settings';
+import { trimTrailingSlash } from '$utils/common';
+import { createLogger } from '$utils/debug';
+
+const log = createLogger('App');
 
 const queryClient = new QueryClient();
 const ReactQueryDevtools = lazy(async () => {
@@ -41,18 +43,16 @@ function BootstrappedAppShell({ clientConfig, screenSize }: BootstrappedAppShell
   const reactQueryDevtoolsEnabled = isReactQueryDevtoolsEnabled();
 
   return (
-    <ClientConfigProvider value={clientConfig}>
-      <QueryClientProvider client={queryClient}>
-        <JotaiProvider store={jotaiStoreRef.current}>
-          <RouterProvider router={createRouter(clientConfig, screenSize)} />
-        </JotaiProvider>
-        {reactQueryDevtoolsEnabled && (
-          <Suspense fallback={null}>
-            <ReactQueryDevtools initialIsOpen={false} />
-          </Suspense>
-        )}
-      </QueryClientProvider>
-    </ClientConfigProvider>
+    <QueryClientProvider client={queryClient}>
+      <JotaiProvider store={jotaiStoreRef.current}>
+        <RouterProvider router={createRouter(clientConfig, screenSize)} />
+      </JotaiProvider>
+      {reactQueryDevtoolsEnabled && (
+        <Suspense fallback={null}>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </Suspense>
+      )}
+    </QueryClientProvider>
   );
 }
 
@@ -65,13 +65,36 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
   );
 }
 
-function appConfigError(err: unknown, retry: () => void, ignore: () => void) {
-  return <ConfigConfigError error={err} retry={retry} ignore={ignore} />;
-}
+function useClientConfigLoader(): { config: ClientConfig; loaded: boolean } {
+  const [config, setConfig] = useState<ClientConfig>({});
+  const [loaded, setLoaded] = useState(false);
 
-function AppConfigLoaded({ clientConfig, screenSize }: BootstrappedAppShellProps) {
-  setMatrixToBase(clientConfig.matrixToBaseUrl);
-  return <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />;
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadConfig = async () => {
+      try {
+        const url = `${trimTrailingSlash(import.meta.env.BASE_URL)}/config.json`;
+        const res = await fetch(url, { method: 'GET' });
+        const data = (await res.json()) as ClientConfig;
+        if (cancelled) return;
+        setConfig(data);
+        setMatrixToBase(data.matrixToBaseUrl);
+        setLoaded(true);
+      } catch (err) {
+        log.error('Failed to load config.json, continuing with empty config:', err);
+        if (cancelled) return;
+        setLoaded(true);
+      }
+    };
+
+    void loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { config, loaded };
 }
 
 function App() {
@@ -79,12 +102,7 @@ function App() {
   useCompositionEndTracking();
   const portalContainer = document.getElementById('portalContainer') ?? undefined;
 
-  const renderAppConfig = useCallback(
-    (clientConfig: ClientConfig) => (
-      <AppConfigLoaded clientConfig={clientConfig} screenSize={screenSize} />
-    ),
-    [screenSize]
-  );
+  const { config: clientConfig, loaded: configLoaded } = useClientConfigLoader();
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
@@ -93,9 +111,11 @@ function App() {
           <OverlayContainerProvider value={portalContainer}>
             <ScreenSizeProvider value={screenSize}>
               <FeatureCheck>
-                <ClientConfigLoader error={appConfigError}>
-                  {renderAppConfig}
-                </ClientConfigLoader>
+                <ClientConfigProvider value={clientConfig}>
+                  <ClientConfigLoadedProvider value={configLoaded}>
+                    <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
+                  </ClientConfigLoadedProvider>
+                </ClientConfigProvider>
               </FeatureCheck>
             </ScreenSizeProvider>
           </OverlayContainerProvider>

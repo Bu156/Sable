@@ -48,7 +48,7 @@ import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
-import { useClientConfig } from '$hooks/useClientConfig';
+import { useClientConfig, useClientConfigLoaded } from '$hooks/useClientConfig';
 import { pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
@@ -219,6 +219,7 @@ type ClientRootProps = {
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
   const clientConfig = useClientConfig();
+  const configLoaded = useClientConfigLoaded();
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
@@ -316,10 +317,10 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [loadState, loadMatrix]);
 
   useEffect(() => {
-    if (mx && !mx.clientRunning) {
+    if (mx && !mx.clientRunning && configLoaded) {
       startMatrix(mx);
     }
-  }, [mx, startMatrix]);
+  }, [mx, startMatrix, configLoaded]);
 
   useSyncState(
     mx,

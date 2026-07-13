@@ -58,18 +58,26 @@ export type ClientConfig = {
   settingsDefaults?: Partial<Settings>;
 };
 
-const ClientConfigContext = createContext<ClientConfig | null>(null);
+const EMPTY_CONFIG: ClientConfig = {};
+
+const ClientConfigContext = createContext<ClientConfig>(EMPTY_CONFIG);
 
 export const ClientConfigProvider = ClientConfigContext.Provider;
 
 export function useClientConfig(): ClientConfig {
-  const config = useContext(ClientConfigContext);
-  if (!config) throw new Error('Client config are not provided!');
-  return config;
+  return useContext(ClientConfigContext);
 }
 
-export function useOptionalClientConfig(): ClientConfig | null {
+export function useOptionalClientConfig(): ClientConfig {
   return useContext(ClientConfigContext);
+}
+
+const ClientConfigLoadedContext = createContext<boolean>(false);
+
+export const ClientConfigLoadedProvider = ClientConfigLoadedContext.Provider;
+
+export function useClientConfigLoaded(): boolean {
+  return useContext(ClientConfigLoadedContext);
 }
 
 export const clientDefaultServer = (clientConfig: ClientConfig): string =>

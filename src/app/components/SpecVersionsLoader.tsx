@@ -32,7 +32,7 @@ export function SpecVersionsLoader({
   }
 
   if (!ignoreError && state.status === AsyncStatus.Error) {
-    return error?.(state.error, load, ignoreCallback);
+    if (error) return error(state.error, load, ignoreCallback);
   }
 
   return children(
