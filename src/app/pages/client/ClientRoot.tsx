@@ -217,7 +217,6 @@ type ClientRootProps = {
   children: ReactNode;
 };
 export function ClientRoot({ children }: ClientRootProps) {
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const clientConfig = useClientConfig();
   const sessions = useAtomValue(sessionsAtom);
@@ -280,7 +279,6 @@ export function ClientRoot({ children }: ClientRootProps) {
       if (mx?.clientRunning) {
         stopClient(mx);
       }
-      setLoading(true);
       loadedUserIdRef.current = undefined;
       setLoadState({ status: AsyncStatus.Idle });
       navigate(getHomePath(), { replace: true });
@@ -323,13 +321,6 @@ export function ClientRoot({ children }: ClientRootProps) {
     }
   }, [mx, startMatrix]);
 
-  useEffect(() => {
-    if (!mx) return;
-    if (isClientReady(mx.getSyncState())) {
-      setLoading(false);
-    }
-  }, [mx]);
-
   useSyncState(
     mx,
     useCallback((state: string) => {
@@ -341,10 +332,11 @@ export function ClientRoot({ children }: ClientRootProps) {
             performance.now() - syncStartTimeRef.current
           );
         }
-        setLoading(false);
       }
     }, [])
   );
+
+  const isError = loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
 
   // Set matrix client context: homeserver and sync type (not PII)
   useEffect(() => {
@@ -400,8 +392,8 @@ export function ClientRoot({ children }: ClientRootProps) {
     <AutoDiscovery userId={userId ?? ''} baseUrl={baseUrl ?? ''}>
       <SpecVersions baseUrl={baseUrl ?? ''}>
         {mx && <SyncStatus mx={mx} />}
-        {loading && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
-        {(loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error) && (
+        {(!mx || isError) && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
+        {isError && (
           <SplashScreen>
             <Box
               direction="Column"
@@ -428,7 +420,7 @@ export function ClientRoot({ children }: ClientRootProps) {
             </Box>
           </SplashScreen>
         )}
-        {loading || !mx ? (
+        {!mx ? (
           <ClientRootLoading />
         ) : (
           <MatrixClientProvider value={mx}>
