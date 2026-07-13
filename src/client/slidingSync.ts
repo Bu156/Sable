@@ -31,8 +31,8 @@ export const LIST_ROOM_SEARCH = 'room_search';
 export const LIST_SPACE = 'space';
 const LIST_TIMELINE_LIMIT = 1;
 const DEFAULT_LIST_PAGE_SIZE = 250;
+const INITIAL_LIST_SIZE = 30;
 const DEFAULT_POLL_TIMEOUT_MS = 20000;
-const DEFAULT_MAX_ROOMS = 5000;
 
 const LIST_SORT_ORDER = ['by_recency', 'by_name'];
 
@@ -52,7 +52,6 @@ export type SlidingSyncConfig = {
   listPageSize?: number;
   timelineLimit?: number;
   pollTimeoutMs?: number;
-  maxRooms?: number;
   includeInviteList?: boolean;
   probeTimeoutMs?: number;
 };
@@ -76,23 +75,19 @@ const clampPositive = (value: number | undefined, fallback: number): number => {
 };
 
 const buildListRequiredState = (): MSC3575RoomSubscription['required_state'] => [
-  [EventType.RoomJoinRules, ''],
+  // first sync limited solely to what's needed to render rooms
   [EventType.RoomAvatar, ''],
   [EventType.RoomTombstone, ''],
   [EventType.RoomEncryption, ''],
   [EventType.RoomCreate, ''],
-  [EventType.RoomTopic, ''],
+  [EventType.RoomName, ''],
   [EventType.RoomCanonicalAlias, ''],
   [EventType.RoomMember, MSC3575_STATE_KEY_ME],
   ['m.space.child', MSC3575_WILDCARD],
-  [EventType.GroupCallMemberPrefix, MSC3575_WILDCARD],
-  [CustomStateEvent.ImagePack, MSC3575_WILDCARD],
-  [CustomStateEvent.PoniesRoomEmotes, MSC3575_WILDCARD],
-  [CustomStateEvent.RoomAbbreviations, ''],
-  [CustomStateEvent.RoomBanner, ''],
 ];
 
 const ACTIVE_ROOM_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
+  // active room subscription includes all room data
   [EventType.RoomPowerLevels, ''],
   [EventType.RoomName, ''],
   [EventType.RoomTopic, ''],
@@ -130,7 +125,7 @@ const buildLists = (pageSize: number, includeInviteList: boolean): Map<string, M
   const lists = new Map<string, MSC3575List>();
   const listRequiredState = buildListRequiredState();
 
-  const initialRange = Math.min(pageSize, 100);
+  const initialRange = Math.min(pageSize, INITIAL_LIST_SIZE);
 
   lists.set(LIST_JOINED, {
     ranges: [[0, Math.max(0, initialRange - 1)]],
@@ -161,8 +156,6 @@ const getListEndIndex = (list: MSC3575List | null): number => {
 export class SlidingSyncManager {
   private disposed = false;
 
-  private readonly maxRooms: number;
-
   private readonly listKeys: string[];
 
   private readonly activeRoomSubscriptions = new Set<string>();
@@ -185,6 +178,8 @@ export class SlidingSyncManager {
   private listsFullyLoaded = false;
 
   private initialSyncCompleted = false;
+
+  private activeRoomDataReceived = false;
 
   private syncCount = 0;
 
@@ -218,7 +213,6 @@ export class SlidingSyncManager {
     const listPageSize = clampPositive(config.listPageSize, DEFAULT_LIST_PAGE_SIZE);
     const pollTimeoutMs = clampPositive(config.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS);
     this.probeTimeoutMs = clampPositive(config.probeTimeoutMs, 5000);
-    this.maxRooms = clampPositive(config.maxRooms, DEFAULT_MAX_ROOMS);
     this.listPageSize = listPageSize;
     const includeInviteList = config.includeInviteList !== false;
 
@@ -324,7 +318,7 @@ export class SlidingSyncManager {
         this.initialSyncSpan = null;
       }
 
-      this.expandListsToKnownCount();
+      this.expandListsByPage();
 
       Sentry.metrics.distribution('sable.sync.processing_ms', syncDuration, {
         attributes: { transport: 'sliding' },
@@ -352,7 +346,6 @@ export class SlidingSyncManager {
       proxyBaseUrl: this.proxyBaseUrl,
       listPageSize: this.listPageSize,
       roomTimelineLimit: this.roomTimelineLimit,
-      maxRooms: this.maxRooms,
       lists: this.listKeys,
     });
 
@@ -406,8 +399,9 @@ export class SlidingSyncManager {
     };
   }
 
-  private expandListsToKnownCount(): void {
-    if (this.listsFullyLoaded) return;
+  private expandListsByPage(): void {
+    if (!this.initialSyncCompleted) return;
+    if (this.activeRoomSubscriptions.size > 0 && !this.activeRoomDataReceived) return;
 
     let allListsComplete = true;
     let expandedAny = false;
@@ -437,7 +431,7 @@ export class SlidingSyncManager {
       const existing = this.slidingSync.getListParams(key);
       const currentEnd = getListEndIndex(existing);
 
-      const maxEnd = Math.min(knownCount, this.maxRooms) - 1;
+      const maxEnd = knownCount - 1;
 
       if (currentEnd >= maxEnd) {
         expansionDetails[key] = { status: 'complete', knownCount, currentEnd };
@@ -446,7 +440,7 @@ export class SlidingSyncManager {
 
       allListsComplete = false;
 
-      const desiredEnd = maxEnd;
+      const desiredEnd = Math.min(maxEnd, currentEnd + this.listPageSize);
 
       if (desiredEnd === currentEnd) {
         expansionDetails[key] = {
@@ -469,46 +463,37 @@ export class SlidingSyncManager {
         roomsToLoad: desiredEnd - currentEnd,
       };
 
-      debugLog.info('sync', `Expanding list "${key}" to full range`, {
+      debugLog.info('sync', `Expanding list "${key}" by page`, {
         list: key,
         knownCount,
         previousEnd: currentEnd,
         newEnd: desiredEnd,
         roomsToLoad: desiredEnd - currentEnd,
       });
-
-      if (knownCount > this.maxRooms) {
-        log.warn(
-          `Sliding Sync list "${key}" capped at ${this.maxRooms}/${knownCount} rooms for ${this.mx.getUserId()}`
-        );
-        debugLog.warn('sync', `List "${key}" exceeds maxRooms limit`, {
-          list: key,
-          knownCount,
-          maxRooms: this.maxRooms,
-          cappedCount: this.maxRooms,
-        });
-      }
     });
 
     const expansionDuration = performance.now() - expansionStartTime;
     const hasExpansions = Object.values(expansionDetails).some((d) => d.status === 'expanding');
 
     if (allListsComplete) {
-      this.listsFullyLoaded = true;
-      log.log(`Sliding Sync all lists fully loaded for ${this.mx.getUserId()}`);
-      const totalRooms = this.listKeys.reduce(
-        (sum, key) => sum + (this.slidingSync.getListData(key)?.joinedCount ?? 0),
-        0
-      );
-      const listsLoadedMs =
-        this.attachTime != null ? Math.round(performance.now() - this.attachTime) : 0;
-      Sentry.metrics.distribution('sable.sync.lists_loaded_ms', listsLoadedMs, {
-        attributes: { transport: 'sliding' },
-      });
-      Sentry.metrics.gauge('sable.sync.total_rooms', totalRooms, {
-        attributes: { transport: 'sliding' },
-      });
+      if (!this.listsFullyLoaded) {
+        this.listsFullyLoaded = true;
+        log.log(`Sliding Sync all lists fully loaded for ${this.mx.getUserId()}`);
+        const totalRooms = this.listKeys.reduce(
+          (sum, key) => sum + (this.slidingSync.getListData(key)?.joinedCount ?? 0),
+          0
+        );
+        const listsLoadedMs =
+          this.attachTime != null ? Math.round(performance.now() - this.attachTime) : 0;
+        Sentry.metrics.distribution('sable.sync.lists_loaded_ms', listsLoadedMs, {
+          attributes: { transport: 'sliding' },
+        });
+        Sentry.metrics.gauge('sable.sync.total_rooms', totalRooms, {
+          attributes: { transport: 'sliding' },
+        });
+      }
     } else if (expandedAny) {
+      this.listsFullyLoaded = false;
       log.log(`Sliding Sync lists expanding... for ${this.mx.getUserId()}`);
     }
 
@@ -646,6 +631,8 @@ export class SlidingSyncManager {
       });
       this.slidingSync.removeListener(SlidingSyncEvent.RoomData, onFirstRoomData);
       this.pendingRoomDataListeners.delete(roomId);
+      this.activeRoomDataReceived = true;
+      this.expandListsByPage();
     };
     this.pendingRoomDataListeners.set(roomId, onFirstRoomData);
     this.slidingSync.on(SlidingSyncEvent.RoomData, onFirstRoomData);

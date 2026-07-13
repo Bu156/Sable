@@ -33,7 +33,6 @@ export type ClientConfig = {
     listPageSize?: number;
     timelineLimit?: number;
     pollTimeoutMs?: number;
-    maxRooms?: number;
     includeInviteList?: boolean;
     probeTimeoutMs?: number;
   };

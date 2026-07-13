@@ -3,15 +3,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MatrixClient } from '$types/matrix-sdk';
+import type { MatrixClient, MSC3575List } from '$types/matrix-sdk';
+import { SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
 
 import { SlidingSyncManager, type SlidingSyncConfig } from './slidingSync';
 
 // ── vi.hoisted mocks ─────────────────────────────────────────────────────────
 // Must be defined via vi.hoisted
 const mocks = vi.hoisted(() => ({
+  slidingSyncConstructorArgs: undefined as unknown[] | undefined,
   slidingSyncInstance: {
-    on: vi.fn<() => void>(),
+    on: vi.fn<(event: unknown, handler: unknown) => void>(),
     off: vi.fn<() => void>(),
     removeListener: vi.fn<() => void>(),
     stop: vi.fn<() => void>(),
@@ -20,8 +22,8 @@ const mocks = vi.hoisted(() => ({
     addCustomSubscription: vi.fn<() => void>(),
     useCustomSubscription: vi.fn<() => void>(),
     registerExtension: vi.fn<() => void>(),
-    getListData: vi.fn<() => null>(),
-    getListParams: vi.fn<() => null>(),
+    getListData: vi.fn<(key: string) => null>(),
+    getListParams: vi.fn<(key: string) => null>(),
     setList: vi.fn<() => void>(),
     setListRanges: vi.fn<() => void>(),
   },
@@ -44,7 +46,8 @@ vi.mock('@sentry/react', () => ({
 // A plain function constructor is the correct pattern
 vi.mock('$types/matrix-sdk', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  function MockSlidingSync() {
+  function MockSlidingSync(...args: unknown[]) {
+    mocks.slidingSyncConstructorArgs = args;
     return mocks.slidingSyncInstance;
   }
   return { ...actual, SlidingSync: MockSlidingSync };
@@ -72,6 +75,41 @@ function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.slidingSyncConstructorArgs = undefined;
+});
+
+describe('SlidingSyncManager initial request', () => {
+  it('starts with a small room-list range and only row-level state', () => {
+    makeManager(makeMockMx());
+
+    const lists = mocks.slidingSyncConstructorArgs?.[1] as Map<string, MSC3575List>;
+    const joined = lists.get('joined');
+
+    expect(joined?.ranges).toEqual([[0, 29]]);
+    expect(joined?.required_state).toHaveLength(8);
+    expect(joined?.required_state).not.toContainEqual(['m.image_pack', '*']);
+  });
+
+  it('expands by one page after the first response instead of jumping to all rooms', () => {
+    const manager = makeManager(makeMockMx());
+    mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
+      key === 'joined' ? ({ joinedCount: 1000 } as never) : null
+    );
+    mocks.slidingSyncInstance.getListParams.mockReturnValue({
+      ranges: [[0, 29]],
+    } as never);
+    manager.attach();
+
+    const lifecycleCall = mocks.slidingSyncInstance.on.mock.calls.find(
+      ([event]) => event === SlidingSyncEvent.Lifecycle
+    );
+    const lifecycle = lifecycleCall?.[1] as
+      | ((state: SlidingSyncState, response: unknown, error?: Error) => void)
+      | undefined;
+    lifecycle?.(SlidingSyncState.Complete, {});
+
+    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [[0, 279]]);
+  });
 });
 
 // ── dispose() ────────────────────────────────────────────────────────────────
