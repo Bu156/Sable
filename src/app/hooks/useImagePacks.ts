@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ImagePack, ImageUsage } from '$plugins/custom-emoji';
 import {
   getGlobalImagePacks,
+  getGlobalImagePackRoomIds,
   getRoomImagePack,
   getRoomImagePacks,
   getUserImagePack,
@@ -15,6 +16,7 @@ import {
   writeCachedPack,
   writeCachedPacks,
 } from '$plugins/custom-emoji';
+import { getSlidingSyncManager } from '$client/initMatrix';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
@@ -102,6 +104,25 @@ export const useGlobalImagePacks = (): ImagePack[] => {
   });
 
   useEffect(() => {
+    const manager = getSlidingSyncManager(mx);
+    if (!manager) return undefined;
+
+    const refresh = () => {
+      setGlobalPacks((prev) => {
+        const next = getGlobalImagePacks(mx);
+        return imagePackListEqual(prev, next) ? prev : next;
+      });
+    };
+
+    const listeners = getGlobalImagePackRoomIds(mx).map((roomId) => {
+      manager.subscribeToImagePackRoom(roomId);
+      return manager.onRoomData(roomId, refresh);
+    });
+
+    return () => listeners.forEach((unsubscribe) => unsubscribe());
+  }, [mx]);
+
+  useEffect(() => {
     const userId = mx.getUserId();
     if (userId) writeCachedPacks(userId, globalPacksScope(), globalPacks);
   }, [mx, globalPacks]);
@@ -114,6 +135,12 @@ export const useGlobalImagePacks = (): ImagePack[] => {
           mEvent.getType() === (CustomAccountDataEvent.ImagePackRooms as string) ||
           mEvent.getType() === (CustomAccountDataEvent.PoniesEmoteRooms as string)
         ) {
+          const manager = getSlidingSyncManager(mx);
+          if (manager) {
+            getGlobalImagePackRoomIds(mx).forEach((roomId) =>
+              manager.subscribeToImagePackRoom(roomId)
+            );
+          }
           setGlobalPacks((prev) => {
             const next = getGlobalImagePacks(mx);
             return imagePackListEqual(prev, next) ? prev : next;

@@ -37,6 +37,7 @@ const DEFAULT_POLL_TIMEOUT_MS = 20000;
 const LIST_SORT_ORDER = ['by_recency', 'by_name'];
 
 const UNENCRYPTED_SUBSCRIPTION_KEY = 'unencrypted';
+const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
 const ACTIVE_ROOM_TIMELINE_LIMIT = 50;
 
 export type PartialSlidingSyncRequest = {
@@ -117,6 +118,14 @@ const buildUnencryptedSubscription = (timelineLimit: number): MSC3575RoomSubscri
   required_state: ACTIVE_ROOM_REQUIRED_STATE,
 });
 
+const buildImagePackSubscription = (): MSC3575RoomSubscription => ({
+  timeline_limit: 0,
+  required_state: [
+    [CustomStateEvent.ImagePack, MSC3575_WILDCARD],
+    [CustomStateEvent.PoniesRoomEmotes, MSC3575_WILDCARD],
+  ],
+});
+
 const buildLists = (pageSize: number): Map<string, MSC3575List> => {
   const lists = new Map<string, MSC3575List>();
   const listRequiredState = buildListRequiredState();
@@ -153,6 +162,8 @@ export class SlidingSyncManager {
   private readonly listKeys: string[];
 
   private readonly activeRoomSubscriptions = new Set<string>();
+
+  private readonly imagePackRoomSubscriptions = new Set<string>();
 
   private readonly listPageSize: number;
 
@@ -217,6 +228,10 @@ export class SlidingSyncManager {
     this.slidingSync.addCustomSubscription(
       UNENCRYPTED_SUBSCRIPTION_KEY,
       buildUnencryptedSubscription(roomTimelineLimit)
+    );
+    this.slidingSync.addCustomSubscription(
+      IMAGE_PACK_SUBSCRIPTION_KEY,
+      buildImagePackSubscription()
     );
 
     this.onLifecycle = (state, resp, err) => {
@@ -564,6 +579,25 @@ export class SlidingSyncManager {
     return this.activeRoomSubscriptions.has(roomId);
   }
 
+  public subscribeToImagePackRoom(roomId: string): void {
+    if (this.disposed || this.imagePackRoomSubscriptions.has(roomId)) return;
+    this.slidingSync.useCustomSubscription(roomId, IMAGE_PACK_SUBSCRIPTION_KEY);
+    this.imagePackRoomSubscriptions.add(roomId);
+    this.slidingSync.modifyRoomSubscriptions(
+      new Set([...this.activeRoomSubscriptions, ...this.imagePackRoomSubscriptions])
+    );
+  }
+
+  /* Listen for raw sliding-sync data for one room */
+  public onRoomData(roomId: string, listener: () => void): () => void {
+    const handler = (dataRoomId: string) => {
+      // Let matrix-js-sdk finish applying the room data before reading state events
+      if (dataRoomId === roomId) globalThis.setTimeout(listener, 0);
+    };
+    this.slidingSync.on(SlidingSyncEvent.RoomData, handler);
+    return () => this.slidingSync.removeListener(SlidingSyncEvent.RoomData, handler);
+  }
+
   public subscribeToRoom(roomId: string): void {
     if (this.disposed) return;
     const room = this.mx.getRoom(roomId);
@@ -572,7 +606,9 @@ export class SlidingSyncManager {
       this.slidingSync.useCustomSubscription(roomId, UNENCRYPTED_SUBSCRIPTION_KEY);
     }
     this.activeRoomSubscriptions.add(roomId);
-    this.slidingSync.modifyRoomSubscriptions(new Set(this.activeRoomSubscriptions));
+    this.slidingSync.modifyRoomSubscriptions(
+      new Set([...this.activeRoomSubscriptions, ...this.imagePackRoomSubscriptions])
+    );
     Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
       attributes: { transport: 'sliding' },
     });
@@ -636,7 +672,9 @@ export class SlidingSyncManager {
       this.pendingRoomDataListeners.delete(roomId);
     }
     this.activeRoomSubscriptions.delete(roomId);
-    this.slidingSync.modifyRoomSubscriptions(new Set(this.activeRoomSubscriptions));
+    this.slidingSync.modifyRoomSubscriptions(
+      new Set([...this.activeRoomSubscriptions, ...this.imagePackRoomSubscriptions])
+    );
     Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
       attributes: { transport: 'sliding' },
     });
