@@ -22,7 +22,6 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   clearCacheAndReload,
   clearLoginData,
-  clearMismatchedStores,
   initClient,
   logoutClient,
   startClient,
@@ -242,22 +241,6 @@ export function ClientRoot({ children }: ClientRootProps) {
       if (activeSession.userId !== activeSessionId) {
         log.log('persisting activeSessionId →', activeSession.userId);
         setActiveSessionId(activeSession.userId);
-      }
-      const storeCleanupStart = performance.now();
-      let storeCleanupOutcome = 'success';
-      try {
-        await clearMismatchedStores();
-      } catch (error) {
-        storeCleanupOutcome = 'error';
-        throw error;
-      } finally {
-        Sentry.metrics.distribution(
-          'sable.startup.phase_ms',
-          performance.now() - storeCleanupStart,
-          {
-            attributes: { phase: 'store_cleanup', outcome: storeCleanupOutcome },
-          }
-        );
       }
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
