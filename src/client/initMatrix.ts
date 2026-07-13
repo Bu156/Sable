@@ -14,6 +14,7 @@ import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
+import { SessionOidcTokenRefresher } from './oidcTokenRefresher';
 import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncConfig, SlidingSyncDiagnostics } from './slidingSync';
 import { SlidingSyncManager } from './slidingSync';
@@ -275,9 +276,13 @@ const buildClient = async (session: Session): Promise<MatrixClient> => {
 
   const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, storeName.crypto);
 
+  const tokenRefresher =
+    session.oidc && session.refreshToken ? new SessionOidcTokenRefresher(session) : undefined;
+
   const mx = createClient({
     baseUrl: session.baseUrl,
     accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
     userId: session.userId,
     store: indexedDBStore,
     cryptoStore: legacyCryptoStore,
@@ -285,6 +290,9 @@ const buildClient = async (session: Session): Promise<MatrixClient> => {
     timelineSupport: true,
     cryptoCallbacks: cryptoCallbacks as unknown as CryptoCallbacks,
     verificationMethods: ['m.sas.v1'],
+    tokenRefreshFunction: tokenRefresher
+      ? (refreshToken) => tokenRefresher.doRefreshAccessToken(refreshToken)
+      : undefined,
   });
 
   await indexedDBStore.startup();
@@ -476,6 +484,43 @@ export const getClientSyncDiagnostics = (mx: MatrixClient): ClientSyncDiagnostic
   };
 };
 
+const revokeOidcToken = async (
+  endpoint: string,
+  token: string,
+  tokenTypeHint: 'access_token' | 'refresh_token',
+  clientId: string
+): Promise<void> => {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token, token_type_hint: tokenTypeHint, client_id: clientId }),
+  });
+  if (!res.ok) {
+    throw new Error(`OIDC token revocation failed (${res.status})`);
+  }
+};
+
+const revokeOidcSession = async (mx: MatrixClient, session: Session): Promise<void> => {
+  const clientId = session.oidc?.clientId;
+  if (!clientId) return;
+  const metadata = await mx.getAuthMetadata();
+  const endpoint = metadata.revocation_endpoint;
+  if (!endpoint) return;
+
+  const accessToken = mx.getAccessToken() ?? undefined;
+  const results = await Promise.allSettled([
+    session.refreshToken
+      ? revokeOidcToken(endpoint, session.refreshToken, 'refresh_token', clientId)
+      : Promise.resolve(),
+    accessToken
+      ? revokeOidcToken(endpoint, accessToken, 'access_token', clientId)
+      : Promise.resolve(),
+  ]);
+  if (results.some((r) => r.status === 'rejected')) {
+    debugLog.warn('general', 'OIDC token revocation had failures', { userId: session.userId });
+  }
+};
+
 /**
  * Logs out a Matrix client and cleans up its SDK stores + IndexedDB databases.
  * Does NOT touch the Jotai sessions atom — callers must do that themselves
@@ -490,7 +535,11 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
   pushSessionToSW();
   stopClient(mx);
   try {
-    await mx.logout();
+    if (session?.oidc) {
+      await revokeOidcSession(mx, session);
+    } else {
+      await mx.logout();
+    }
     debugLog.info('general', 'Logout successful', { userId: mx.getUserId() });
   } catch {
     // ignore
