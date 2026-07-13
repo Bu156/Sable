@@ -424,39 +424,33 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   return (
     <AutoDiscovery userId={userId ?? ''} baseUrl={baseUrl ?? ''}>
-      <SpecVersions baseUrl={baseUrl ?? ''}>
-        {mx && <SyncStatus mx={mx} />}
-        {(!mx || isError) && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
-        {isError && (
-          <SplashScreen>
-            <Box
-              direction="Column"
-              grow="Yes"
-              alignItems="Center"
-              justifyContent="Center"
-              gap="400"
-            >
-              <Dialog>
-                <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
-                  {loadState.status === AsyncStatus.Error && (
-                    <Text>{`Failed to load. ${loadState.error.message}`}</Text>
-                  )}
-                  {startState.status === AsyncStatus.Error && (
-                    <Text>{`Failed to start. ${startState.error.message}`}</Text>
-                  )}
-                  <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
-                    <Text as="span" size="B400">
-                      Retry
-                    </Text>
-                  </Button>
-                </Box>
-              </Dialog>
-            </Box>
-          </SplashScreen>
-        )}
-        {!mx || (!syncReadyClient && !isError) ? (
-          <ClientRootLoading />
-        ) : isError ? null : (
+      {mx && <SyncStatus mx={mx} />}
+      {(!mx || isError) && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
+      {isError && (
+        <SplashScreen>
+          <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
+            <Dialog>
+              <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
+                {loadState.status === AsyncStatus.Error && (
+                  <Text>{`Failed to load. ${loadState.error.message}`}</Text>
+                )}
+                {startState.status === AsyncStatus.Error && (
+                  <Text>{`Failed to start. ${startState.error.message}`}</Text>
+                )}
+                <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
+                  <Text as="span" size="B400">
+                    Retry
+                  </Text>
+                </Button>
+              </Box>
+            </Dialog>
+          </Box>
+        </SplashScreen>
+      )}
+      {!mx || (!syncReadyClient && !isError) ? (
+        <ClientRootLoading />
+      ) : isError ? null : (
+        <SpecVersions baseUrl={baseUrl ?? ''}>
           <MatrixClientProvider value={mx}>
             <ServerConfigsLoader>
               {(serverConfigs) => (
@@ -470,8 +464,8 @@ export function ClientRoot({ children }: ClientRootProps) {
               )}
             </ServerConfigsLoader>
           </MatrixClientProvider>
-        )}
-      </SpecVersions>
+        </SpecVersions>
+      )}
     </AutoDiscovery>
   );
 }

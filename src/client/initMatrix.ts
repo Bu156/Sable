@@ -4,7 +4,13 @@ import type {
   MSC3575SlidingSyncRequest,
   MSC3575SlidingSyncResponse,
 } from '$types/matrix-sdk';
-import { createClient, IndexedDBStore, IndexedDBCryptoStore } from '$types/matrix-sdk';
+import {
+  ClientEvent,
+  createClient,
+  IndexedDBStore,
+  IndexedDBCryptoStore,
+  SyncState,
+} from '$types/matrix-sdk';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, Sessions, SessionStoreName } from '$state/sessions';
@@ -23,7 +29,50 @@ const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
 const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
 const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
+const presenceStartCleanupByClient = new WeakMap<MatrixClient, () => void>();
 const SLIDING_SYNC_POLL_TIMEOUT_MS = 20000;
+
+const isInitialSyncReady = (state: string | null): boolean =>
+  state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
+
+const startPresenceAfterInitialSync = (
+  mx: MatrixClient,
+  manager: PresenceSyncManager
+): (() => void) => {
+  let started = false;
+  let startTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const start = () => {
+    if (started) return;
+    started = true;
+    presenceStartCleanupByClient.delete(mx);
+    mx.removeListener(ClientEvent.Sync, onSync);
+    manager.start();
+  };
+
+  const scheduleStart = () => {
+    if (startTimer !== undefined) return;
+    startTimer = globalThis.setTimeout(() => {
+      startTimer = undefined;
+      start();
+    }, 0);
+  };
+
+  const onSync = (state: SyncState) => {
+    if (isInitialSyncReady(state)) scheduleStart();
+  };
+
+  if (isInitialSyncReady(mx.getSyncState())) scheduleStart();
+  else mx.on(ClientEvent.Sync, onSync);
+
+  const cleanup = () => {
+    if (startTimer !== undefined) globalThis.clearTimeout(startTimer);
+    mx.removeListener(ClientEvent.Sync, onSync);
+    presenceStartCleanupByClient.delete(mx);
+  };
+  presenceStartCleanupByClient.set(mx, cleanup);
+  return cleanup;
+};
 
 type StartupPhase = 'sync_store' | 'rust_crypto' | 'client_init' | 'client_start';
 
@@ -321,6 +370,8 @@ const initializeClient = async (
   }
   const { mx, indexedDBStore } = builtClient;
 
+  void mx.getVersions().catch(() => undefined);
+
   const syncStorePromise = measureStartupPhase('sync_store', () => indexedDBStore.startup());
   const cryptoPromise = measureStartupPhase('rust_crypto', () =>
     mx.initRustCrypto({ cryptoDatabasePrefix })
@@ -438,6 +489,7 @@ const disposeSlidingSync = (mx: MatrixClient): void => {
 };
 
 const disposePresenceSync = (mx: MatrixClient): void => {
+  presenceStartCleanupByClient.get(mx)?.();
   const manager = presenceSyncByClient.get(mx);
   if (!manager) return;
   manager.dispose();
@@ -461,8 +513,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 
   const presenceManager = new PresenceSyncManager(mx);
   presenceSyncByClient.set(mx, presenceManager);
-
-  presenceManager.start();
+  startPresenceAfterInitialSync(mx, presenceManager);
 
   let manager: SlidingSyncManager | undefined;
 
