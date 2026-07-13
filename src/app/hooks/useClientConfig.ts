@@ -27,16 +27,6 @@ export type ClientConfig = {
     webPushAppID?: string;
   };
 
-  slidingSync?: {
-    proxyBaseUrl?: string;
-    bootstrapClassicOnColdCache?: boolean;
-    listPageSize?: number;
-    timelineLimit?: number;
-    pollTimeoutMs?: number;
-    includeInviteList?: boolean;
-    probeTimeoutMs?: number;
-  };
-
   featuredCommunities?: {
     openAsDefault?: boolean;
     spaces?: string[];

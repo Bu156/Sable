@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MSC3575List } from '$types/matrix-sdk';
 import { SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
 
-import { SlidingSyncManager, type SlidingSyncConfig } from './slidingSync';
+import { SlidingSyncManager } from './slidingSync';
 
 // ── vi.hoisted mocks ─────────────────────────────────────────────────────────
 // Must be defined via vi.hoisted
@@ -69,8 +69,7 @@ function makeMockMx(overrides: Record<string, unknown> = {}) {
 }
 
 function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
-  const config: SlidingSyncConfig = {};
-  return new SlidingSyncManager(mx, 'https://sliding.example.com', config);
+  return new SlidingSyncManager(mx, 'https://sliding.example.com');
 }
 
 beforeEach(() => {

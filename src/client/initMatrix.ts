@@ -15,7 +15,7 @@ import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
 import { cryptoCallbacks } from './secretStorageKeys';
-import type { SlidingSyncConfig, SlidingSyncDiagnostics } from './slidingSync';
+import type { SlidingSyncDiagnostics } from './slidingSync';
 import { SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 
@@ -58,7 +58,7 @@ const slidingSyncConnIdCleanupByClient = new WeakMap<MatrixClient, () => void>()
 
 type SlidingSyncMethod = (
   reqBody: MSC3575SlidingSyncRequest,
-  proxyBaseUrl?: string,
+  baseUrl?: string,
   abortSignal?: AbortSignal
 ) => Promise<MSC3575SlidingSyncResponse>;
 
@@ -75,13 +75,12 @@ function installSlidingSyncConnId(mx: MatrixClient): void {
 
   const mxWritable = mx as MatrixClientWithWritableSlidingSync;
   const original = mx.slidingSync.bind(mx) as SlidingSyncMethod;
-
-  mxWritable.slidingSync = (reqBody, proxyBaseUrl, abortSignal) => {
+  mxWritable.slidingSync = (reqBody, baseUrl, abortSignal) => {
     const req = reqBody as SlidingSyncRequestWithConnId;
     if (req.conn_id === undefined) {
       req.conn_id = SLIDING_SYNC_CONN_ID;
     }
-    return original(reqBody, proxyBaseUrl, abortSignal);
+    return original(reqBody, baseUrl, abortSignal);
   };
 
   slidingSyncConnIdCleanupByClient.set(mx, () => {
@@ -420,7 +419,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 
 export type StartClientConfig = {
   baseUrl?: string;
-  slidingSync?: SlidingSyncConfig;
   sessionSlidingSyncOptIn?: boolean;
   pollTimeoutMs?: number;
   timelineLimit?: number;
@@ -453,13 +451,13 @@ export const getPresenceSyncManager = (mx: MatrixClient): PresenceSyncManager | 
   presenceSyncByClient.get(mx);
 
 export const startClient = async (mx: MatrixClient, config?: StartClientConfig): Promise<void> => {
-  debugLog.info('sync', 'Starting Matrix client', { userId: mx.getUserId() });
   disposeSlidingSync(mx);
   disposePresenceSync(mx);
 
-  const slidingConfig = config?.slidingSync;
-  const proxyBaseUrl = slidingConfig?.proxyBaseUrl ?? config?.baseUrl ?? mx.baseUrl;
-  const useSliding = config?.sessionSlidingSyncOptIn === true && !!slidingConfig;
+  const baseUrl = config?.baseUrl ?? mx.baseUrl;
+  const useSliding = config?.sessionSlidingSyncOptIn === true;
+
+  debugLog.info('sync', 'Starting Matrix client', { userId: mx.getUserId() });
 
   const presenceManager = new PresenceSyncManager(mx);
   presenceSyncByClient.set(mx, presenceManager);
@@ -469,10 +467,9 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
   let manager: SlidingSyncManager | undefined;
 
   if (useSliding) {
-    manager = new SlidingSyncManager(mx, proxyBaseUrl, {
-      ...slidingConfig,
-      includeInviteList: true,
-      pollTimeoutMs: slidingConfig?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
+    manager = new SlidingSyncManager(mx, baseUrl, {
+      pollTimeoutMs: config?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
+      timelineLimit: config?.timelineLimit,
     });
 
     installStartupFetchRoomEventPatch(mx, manager);
@@ -497,7 +494,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     debugLog.error('network', 'Failed to start client with sliding sync', {
       error: err instanceof Error ? err.message : String(err),
       userId: mx.getUserId(),
-      proxyBaseUrl: useSliding ? proxyBaseUrl : undefined,
+      baseUrl: useSliding ? baseUrl : undefined,
       stack: err instanceof Error ? err.stack : undefined,
     });
     disposeSlidingSync(mx);

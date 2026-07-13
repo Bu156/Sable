@@ -45,15 +45,10 @@ export type PartialSlidingSyncRequest = {
   ranges?: [number, number][];
 };
 
-export type SlidingSyncConfig = {
-  enabled?: boolean;
-  proxyBaseUrl?: string;
-  bootstrapClassicOnColdCache?: boolean;
+type SlidingSyncOptions = {
   listPageSize?: number;
   timelineLimit?: number;
   pollTimeoutMs?: number;
-  includeInviteList?: boolean;
-  probeTimeoutMs?: number;
 };
 
 export type SlidingSyncListDiagnostics = {
@@ -63,7 +58,7 @@ export type SlidingSyncListDiagnostics = {
 };
 
 export type SlidingSyncDiagnostics = {
-  proxyBaseUrl: string;
+  baseUrl: string;
   timelineLimit: number;
   listPageSize: number;
   lists: SlidingSyncListDiagnostics[];
@@ -121,7 +116,7 @@ const buildUnencryptedSubscription = (timelineLimit: number): MSC3575RoomSubscri
   required_state: ACTIVE_ROOM_REQUIRED_STATE,
 });
 
-const buildLists = (pageSize: number, includeInviteList: boolean): Map<string, MSC3575List> => {
+const buildLists = (pageSize: number): Map<string, MSC3575List> => {
   const lists = new Map<string, MSC3575List>();
   const listRequiredState = buildListRequiredState();
 
@@ -135,15 +130,13 @@ const buildLists = (pageSize: number, includeInviteList: boolean): Map<string, M
     filters: { is_invite: false },
   });
 
-  if (includeInviteList) {
-    lists.set(LIST_INVITES, {
-      ranges: [[0, Math.max(0, initialRange - 1)]],
-      sort: LIST_SORT_ORDER,
-      timeline_limit: LIST_TIMELINE_LIMIT,
-      required_state: listRequiredState,
-      filters: { is_invite: true },
-    });
-  }
+  lists.set(LIST_INVITES, {
+    ranges: [[0, Math.max(0, initialRange - 1)]],
+    sort: LIST_SORT_ORDER,
+    timeline_limit: LIST_TIMELINE_LIMIT,
+    required_state: listRequiredState,
+    filters: { is_invite: true },
+  });
 
   return lists;
 };
@@ -203,26 +196,22 @@ export class SlidingSyncManager {
 
   public readonly slidingSync: SlidingSync;
 
-  public readonly probeTimeoutMs: number;
-
   public constructor(
     private readonly mx: MatrixClient,
-    private readonly proxyBaseUrl: string,
-    config: SlidingSyncConfig
+    private readonly baseUrl: string,
+    options: SlidingSyncOptions = {}
   ) {
-    const listPageSize = clampPositive(config.listPageSize, DEFAULT_LIST_PAGE_SIZE);
-    const pollTimeoutMs = clampPositive(config.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS);
-    this.probeTimeoutMs = clampPositive(config.probeTimeoutMs, 5000);
+    const listPageSize = clampPositive(options.listPageSize, DEFAULT_LIST_PAGE_SIZE);
+    const pollTimeoutMs = clampPositive(options.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS);
     this.listPageSize = listPageSize;
-    const includeInviteList = config.includeInviteList !== false;
 
-    const roomTimelineLimit = clampPositive(config.timelineLimit, ACTIVE_ROOM_TIMELINE_LIMIT);
+    const roomTimelineLimit = clampPositive(options.timelineLimit, ACTIVE_ROOM_TIMELINE_LIMIT);
     this.roomTimelineLimit = roomTimelineLimit;
 
     const defaultSubscription = buildEncryptedSubscription(roomTimelineLimit);
-    const lists = buildLists(listPageSize, includeInviteList);
+    const lists = buildLists(listPageSize);
     this.listKeys = Array.from(lists.keys());
-    this.slidingSync = new SlidingSync(proxyBaseUrl, lists, defaultSubscription, mx, pollTimeoutMs);
+    this.slidingSync = new SlidingSync(baseUrl, lists, defaultSubscription, mx, pollTimeoutMs);
 
     this.slidingSync.addCustomSubscription(
       UNENCRYPTED_SUBSCRIPTION_KEY,
@@ -343,7 +332,7 @@ export class SlidingSyncManager {
 
   public attach(): void {
     debugLog.info('sync', 'Attaching sliding sync listeners', {
-      proxyBaseUrl: this.proxyBaseUrl,
+      baseUrl: this.baseUrl,
       listPageSize: this.listPageSize,
       roomTimelineLimit: this.roomTimelineLimit,
       lists: this.listKeys,
@@ -353,7 +342,7 @@ export class SlidingSyncManager {
     this.initialSyncSpan = Sentry.startInactiveSpan({
       name: 'sync.initial',
       op: 'matrix.sync',
-      attributes: { 'sync.transport': 'sliding', 'sync.proxy': this.proxyBaseUrl },
+      attributes: { 'sync.transport': 'sliding', 'sync.base_url': this.baseUrl },
     });
 
     this.slidingSync.on(SlidingSyncEvent.Lifecycle, this.onLifecycle);
@@ -384,7 +373,7 @@ export class SlidingSyncManager {
 
   public getDiagnostics(): SlidingSyncDiagnostics {
     return {
-      proxyBaseUrl: this.proxyBaseUrl,
+      baseUrl: this.baseUrl,
       timelineLimit: this.roomTimelineLimit,
       listPageSize: this.listPageSize,
       lists: this.listKeys.map((key) => {

@@ -2,19 +2,22 @@ import { useEffect } from 'react';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getSlidingSyncManager } from '$client/initMatrix';
 import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
+import { useSelectedSpace } from '$hooks/router/useSelectedSpace';
 
 export const useSlidingSyncActiveRoom = (): void => {
   const mx = useMatrixClient();
   const roomId = useSelectedRoom();
+  const spaceId = useSelectedSpace();
 
   useEffect(() => {
-    if (!roomId) return undefined;
     const manager = getSlidingSyncManager(mx);
     if (!manager) return undefined;
 
-    manager.subscribeToRoom(roomId);
+    const activeRoomIds = [...new Set([spaceId, roomId].filter(Boolean))] as string[];
+    activeRoomIds.forEach((activeRoomId) => manager.subscribeToRoom(activeRoomId));
+
     return () => {
-      manager.unsubscribeFromRoom(roomId);
+      activeRoomIds.forEach((activeRoomId) => manager.unsubscribeFromRoom(activeRoomId));
     };
-  }, [mx, roomId]);
+  }, [mx, roomId, spaceId]);
 };

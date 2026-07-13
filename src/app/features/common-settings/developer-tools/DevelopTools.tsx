@@ -422,7 +422,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                 {syncDiagnostics.sliding ? (
                                   <>
                                     <Text size="T200">
-                                      Proxy: {syncDiagnostics.sliding.proxyBaseUrl}
+                                      Base URL: {syncDiagnostics.sliding.baseUrl}
                                     </Text>
                                     <Text size="T200">
                                       Room timeline: {syncDiagnostics.sliding.timelineLimit} | page

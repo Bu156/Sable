@@ -179,7 +179,7 @@ export function SyncDiagnostics() {
               </Box>
               {expandSliding && (
                 <Box direction="Column" gap="100">
-                  <Text size="T300">Sliding proxy: {diagnostics.sliding.proxyBaseUrl}</Text>
+                  <Text size="T300">Sliding sync base URL: {diagnostics.sliding.baseUrl}</Text>
                   <Text size="T300">
                     Room timeline limit: {diagnostics.sliding.timelineLimit} | page size:{' '}
                     {diagnostics.sliding.listPageSize}

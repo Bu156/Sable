@@ -48,7 +48,7 @@ import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
-import { useClientConfig, useClientConfigLoaded } from '$hooks/useClientConfig';
+import { useClientConfigLoaded } from '$hooks/useClientConfig';
 import { pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
@@ -218,7 +218,6 @@ type ClientRootProps = {
 };
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
-  const clientConfig = useClientConfig();
   const configLoaded = useClientConfigLoaded();
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
@@ -274,10 +273,9 @@ export function ClientRoot({ children }: ClientRootProps) {
       (m) =>
         startClient(m, {
           baseUrl: activeSession?.baseUrl,
-          slidingSync: clientConfig.slidingSync,
           sessionSlidingSyncOptIn: activeSession?.slidingSyncOptIn,
         }),
-      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn, clientConfig.slidingSync]
+      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn]
     )
   );
 
@@ -359,12 +357,12 @@ export function ClientRoot({ children }: ClientRootProps) {
     if (!activeSession?.baseUrl) return undefined;
     Sentry.setContext('client', {
       homeserver: activeSession.baseUrl,
-      sliding_sync: clientConfig.slidingSync,
+      sliding_sync: activeSession.slidingSyncOptIn === true,
     });
     return () => {
       Sentry.setContext('client', null);
     };
-  }, [activeSession?.baseUrl, clientConfig.slidingSync]);
+  }, [activeSession?.baseUrl, activeSession?.slidingSyncOptIn]);
 
   // Set a pseudonymous hashed user ID for error grouping — never sends raw Matrix ID
   useEffect(() => {

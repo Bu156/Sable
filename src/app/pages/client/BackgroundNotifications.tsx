@@ -43,7 +43,6 @@ import {
 } from '$utils/notificationStyle';
 import * as Sentry from '@sentry/react';
 import { startClient, stopClient } from '$client/initMatrix';
-import { useClientConfig } from '$hooks/useClientConfig';
 import { mobileOrTablet } from '$utils/user-agent';
 
 const log = createLogger('BackgroundNotifications');
@@ -55,10 +54,7 @@ const BACKGROUND_STAGGER_DELAY_MS = 5_000;
 const isClientReadyForNotifications = (state: SyncState | string | null): boolean =>
   state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
 
-const startBackgroundClient = async (
-  session: Session,
-  slidingSyncConfig: ReturnType<typeof useClientConfig>['slidingSync']
-): Promise<MatrixClient> => {
+const startBackgroundClient = async (session: Session): Promise<MatrixClient> => {
   const storeName = {
     sync: `bg-sync${session.userId}`,
     crypto: `bg-crypto${session.userId}`,
@@ -82,7 +78,6 @@ const startBackgroundClient = async (
 
   const startOpts = {
     baseUrl: session.baseUrl,
-    slidingSync: session.slidingSyncOptIn ? slidingSyncConfig : undefined,
     sessionSlidingSyncOptIn: session.slidingSyncOptIn,
     pollTimeoutMs: BACKGROUND_SYNC_POLL_TIMEOUT_MS,
     timelineLimit: 1,
@@ -121,7 +116,6 @@ const waitForSync = (mx: MatrixClient): Promise<void> =>
   });
 
 export function BackgroundNotifications() {
-  const clientConfig = useClientConfig();
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const [showNotifications] = useSetting(settingsAtom, 'useInAppNotifications');
@@ -256,7 +250,7 @@ export function BackgroundNotifications() {
     // fresh retry referencing the latest session from inactiveSessionsRef.
     const startSession = (session: Session, attempt = 0): void => {
       let sessionMx: MatrixClient | undefined;
-      startBackgroundClient(session, clientConfig.slidingSync)
+      startBackgroundClient(session)
         .then(async (mx) => {
           sessionMx = mx;
           current.set(session.userId, mx);
@@ -591,7 +585,6 @@ export function BackgroundNotifications() {
       });
     };
   }, [
-    clientConfig.slidingSync,
     inactiveSessions,
     shouldRunBackgroundNotifications,
     setActiveSessionId,
