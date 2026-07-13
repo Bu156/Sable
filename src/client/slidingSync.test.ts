@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MSC3575List } from '$types/matrix-sdk';
-import { SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
+import { EventType, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
 
 import { SlidingSyncManager } from './slidingSync';
 
@@ -85,7 +85,8 @@ describe('SlidingSyncManager initial request', () => {
     const joined = lists.get('joined');
 
     expect(joined?.ranges).toEqual([[0, 29]]);
-    expect(joined?.required_state).toHaveLength(8);
+    expect(joined?.required_state).toHaveLength(9);
+    expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
     expect(joined?.required_state).not.toContainEqual(['m.image_pack', '*']);
   });
 

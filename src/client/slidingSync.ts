@@ -77,6 +77,7 @@ const buildListRequiredState = (): MSC3575RoomSubscription['required_state'] => 
   [EventType.RoomCreate, ''],
   [EventType.RoomName, ''],
   [EventType.RoomCanonicalAlias, ''],
+  [EventType.RoomJoinRules, ''],
   [EventType.RoomMember, MSC3575_STATE_KEY_ME],
   ['m.space.child', MSC3575_WILDCARD],
 ];
