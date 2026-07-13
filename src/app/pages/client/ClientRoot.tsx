@@ -243,7 +243,22 @@ export function ClientRoot({ children }: ClientRootProps) {
         log.log('persisting activeSessionId →', activeSession.userId);
         setActiveSessionId(activeSession.userId);
       }
-      await clearMismatchedStores();
+      const storeCleanupStart = performance.now();
+      let storeCleanupOutcome = 'success';
+      try {
+        await clearMismatchedStores();
+      } catch (error) {
+        storeCleanupOutcome = 'error';
+        throw error;
+      } finally {
+        Sentry.metrics.distribution(
+          'sable.startup.phase_ms',
+          performance.now() - storeCleanupStart,
+          {
+            attributes: { phase: 'store_cleanup', outcome: storeCleanupOutcome },
+          }
+        );
+      }
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;

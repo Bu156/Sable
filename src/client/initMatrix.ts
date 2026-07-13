@@ -25,6 +25,28 @@ const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
 const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
 const SLIDING_SYNC_POLL_TIMEOUT_MS = 20000;
 
+type StartupPhase = 'sync_store' | 'rust_crypto' | 'client_init' | 'client_start';
+
+const measureStartupPhase = async <T>(
+  phase: StartupPhase,
+  task: () => Promise<T>,
+  attributes?: Record<string, string>
+): Promise<T> => {
+  const startTime = performance.now();
+  try {
+    const result = await task();
+    Sentry.metrics.distribution('sable.startup.phase_ms', performance.now() - startTime, {
+      attributes: { phase, outcome: 'success', ...attributes },
+    });
+    return result;
+  } catch (error) {
+    Sentry.metrics.distribution('sable.startup.phase_ms', performance.now() - startTime, {
+      attributes: { phase, outcome: 'error', ...attributes },
+    });
+    throw error;
+  }
+};
+
 type FetchRoomEventResult = Awaited<ReturnType<MatrixClient['fetchRoomEvent']>>;
 type MatrixClientWithWritableFetchRoomEvent = MatrixClient & {
   fetchRoomEvent: (roomId: string, eventId: string) => Promise<FetchRoomEventResult>;
@@ -253,7 +275,12 @@ export const clearMismatchedStores = async (): Promise<void> => {
   );
 };
 
-const buildClient = async (session: Session): Promise<MatrixClient> => {
+type BuiltClient = {
+  mx: MatrixClient;
+  indexedDBStore: IndexedDBStore;
+};
+
+const buildClient = (session: Session): BuiltClient => {
   const storeName = getSessionStoreName(session);
 
   const indexedDBStore = new IndexedDBStore({
@@ -276,8 +303,44 @@ const buildClient = async (session: Session): Promise<MatrixClient> => {
     verificationMethods: ['m.sas.v1'],
   });
 
-  await indexedDBStore.startup();
-  return mx;
+  return { mx, indexedDBStore };
+};
+
+type ClientInitializationResult =
+  | { ok: true; mx: MatrixClient }
+  | { ok: false; error: unknown; phase: 'sync_store' | 'rust_crypto' };
+
+const initializeClient = async (
+  session: Session,
+  cryptoDatabasePrefix: string
+): Promise<ClientInitializationResult> => {
+  let builtClient: BuiltClient;
+  try {
+    builtClient = buildClient(session);
+  } catch (error) {
+    return { ok: false, error, phase: 'sync_store' };
+  }
+  const { mx, indexedDBStore } = builtClient;
+
+  const syncStorePromise = measureStartupPhase('sync_store', () => indexedDBStore.startup());
+  const cryptoPromise = measureStartupPhase('rust_crypto', () =>
+    mx.initRustCrypto({ cryptoDatabasePrefix })
+  );
+  const [syncStoreResult, cryptoResult] = await Promise.allSettled([
+    syncStorePromise,
+    cryptoPromise,
+  ]);
+
+  if (syncStoreResult.status === 'rejected') {
+    mx.stopClient();
+    return { ok: false, error: syncStoreResult.reason, phase: 'sync_store' };
+  }
+  if (cryptoResult.status === 'rejected') {
+    mx.stopClient();
+    return { ok: false, error: cryptoResult.reason, phase: 'rust_crypto' };
+  }
+
+  return { ok: true, mx };
 };
 
 export const initClient = async (session: Session): Promise<MatrixClient> => {
@@ -314,43 +377,45 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     }
   };
 
-  let mx: MatrixClient;
+  const initStartTime = performance.now();
+  let initOutcome = 'success';
   try {
-    mx = await buildClient(session);
-  } catch (err) {
-    if (!isMismatch(err)) {
-      debugLog.error('sync', 'Failed to build client', { error: err });
-      throw err;
-    }
-    log.warn('initClient: mismatch on buildClient — wiping and retrying:', err);
-    debugLog.warn('sync', 'Client build mismatch - wiping stores and retrying', { error: err });
-    await wipeAllStores();
-    mx = await buildClient(session);
-  }
+    let result = await initializeClient(session, storeName.rustCryptoPrefix);
+    if (!result.ok) {
+      if (!isMismatch(result.error)) {
+        debugLog.error('sync', 'Failed to initialize client', {
+          phase: result.phase,
+          error: result.error,
+        });
+        throw result.error;
+      }
 
-  try {
-    await mx.initRustCrypto({
-      cryptoDatabasePrefix: storeName.rustCryptoPrefix,
-    });
-  } catch (err) {
-    if (!isMismatch(err)) {
-      debugLog.error('sync', 'Failed to initialize crypto', { error: err });
-      throw err;
+      log.warn(`initClient: mismatch during ${result.phase} — wiping and retrying:`, result.error);
+      debugLog.warn('sync', 'Client initialization mismatch - wiping stores and retrying', {
+        phase: result.phase,
+        error: result.error,
+      });
+      await wipeAllStores();
+      result = await initializeClient(session, storeName.rustCryptoPrefix);
+      if (!result.ok) {
+        debugLog.error('sync', 'Failed to initialize client after store reset', {
+          phase: result.phase,
+          error: result.error,
+        });
+        throw result.error;
+      }
     }
-    log.warn('initClient: mismatch on initRustCrypto — wiping and retrying:', err);
-    debugLog.warn('sync', 'Crypto init mismatch - wiping stores and retrying', {
-      error: err,
-    });
-    mx.stopClient();
-    await wipeAllStores();
-    mx = await buildClient(session);
-    await mx.initRustCrypto({
-      cryptoDatabasePrefix: storeName.rustCryptoPrefix,
+
+    result.mx.setMaxListeners(50);
+    return result.mx;
+  } catch (error) {
+    initOutcome = 'error';
+    throw error;
+  } finally {
+    Sentry.metrics.distribution('sable.startup.phase_ms', performance.now() - initStartTime, {
+      attributes: { phase: 'client_init', outcome: initOutcome },
     });
   }
-
-  mx.setMaxListeners(50);
-  return mx;
 };
 
 export type StartClientConfig = {
@@ -418,11 +483,16 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
   }
 
   try {
-    await mx.startClient({
-      lazyLoadMembers: true,
-      slidingSync: manager?.slidingSync,
-      threadSupport: true,
-    });
+    await measureStartupPhase(
+      'client_start',
+      () =>
+        mx.startClient({
+          lazyLoadMembers: true,
+          slidingSync: manager?.slidingSync,
+          threadSupport: true,
+        }),
+      { transport: useSliding ? 'sliding' : 'classic' }
+    );
   } catch (err) {
     debugLog.error('network', 'Failed to start client with sliding sync', {
       error: err instanceof Error ? err.message : String(err),
