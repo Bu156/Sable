@@ -231,6 +231,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   const loadedUserIdRef = useRef<string | undefined>(undefined);
   const syncStartTimeRef = useRef(performance.now());
   const firstSyncReadyRef = useRef(false);
+  const [syncReadyClient, setSyncReadyClient] = useState<MatrixClient>();
 
   const [loadState, loadMatrix, setLoadState] = useAsyncCallback<MatrixClient, Error, []>(
     useCallback(async () => {
@@ -335,19 +336,38 @@ export function ClientRoot({ children }: ClientRootProps) {
     }
   }, [mx, startMatrix, configLoaded]);
 
+  useEffect(() => {
+    firstSyncReadyRef.current = false;
+    syncStartTimeRef.current = performance.now();
+
+    if (!mx) {
+      setSyncReadyClient(undefined);
+      return;
+    }
+
+    if (isClientReady(mx.getSyncState())) {
+      setSyncReadyClient(mx);
+      firstSyncReadyRef.current = true;
+    }
+  }, [mx]);
+
   useSyncState(
     mx,
-    useCallback((state: string) => {
-      if (isClientReady(state)) {
-        if (!firstSyncReadyRef.current) {
-          firstSyncReadyRef.current = true;
-          Sentry.metrics.distribution(
-            'sable.sync.time_to_ready_ms',
-            performance.now() - syncStartTimeRef.current
-          );
+    useCallback(
+      (state: string) => {
+        if (isClientReady(state)) {
+          setSyncReadyClient((current) => (current === mx ? current : mx));
+          if (!firstSyncReadyRef.current) {
+            firstSyncReadyRef.current = true;
+            Sentry.metrics.distribution(
+              'sable.sync.time_to_ready_ms',
+              performance.now() - syncStartTimeRef.current
+            );
+          }
         }
-      }
-    }, [])
+      },
+      [mx]
+    )
   );
 
   const isError = loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
@@ -434,9 +454,9 @@ export function ClientRoot({ children }: ClientRootProps) {
             </Box>
           </SplashScreen>
         )}
-        {!mx ? (
+        {!mx || (!syncReadyClient && !isError) ? (
           <ClientRootLoading />
-        ) : (
+        ) : isError ? null : (
           <MatrixClientProvider value={mx}>
             <ServerConfigsLoader>
               {(serverConfigs) => (
