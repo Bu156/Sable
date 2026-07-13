@@ -14,7 +14,7 @@ import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider, useScreenSize } from '$hooks/useScreenSize';
 import { useCompositionEndTracking } from '$hooks/useComposingCheck';
 import { ErrorPage } from '$components/DefaultErrorPage';
-import { ConfigConfigError, ConfigConfigLoading } from './ConfigConfig';
+import { ConfigConfigError } from './ConfigConfig';
 import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
@@ -65,10 +65,6 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
   );
 }
 
-function appConfigFallback() {
-  return <ConfigConfigLoading />;
-}
-
 function appConfigError(err: unknown, retry: () => void, ignore: () => void) {
   return <ConfigConfigError error={err} retry={retry} ignore={ignore} />;
 }
@@ -97,7 +93,7 @@ function App() {
           <OverlayContainerProvider value={portalContainer}>
             <ScreenSizeProvider value={screenSize}>
               <FeatureCheck>
-                <ClientConfigLoader fallback={appConfigFallback} error={appConfigError}>
+                <ClientConfigLoader error={appConfigError}>
                   {renderAppConfig}
                 </ClientConfigLoader>
               </FeatureCheck>

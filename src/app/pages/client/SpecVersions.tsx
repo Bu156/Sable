@@ -1,21 +1,10 @@
 import type { ReactNode } from 'react';
 import { useCallback } from 'react';
-import { Box, Dialog, config, Text, Button, Spinner } from 'folds';
+import { Box, Dialog, config, Text, Button } from 'folds';
 import { SpecVersionsLoader } from '$components/SpecVersionsLoader';
 import { SpecVersionsProvider } from '$hooks/useSpecVersions';
 import type { SpecVersions } from '../../cs-api';
 import { SplashScreen } from '$components/splash-screen';
-
-function specVersionsFallback() {
-  return (
-    <SplashScreen>
-      <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
-        <Spinner variant="Secondary" size="600" />
-        <Text>Connecting to server</Text>
-      </Box>
-    </SplashScreen>
-  );
-}
 
 function specVersionsError(_err: unknown, retry: () => void, ignore: () => void) {
   return (
@@ -52,7 +41,7 @@ export function SpecVersions({ baseUrl, children }: { baseUrl: string; children:
   );
 
   return (
-    <SpecVersionsLoader baseUrl={baseUrl} fallback={specVersionsFallback} error={specVersionsError}>
+    <SpecVersionsLoader baseUrl={baseUrl} error={specVersionsError}>
       {renderChildren}
     </SpecVersionsLoader>
   );
