@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
     getListData: vi.fn<(key: string) => null>(),
     getListParams: vi.fn<(key: string) => null>(),
     setList: vi.fn<() => void>(),
-    setListRanges: vi.fn<() => void>(),
+    setListRanges: vi.fn<(key: string, ranges: number[][]) => void>(),
   },
 }));
 
@@ -74,8 +74,21 @@ function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.slidingSyncInstance.getListData.mockReset().mockReturnValue(null);
+  mocks.slidingSyncInstance.getListParams.mockReset().mockReturnValue(null);
+  mocks.slidingSyncInstance.setListRanges.mockReset();
   mocks.slidingSyncConstructorArgs = undefined;
 });
+
+function fireLifecycle(state: SlidingSyncState, response: unknown = {}) {
+  const lifecycleCall = mocks.slidingSyncInstance.on.mock.calls.find(
+    ([event]) => event === SlidingSyncEvent.Lifecycle
+  );
+  const lifecycle = lifecycleCall?.[1] as
+    | ((nextState: SlidingSyncState, nextResponse: unknown, error?: Error) => void)
+    | undefined;
+  lifecycle?.(state, response);
+}
 
 describe('SlidingSyncManager initial request', () => {
   it('starts with a small room-list range and only row-level state', () => {
@@ -85,9 +98,9 @@ describe('SlidingSyncManager initial request', () => {
     const joined = lists.get('joined');
 
     expect(joined?.ranges).toEqual([[0, 29]]);
-    expect(joined?.required_state).toHaveLength(9);
+    expect(joined?.required_state).toHaveLength(8);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
-    expect(joined?.required_state).not.toContainEqual(['m.image_pack', '*']);
+    expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
   });
 
   it('expands by one page after the first response instead of jumping to all rooms', () => {
@@ -108,7 +121,60 @@ describe('SlidingSyncManager initial request', () => {
       | undefined;
     lifecycle?.(SlidingSyncState.Complete, {});
 
-    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [[0, 279]]);
+    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [
+      [0, 29],
+      [30, 59],
+    ]);
+  });
+
+  it('continues expanding lists when an active-room subscription has not returned data yet', () => {
+    const manager = makeManager(makeMockMx());
+    mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
+      key === 'joined' ? ({ joinedCount: 1000 } as never) : null
+    );
+    mocks.slidingSyncInstance.getListParams.mockReturnValue({
+      ranges: [[0, 29]],
+    } as never);
+    manager.attach();
+    manager.subscribeToRoom('!active:example.com');
+
+    const lifecycleCall = mocks.slidingSyncInstance.on.mock.calls.find(
+      ([event]) => event === SlidingSyncEvent.Lifecycle
+    );
+    const lifecycle = lifecycleCall?.[1] as
+      | ((state: SlidingSyncState, response: unknown, error?: Error) => void)
+      | undefined;
+    lifecycle?.(SlidingSyncState.Complete, {});
+
+    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [
+      [0, 29],
+      [30, 59],
+    ]);
+  });
+
+  it('defers active subscriptions while an expanded range is awaiting its response', () => {
+    let joinedRange: [number, number][] = [[0, 29]];
+    const manager = makeManager(makeMockMx());
+    mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
+      key === 'joined' ? ({ joinedCount: 193 } as never) : null
+    );
+    mocks.slidingSyncInstance.getListParams.mockImplementation((key: string) =>
+      key === 'joined' ? ({ ranges: joinedRange } as never) : ({ ranges: [[0, 29]] } as never)
+    );
+    mocks.slidingSyncInstance.setListRanges.mockImplementation((key, ranges) => {
+      if (key === 'joined') joinedRange = ranges as [number, number][];
+    });
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.Complete);
+    manager.subscribeToRoom('!active:example.com');
+
+    const diagnostics = manager.getDiagnostics();
+    expect(manager.isRoomActive('!active:example.com')).toBe(true);
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).not.toHaveBeenCalled();
+    expect(diagnostics.lists.find((list) => list.key === 'joined')).toMatchObject({
+      rangeEnd: 59,
+    });
   });
 });
 
@@ -147,6 +213,7 @@ describe('SlidingSyncManager — membership leave auto-unsubscribe', () => {
     const mx = makeMockMx();
     const manager = makeManager(mx);
     manager.attach();
+    fireLifecycle(SlidingSyncState.Complete);
     manager.subscribeToRoom('!room:example.com');
 
     fireMembershipEvent(mx, 'leave');
@@ -159,6 +226,7 @@ describe('SlidingSyncManager — membership leave auto-unsubscribe', () => {
     const mx = makeMockMx();
     const manager = makeManager(mx);
     manager.attach();
+    fireLifecycle(SlidingSyncState.Complete);
     manager.subscribeToRoom('!room:example.com');
 
     fireMembershipEvent(mx, 'ban');
@@ -170,6 +238,7 @@ describe('SlidingSyncManager — membership leave auto-unsubscribe', () => {
     const mx = makeMockMx();
     const manager = makeManager(mx);
     manager.attach();
+    fireLifecycle(SlidingSyncState.Complete);
     manager.subscribeToRoom('!room:example.com');
 
     fireMembershipEvent(mx, 'leave', '!room:example.com', '@other:example.com');
@@ -182,6 +251,7 @@ describe('SlidingSyncManager — membership leave auto-unsubscribe', () => {
     const mx = makeMockMx();
     const manager = makeManager(mx);
     manager.attach();
+    fireLifecycle(SlidingSyncState.Complete);
     manager.subscribeToRoom('!room:example.com');
 
     fireMembershipEvent(mx, 'join');

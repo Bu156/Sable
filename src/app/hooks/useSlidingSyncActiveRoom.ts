@@ -1,23 +1,62 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getSlidingSyncManager } from '$client/initMatrix';
-import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
-import { useSelectedSpace } from '$hooks/router/useSelectedSpace';
+import { useResolvedSelectedRoom, useResolvedSelectedSpace } from '$hooks/router/useResolvedRoomId';
+import { useSpaces } from '$state/hooks/roomList';
+import { allRoomsAtom } from '$state/room-list/roomList';
+import { ClientEvent } from '$types/matrix-sdk';
 
-export const useSlidingSyncActiveRoom = (): void => {
+const useAvailableSlidingSyncManager = () => {
   const mx = useMatrixClient();
-  const roomId = useSelectedRoom();
-  const spaceId = useSelectedSpace();
+  const [manager, setManager] = useState(() => getSlidingSyncManager(mx));
 
   useEffect(() => {
-    const manager = getSlidingSyncManager(mx);
-    if (!manager) return undefined;
+    if (manager) return undefined;
+
+    const checkForManager = () => {
+      const nextManager = getSlidingSyncManager(mx);
+      if (nextManager) setManager(nextManager);
+    };
+
+    const retryId = globalThis.setTimeout(checkForManager, 0);
+    mx.on(ClientEvent.Sync, checkForManager);
+    return () => {
+      globalThis.clearTimeout(retryId);
+      mx.removeListener(ClientEvent.Sync, checkForManager);
+    };
+  }, [manager, mx]);
+
+  return manager;
+};
+
+export const useSlidingSyncRouteRooms = (): void => {
+  const manager = useAvailableSlidingSyncManager();
+  const { roomId, resolving: resolvingRoom } = useResolvedSelectedRoom();
+  const { roomId: spaceId, resolving: resolvingSpace } = useResolvedSelectedSpace();
+
+  useEffect(() => {
+    if (!manager || resolvingRoom || resolvingSpace) return undefined;
 
     const activeRoomIds = [...new Set([spaceId, roomId].filter(Boolean))] as string[];
     activeRoomIds.forEach((activeRoomId) => manager.subscribeToRoom(activeRoomId));
 
-    return () => {
-      activeRoomIds.forEach((activeRoomId) => manager.unsubscribeFromRoom(activeRoomId));
-    };
-  }, [mx, roomId, spaceId]);
+    return () => activeRoomIds.forEach((activeRoomId) => manager.unsubscribeFromRoom(activeRoomId));
+  }, [manager, resolvingRoom, resolvingSpace, roomId, spaceId]);
+};
+
+export const useSlidingSyncSpaceSubscriptions = (): void => {
+  const manager = useAvailableSlidingSyncManager();
+  const mx = useMatrixClient();
+  const spaces = useSpaces(mx, allRoomsAtom);
+
+  useEffect(() => {
+    if (!manager) return undefined;
+    manager.setSpaceSubscriptions(spaces);
+    return undefined;
+  }, [manager, spaces]);
+};
+
+export const useSlidingSyncActiveRoom = (): void => {
+  useSlidingSyncRouteRooms();
+  useSlidingSyncSpaceSubscriptions();
 };

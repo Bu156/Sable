@@ -430,24 +430,28 @@ export function ClientRoot({ children }: ClientRootProps) {
           </Box>
         </SplashScreen>
       )}
-      {!mx || (!syncReadyClient && !isError) ? (
+      {!mx ? (
         <ClientRootLoading />
       ) : isError ? null : (
-        <SpecVersions baseUrl={baseUrl ?? ''}>
-          <MatrixClientProvider value={mx}>
-            <ServerConfigsLoader>
-              {(serverConfigs) => (
-                <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
-                  <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
-                    <AuthMetadataProvider value={serverConfigs.authMetadata}>
-                      {children}
-                    </AuthMetadataProvider>
-                  </MediaConfigProvider>
-                </CapabilitiesProvider>
-              )}
-            </ServerConfigsLoader>
-          </MatrixClientProvider>
-        </SpecVersions>
+        <MatrixClientProvider value={mx}>
+          {!syncReadyClient ? (
+            <ClientRootLoading />
+          ) : (
+            <SpecVersions baseUrl={baseUrl ?? ''}>
+              <ServerConfigsLoader>
+                {(serverConfigs) => (
+                  <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
+                    <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
+                      <AuthMetadataProvider value={serverConfigs.authMetadata}>
+                        {children}
+                      </AuthMetadataProvider>
+                    </MediaConfigProvider>
+                  </CapabilitiesProvider>
+                )}
+              </ServerConfigsLoader>
+            </SpecVersions>
+          )}
+        </MatrixClientProvider>
       )}
     </AutoDiscovery>
   );

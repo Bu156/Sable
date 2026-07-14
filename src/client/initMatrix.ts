@@ -129,6 +129,7 @@ function installSlidingSyncConnId(mx: MatrixClient): void {
     if (req.conn_id === undefined) {
       req.conn_id = SLIDING_SYNC_CONN_ID;
     }
+
     return original(reqBody, baseUrl, abortSignal);
   };
 
