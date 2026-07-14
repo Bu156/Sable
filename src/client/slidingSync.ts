@@ -218,6 +218,13 @@ export class SlidingSyncManager {
     (roomId: string, data: MSC3575RoomData) => void
   >();
 
+  private readonly roomSubscriptionStatusListeners = new Map<
+    string,
+    Set<(loading: boolean) => void>
+  >();
+
+  private readonly roomDataAwaitingSyncCompletion = new Set<string>();
+
   /** Wall-clock time recorded in attach() — used to compute true initial-sync latency. */
   private attachTime: number | null = null;
 
@@ -284,6 +291,11 @@ export class SlidingSyncManager {
       }
 
       if (err || !resp || state !== SlidingSyncState.Complete) return;
+
+      this.roomDataAwaitingSyncCompletion.forEach((roomId) =>
+        this.notifyRoomSubscriptionStatus(roomId, false)
+      );
+      this.roomDataAwaitingSyncCompletion.clear();
 
       this.syncCount += 1;
       Sentry.metrics.count('sable.sync.cycle', 1, {
@@ -406,6 +418,11 @@ export class SlidingSyncManager {
     });
 
     this.pendingRoomDataListeners.clear();
+    this.roomDataAwaitingSyncCompletion.clear();
+    this.roomSubscriptionStatusListeners.forEach((listeners) =>
+      listeners.forEach((listener) => listener(false))
+    );
+    this.roomSubscriptionStatusListeners.clear();
 
     this.disposed = true;
     this.slidingSync.stop();
@@ -671,6 +688,25 @@ export class SlidingSyncManager {
     return () => this.slidingSync.removeListener(SlidingSyncEvent.RoomData, handler);
   }
 
+  public onRoomSubscriptionStatus(
+    roomId: string,
+    listener: (loading: boolean) => void
+  ): () => void {
+    const listeners = this.roomSubscriptionStatusListeners.get(roomId) ?? new Set();
+    listeners.add(listener);
+    this.roomSubscriptionStatusListeners.set(roomId, listeners);
+    listener(this.pendingRoomDataListeners.has(roomId));
+
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.roomSubscriptionStatusListeners.delete(roomId);
+    };
+  }
+
+  private notifyRoomSubscriptionStatus(roomId: string, loading: boolean): void {
+    this.roomSubscriptionStatusListeners.get(roomId)?.forEach((listener) => listener(loading));
+  }
+
   public subscribeToRoom(roomId: string): void {
     if (this.disposed) return;
     if (this.activeRoomSubscriptions.has(roomId)) return;
@@ -728,9 +764,11 @@ export class SlidingSyncManager {
       });
       this.slidingSync.removeListener(SlidingSyncEvent.RoomData, onFirstRoomData);
       this.pendingRoomDataListeners.delete(roomId);
+      this.roomDataAwaitingSyncCompletion.add(roomId);
     };
     this.pendingRoomDataListeners.set(roomId, onFirstRoomData);
     this.slidingSync.on(SlidingSyncEvent.RoomData, onFirstRoomData);
+    this.notifyRoomSubscriptionStatus(roomId, true);
   }
 
   public unsubscribeFromRoom(roomId: string): void {
@@ -741,6 +779,8 @@ export class SlidingSyncManager {
       this.slidingSync.removeListener(SlidingSyncEvent.RoomData, pendingListener);
       this.pendingRoomDataListeners.delete(roomId);
     }
+    this.roomDataAwaitingSyncCompletion.delete(roomId);
+    this.notifyRoomSubscriptionStatus(roomId, false);
     this.activeRoomSubscriptions.delete(roomId);
     this.syncRoomSubscriptions();
     Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {

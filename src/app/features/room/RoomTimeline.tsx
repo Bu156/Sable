@@ -41,6 +41,7 @@ import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { useGetMemberPowerTag } from '$hooks/useMemberPowerTag';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { useSlidingSyncRoomLoading } from '$hooks/useSlidingSyncActiveRoom';
 import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
@@ -282,6 +283,7 @@ export function RoomTimeline({
 }: Readonly<RoomTimelineProps>) {
   const mx = useMatrixClient();
   const alive = useAlive();
+  const roomSyncLoading = useSlidingSyncRoomLoading(room.roomId);
 
   const { editId, handleEdit } = useMessageEdit(editor, { onReset: onEditorReset, alive });
   const { navigateRoom } = useRoomNavigate();
@@ -1041,6 +1043,15 @@ export function RoomTimeline({
 
   return (
     <Box grow="Yes" style={{ position: 'relative' }}>
+      {roomSyncLoading && timelineSync.eventsLength === 0 && (
+        <Box
+          justifyContent="Center"
+          alignItems="Center"
+          style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
+        >
+          <Spinner variant="Secondary" size="400" />
+        </Box>
+      )}
       {unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && isReady && (
         <TimelineFloat position="Top" style={{ background: 'transparent' }}>
           <Chip

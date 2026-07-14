@@ -56,6 +56,22 @@ export const useSlidingSyncSpaceSubscriptions = (): void => {
   }, [manager, spaces]);
 };
 
+export const useSlidingSyncRoomLoading = (roomId: string): boolean => {
+  const manager = useAvailableSlidingSyncManager();
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!manager) {
+      setLoading(false);
+      return undefined;
+    }
+
+    return manager.onRoomSubscriptionStatus(roomId, setLoading);
+  }, [manager, roomId]);
+
+  return loading;
+};
+
 export const useSlidingSyncActiveRoom = (): void => {
   useSlidingSyncRouteRooms();
   useSlidingSyncSpaceSubscriptions();

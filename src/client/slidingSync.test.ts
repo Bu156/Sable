@@ -179,6 +179,28 @@ describe('SlidingSyncManager initial request', () => {
 });
 
 describe('SlidingSyncManager room subscription coordination', () => {
+  it('reports loading until the subscribed room returns data', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!slow:example.com';
+    const loadingStates: boolean[] = [];
+
+    manager.onRoomSubscriptionStatus(roomId, (loading) => loadingStates.push(loading));
+    manager.subscribeToRoom(roomId);
+
+    const roomDataHandler = mocks.slidingSyncInstance.on.mock.calls
+      .toReversed()
+      .find(([event]) => event === SlidingSyncEvent.RoomData)?.[1] as
+      | ((dataRoomId: string, data: unknown) => void)
+      | undefined;
+    roomDataHandler?.(roomId, {});
+    expect(loadingStates).toEqual([false, true]);
+
+    manager.attach();
+    fireLifecycle(SlidingSyncState.Complete);
+
+    expect(loadingStates).toEqual([false, true, false]);
+  });
+
   it('uses the active subscription while a room is also an image-pack room', () => {
     const manager = makeManager(makeMockMx());
     const roomId = '!pack:example.com';
