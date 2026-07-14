@@ -1,7 +1,7 @@
 import { Box, Button, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text } from 'folds';
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { OidcClientConfig } from '$types/matrix-sdk';
+import type { ValidatedAuthMetadata } from '$types/matrix-sdk';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAuthServer } from '$hooks/useAuthServer';
 import { InfoCard } from '$components/info-card';
@@ -32,7 +32,7 @@ const oidcErrorMessage = (error: unknown): string => {
 };
 
 type OidcLoginButtonProps = {
-  authMetadata: OidcClientConfig;
+  authMetadata: ValidatedAuthMetadata;
   homeserverUrl: string;
   redirectUri: string;
   label: string;

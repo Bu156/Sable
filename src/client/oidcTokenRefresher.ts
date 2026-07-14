@@ -1,5 +1,6 @@
-import type { AccessTokens } from '$types/matrix-sdk';
-import { OidcTokenRefresher } from '$types/matrix-sdk';
+import type { AccessTokens, ValidatedAuthMetadata } from '$types/matrix-sdk';
+import { OAuth2, TokenRefresher } from '$types/matrix-sdk';
+import type { MatrixClient } from '$types/matrix-sdk';
 import type { Session } from '$state/sessions';
 import {
   ACTIVE_SESSION_KEY,
@@ -10,45 +11,37 @@ import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { pushSessionToSW } from '../sw-session';
 import { getAppOrigin } from '$utils/platform';
 
-export class SessionOidcTokenRefresher extends OidcTokenRefresher {
-  private readonly userId: string;
+export const createSessionTokenRefresher = async (
+  session: Session,
+  mx: MatrixClient
+): Promise<TokenRefresher | undefined> => {
+  if (!session.oidc || !session.refreshToken) return undefined;
 
-  private readonly baseUrl: string;
+  const metadata: ValidatedAuthMetadata = await mx.getAuthMetadata();
 
-  public constructor(session: Session) {
-    if (!session.oidc) {
-      throw new Error('SessionOidcTokenRefresher requires an OIDC session');
-    }
-    super(
-      session.oidc.issuer,
-      session.oidc.clientId,
-      getAppOrigin(),
-      session.deviceId,
-      session.oidc.idTokenClaims ?? ({} as never)
-    );
-    this.userId = session.userId;
-    this.baseUrl = session.baseUrl;
-  }
+  const oauth2 = new OAuth2(metadata, {
+    clientId: session.oidc.clientId,
+    redirectUri: getAppOrigin(),
+    deviceId: session.deviceId,
+  });
 
-  // Another tab may have rotated the token; reusing a consumed one revokes the session.
-  public override doRefreshAccessToken(refreshToken: string): Promise<AccessTokens> {
-    return super.doRefreshAccessToken(getStoredSessionRefreshToken(this.userId) ?? refreshToken);
-  }
-
-  protected async persistTokens(tokens: {
-    accessToken: string;
-    refreshToken?: string;
-  }): Promise<void> {
-    const { expiry } = tokens as { expiry?: Date };
-    updateSessionTokens(this.userId, {
+  const onRefresh = async (tokens: AccessTokens): Promise<void> => {
+    updateSessionTokens(session.userId, {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      expiresInMs: expiry ? expiry.getTime() - Date.now() : undefined,
+      expiresInMs: tokens.expiry ? tokens.expiry.getTime() - Date.now() : undefined,
     });
     // Only the active session owns the single service-worker session.
     const activeSessionId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
-    if (activeSessionId === this.userId) {
-      pushSessionToSW(this.baseUrl, tokens.accessToken, this.userId);
+    if (activeSessionId === session.userId) {
+      pushSessionToSW(session.baseUrl, tokens.accessToken, session.userId);
     }
-  }
-}
+  };
+
+  const tokenRefresher = new TokenRefresher(oauth2, onRefresh);
+  const refresh = tokenRefresher.tokenRefreshFunction;
+  // Another tab may have rotated the token; reusing a consumed one revokes the session.
+  tokenRefresher.tokenRefreshFunction = (refreshToken) =>
+    refresh(getStoredSessionRefreshToken(session.userId) ?? refreshToken);
+  return tokenRefresher;
+};

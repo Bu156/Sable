@@ -10,10 +10,12 @@ import {
   IndexedDBStore,
   IndexedDBCryptoStore,
   KnownMembership,
+  OAuth2,
   SyncState,
 } from '$types/matrix-sdk';
 import { fetch } from '$utils/fetch';
 import { clearMediaCache } from '$utils/mediaCache';
+import { getAppOrigin } from '$utils/platform';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, SessionStoreName } from '$state/sessions';
@@ -22,7 +24,7 @@ import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
-import { SessionOidcTokenRefresher } from './oidcTokenRefresher';
+import { createSessionTokenRefresher } from './oidcTokenRefresher';
 import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
@@ -231,7 +233,7 @@ type BuiltClient = {
   indexedDBStore: IndexedDBStore;
 };
 
-const buildClient = (session: Session): BuiltClient => {
+const buildClient = async (session: Session): Promise<BuiltClient> => {
   const storeName = getSessionStoreName(session);
 
   const indexedDBStore = new IndexedDBStore({
@@ -242,8 +244,15 @@ const buildClient = (session: Session): BuiltClient => {
 
   const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, storeName.crypto);
 
-  const tokenRefresher =
-    session.oidc && session.refreshToken ? new SessionOidcTokenRefresher(session) : undefined;
+  const tempClient = createClient({
+    baseUrl: session.baseUrl,
+    fetchFn: fetch,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    userId: session.userId,
+    deviceId: session.deviceId,
+  });
+  const tokenRefresher = await createSessionTokenRefresher(session, tempClient);
 
   const mx = createClient({
     baseUrl: session.baseUrl,
@@ -257,9 +266,7 @@ const buildClient = (session: Session): BuiltClient => {
     timelineSupport: true,
     cryptoCallbacks: cryptoCallbacks as unknown as CryptoCallbacks,
     verificationMethods: ['m.sas.v1'],
-    tokenRefreshFunction: tokenRefresher
-      ? (refreshToken) => tokenRefresher.doRefreshAccessToken(refreshToken)
-      : undefined,
+    tokenRefreshFunction: tokenRefresher?.tokenRefreshFunction,
   });
 
   return { mx, indexedDBStore };
@@ -275,7 +282,7 @@ const initializeClient = async (
 ): Promise<ClientInitializationResult> => {
   let builtClient: BuiltClient;
   try {
-    builtClient = buildClient(session);
+    builtClient = await buildClient(session);
   } catch (error) {
     return { ok: false, error, phase: 'sync_store' };
   }
@@ -545,37 +552,23 @@ export const getClientSyncDiagnostics = (mx: MatrixClient): ClientSyncDiagnostic
   };
 };
 
-const revokeOidcToken = async (
-  endpoint: string,
-  token: string,
-  tokenTypeHint: 'access_token' | 'refresh_token',
-  clientId: string
-): Promise<void> => {
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ token, token_type_hint: tokenTypeHint, client_id: clientId }),
-  });
-  if (!res.ok) {
-    throw new Error(`OIDC token revocation failed (${res.status})`);
-  }
-};
-
 const revokeOidcSession = async (mx: MatrixClient, session: Session): Promise<void> => {
   const clientId = session.oidc?.clientId;
   if (!clientId) return;
   const metadata = await mx.getAuthMetadata();
-  const endpoint = metadata.revocation_endpoint;
-  if (!endpoint) return;
+
+  const oauth2 = new OAuth2(metadata, {
+    clientId,
+    redirectUri: getAppOrigin(),
+    deviceId: session.deviceId,
+  });
 
   const accessToken = mx.getAccessToken() ?? undefined;
   const results = await Promise.allSettled([
     session.refreshToken
-      ? revokeOidcToken(endpoint, session.refreshToken, 'refresh_token', clientId)
+      ? oauth2.revokeToken(session.refreshToken, 'refresh_token')
       : Promise.resolve(),
-    accessToken
-      ? revokeOidcToken(endpoint, accessToken, 'access_token', clientId)
-      : Promise.resolve(),
+    accessToken ? oauth2.revokeToken(accessToken, 'access_token') : Promise.resolve(),
   ]);
   if (results.some((r) => r.status === 'rejected')) {
     debugLog.warn('general', 'OIDC token revocation had failures', { userId: session.userId });

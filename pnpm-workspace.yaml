@@ -10,6 +10,7 @@ allowBuilds:
 engineStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  - 'matrix-js-sdk'
   - '@sableclient/sable-call-embedded'
   - '@sableclient/twemoji-font'
 

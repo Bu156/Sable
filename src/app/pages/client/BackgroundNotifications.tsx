@@ -44,7 +44,7 @@ import {
 } from '$utils/notificationStyle';
 import * as Sentry from '@sentry/react';
 import { startClient, stopClient } from '$client/initMatrix';
-import { SessionOidcTokenRefresher } from '$client/oidcTokenRefresher';
+import { createSessionTokenRefresher } from '$client/oidcTokenRefresher';
 import { mobileOrTablet } from '$utils/user-agent';
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
@@ -83,8 +83,15 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
     dbName: storeName.sync,
   });
 
-  const tokenRefresher =
-    session.oidc && session.refreshToken ? new SessionOidcTokenRefresher(session) : undefined;
+  const tempClient = createClient({
+    baseUrl: session.baseUrl,
+    fetchFn: fetch,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    userId: session.userId,
+    deviceId: session.deviceId,
+  });
+  const tokenRefresher = await createSessionTokenRefresher(session, tempClient);
 
   const mx = createClient({
     baseUrl: session.baseUrl,
@@ -95,9 +102,7 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
     deviceId: session.deviceId,
     store: indexedDBStore,
     timelineSupport: false,
-    tokenRefreshFunction: tokenRefresher
-      ? (refreshToken) => tokenRefresher.doRefreshAccessToken(refreshToken)
-      : undefined,
+    tokenRefreshFunction: tokenRefresher?.tokenRefreshFunction,
   });
 
   const startOpts = {
