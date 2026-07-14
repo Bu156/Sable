@@ -57,6 +57,9 @@ const imagePackListEqual = (a: ImagePack[], b: ImagePack[]): boolean => {
   return a.every((pack, index) => imagePackEqual(pack, b[index]));
 };
 
+const roomIdListEqual = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((roomId, index) => roomId === b[index]);
+
 export const useUserImagePack = (): ImagePack | undefined => {
   const mx = useMatrixClient();
   // Seed from cache during initial state when live data is not available yet.
@@ -102,6 +105,7 @@ export const useGlobalImagePacks = (): ImagePack[] => {
     const cachedPacks = readCachedPacks(userId, globalPacksScope());
     return cachedPacks.length > 0 ? cachedPacks : livePacks;
   });
+  const [packRoomIds, setPackRoomIds] = useState<string[]>(() => getGlobalImagePackRoomIds(mx));
 
   useEffect(() => {
     const manager = getSlidingSyncManager(mx);
@@ -114,13 +118,11 @@ export const useGlobalImagePacks = (): ImagePack[] => {
       });
     };
 
-    const listeners = getGlobalImagePackRoomIds(mx).map((roomId) => {
-      manager.subscribeToImagePackRoom(roomId);
-      return manager.onRoomData(roomId, refresh);
-    });
+    manager.setImagePackSubscriptions(packRoomIds);
+    const listeners = packRoomIds.map((roomId) => manager.onRoomData(roomId, refresh));
 
     return () => listeners.forEach((unsubscribe) => unsubscribe());
-  }, [mx]);
+  }, [mx, packRoomIds]);
 
   useEffect(() => {
     const userId = mx.getUserId();
@@ -136,11 +138,11 @@ export const useGlobalImagePacks = (): ImagePack[] => {
           mEvent.getType() === (CustomAccountDataEvent.PoniesEmoteRooms as string)
         ) {
           const manager = getSlidingSyncManager(mx);
-          if (manager) {
-            getGlobalImagePackRoomIds(mx).forEach((roomId) =>
-              manager.subscribeToImagePackRoom(roomId)
-            );
-          }
+          const nextPackRoomIds = getGlobalImagePackRoomIds(mx);
+          manager?.setImagePackSubscriptions(nextPackRoomIds);
+          setPackRoomIds((current) =>
+            roomIdListEqual(current, nextPackRoomIds) ? current : nextPackRoomIds
+          );
           setGlobalPacks((prev) => {
             const next = getGlobalImagePacks(mx);
             return imagePackListEqual(prev, next) ? prev : next;

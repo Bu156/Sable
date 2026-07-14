@@ -425,8 +425,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                       Base URL: {syncDiagnostics.sliding.baseUrl}
                                     </Text>
                                     <Text size="T200">
-                                      Room timeline: {syncDiagnostics.sliding.timelineLimit} | page
-                                      size: {syncDiagnostics.sliding.listPageSize}
+                                      Room timeline: {syncDiagnostics.sliding.timelineLimit}
                                     </Text>
                                   </>
                                 ) : (

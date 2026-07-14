@@ -180,10 +180,7 @@ export function SyncDiagnostics() {
               {expandSliding && (
                 <Box direction="Column" gap="100">
                   <Text size="T300">Sliding sync base URL: {diagnostics.sliding.baseUrl}</Text>
-                  <Text size="T300">
-                    Room timeline limit: {diagnostics.sliding.timelineLimit} | page size:{' '}
-                    {diagnostics.sliding.listPageSize}
-                  </Text>
+                  <Text size="T300">Room timeline limit: {diagnostics.sliding.timelineLimit}</Text>
                   {diagnostics.sliding.lists.map((list) => (
                     <Text size="T300" key={list.key}>
                       List `{list.key}` coverage:{' '}

@@ -4,6 +4,7 @@ import { Box, Button, Dialog, config, Text } from 'folds';
 import { SpecVersionsLoader } from '$components/SpecVersionsLoader';
 import { SpecVersionsProvider } from '$hooks/useSpecVersions';
 import { SplashScreen } from '$components/splash-screen';
+import { useMatrixClient } from '$hooks/useMatrixClient';
 import type { SpecVersions } from '../../cs-api';
 
 const EMPTY_VERSIONS: SpecVersions = { versions: [] };
@@ -38,6 +39,8 @@ function HomeserverOfflineError({ baseUrl, onRetry }: HomeserverOfflineErrorProp
 }
 
 export function SpecVersions({ baseUrl, children }: { baseUrl: string; children: ReactNode }) {
+  const mx = useMatrixClient();
+  const loadVersions = useCallback(() => mx.getVersions(), [mx]);
   const renderChildren = useCallback(
     (versions: SpecVersions) => (
       <SpecVersionsProvider value={versions}>{children}</SpecVersionsProvider>
@@ -58,7 +61,12 @@ export function SpecVersions({ baseUrl, children }: { baseUrl: string; children:
   );
 
   return (
-    <SpecVersionsLoader baseUrl={baseUrl} fallback={renderFallback} error={renderError}>
+    <SpecVersionsLoader
+      baseUrl={baseUrl}
+      loadVersions={loadVersions}
+      fallback={renderFallback}
+      error={renderError}
+    >
       {renderChildren}
     </SpecVersionsLoader>
   );

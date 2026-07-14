@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 
 import type { ClientConfig } from '$hooks/useClientConfig';
-import { ClientConfigLoadedProvider, ClientConfigProvider } from '$hooks/useClientConfig';
+import { ClientConfigProvider } from '$hooks/useClientConfig';
 import { setMatrixToBase } from '$plugins/matrix-to';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider, useScreenSize } from '$hooks/useScreenSize';
@@ -65,9 +65,8 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
   );
 }
 
-function useClientConfigLoader(): { config: ClientConfig; loaded: boolean } {
+function useClientConfigLoader(): ClientConfig {
   const [config, setConfig] = useState<ClientConfig>({});
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,11 +79,8 @@ function useClientConfigLoader(): { config: ClientConfig; loaded: boolean } {
         if (cancelled) return;
         setConfig(data);
         setMatrixToBase(data.matrixToBaseUrl);
-        setLoaded(true);
       } catch (err) {
         log.error('Failed to load config.json, continuing with empty config:', err);
-        if (cancelled) return;
-        setLoaded(true);
       }
     };
 
@@ -94,7 +90,7 @@ function useClientConfigLoader(): { config: ClientConfig; loaded: boolean } {
     };
   }, []);
 
-  return { config, loaded };
+  return config;
 }
 
 function App() {
@@ -102,7 +98,7 @@ function App() {
   useCompositionEndTracking();
   const portalContainer = document.getElementById('portalContainer') ?? undefined;
 
-  const { config: clientConfig, loaded: configLoaded } = useClientConfigLoader();
+  const clientConfig = useClientConfigLoader();
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
@@ -112,9 +108,7 @@ function App() {
             <ScreenSizeProvider value={screenSize}>
               <FeatureCheck>
                 <ClientConfigProvider value={clientConfig}>
-                  <ClientConfigLoadedProvider value={configLoaded}>
-                    <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
-                  </ClientConfigLoadedProvider>
+                  <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
                 </ClientConfigProvider>
               </FeatureCheck>
             </ScreenSizeProvider>

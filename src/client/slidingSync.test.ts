@@ -121,10 +121,7 @@ describe('SlidingSyncManager initial request', () => {
       | undefined;
     lifecycle?.(SlidingSyncState.Complete, {});
 
-    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [
-      [0, 29],
-      [30, 59],
-    ]);
+    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [[0, 59]]);
   });
 
   it('continues expanding lists when an active-room subscription has not returned data yet', () => {
@@ -146,13 +143,10 @@ describe('SlidingSyncManager initial request', () => {
       | undefined;
     lifecycle?.(SlidingSyncState.Complete, {});
 
-    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [
-      [0, 29],
-      [30, 59],
-    ]);
+    expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [[0, 59]]);
   });
 
-  it('defers active subscriptions while an expanded range is awaiting its response', () => {
+  it('prioritizes active subscriptions while an expanded range is awaiting its response', () => {
     let joinedRange: [number, number][] = [[0, 29]];
     const manager = makeManager(makeMockMx());
     mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
@@ -171,10 +165,59 @@ describe('SlidingSyncManager initial request', () => {
 
     const diagnostics = manager.getDiagnostics();
     expect(manager.isRoomActive('!active:example.com')).toBe(true);
-    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).not.toHaveBeenCalled();
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenCalledWith(
+      new Set(['!active:example.com'])
+    );
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenCalledWith(
+      '!active:example.com',
+      'active_room'
+    );
     expect(diagnostics.lists.find((list) => list.key === 'joined')).toMatchObject({
       rangeEnd: 59,
     });
+  });
+});
+
+describe('SlidingSyncManager room subscription coordination', () => {
+  it('uses the active subscription while a room is also an image-pack room', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!pack:example.com';
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.subscribeToRoom(roomId);
+
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'active_room'
+    );
+  });
+
+  it('restores the image-pack subscription when the room is no longer active', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!pack:example.com';
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.subscribeToRoom(roomId);
+    manager.unsubscribeFromRoom(roomId);
+
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'image_packs'
+    );
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set([roomId])
+    );
+  });
+
+  it('removes image-pack subscriptions which are no longer configured', () => {
+    const manager = makeManager(makeMockMx());
+
+    manager.setImagePackSubscriptions(['!old:example.com', '!current:example.com']);
+    manager.setImagePackSubscriptions(['!current:example.com']);
+
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set(['!current:example.com'])
+    );
   });
 });
 

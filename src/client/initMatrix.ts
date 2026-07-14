@@ -148,9 +148,17 @@ function installStartupFetchRoomEventPatch(
   const mxWritable = mx as MatrixClientWithWritableFetchRoomEvent;
   const origFetchRoomEvent = mx.fetchRoomEvent.bind(mx);
 
+  let restored = false;
   const restore = () => {
+    if (restored) return;
+    restored = true;
     fetchRoomEventStartupCleanupByClient.delete(mx);
+    mx.removeListener(ClientEvent.Sync, onSync);
     mxWritable.fetchRoomEvent = origFetchRoomEvent;
+  };
+
+  const onSync = (state: SyncState) => {
+    if (isInitialSyncReady(state)) restore();
   };
 
   mxWritable.fetchRoomEvent = (roomId: string, eventId: string) => {
@@ -166,6 +174,7 @@ function installStartupFetchRoomEventPatch(
   };
 
   fetchRoomEventStartupCleanupByClient.set(mx, restore);
+  mx.on(ClientEvent.Sync, onSync);
 }
 
 const deleteDatabase = (name: string): Promise<void> =>
@@ -549,6 +558,8 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       baseUrl: useSliding ? baseUrl : undefined,
       stack: err instanceof Error ? err.stack : undefined,
     });
+    fetchRoomEventStartupCleanupByClient.get(mx)?.();
+    slidingSyncConnIdCleanupByClient.get(mx)?.();
     disposeSlidingSync(mx);
     disposePresenceSync(mx);
     throw err;
@@ -558,6 +569,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 export const stopClient = (mx: MatrixClient): void => {
   log.log('stopClient', mx.getUserId());
   debugLog.info('sync', 'Stopping client', { userId: mx.getUserId() });
+  fetchRoomEventStartupCleanupByClient.get(mx)?.();
   slidingSyncConnIdCleanupByClient.get(mx)?.();
   disposeSlidingSync(mx);
   disposePresenceSync(mx);

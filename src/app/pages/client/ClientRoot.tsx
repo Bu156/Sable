@@ -47,7 +47,6 @@ import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
-import { useClientConfigLoaded } from '$hooks/useClientConfig';
 import { pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
@@ -228,7 +227,6 @@ type ClientRootProps = {
 };
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
-  const configLoaded = useClientConfigLoaded();
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
@@ -325,10 +323,10 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [loadState, loadMatrix]);
 
   useEffect(() => {
-    if (mx && !mx.clientRunning && configLoaded) {
+    if (mx && !mx.clientRunning) {
       startMatrix(mx);
     }
-  }, [mx, startMatrix, configLoaded]);
+  }, [mx, startMatrix]);
 
   useEffect(() => {
     firstSyncReadyRef.current = false;
