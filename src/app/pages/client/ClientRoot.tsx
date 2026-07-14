@@ -52,6 +52,8 @@ import { pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
 import { AutoDiscovery } from './AutoDiscovery';
+import { useSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
 
 const log = createLogger('ClientRoot');
 
@@ -63,13 +65,17 @@ function ClientRootLoading() {
   const activeSessionId = useAtomValue(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
 
+  const [showEasterEggs] = useSetting(settingsAtom, 'showEasterEggs');
+  const [animalKind] = useSetting(settingsAtom, 'animalKind');
+
   const activeSession: Session | undefined =
-    sessions.find((s) => s.userId === activeSessionId) ?? sessions[0];
+    sessions.find((session) => session.userId === activeSessionId) ?? sessions[0];
 
   const usingSlidingSync = activeSession?.slidingSyncOptIn === true;
 
   const handleSwap = () => {
     if (!activeSession) return;
+
     setSessions({
       type: 'PUT',
       session: {
@@ -77,14 +83,19 @@ function ClientRootLoading() {
         slidingSyncOptIn: !usingSlidingSync,
       },
     });
+
     window.location.reload();
   };
+
+  const loadingAnimal = showEasterEggs && animalKind ? animalKind : 'cats';
 
   return (
     <SplashScreen>
       <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
         <Spinner variant="Secondary" size="600" />
-        <Text>Petting cats</Text>
+
+        <Text>{`Petting ${loadingAnimal}`}</Text>
+
         {activeSession && (
           <Text
             as="button"
