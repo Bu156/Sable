@@ -44,7 +44,9 @@ type MatrixClientWithWritableSlidingSync = MatrixClient & {
   slidingSync: SlidingSyncMethod;
 };
 
-type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & { conn_id?: string };
+type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & {
+  conn_id?: string;
+};
 
 const SLIDING_SYNC_CONN_ID = 'sable-main';
 
@@ -410,12 +412,8 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     !!slidingConfig &&
     resolveSlidingEnabled(slidingConfig?.enabled);
 
-  const presenceManager = new PresenceSyncManager(mx);
-  presenceSyncByClient.set(mx, presenceManager);
-
-  presenceManager.start();
-
   let manager: SlidingSyncManager | undefined;
+  let presenceManager: PresenceSyncManager | undefined;
 
   if (useSliding) {
     manager = new SlidingSyncManager(mx, proxyBaseUrl, {
@@ -429,6 +427,9 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 
     manager.attach();
     slidingSyncByClient.set(mx, manager);
+
+    presenceManager = new PresenceSyncManager(mx);
+    presenceSyncByClient.set(mx, presenceManager);
   }
 
   try {
@@ -437,6 +438,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       slidingSync: manager?.slidingSync,
       threadSupport: true,
     });
+    presenceManager?.start();
   } catch (err) {
     debugLog.error('network', 'Failed to start client with sliding sync', {
       error: err instanceof Error ? err.message : String(err),
