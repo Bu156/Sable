@@ -24,6 +24,7 @@ import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
 import { SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
+import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
@@ -484,6 +485,7 @@ export type StartClientConfig = {
   pollTimeoutMs?: number;
   timelineLimit?: number;
   initialRoomIds?: Iterable<string>;
+  onCachedRoomsLoaded?: () => void;
 };
 
 export type ClientSyncDiagnostics = {
@@ -539,6 +541,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     installSlidingSyncConnId(mx);
 
     manager.attach();
+    manager.prepareSidebarCacheHydration();
     slidingSyncByClient.set(mx, manager);
   }
 
@@ -553,6 +556,9 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
         }),
       { transport: useSliding ? 'sliding' : 'classic' }
     );
+    if (manager && (await manager.waitForSidebarCacheHydration())) {
+      config?.onCachedRoomsLoaded?.();
+    }
   } catch (err) {
     debugLog.error('network', 'Failed to start client with sliding sync', {
       error: err instanceof Error ? err.message : String(err),
@@ -582,6 +588,7 @@ export const clearCacheAndReload = async (mx: MatrixClient) => {
   log.log('clearCacheAndReload', mx.getUserId());
   stopClient(mx);
   clearNavToActivePathStore(mx.getSafeUserId());
+  SlidingSyncSidebarCache.clear(mx.getSafeUserId());
   await mx.store.deleteAllData();
   window.location.reload();
 };
@@ -616,6 +623,7 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
   }
 
   if (session) {
+    SlidingSyncSidebarCache.clear(session.userId);
     const storeName: SessionStoreName = getSessionStoreName(session);
     await mx.clearStores({ cryptoDatabasePrefix: storeName.rustCryptoPrefix });
     await deleteDatabase(storeName.sync);

@@ -74,6 +74,7 @@ function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mocks.slidingSyncInstance.getListData.mockReset().mockReturnValue(null);
   mocks.slidingSyncInstance.getListParams.mockReset().mockReturnValue(null);
   mocks.slidingSyncInstance.setListRanges.mockReset();

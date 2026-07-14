@@ -61,6 +61,21 @@ const log = createLogger('ClientRoot');
 const isClientReady = (syncState: string | null): boolean =>
   syncState === 'PREPARED' || syncState === 'SYNCING' || syncState === 'CATCHUP';
 
+const resolveLocalRoomId = (
+  mx: MatrixClient,
+  encodedRoomIdOrAlias?: string
+): string | undefined => {
+  if (!encodedRoomIdOrAlias) return undefined;
+  try {
+    const roomIdOrAlias = decodeURIComponent(encodedRoomIdOrAlias);
+    if (isRoomId(roomIdOrAlias)) return roomIdOrAlias;
+    if (isRoomAlias(roomIdOrAlias)) return getCanonicalAliasRoomId(mx, roomIdOrAlias);
+  } catch {
+    // Ignore malformed route values and let the normal router handle them.
+  }
+  return undefined;
+};
+
 function ClientRootLoading() {
   const sessions = useAtomValue(sessionsAtom);
   const activeSessionId = useAtomValue(activeSessionIdAtom);
@@ -273,23 +288,13 @@ export function ClientRoot({ children }: ClientRootProps) {
   const [startState, startMatrix] = useAsyncCallback<void, Error, [MatrixClient]>(
     useCallback(
       (m) => {
-        let initialRoomId: string | undefined;
-        if (encodedInitialRoomIdOrAlias) {
-          try {
-            const roomIdOrAlias = decodeURIComponent(encodedInitialRoomIdOrAlias);
-            if (isRoomId(roomIdOrAlias)) initialRoomId = roomIdOrAlias;
-            else if (isRoomAlias(roomIdOrAlias)) {
-              initialRoomId = getCanonicalAliasRoomId(m, roomIdOrAlias);
-            }
-          } catch {
-            // Ignore malformed route values and let the normal router handle them.
-          }
-        }
+        const initialRoomId = resolveLocalRoomId(m, encodedInitialRoomIdOrAlias);
 
         return startClient(m, {
           baseUrl: activeSession?.baseUrl,
           sessionSlidingSyncOptIn: activeSession?.slidingSyncOptIn,
           initialRoomIds: initialRoomId ? [initialRoomId] : undefined,
+          onCachedRoomsLoaded: () => setSyncReadyClient(m),
         });
       },
       [activeSession?.baseUrl, activeSession?.slidingSyncOptIn, encodedInitialRoomIdOrAlias]

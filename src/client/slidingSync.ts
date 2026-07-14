@@ -1,5 +1,6 @@
 import type {
   MatrixClient,
+  MatrixEvent,
   MSC3575List,
   MSC3575RoomData,
   MSC3575RoomSubscription,
@@ -15,11 +16,14 @@ import {
   MSC3575_STATE_KEY_LAZY,
   MSC3575_STATE_KEY_ME,
   EventType,
+  EventEmitterEvents,
+  ClientEvent,
 } from '$types/matrix-sdk';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import { CustomStateEvent } from '$types/matrix/room';
 import * as Sentry from '@sentry/react';
+import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 
 const log = createLogger('slidingSync');
 const debugLog = createDebugLogger('slidingSync');
@@ -184,6 +188,22 @@ export class SlidingSyncManager {
 
   private readonly roomTimelineLimit: number;
 
+  private readonly sidebarCache: SlidingSyncSidebarCache;
+
+  private cacheHydrationPromise: Promise<boolean> = Promise.resolve(false);
+
+  private cacheHydrationNewListener:
+    | ((eventName: string | symbol, listener: (...args: unknown[]) => void) => void)
+    | undefined;
+
+  private cacheHydrationResolve: ((hydrated: boolean) => void) | undefined;
+
+  private hydratingSidebarCache = false;
+
+  private readonly onCacheRoomData: (roomId: string, data: MSC3575RoomData) => void;
+
+  private readonly onCacheAccountData: (event: MatrixEvent) => void;
+
   private readonly onLifecycle: (
     state: SlidingSyncState,
     resp: MSC3575SlidingSyncResponse | null,
@@ -243,6 +263,7 @@ export class SlidingSyncManager {
 
     const roomTimelineLimit = clampPositive(options.timelineLimit, ACTIVE_ROOM_TIMELINE_LIMIT);
     this.roomTimelineLimit = roomTimelineLimit;
+    this.sidebarCache = new SlidingSyncSidebarCache(mx.getSafeUserId());
 
     const defaultSubscription = buildEncryptedSubscription(roomTimelineLimit);
     const lists = buildLists();
@@ -385,9 +406,13 @@ export class SlidingSyncManager {
       if (member.userId !== this.mx.getUserId()) return;
       if (member.membership !== KnownMembership.Leave && member.membership !== KnownMembership.Ban)
         return;
+      this.sidebarCache.removeRoom(member.roomId);
       if (!this.activeRoomSubscriptions.has(member.roomId)) return;
       this.unsubscribeFromRoom(member.roomId);
     };
+
+    this.onCacheRoomData = (roomId, data) => this.sidebarCache.cacheRoom(roomId, data);
+    this.onCacheAccountData = (event) => this.sidebarCache.cacheAccountData(event);
 
     for (const roomId of options.initialRoomIds ?? []) {
       this.subscribeToRoom(roomId);
@@ -409,7 +434,9 @@ export class SlidingSyncManager {
     });
 
     this.slidingSync.on(SlidingSyncEvent.Lifecycle, this.onLifecycle);
+    this.slidingSync.on(SlidingSyncEvent.RoomData, this.onCacheRoomData);
     this.mx.on(RoomMemberEvent.Membership, this.onMembershipLeave);
+    this.mx.on(ClientEvent.AccountData, this.onCacheAccountData);
 
     debugLog.info('sync', 'Sliding sync listeners attached successfully');
   }
@@ -432,7 +459,19 @@ export class SlidingSyncManager {
     this.disposed = true;
     this.slidingSync.stop();
     this.slidingSync.removeListener(SlidingSyncEvent.Lifecycle, this.onLifecycle);
+    this.slidingSync.removeListener(SlidingSyncEvent.RoomData, this.onCacheRoomData);
+    if (this.cacheHydrationNewListener) {
+      this.slidingSync.removeListener(
+        EventEmitterEvents.NewListener,
+        this.cacheHydrationNewListener as never
+      );
+      this.cacheHydrationNewListener = undefined;
+    }
+    this.cacheHydrationResolve?.(false);
+    this.cacheHydrationResolve = undefined;
     this.mx.removeListener(RoomMemberEvent.Membership, this.onMembershipLeave);
+    this.mx.removeListener(ClientEvent.AccountData, this.onCacheAccountData);
+    this.sidebarCache.dispose();
 
     debugLog.info('sync', 'Sliding sync disposed successfully', {
       totalSyncCycles: this.syncCount,
@@ -453,6 +492,41 @@ export class SlidingSyncManager {
         };
       }),
     };
+  }
+
+  public prepareSidebarCacheHydration(): void {
+    if (this.disposed || this.cacheHydrationNewListener) return;
+
+    this.cacheHydrationPromise = new Promise<boolean>((resolve) => {
+      this.cacheHydrationResolve = resolve;
+    });
+
+    this.cacheHydrationNewListener = (eventName) => {
+      if (eventName !== SlidingSyncEvent.RoomData) return;
+      const listener = this.cacheHydrationNewListener;
+      if (listener) {
+        this.slidingSync.removeListener(EventEmitterEvents.NewListener, listener as never);
+      }
+      this.cacheHydrationNewListener = undefined;
+
+      globalThis.queueMicrotask(() => {
+        this.hydratingSidebarCache = true;
+        void this.sidebarCache
+          .hydrate(this.mx, this.slidingSync)
+          .then((hydrated) => this.cacheHydrationResolve?.(hydrated))
+          .catch(() => this.cacheHydrationResolve?.(false))
+          .finally(() => {
+            this.hydratingSidebarCache = false;
+            this.cacheHydrationResolve = undefined;
+          });
+      });
+    };
+
+    this.slidingSync.on(EventEmitterEvents.NewListener, this.cacheHydrationNewListener as never);
+  }
+
+  public waitForSidebarCacheHydration(): Promise<boolean> {
+    return this.cacheHydrationPromise;
   }
 
   private expandListsByPage(): void {
@@ -759,6 +833,7 @@ export class SlidingSyncManager {
     const subscribeMs = performance.now();
     const onFirstRoomData = (dataRoomId: string) => {
       if (dataRoomId !== roomId) return;
+      if (this.hydratingSidebarCache) return;
       const latencyMs = Math.round(performance.now() - subscribeMs);
       const subscribedRoom = this.mx.getRoom(roomId);
       const eventCount = subscribedRoom?.getLiveTimeline().getEvents().length ?? 0;
