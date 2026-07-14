@@ -31,14 +31,14 @@ export const LIST_ROOM_SEARCH = 'room_search';
 export const LIST_SPACE = 'space';
 const LIST_TIMELINE_LIMIT = 0;
 const LIST_PAGE_SIZE = 30;
-const DEFAULT_POLL_TIMEOUT_MS = 20000;
+const DEFAULT_POLL_TIMEOUT_MS = 45000;
 
 const LIST_SORT_ORDER = ['by_recency', 'by_name'];
 
 const ACTIVE_ROOM_SUBSCRIPTION_KEY = 'active_room';
 const SPACE_SUBSCRIPTION_KEY = 'space';
 const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
-const ACTIVE_ROOM_TIMELINE_LIMIT = 50;
+const ACTIVE_ROOM_TIMELINE_LIMIT = 30;
 
 export type PartialSlidingSyncRequest = {
   filters?: MSC3575List['filters'];
@@ -49,6 +49,7 @@ export type PartialSlidingSyncRequest = {
 type SlidingSyncOptions = {
   timelineLimit?: number;
   pollTimeoutMs?: number;
+  initialRoomIds?: Iterable<string>;
 };
 
 export type SlidingSyncListDiagnostics = {
@@ -387,6 +388,10 @@ export class SlidingSyncManager {
       if (!this.activeRoomSubscriptions.has(member.roomId)) return;
       this.unsubscribeFromRoom(member.roomId);
     };
+
+    for (const roomId of options.initialRoomIds ?? []) {
+      this.subscribeToRoom(roomId);
+    }
   }
 
   public attach(): void {
@@ -665,6 +670,19 @@ export class SlidingSyncManager {
     this.slidingSync.modifyRoomSubscriptions(desiredSubscriptions);
   }
 
+  private pauseUnconfirmedListExpansion(): void {
+    this.listKeys.forEach((key) => {
+      const confirmedEnd = this.confirmedListRangeEnds.get(key) ?? -1;
+      if (confirmedEnd < 0) return;
+
+      const requestedEnd = getListEndIndex(this.slidingSync.getListParams(key));
+      if (requestedEnd <= confirmedEnd) return;
+
+      this.slidingSync.setListRanges(key, [[0, confirmedEnd]]);
+      this.requestedListRangeEnds.set(key, confirmedEnd);
+    });
+  }
+
   public setImagePackSubscriptions(roomIds: Iterable<string>): void {
     if (this.disposed) return;
     const next = new Set(roomIds);
@@ -713,9 +731,8 @@ export class SlidingSyncManager {
     const room = this.mx.getRoom(roomId);
     const isEncrypted = this.mx.isRoomEncrypted(roomId);
     this.activeRoomSubscriptions.add(roomId);
+    this.pauseUnconfirmedListExpansion();
     this.syncRoomSubscriptions();
-
-    this.expandListsByPage();
     Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
       attributes: { transport: 'sliding' },
     });

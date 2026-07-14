@@ -90,17 +90,46 @@ function fireLifecycle(state: SlidingSyncState, response: unknown = {}) {
   lifecycle?.(state, response);
 }
 
+function fireRoomData(roomId: string) {
+  const roomDataHandler = mocks.slidingSyncInstance.on.mock.calls
+    .toReversed()
+    .find(([event]) => event === SlidingSyncEvent.RoomData)?.[1] as
+    | ((dataRoomId: string, data: unknown) => void)
+    | undefined;
+  roomDataHandler?.(roomId, {});
+}
+
 describe('SlidingSyncManager initial request', () => {
   it('starts with a small room-list range and only row-level state', () => {
     makeManager(makeMockMx());
 
     const lists = mocks.slidingSyncConstructorArgs?.[1] as Map<string, MSC3575List>;
     const joined = lists.get('joined');
+    const defaultSubscription = mocks.slidingSyncConstructorArgs?.[2] as {
+      timeline_limit: number;
+    };
 
     expect(joined?.ranges).toEqual([[0, 29]]);
     expect(joined?.required_state).toHaveLength(8);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
     expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
+    expect(defaultSubscription.timeline_limit).toBe(30);
+    expect(mocks.slidingSyncConstructorArgs?.[4]).toBe(45000);
+  });
+
+  it('includes the selected room subscription before the first request', () => {
+    const manager = new SlidingSyncManager(makeMockMx(), 'https://sliding.example.com', {
+      initialRoomIds: ['!selected:example.com'],
+    });
+
+    expect(manager.isRoomActive('!selected:example.com')).toBe(true);
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenCalledWith(
+      '!selected:example.com',
+      'active_room'
+    );
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenCalledWith(
+      new Set(['!selected:example.com'])
+    );
   });
 
   it('expands by one page after the first response instead of jumping to all rooms', () => {
@@ -124,7 +153,7 @@ describe('SlidingSyncManager initial request', () => {
     expect(mocks.slidingSyncInstance.setListRanges).toHaveBeenCalledWith('joined', [[0, 59]]);
   });
 
-  it('continues expanding lists when an active-room subscription has not returned data yet', () => {
+  it('does not expand lists synchronously while adding an active-room subscription', () => {
     const manager = makeManager(makeMockMx());
     mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
       key === 'joined' ? ({ joinedCount: 1000 } as never) : null
@@ -134,6 +163,8 @@ describe('SlidingSyncManager initial request', () => {
     } as never);
     manager.attach();
     manager.subscribeToRoom('!active:example.com');
+
+    expect(mocks.slidingSyncInstance.setListRanges).not.toHaveBeenCalledWith('joined', [[0, 59]]);
 
     const lifecycleCall = mocks.slidingSyncInstance.on.mock.calls.find(
       ([event]) => event === SlidingSyncEvent.Lifecycle
@@ -173,7 +204,7 @@ describe('SlidingSyncManager initial request', () => {
       'active_room'
     );
     expect(diagnostics.lists.find((list) => list.key === 'joined')).toMatchObject({
-      rangeEnd: 59,
+      rangeEnd: 29,
     });
   });
 });
@@ -187,12 +218,7 @@ describe('SlidingSyncManager room subscription coordination', () => {
     manager.onRoomSubscriptionStatus(roomId, (loading) => loadingStates.push(loading));
     manager.subscribeToRoom(roomId);
 
-    const roomDataHandler = mocks.slidingSyncInstance.on.mock.calls
-      .toReversed()
-      .find(([event]) => event === SlidingSyncEvent.RoomData)?.[1] as
-      | ((dataRoomId: string, data: unknown) => void)
-      | undefined;
-    roomDataHandler?.(roomId, {});
+    fireRoomData(roomId);
     expect(loadingStates).toEqual([false, true]);
 
     manager.attach();

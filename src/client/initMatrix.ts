@@ -30,7 +30,7 @@ const debugLog = createDebugLogger('initMatrix');
 const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
 const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
 const presenceStartCleanupByClient = new WeakMap<MatrixClient, () => void>();
-const SLIDING_SYNC_POLL_TIMEOUT_MS = 20000;
+const SLIDING_SYNC_POLL_TIMEOUT_MS = 45000;
 
 const isInitialSyncReady = (state: string | null): boolean =>
   state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
@@ -483,6 +483,7 @@ export type StartClientConfig = {
   sessionSlidingSyncOptIn?: boolean;
   pollTimeoutMs?: number;
   timelineLimit?: number;
+  initialRoomIds?: Iterable<string>;
 };
 
 export type ClientSyncDiagnostics = {
@@ -531,6 +532,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     manager = new SlidingSyncManager(mx, baseUrl, {
       pollTimeoutMs: config?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
       timelineLimit: config?.timelineLimit,
+      initialRoomIds: config?.initialRoomIds,
     });
 
     installStartupFetchRoomEventPatch(mx, manager);

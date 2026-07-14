@@ -17,7 +17,7 @@ import FocusTrap from 'focus-trap-react';
 import type { MouseEventHandler, ReactNode } from 'react';
 import { useRef, useCallback, useEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   clearCacheAndReload,
@@ -47,6 +47,8 @@ import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
+import { DIRECT_ROOM_PATH, HOME_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
+import { getCanonicalAliasRoomId, isRoomAlias, isRoomId } from '$utils/matrix';
 import { pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
@@ -227,6 +229,7 @@ type ClientRootProps = {
 };
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
@@ -261,14 +264,35 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
 
+  const roomMatch =
+    matchPath(HOME_ROOM_PATH, location.pathname) ??
+    matchPath(DIRECT_ROOM_PATH, location.pathname) ??
+    matchPath(SPACE_ROOM_PATH, location.pathname);
+  const encodedInitialRoomIdOrAlias = roomMatch?.params.roomIdOrAlias;
+
   const [startState, startMatrix] = useAsyncCallback<void, Error, [MatrixClient]>(
     useCallback(
-      (m) =>
-        startClient(m, {
+      (m) => {
+        let initialRoomId: string | undefined;
+        if (encodedInitialRoomIdOrAlias) {
+          try {
+            const roomIdOrAlias = decodeURIComponent(encodedInitialRoomIdOrAlias);
+            if (isRoomId(roomIdOrAlias)) initialRoomId = roomIdOrAlias;
+            else if (isRoomAlias(roomIdOrAlias)) {
+              initialRoomId = getCanonicalAliasRoomId(m, roomIdOrAlias);
+            }
+          } catch {
+            // Ignore malformed route values and let the normal router handle them.
+          }
+        }
+
+        return startClient(m, {
           baseUrl: activeSession?.baseUrl,
           sessionSlidingSyncOptIn: activeSession?.slidingSyncOptIn,
-        }),
-      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn]
+          initialRoomIds: initialRoomId ? [initialRoomId] : undefined,
+        });
+      },
+      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn, encodedInitialRoomIdOrAlias]
     )
   );
 
