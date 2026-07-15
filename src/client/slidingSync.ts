@@ -33,7 +33,7 @@ export const LIST_INVITES = 'invites';
 export const LIST_SEARCH = 'search';
 export const LIST_ROOM_SEARCH = 'room_search';
 export const LIST_SPACE = 'space';
-const LIST_TIMELINE_LIMIT = 0;
+const LIST_TIMELINE_LIMIT = 1;
 const LIST_PAGE_SIZE = 30;
 const DEFAULT_POLL_TIMEOUT_MS = 45000;
 
@@ -223,6 +223,10 @@ export class SlidingSyncManager {
 
   private responseProcessingStartedAt: number | undefined;
 
+  private responseProcessing = false;
+
+  private readonly responseSettledListeners = new Set<() => void>();
+
   private previousListCounts: Map<string, number> = new Map();
 
   private readonly requestedListRangeEnds = new Map<string, number>();
@@ -310,7 +314,10 @@ export class SlidingSyncManager {
       }
 
       if (state === SlidingSyncState.RequestFinished) {
-        if (!err && resp) this.responseProcessingStartedAt = performance.now();
+        if (!err && resp) {
+          this.responseProcessing = true;
+          this.responseProcessingStartedAt = performance.now();
+        }
         return;
       }
 
@@ -402,6 +409,12 @@ export class SlidingSyncManager {
           totalRoomCount,
         });
       }
+
+      globalThis.queueMicrotask(() => {
+        if (this.disposed) return;
+        this.responseProcessing = false;
+        this.responseSettledListeners.forEach((listener) => listener());
+      });
     };
 
     this.onMembershipLeave = (_event, member) => {
@@ -455,6 +468,8 @@ export class SlidingSyncManager {
     });
 
     this.pendingRoomDataListeners.clear();
+    this.responseProcessing = false;
+    this.responseSettledListeners.clear();
     this.roomDataAwaitingSyncCompletion.clear();
     this.roomSubscriptionStatusListeners.forEach((listeners) =>
       listeners.forEach((listener) => listener(false))
@@ -719,6 +734,15 @@ export class SlidingSyncManager {
 
   public isRoomActive(roomId: string): boolean {
     return this.activeRoomSubscriptions.has(roomId);
+  }
+
+  public isResponseProcessing(): boolean {
+    return this.responseProcessing;
+  }
+
+  public subscribeToResponseSettled(listener: () => void): () => void {
+    this.responseSettledListeners.add(listener);
+    return () => this.responseSettledListeners.delete(listener);
   }
 
   public reconcileRoomMembership(

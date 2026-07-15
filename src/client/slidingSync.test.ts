@@ -111,11 +111,30 @@ describe('SlidingSyncManager initial request', () => {
     };
 
     expect(joined?.ranges).toEqual([[0, 29]]);
+    expect(joined?.timeline_limit).toBe(1);
     expect(joined?.required_state).toHaveLength(8);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
     expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
     expect(defaultSubscription.timeline_limit).toBe(30);
     expect(mocks.slidingSyncConstructorArgs?.[4]).toBe(45000);
+  });
+
+  it('settles response processing after post-response work can finish', async () => {
+    const manager = makeManager(makeMockMx());
+    const settled = vi.fn<() => void>();
+    manager.subscribeToResponseSettled(settled);
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.RequestFinished, {});
+    expect(manager.isResponseProcessing()).toBe(true);
+
+    fireLifecycle(SlidingSyncState.Complete, {});
+    expect(manager.isResponseProcessing()).toBe(true);
+    expect(settled).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    expect(manager.isResponseProcessing()).toBe(false);
+    expect(settled).toHaveBeenCalledOnce();
   });
 
   it('includes the selected room subscription before the first request', () => {
