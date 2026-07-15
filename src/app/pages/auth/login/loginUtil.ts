@@ -11,6 +11,7 @@ import {
   deleteAfterLoginRedirectPath,
   getAfterLoginRedirectPath,
 } from '$pages/afterLoginRedirectPath';
+import { clearPendingSlidingSyncLogin } from './slidingSyncLogin';
 import { getHomePath } from '$pages/pathUtils';
 import { activeSessionIdAtom, sessionsAtom, type Session } from '$state/sessions';
 import { createLogger } from '$utils/debug';
@@ -155,9 +156,12 @@ export const useCommitLoginSession = () => {
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
 
   return useCallback(
-    (session: Session) => {
-      setSessions({ type: 'PUT', session });
-      setActiveSessionId(session.userId);
+    (session: Session, slidingSyncOptIn?: boolean) => {
+      const committedSession =
+        slidingSyncOptIn === undefined ? session : { ...session, slidingSyncOptIn };
+      setSessions({ type: 'PUT', session: committedSession });
+      setActiveSessionId(committedSession.userId);
+      clearPendingSlidingSyncLogin();
       const afterLoginRedirectUrl = getAfterLoginRedirectPath();
       deleteAfterLoginRedirectPath();
       const destination = afterLoginRedirectUrl ?? getHomePath();
@@ -184,10 +188,7 @@ export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: 
         deviceId: loginRes.device_id,
         accessToken: loginRes.access_token,
       };
-      if (slidingSyncOptIn !== undefined) {
-        newSession.slidingSyncOptIn = slidingSyncOptIn;
-      }
-      commitSession(newSession);
+      commitSession(newSession, slidingSyncOptIn);
     }
   }, [data, slidingSyncOptIn, commitSession]);
 };
