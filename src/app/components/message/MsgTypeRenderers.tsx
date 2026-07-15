@@ -649,7 +649,7 @@ export function MAudio({
 }
 
 type RenderFileContentProps = {
-  body: string;
+  fileName: string;
   info: IFileInfo & IThumbnailContent;
   mimeType: string;
   url: string;
@@ -680,7 +680,7 @@ export function MFile({ content, renderFileContent, outlined }: MFileProps) {
       <AttachmentBox>
         <AttachmentContent>
           {renderFileContent({
-            body: content.body ?? content.filename ?? 'File',
+            fileName: content.filename ?? content.body ?? 'File',
             info: fileInfo ?? {},
             mimeType: fileInfo?.mimetype ?? FALLBACK_MIMETYPE,
             url: mxcUrl,
