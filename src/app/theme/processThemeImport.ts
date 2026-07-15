@@ -43,6 +43,7 @@ export type ProcessedUploadedSableCss =
       role: 'theme';
       fullUrl?: string;
       previewCssForCard: string;
+      fullCssForCard?: string;
       displayName: string;
       basename: string;
       kind: 'light' | 'dark';
@@ -418,6 +419,7 @@ export async function processUploadedSableCssAttachment(
         role: 'theme',
         fullUrl,
         previewCssForCard: trimmed,
+        fullCssForCard: fullCss,
         displayName,
         basename,
         kind: metaKindToLd(meta),
@@ -447,6 +449,7 @@ export async function processUploadedSableCssAttachment(
     role: 'theme',
     fullUrl,
     previewCssForCard: trimmed,
+    fullCssForCard: trimmed,
     displayName,
     basename,
     kind: metaKindToLd(meta),

@@ -24,6 +24,16 @@ export type ThemeCacheUpdate = {
   contentHash: string;
 };
 
+export type ThemeCacheStats = {
+  entries: number;
+  localEntries: number;
+  remoteEntries: number;
+  totalBytes: number;
+  localBytes: number;
+  remoteBytes: number;
+  lastCheckedAt?: number;
+};
+
 const updateListeners = new Set<(update: ThemeCacheUpdate) => void>();
 let updateChannel: BroadcastChannel | undefined;
 
@@ -191,6 +201,63 @@ export async function clearThemeCache(): Promise<void> {
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).clear();
     tx.addEventListener('complete', () => resolve());
+    tx.addEventListener('error', () => reject(tx.error));
+  });
+}
+
+export async function getThemeCacheStats(): Promise<ThemeCacheStats> {
+  const db = await openDb();
+  const entries = await new Promise<CachedThemeEntry[]>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.addEventListener('error', () => reject(req.error));
+    req.addEventListener('success', () => resolve(req.result as CachedThemeEntry[]));
+  });
+  const stats: ThemeCacheStats = {
+    entries: entries.length,
+    localEntries: 0,
+    remoteEntries: 0,
+    totalBytes: 0,
+    localBytes: 0,
+    remoteBytes: 0,
+  };
+  entries.forEach((entry) => {
+    const bytes = new TextEncoder().encode(entry.cssText).byteLength;
+    const local = entry.url.startsWith('sable-import://');
+    stats.totalBytes += bytes;
+    if (local) {
+      stats.localEntries += 1;
+      stats.localBytes += bytes;
+    } else {
+      stats.remoteEntries += 1;
+      stats.remoteBytes += bytes;
+      const checkedAt = entry.checkedAt ?? entry.cachedAt;
+      if (!stats.lastCheckedAt || checkedAt > stats.lastCheckedAt) stats.lastCheckedAt = checkedAt;
+    }
+  });
+  return stats;
+}
+
+/** Clears only refetchable network CSS. Uploaded local theme packages are preserved. */
+export async function clearRemoteThemeCache(): Promise<number> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    const req = store.openCursor();
+    let removed = 0;
+    req.addEventListener('error', () => reject(req.error));
+    req.addEventListener('success', () => {
+      const cursor = req.result;
+      if (!cursor) return;
+      const entry = cursor.value as CachedThemeEntry;
+      if (!entry.url.startsWith('sable-import://')) {
+        cursor.delete();
+        removed += 1;
+      }
+      cursor.continue();
+    });
+    tx.addEventListener('complete', () => resolve(removed));
     tx.addEventListener('error', () => reject(tx.error));
   });
 }

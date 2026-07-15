@@ -4,6 +4,7 @@ import { Box, Button, IconButton, Spinner, Switch, Text, config, toRem } from 'f
 
 import { Star, sizedIcon } from '$components/icons/phosphor';
 import { ThemePreviewCard } from '$components/theme/ThemePreviewCard';
+import { CssViewerButton } from '$components/theme/CssViewerButton';
 import { usePatchSettings } from '$features/settings/cosmetics/themeSettingsPatch';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useClientConfig } from '$hooks/useClientConfig';
@@ -25,6 +26,11 @@ import {
   buildPreviewStyleBlock,
   extractSafePreviewCustomProperties,
 } from '../../../theme/previewCss';
+import {
+  pruneThemeFavorites,
+  pruneThemeTweakFavorites,
+  themeSourceLabel,
+} from '../../../theme/themeLibrary';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
 
 export const MAX_SABLE_CSS_ATTACHMENT_BYTES = 1024 * 1024;
@@ -38,22 +44,6 @@ type UploadedSableCssContentProps = {
 };
 
 type SuccessfulUpload = Extract<ProcessedUploadedSableCss, { ok: true }>;
-
-function pruneThemeFavorites(
-  favorites: ThemeRemoteFavorite[],
-  activeUrls: Array<string | undefined>
-): ThemeRemoteFavorite[] {
-  const active = new Set(activeUrls.filter((url): url is string => Boolean(url)));
-  return favorites.filter((favorite) => favorite.pinned === true || active.has(favorite.fullUrl));
-}
-
-function pruneTweakFavorites(
-  favorites: ThemeRemoteTweakFavorite[],
-  enabledUrls: string[]
-): ThemeRemoteTweakFavorite[] {
-  const enabled = new Set(enabledUrls);
-  return favorites.filter((favorite) => favorite.pinned === true || enabled.has(favorite.fullUrl));
-}
 
 function UploadedTweakCard({ data }: { data: Extract<SuccessfulUpload, { role: 'tweak' }> }) {
   const patchSettings = usePatchSettings();
@@ -97,7 +87,7 @@ function UploadedTweakCard({ data }: { data: Extract<SuccessfulUpload, { role: '
       const nextEnabled = enabledUrls.filter((url) => url !== data.fullUrl);
       patchSettings({
         themeRemoteEnabledTweakFullUrls: nextEnabled,
-        themeRemoteTweakFavorites: pruneTweakFavorites(
+        themeRemoteTweakFavorites: pruneThemeTweakFavorites(
           favorites.filter((favorite) => favorite.fullUrl !== data.fullUrl),
           nextEnabled
         ),
@@ -114,7 +104,7 @@ function UploadedTweakCard({ data }: { data: Extract<SuccessfulUpload, { role: '
         : enabledUrls.filter((url) => url !== data.fullUrl);
       patchSettings({
         themeRemoteEnabledTweakFullUrls: nextEnabled,
-        themeRemoteTweakFavorites: pruneTweakFavorites(makeFavorite(false), nextEnabled),
+        themeRemoteTweakFavorites: pruneThemeTweakFavorites(makeFavorite(false), nextEnabled),
       });
     },
     [data.fullUrl, enabledUrls, makeFavorite, patchSettings]
@@ -145,8 +135,16 @@ function UploadedTweakCard({ data }: { data: Extract<SuccessfulUpload, { role: '
           <Text size="T200" priority="300">
             {description || 'Uploaded tweak'}
           </Text>
+          <Text size="T200" priority="300">
+            Source: Uploaded file
+          </Text>
         </Box>
         <Box direction="Row" gap="100" alignItems="Center" shrink="No">
+          <CssViewerButton
+            title={`${data.displayName} — CSS`}
+            cssText={data.cssText}
+            ariaLabel="View tweak CSS"
+          />
           <IconButton
             size="300"
             variant={isFavorite ? 'Primary' : 'Secondary'}
@@ -284,7 +282,9 @@ function UploadedThemeCard({ data }: { data: Extract<SuccessfulUpload, { role: '
       title={data.displayName}
       subtitle={subtitle}
       previewCssText={data.previewCssForCard}
+      fullCssText={data.fullCssForCard}
       scopeSlug={`upload-${data.basename}`}
+      sourceLabel={themeSourceLabel({ importedLocal: data.importedLocal, url: data.fullUrl })}
       thirdParty={
         fullUrl !== undefined &&
         !data.importedLocal &&
