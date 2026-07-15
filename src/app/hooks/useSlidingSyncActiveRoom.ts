@@ -1,10 +1,54 @@
 import { useEffect, useState } from 'react';
+import { matchPath, useLocation } from 'react-router-dom';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getSlidingSyncManager } from '$client/initMatrix';
-import { useResolvedSelectedRoom, useResolvedSelectedSpace } from '$hooks/router/useResolvedRoomId';
+import { useResolvedRoomIdOrAlias } from '$hooks/router/useResolvedRoomId';
 import { useSpaces } from '$state/hooks/roomList';
 import { allRoomsAtom } from '$state/room-list/roomList';
 import { ClientEvent } from '$types/matrix-sdk';
+import {
+  DIRECT_ROOM_PATH,
+  HOME_ROOM_PATH,
+  SPACE_LOBBY_PATH,
+  SPACE_PATH,
+  SPACE_ROOM_PATH,
+  SPACE_SEARCH_PATH,
+} from '$pages/paths';
+import { isRoomAlias, isRoomId } from '$utils/matrix';
+
+type RouteRoomRefs = {
+  roomIdOrAlias?: string;
+  spaceIdOrAlias?: string;
+};
+
+const decodeRoomRef = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  const decoded = decodeURIComponent(value);
+  return isRoomId(decoded) || isRoomAlias(decoded) ? decoded : undefined;
+};
+
+export const getRouteRoomRefs = (pathname: string): RouteRoomRefs => {
+  const homeRoomMatch = matchPath(HOME_ROOM_PATH, pathname);
+  const directRoomMatch = matchPath(DIRECT_ROOM_PATH, pathname);
+  const nonSpaceRoomMatch = homeRoomMatch ?? directRoomMatch;
+  if (nonSpaceRoomMatch) {
+    return { roomIdOrAlias: decodeRoomRef(nonSpaceRoomMatch.params.roomIdOrAlias) };
+  }
+
+  const spaceRoomMatch = matchPath(SPACE_ROOM_PATH, pathname);
+  if (spaceRoomMatch) {
+    return {
+      roomIdOrAlias: decodeRoomRef(spaceRoomMatch.params.roomIdOrAlias),
+      spaceIdOrAlias: decodeRoomRef(spaceRoomMatch.params.spaceIdOrAlias),
+    };
+  }
+
+  const spaceMatch =
+    matchPath(SPACE_LOBBY_PATH, pathname) ??
+    matchPath(SPACE_SEARCH_PATH, pathname) ??
+    matchPath(SPACE_PATH, pathname);
+  return { spaceIdOrAlias: decodeRoomRef(spaceMatch?.params.spaceIdOrAlias) };
+};
 
 const useAvailableSlidingSyncManager = () => {
   const mx = useMatrixClient();
@@ -31,8 +75,10 @@ const useAvailableSlidingSyncManager = () => {
 
 export const useSlidingSyncRouteRooms = (): void => {
   const manager = useAvailableSlidingSyncManager();
-  const { roomId, resolving: resolvingRoom } = useResolvedSelectedRoom();
-  const { roomId: spaceId, resolving: resolvingSpace } = useResolvedSelectedSpace();
+  const { pathname } = useLocation();
+  const { roomIdOrAlias, spaceIdOrAlias } = getRouteRoomRefs(pathname);
+  const { roomId, resolving: resolvingRoom } = useResolvedRoomIdOrAlias(roomIdOrAlias);
+  const { roomId: spaceId, resolving: resolvingSpace } = useResolvedRoomIdOrAlias(spaceIdOrAlias);
 
   useEffect(() => {
     if (!manager || resolvingRoom || resolvingSpace) return undefined;

@@ -883,8 +883,11 @@ function PresenceFeature() {
   useEffect(() => {
     // Classic sync / MSC4186 presence: set_presence query param on every /sync poll.
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
-    mx.setSyncPresence(sendPresence ? undefined : SetPresence.Offline);
-    getPresenceSyncManager(mx)?.setPresenceEnabled(sendPresence);
+    const syncPresence = sendPresence ? undefined : SetPresence.Offline;
+    mx.setSyncPresence(syncPresence);
+    const presenceManager = getPresenceSyncManager(mx);
+    presenceManager?.setPresence(syncPresence);
+    presenceManager?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
 
   return null;
