@@ -107,6 +107,27 @@ function PageZoomFeature() {
   return null;
 }
 
+// Updates document.title with an unread count.
+function PageTitleUpdater() {
+  const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const [faviconForMentionsOnly] = useSetting(settingsAtom, 'faviconForMentionsOnly');
+
+  useEffect(() => {
+    let total = 0;
+    let highlightTotal = 0;
+    roomToUnread.forEach((unread) => {
+      if (unread.from === null) {
+        total += unread.total;
+        highlightTotal += unread.highlight;
+      }
+    });
+    const count = faviconForMentionsOnly ? highlightTotal : total;
+    document.title = count > 0 ? `(${count}) Sable Client` : 'Sable Client';
+  }, [roomToUnread, faviconForMentionsOnly]);
+
+  return null;
+}
+
 function FaviconUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
@@ -904,6 +925,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PrivacyBlurFeature />
       <FaviconUpdater />
+      <PageTitleUpdater />
       <InviteNotifications />
       <MessageNotifications />
       <BackgroundNotifications />
