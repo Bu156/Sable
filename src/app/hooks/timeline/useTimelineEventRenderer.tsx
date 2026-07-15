@@ -562,6 +562,7 @@ export function useTimelineEventRenderer({
         const baseContent = mEvent.getContent() || {};
         const safeContent =
           Object.keys(baseContent).length > 0 ? baseContent : mEvent.getOriginalContent();
+        const isContentEmpty = Object.keys(safeContent).length === 0;
 
         const getContent = (() => editedNewContent ?? safeContent) as GetContentCallback;
 
@@ -669,7 +670,7 @@ export function useTimelineEventRenderer({
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
           >
-            {mEvent.isRedacted() ? (
+            {mEvent.isRedacted() || isContentEmpty ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
             ) : (
               <RenderMessageContent
@@ -1039,6 +1040,7 @@ export function useTimelineEventRenderer({
         const baseContent = mEvent.getContent() || {};
         const safeContent =
           Object.keys(baseContent).length > 0 ? baseContent : mEvent.getOriginalContent();
+        const isContentEmpty = Object.keys(safeContent).length === 0;
 
         const getContent = (() => editedNewContent ?? safeContent) as GetContentCallback;
 
@@ -1146,7 +1148,7 @@ export function useTimelineEventRenderer({
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
           >
-            {mEvent.isRedacted() ? (
+            {mEvent.isRedacted() || isContentEmpty ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
             ) : (
               <RenderMessageContent
