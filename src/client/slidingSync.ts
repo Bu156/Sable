@@ -303,7 +303,9 @@ export class SlidingSyncManager {
       }
 
       if (this.disposed) {
-        debugLog.warn('sync', 'Sync lifecycle called after disposal', { state });
+        debugLog.warn('sync', 'Sync lifecycle called after disposal', {
+          state,
+        });
         return;
       }
 
@@ -430,7 +432,10 @@ export class SlidingSyncManager {
     this.initialSyncSpan = Sentry.startInactiveSpan({
       name: 'sync.initial',
       op: 'matrix.sync',
-      attributes: { 'sync.transport': 'sliding', 'sync.base_url': this.baseUrl },
+      attributes: {
+        'sync.transport': 'sliding',
+        'sync.base_url': this.baseUrl,
+      },
     });
 
     this.slidingSync.on(SlidingSyncEvent.Lifecycle, this.onLifecycle);
@@ -716,6 +721,18 @@ export class SlidingSyncManager {
     return this.activeRoomSubscriptions.has(roomId);
   }
 
+  public reconcileRoomMembership(
+    roomId: string,
+    membership: KnownMembership.Join | KnownMembership.Leave
+  ): void {
+    this.mx.getRoom(roomId)?.updateMyMembership(membership);
+
+    if (membership === KnownMembership.Leave) {
+      this.sidebarCache.removeRoom(roomId);
+      this.unsubscribeFromRoom(roomId);
+    }
+  }
+
   private flushDeferredSubscriptions(): void {
     if (this.disposed || !this.listsFullyLoaded) return;
 
@@ -787,12 +804,18 @@ export class SlidingSyncManager {
     const listeners = this.roomSubscriptionStatusListeners.get(roomId) ?? new Set();
     listeners.add(listener);
     this.roomSubscriptionStatusListeners.set(roomId, listeners);
-    listener(this.pendingRoomDataListeners.has(roomId));
+    listener(this.isRoomSubscriptionLoading(roomId));
 
     return () => {
       listeners.delete(listener);
       if (listeners.size === 0) this.roomSubscriptionStatusListeners.delete(roomId);
     };
+  }
+
+  public isRoomSubscriptionLoading(roomId: string): boolean {
+    return (
+      this.pendingRoomDataListeners.has(roomId) || this.roomDataAwaitingSyncCompletion.has(roomId)
+    );
   }
 
   private notifyRoomSubscriptionStatus(roomId: string, loading: boolean): void {

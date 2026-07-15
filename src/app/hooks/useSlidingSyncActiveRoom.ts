@@ -58,7 +58,7 @@ export const useSlidingSyncSpaceSubscriptions = (): void => {
 
 export const useSlidingSyncRoomLoading = (roomId: string): boolean => {
   const manager = useAvailableSlidingSyncManager();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => manager?.isRoomSubscriptionLoading(roomId) ?? false);
 
   useEffect(() => {
     if (!manager) {

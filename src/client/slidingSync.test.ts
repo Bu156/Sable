@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MSC3575List } from '$types/matrix-sdk';
-import { EventType, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
+import { EventType, KnownMembership, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
 
 import { SlidingSyncManager } from './slidingSync';
 
@@ -221,6 +221,7 @@ describe('SlidingSyncManager room subscription coordination', () => {
 
     fireRoomData(roomId);
     expect(loadingStates).toEqual([false, true]);
+    expect(manager.isRoomSubscriptionLoading(roomId)).toBe(true);
 
     manager.attach();
     fireLifecycle(SlidingSyncState.Complete);
@@ -267,6 +268,41 @@ describe('SlidingSyncManager room subscription coordination', () => {
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
       new Set(['!current:example.com'])
     );
+  });
+});
+
+describe('SlidingSyncManager local membership reconciliation', () => {
+  it('updates an existing invite immediately after a successful join', () => {
+    const updateMyMembership = vi.fn<() => void>();
+    const manager = makeManager(
+      makeMockMx({
+        getRoom: vi.fn<() => { updateMyMembership: typeof updateMyMembership }>().mockReturnValue({
+          updateMyMembership,
+        }),
+      })
+    );
+
+    manager.reconcileRoomMembership('!invite:example.com', KnownMembership.Join);
+
+    expect(updateMyMembership).toHaveBeenCalledWith(KnownMembership.Join);
+  });
+
+  it('updates and unsubscribes a room immediately after a successful leave', () => {
+    const updateMyMembership = vi.fn<() => void>();
+    const manager = makeManager(
+      makeMockMx({
+        getRoom: vi.fn<() => { updateMyMembership: typeof updateMyMembership }>().mockReturnValue({
+          updateMyMembership,
+        }),
+      })
+    );
+    manager.subscribeToRoom('!room:example.com');
+
+    manager.reconcileRoomMembership('!room:example.com', KnownMembership.Leave);
+
+    expect(updateMyMembership).toHaveBeenCalledWith(KnownMembership.Leave);
+    expect(manager.isRoomActive('!room:example.com')).toBe(false);
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(new Set());
   });
 });
 

@@ -9,6 +9,7 @@ import {
   createClient,
   IndexedDBStore,
   IndexedDBCryptoStore,
+  KnownMembership,
   SyncState,
 } from '$types/matrix-sdk';
 
@@ -30,6 +31,7 @@ import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
 const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
+const membershipActionCleanupByClient = new WeakMap<MatrixClient, () => void>();
 const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
 const presenceStartCleanupByClient = new WeakMap<MatrixClient, () => void>();
 const SLIDING_SYNC_POLL_TIMEOUT_MS = 45000;
@@ -505,10 +507,47 @@ export type ClientSyncDiagnostics = {
 };
 
 const disposeSlidingSync = (mx: MatrixClient): void => {
+  membershipActionCleanupByClient.get(mx)?.();
   const manager = slidingSyncByClient.get(mx);
   if (!manager) return;
   manager.dispose();
   slidingSyncByClient.delete(mx);
+};
+
+type MatrixClientWithWritableMembershipActions = MatrixClient & {
+  joinRoom: MatrixClient['joinRoom'];
+  leave: MatrixClient['leave'];
+};
+
+const installMembershipActionReconciliation = (
+  mx: MatrixClient,
+  manager: SlidingSyncManager
+): void => {
+  membershipActionCleanupByClient.get(mx)?.();
+
+  const writableMx = mx as MatrixClientWithWritableMembershipActions;
+  // Keep the exact methods so cleanup restores the client without leaving bound replacements behind.
+  // oxlint-disable-next-line typescript/unbound-method
+  const originalJoinRoom = mx.joinRoom;
+  // oxlint-disable-next-line typescript/unbound-method
+  const originalLeave = mx.leave;
+
+  writableMx.joinRoom = async (...args) => {
+    const room = await originalJoinRoom.apply(mx, args);
+    manager.reconcileRoomMembership(room.roomId, KnownMembership.Join);
+    return room;
+  };
+  writableMx.leave = async (...args) => {
+    const result = await originalLeave.apply(mx, args);
+    manager.reconcileRoomMembership(args[0], KnownMembership.Leave);
+    return result;
+  };
+
+  membershipActionCleanupByClient.set(mx, () => {
+    membershipActionCleanupByClient.delete(mx);
+    writableMx.joinRoom = originalJoinRoom;
+    writableMx.leave = originalLeave;
+  });
 };
 
 const disposePresenceSync = (mx: MatrixClient): void => {
@@ -552,6 +591,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 
     manager.attach();
     manager.prepareSidebarCacheHydration();
+    installMembershipActionReconciliation(mx, manager);
     slidingSyncByClient.set(mx, manager);
   }
 
@@ -578,6 +618,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     });
     fetchRoomEventStartupCleanupByClient.get(mx)?.();
     slidingSyncConnIdCleanupByClient.get(mx)?.();
+    membershipActionCleanupByClient.get(mx)?.();
     disposeSlidingSync(mx);
     disposePresenceSync(mx);
     throw err;
