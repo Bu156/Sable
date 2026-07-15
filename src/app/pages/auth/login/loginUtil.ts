@@ -1,7 +1,7 @@
 import to from 'await-to-js';
 import type { LoginRequest, LoginResponse } from '$types/matrix-sdk';
 import { createClient, MatrixError } from '$types/matrix-sdk';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
 import * as Sentry from '@sentry/react';
@@ -145,10 +145,31 @@ export const login = async (
   );
 };
 
-export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: boolean) => {
+/**
+ * Commits a session to the store, makes it active, and navigates into the app. Shared by the
+ * password/token login path and the OIDC callback.
+ */
+export const useCommitLoginSession = () => {
   const navigate = useNavigate();
   const setSessions = useSetAtom(sessionsAtom);
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
+
+  return useCallback(
+    (session: Session) => {
+      setSessions({ type: 'PUT', session });
+      setActiveSessionId(session.userId);
+      const afterLoginRedirectUrl = getAfterLoginRedirectPath();
+      deleteAfterLoginRedirectPath();
+      const destination = afterLoginRedirectUrl ?? getHomePath();
+      log.log('commitLoginSession: navigating to', destination);
+      navigate(destination, { replace: true });
+    },
+    [navigate, setSessions, setActiveSessionId]
+  );
+};
+
+export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: boolean) => {
+  const commitSession = useCommitLoginSession();
 
   useEffect(() => {
     if (data) {
@@ -166,13 +187,7 @@ export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: 
       if (slidingSyncOptIn !== undefined) {
         newSession.slidingSyncOptIn = slidingSyncOptIn;
       }
-      setSessions({ type: 'PUT', session: newSession });
-      setActiveSessionId(loginRes.user_id);
-      const afterLoginRedirectUrl = getAfterLoginRedirectPath();
-      deleteAfterLoginRedirectPath();
-      const destination = afterLoginRedirectUrl ?? getHomePath();
-      log.log('useLoginComplete: navigating to', destination);
-      navigate(destination, { replace: true });
+      commitSession(newSession);
     }
-  }, [data, slidingSyncOptIn, navigate, setSessions, setActiveSessionId]);
+  }, [data, slidingSyncOptIn, commitSession]);
 };

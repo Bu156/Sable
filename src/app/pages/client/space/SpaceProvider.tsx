@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Spinner } from 'folds';
 import { useParams } from 'react-router-dom';
+import { useAtomValue } from 'jotai';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { useSpaces } from '$state/hooks/roomList';
 import { allRoomsAtom } from '$state/room-list/roomList';
 import { useResolvedSelectedSpace } from '$hooks/router/useResolvedRoomId';
 import { SpaceProvider } from '$hooks/useSpace';
@@ -14,7 +14,7 @@ type RouteSpaceProviderProps = {
 };
 export function RouteSpaceProvider({ children }: RouteSpaceProviderProps) {
   const mx = useMatrixClient();
-  const joinedSpaces = useSpaces(mx, allRoomsAtom);
+  const allRooms = useAtomValue(allRoomsAtom);
 
   const { spaceIdOrAlias: encodedSpaceIdOrAlias } = useParams();
   const spaceIdOrAlias = encodedSpaceIdOrAlias && decodeURIComponent(encodedSpaceIdOrAlias);
@@ -25,7 +25,7 @@ export function RouteSpaceProvider({ children }: RouteSpaceProviderProps) {
 
   if (resolving) return <Spinner variant="Secondary" size="600" />;
 
-  if (!space || !joinedSpaces.includes(space.roomId)) {
+  if (!space || !allRooms.includes(space.roomId)) {
     return <JoinBeforeNavigate roomIdOrAlias={spaceIdOrAlias ?? ''} viaServers={viaServers} />;
   }
 
