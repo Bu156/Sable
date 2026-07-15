@@ -47,6 +47,7 @@ import {
   type SableThemeContrast,
 } from '../../../theme/metadata';
 import { previewUrlFromFullThemeUrl } from '../../../theme/previewUrls';
+import { updateInstalledCatalogPackages } from '../../../theme/catalogUpdater';
 
 export type CatalogPreviewRow = ThemePair & {
   previewText: string;
@@ -268,6 +269,12 @@ export function ThemeCatalogSettings({
   const [kindFilter, setKindFilter] = useState<'all' | 'light' | 'dark'>('all');
   const [contrastFilter, setContrastFilter] = useState<'all' | SableThemeContrast>('all');
   const [tweakApplyFilter, setTweakApplyFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [catalogUpdateStatus, setCatalogUpdateStatus] = useState<
+    'idle' | 'checking' | 'updated' | 'unchanged' | 'failed'
+  >('idle');
+  const [catalogUpdateMessage, setCatalogUpdateMessage] = useState(
+    'Automatically checks installed catalog themes and tweaks for CSS changes.'
+  );
 
   useEffect(() => setFavorites(getFavorites ? getFavorites : []), [getFavorites]);
 
@@ -283,6 +290,59 @@ export function ThemeCatalogSettings({
       ),
     [darkRemoteFullUrl, lightRemoteFullUrl, manualRemoteFullUrl]
   );
+
+  const checkInstalledCatalogUpdates = useCallback(async () => {
+    if (catalogUpdateStatus === 'checking') return;
+    setCatalogUpdateStatus('checking');
+    setCatalogUpdateMessage('Checking installed catalog themes and tweaks…');
+    try {
+      const summary = await updateInstalledCatalogPackages({
+        catalogBase,
+        manifestUrl: catalogManifestUrl,
+        installedThemeUrls: Array.from(
+          new Set([...favorites.map((favorite) => favorite.fullUrl), ...activeUrls])
+        ),
+        installedTweakUrls: Array.from(
+          new Set([...tweakFavorites.map((favorite) => favorite.fullUrl), ...enabledTweakFullUrls])
+        ),
+        maxAgeMs: 0,
+      });
+      if (summary.updated > 0) {
+        setCatalogUpdateStatus('updated');
+        setCatalogUpdateMessage(
+          `Updated ${summary.updated} catalog ${summary.updated === 1 ? 'package' : 'packages'}.`
+        );
+      } else if (summary.failed > 0) {
+        setCatalogUpdateStatus('failed');
+        setCatalogUpdateMessage(
+          `Could not check ${summary.failed} ${summary.failed === 1 ? 'package' : 'packages'}. Cached CSS is still active.`
+        );
+      } else {
+        setCatalogUpdateStatus('unchanged');
+        setCatalogUpdateMessage(
+          summary.checked === 0
+            ? 'No installed themes or tweaks belong to the current catalog.'
+            : 'Installed catalog themes and tweaks are up to date.'
+        );
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['theme-local-previews'] }),
+        queryClient.invalidateQueries({ queryKey: ['theme-local-tweaks'] }),
+      ]);
+    } catch {
+      setCatalogUpdateStatus('failed');
+      setCatalogUpdateMessage('Could not check the catalog. Cached CSS is still active.');
+    }
+  }, [
+    activeUrls,
+    catalogBase,
+    catalogManifestUrl,
+    catalogUpdateStatus,
+    enabledTweakFullUrls,
+    favorites,
+    queryClient,
+    tweakFavorites,
+  ]);
 
   const pruneFavorites = useCallback(
     (nextFavorites: ThemeRemoteFavorite[], nextActiveUrls: string[]) => {
@@ -979,6 +1039,31 @@ export function ThemeCatalogSettings({
                 </Button>
               </Box>
             )}
+          </SequenceCard>
+
+          <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
+            <SettingTile
+              title="Catalog theme updates"
+              focusId="theme-catalog-check-updates"
+              description={catalogUpdateMessage}
+              after={
+                <Button
+                  variant={catalogUpdateStatus === 'failed' ? 'Critical' : 'Secondary'}
+                  fill="Soft"
+                  outlined
+                  size="300"
+                  radii="300"
+                  disabled={catalogUpdateStatus === 'checking'}
+                  onClick={() => {
+                    checkInstalledCatalogUpdates().catch(() => undefined);
+                  }}
+                >
+                  <Text size="B300">
+                    {catalogUpdateStatus === 'checking' ? 'Checking…' : 'Check now'}
+                  </Text>
+                </Button>
+              }
+            />
           </SequenceCard>
 
           <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
