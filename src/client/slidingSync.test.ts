@@ -61,6 +61,9 @@ function makeMockMx(overrides: Record<string, unknown> = {}) {
     getSafeUserId: vi.fn<() => string>().mockReturnValue('@user:example.com'),
     isRoomEncrypted: vi.fn<() => boolean>().mockReturnValue(false),
     getRoom: vi.fn<() => null>().mockReturnValue(null),
+    getJoinedRooms: vi.fn<() => Promise<{ joined_rooms: string[] }>>().mockResolvedValue({
+      joined_rooms: [],
+    }),
     on: vi.fn<() => void>(),
     off: vi.fn<() => void>(),
     removeListener: vi.fn<() => void>(),
@@ -322,6 +325,54 @@ describe('SlidingSyncManager local membership reconciliation', () => {
     expect(updateMyMembership).toHaveBeenCalledWith(KnownMembership.Leave);
     expect(manager.isRoomActive('!room:example.com')).toBe(false);
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(new Set());
+  });
+
+  it('waits for cache hydration and unions authoritative joined rooms before reconciling', async () => {
+    let finishHydration: ((hydrated: boolean) => void) | undefined;
+    const hydration = new Promise<boolean>((resolve) => {
+      finishHydration = resolve;
+    });
+    const getJoinedRooms = vi.fn<() => Promise<{ joined_rooms: string[] }>>().mockResolvedValue({
+      joined_rooms: ['!authoritative:example.com'],
+    });
+    const manager = makeManager(makeMockMx({ getJoinedRooms }));
+    const internals = manager as unknown as {
+      cacheHydrationPromise: Promise<boolean>;
+      reconcileSidebarCacheMembership: () => void;
+      serverMembershipRoomIds: Set<string>;
+      sidebarCache: { reconcileRooms: (roomIds: ReadonlySet<string>) => string[] };
+    };
+    internals.cacheHydrationPromise = hydration;
+    internals.serverMembershipRoomIds.add('!observed:example.com');
+    const reconcileRooms = vi.spyOn(internals.sidebarCache, 'reconcileRooms').mockReturnValue([]);
+
+    internals.reconcileSidebarCacheMembership();
+    expect(getJoinedRooms).not.toHaveBeenCalled();
+
+    finishHydration?.(true);
+    await vi.waitFor(() => expect(reconcileRooms).toHaveBeenCalledOnce());
+
+    expect(getJoinedRooms).toHaveBeenCalledOnce();
+    expect(reconcileRooms).toHaveBeenCalledWith(
+      new Set(['!observed:example.com', '!authoritative:example.com'])
+    );
+  });
+
+  it('keeps cached rooms when authoritative membership cannot be fetched', async () => {
+    const getJoinedRooms = vi.fn<() => Promise<{ joined_rooms: string[] }>>().mockRejectedValue(
+      new Error('offline')
+    );
+    const manager = makeManager(makeMockMx({ getJoinedRooms }));
+    const internals = manager as unknown as {
+      reconcileSidebarCacheMembership: () => void;
+      sidebarCache: { reconcileRooms: (roomIds: ReadonlySet<string>) => string[] };
+    };
+    const reconcileRooms = vi.spyOn(internals.sidebarCache, 'reconcileRooms').mockReturnValue([]);
+
+    internals.reconcileSidebarCacheMembership();
+    await vi.waitFor(() => expect(getJoinedRooms).toHaveBeenCalledOnce());
+
+    expect(reconcileRooms).not.toHaveBeenCalled();
   });
 });
 

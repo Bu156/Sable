@@ -60,6 +60,7 @@ export type SlidingSyncListDiagnostics = {
   key: string;
   knownCount: number;
   rangeEnd: number;
+  requestedRangeEnd: number;
 };
 
 export type SlidingSyncDiagnostics = {
@@ -533,11 +534,26 @@ export class SlidingSyncManager {
     if (this.sidebarCacheReconciled || this.sidebarCacheReconciliationQueued) return;
     this.sidebarCacheReconciliationQueued = true;
 
-    void this.cacheHydrationPromise.then(() => {
+    void this.cacheHydrationPromise.then(async () => {
+      if (this.disposed || this.sidebarCacheReconciled) return;
+
+      let joinedRoomIds: string[];
+      try {
+        const response = await this.mx.getJoinedRooms();
+        joinedRoomIds = response.joined_rooms;
+      } catch (error) {
+        debugLog.warn('sync', 'Skipped sidebar cache reconciliation: joined rooms unavailable', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
       if (this.disposed || this.sidebarCacheReconciled) return;
       this.sidebarCacheReconciled = true;
 
-      const removedRoomIds = this.sidebarCache.reconcileRooms(this.serverMembershipRoomIds);
+      const validRoomIds = new Set([...this.serverMembershipRoomIds, ...joinedRoomIds]);
+
+      const removedRoomIds = this.sidebarCache.reconcileRooms(validRoomIds);
       removedRoomIds.forEach((roomId) => {
         this.mx.getRoom(roomId)?.updateMyMembership(KnownMembership.Leave);
         this.unsubscribeFromRoom(roomId);
@@ -546,6 +562,8 @@ export class SlidingSyncManager {
       if (removedRoomIds.length > 0) {
         debugLog.info('sync', 'Removed stale rooms from the sliding sync sidebar cache', {
           removedRoomCount: removedRoomIds.length,
+          joinedRoomCount: joinedRoomIds.length,
+          observedRoomCount: this.serverMembershipRoomIds.size,
         });
       }
     });
@@ -561,7 +579,8 @@ export class SlidingSyncManager {
         return {
           key,
           knownCount: listData?.joinedCount ?? 0,
-          rangeEnd: getListEndIndex(params),
+          rangeEnd: this.confirmedListRangeEnds.get(key) ?? -1,
+          requestedRangeEnd: getListEndIndex(params),
         };
       }),
     };
