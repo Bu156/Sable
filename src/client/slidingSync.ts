@@ -190,6 +190,29 @@ const getListEndIndex = (list: MSC3575List | null): number => {
   return list.ranges.reduce((max, range) => Math.max(max, range[1] ?? -1), -1);
 };
 
+type RoomScopedExtension = {
+  enabled?: boolean;
+  lists?: string[];
+  rooms?: string[];
+};
+
+export const scopeEphemeralExtensions = (
+  extensions: object | undefined,
+  roomIds: readonly string[]
+): void => {
+  if (!extensions) return;
+  const extensionMap = extensions as Record<string, unknown>;
+
+  ['typing', 'receipts'].forEach((name) => {
+    const extension = extensionMap[name];
+    if (!extension || typeof extension !== 'object') return;
+
+    const scopedExtension = extension as RoomScopedExtension;
+    scopedExtension.lists = [];
+    scopedExtension.rooms = [...roomIds];
+  });
+};
+
 export class SlidingSyncManager {
   private disposed = false;
 
@@ -1118,6 +1141,10 @@ export class SlidingSyncManager {
     if (!changed) return;
     this.syncRoomSubscriptions();
     this.reportActiveSubscriptionCount();
+  }
+
+  public getActiveRoomSubscriptionIds(): string[] {
+    return [...this.activeRoomSubscriptions];
   }
 
   public subscribeToRoom(roomId: string): void {

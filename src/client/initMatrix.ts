@@ -23,7 +23,7 @@ import { pushSessionToSW } from '../sw-session';
 import { SessionOidcTokenRefresher } from './oidcTokenRefresher';
 import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
-import { SlidingSyncManager } from './slidingSync';
+import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 
@@ -106,7 +106,7 @@ type MatrixClientWithWritableFetchRoomEvent = MatrixClient & {
 
 const fetchRoomEventStartupCleanupByClient = new WeakMap<MatrixClient, () => void>();
 
-const slidingSyncConnIdCleanupByClient = new WeakMap<MatrixClient, () => void>();
+const slidingSyncRequestCleanupByClient = new WeakMap<MatrixClient, () => void>();
 
 type SlidingSyncMethod = (
   reqBody: MSC3575SlidingSyncRequest,
@@ -124,8 +124,8 @@ type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & {
 
 const SLIDING_SYNC_CONN_ID = 'sable-main';
 
-function installSlidingSyncConnId(mx: MatrixClient): void {
-  slidingSyncConnIdCleanupByClient.get(mx)?.();
+function installSlidingSyncRequestPatch(mx: MatrixClient, manager: SlidingSyncManager): void {
+  slidingSyncRequestCleanupByClient.get(mx)?.();
 
   const mxWritable = mx as MatrixClientWithWritableSlidingSync;
   const original = mx.slidingSync.bind(mx) as SlidingSyncMethod;
@@ -135,11 +135,14 @@ function installSlidingSyncConnId(mx: MatrixClient): void {
       req.conn_id = SLIDING_SYNC_CONN_ID;
     }
 
+    const roomIds = manager.getActiveRoomSubscriptionIds();
+    scopeEphemeralExtensions(req.extensions, roomIds);
+
     return original(reqBody, baseUrl, abortSignal);
   };
 
-  slidingSyncConnIdCleanupByClient.set(mx, () => {
-    slidingSyncConnIdCleanupByClient.delete(mx);
+  slidingSyncRequestCleanupByClient.set(mx, () => {
+    slidingSyncRequestCleanupByClient.delete(mx);
     mxWritable.slidingSync = original;
   });
 }
@@ -456,7 +459,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
     });
 
     installStartupFetchRoomEventPatch(mx, manager);
-    installSlidingSyncConnId(mx);
+    installSlidingSyncRequestPatch(mx, manager);
 
     manager.attach();
     manager.prepareSidebarCacheHydration();
@@ -486,7 +489,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       stack: err instanceof Error ? err.stack : undefined,
     });
     fetchRoomEventStartupCleanupByClient.get(mx)?.();
-    slidingSyncConnIdCleanupByClient.get(mx)?.();
+    slidingSyncRequestCleanupByClient.get(mx)?.();
     membershipActionCleanupByClient.get(mx)?.();
     disposeSlidingSync(mx);
     disposePresenceSync(mx);
@@ -498,7 +501,7 @@ export const stopClient = (mx: MatrixClient): void => {
   log.log('stopClient', mx.getUserId());
   debugLog.info('sync', 'Stopping client', { userId: mx.getUserId() });
   fetchRoomEventStartupCleanupByClient.get(mx)?.();
-  slidingSyncConnIdCleanupByClient.get(mx)?.();
+  slidingSyncRequestCleanupByClient.get(mx)?.();
   disposeSlidingSync(mx);
   disposePresenceSync(mx);
   mx.stopClient();

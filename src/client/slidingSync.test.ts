@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MSC3575List } from '$types/matrix-sdk';
 import { EventType, KnownMembership, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
 
-import { SlidingSyncManager } from './slidingSync';
+import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 
 // ── vi.hoisted mocks ─────────────────────────────────────────────────────────
 // Must be defined via vi.hoisted
@@ -404,6 +404,44 @@ describe('SlidingSyncManager room subscription coordination', () => {
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
       new Set(['!current:example.com'])
     );
+  });
+});
+
+describe('scopeEphemeralExtensions', () => {
+  it('limits typing and receipts to active rooms without changing other extensions', () => {
+    const extensions = {
+      typing: { enabled: true },
+      receipts: { enabled: true },
+      account_data: { enabled: true },
+    };
+
+    scopeEphemeralExtensions(extensions, ['!space:example.com', '!room:example.com']);
+
+    expect(extensions).toEqual({
+      typing: {
+        enabled: true,
+        lists: [],
+        rooms: ['!space:example.com', '!room:example.com'],
+      },
+      receipts: {
+        enabled: true,
+        lists: [],
+        rooms: ['!space:example.com', '!room:example.com'],
+      },
+      account_data: { enabled: true },
+    });
+  });
+
+  it('uses an empty room scope when no timeline is open', () => {
+    const extensions = {
+      typing: { enabled: true, lists: ['joined'], rooms: ['!old:example.com'] },
+      receipts: { enabled: true, lists: ['joined'], rooms: ['!old:example.com'] },
+    };
+
+    scopeEphemeralExtensions(extensions, []);
+
+    expect(extensions.typing).toMatchObject({ lists: [], rooms: [] });
+    expect(extensions.receipts).toMatchObject({ lists: [], rooms: [] });
   });
 });
 
