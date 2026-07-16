@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef } from 'react';
 import { Provider as JotaiProvider } from 'jotai';
 import { createStore } from 'jotai/vanilla';
 import { OverlayContainerProvider, PopOutContainerProvider, TooltipContainerProvider } from 'folds';
@@ -6,6 +6,7 @@ import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 
+import { ClientConfigLoader } from '$components/ClientConfigLoader';
 import type { ClientConfig } from '$hooks/useClientConfig';
 import { ClientConfigProvider } from '$hooks/useClientConfig';
 import { setMatrixToBase } from '$plugins/matrix-to';
@@ -17,10 +18,6 @@ import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
 import { bootstrapSettingsStore } from '$state/settings';
-import { trimTrailingSlash } from '$utils/common';
-import { createLogger } from '$utils/debug';
-
-const log = createLogger('App');
 
 const queryClient = new QueryClient();
 const ReactQueryDevtools = lazy(async () => {
@@ -38,14 +35,15 @@ function BootstrappedAppShell({ clientConfig, screenSize }: BootstrappedAppShell
   const jotaiStoreRef = useRef<ReturnType<typeof createStore>>();
   if (!jotaiStoreRef.current) {
     jotaiStoreRef.current = createStore();
+    bootstrapSettingsStore(jotaiStoreRef.current, clientConfig.settingsDefaults);
   }
-  bootstrapSettingsStore(jotaiStoreRef.current, clientConfig.settingsDefaults);
+  const router = useMemo(() => createRouter(clientConfig, screenSize), [clientConfig, screenSize]);
   const reactQueryDevtoolsEnabled = isReactQueryDevtoolsEnabled();
 
   return (
     <QueryClientProvider client={queryClient}>
       <JotaiProvider store={jotaiStoreRef.current}>
-        <RouterProvider router={createRouter(clientConfig, screenSize)} />
+        <RouterProvider router={router} />
       </JotaiProvider>
       {reactQueryDevtoolsEnabled && (
         <Suspense fallback={null}>
@@ -65,40 +63,22 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
   );
 }
 
-function useClientConfigLoader(): ClientConfig {
-  const [config, setConfig] = useState<ClientConfig>({});
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadConfig = async () => {
-      try {
-        const url = `${trimTrailingSlash(import.meta.env.BASE_URL)}/config.json`;
-        const res = await fetch(url, { method: 'GET' });
-        const data = (await res.json()) as ClientConfig;
-        if (cancelled) return;
-        setConfig(data);
-        setMatrixToBase(data.matrixToBaseUrl);
-      } catch (err) {
-        log.error('Failed to load config.json, continuing with empty config:', err);
-      }
-    };
-
-    void loadConfig();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return config;
-}
-
 function App() {
   const screenSize = useScreenSize();
   useCompositionEndTracking();
   const portalContainer = document.getElementById('portalContainer') ?? undefined;
 
-  const clientConfig = useClientConfigLoader();
+  const renderConfiguredApp = useCallback(
+    (clientConfig: ClientConfig) => {
+      setMatrixToBase(clientConfig.matrixToBaseUrl);
+      return (
+        <ClientConfigProvider value={clientConfig}>
+          <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
+        </ClientConfigProvider>
+      );
+    },
+    [screenSize]
+  );
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
@@ -107,9 +87,7 @@ function App() {
           <OverlayContainerProvider value={portalContainer}>
             <ScreenSizeProvider value={screenSize}>
               <FeatureCheck>
-                <ClientConfigProvider value={clientConfig}>
-                  <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
-                </ClientConfigProvider>
+                <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
               </FeatureCheck>
             </ScreenSizeProvider>
           </OverlayContainerProvider>

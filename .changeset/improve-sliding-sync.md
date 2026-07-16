@@ -8,3 +8,4 @@ Improve sliding sync.
 - Start faster and restore rooms and spaces sooner.
 - Improve room details, memberships, presence, and unread indicators.
 - Make startup loading smoother for both sliding and classic sync.
+- It's fast now :3
