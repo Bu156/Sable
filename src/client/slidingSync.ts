@@ -219,6 +219,8 @@ export class SlidingSyncManager {
 
   private sidebarCacheReconciled = false;
 
+  private sidebarCacheReconciliationQueued = false;
+
   private readonly serverMembershipRoomIds = new Set<string>();
 
   private initialSyncCompleted = false;
@@ -528,20 +530,25 @@ export class SlidingSyncManager {
   }
 
   private reconcileSidebarCacheMembership(): void {
-    if (this.sidebarCacheReconciled) return;
-    this.sidebarCacheReconciled = true;
+    if (this.sidebarCacheReconciled || this.sidebarCacheReconciliationQueued) return;
+    this.sidebarCacheReconciliationQueued = true;
 
-    const removedRoomIds = this.sidebarCache.reconcileRooms(this.serverMembershipRoomIds);
-    removedRoomIds.forEach((roomId) => {
-      this.mx.getRoom(roomId)?.updateMyMembership(KnownMembership.Leave);
-      this.unsubscribeFromRoom(roomId);
-    });
+    void this.cacheHydrationPromise.then(() => {
+      if (this.disposed || this.sidebarCacheReconciled) return;
+      this.sidebarCacheReconciled = true;
 
-    if (removedRoomIds.length > 0) {
-      debugLog.info('sync', 'Removed stale rooms from the sliding sync sidebar cache', {
-        removedRoomCount: removedRoomIds.length,
+      const removedRoomIds = this.sidebarCache.reconcileRooms(this.serverMembershipRoomIds);
+      removedRoomIds.forEach((roomId) => {
+        this.mx.getRoom(roomId)?.updateMyMembership(KnownMembership.Leave);
+        this.unsubscribeFromRoom(roomId);
       });
-    }
+
+      if (removedRoomIds.length > 0) {
+        debugLog.info('sync', 'Removed stale rooms from the sliding sync sidebar cache', {
+          removedRoomCount: removedRoomIds.length,
+        });
+      }
+    });
   }
 
   public getDiagnostics(): SlidingSyncDiagnostics {
