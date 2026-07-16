@@ -217,6 +217,10 @@ export class SlidingSyncManager {
 
   private listsFullyLoaded = false;
 
+  private sidebarCacheReconciled = false;
+
+  private readonly serverMembershipRoomIds = new Set<string>();
+
   private initialSyncCompleted = false;
 
   private syncCount = 0;
@@ -322,6 +326,8 @@ export class SlidingSyncManager {
       }
 
       if (err || !resp || state !== SlidingSyncState.Complete) return;
+
+      this.recordServerMembershipRooms(resp);
 
       this.roomDataAwaitingSyncCompletion.forEach((roomId) =>
         this.notifyRoomSubscriptionStatus(roomId, false)
@@ -498,6 +504,46 @@ export class SlidingSyncManager {
     });
   }
 
+  private recordServerMembershipRooms(response: MSC3575SlidingSyncResponse): void {
+    const userId = this.mx.getSafeUserId();
+    Object.entries(response.rooms ?? {}).forEach(([roomId, roomData]) => {
+      const membershipEvent = [
+        ...(roomData.required_state ?? []),
+        ...(roomData.invite_state ?? []),
+      ].find(
+        (event) => event.type === (EventType.RoomMember as string) && event.state_key === userId
+      );
+      const content = membershipEvent?.content;
+      const membership =
+        content && typeof content === 'object'
+          ? (content as { membership?: unknown }).membership
+          : undefined;
+
+      if (membership === KnownMembership.Leave || membership === KnownMembership.Ban) {
+        this.serverMembershipRoomIds.delete(roomId);
+      } else {
+        this.serverMembershipRoomIds.add(roomId);
+      }
+    });
+  }
+
+  private reconcileSidebarCacheMembership(): void {
+    if (this.sidebarCacheReconciled) return;
+    this.sidebarCacheReconciled = true;
+
+    const removedRoomIds = this.sidebarCache.reconcileRooms(this.serverMembershipRoomIds);
+    removedRoomIds.forEach((roomId) => {
+      this.mx.getRoom(roomId)?.updateMyMembership(KnownMembership.Leave);
+      this.unsubscribeFromRoom(roomId);
+    });
+
+    if (removedRoomIds.length > 0) {
+      debugLog.info('sync', 'Removed stale rooms from the sliding sync sidebar cache', {
+        removedRoomCount: removedRoomIds.length,
+      });
+    }
+  }
+
   public getDiagnostics(): SlidingSyncDiagnostics {
     return {
       baseUrl: this.baseUrl,
@@ -639,6 +685,7 @@ export class SlidingSyncManager {
     if (allListsComplete) {
       if (!this.listsFullyLoaded) {
         this.listsFullyLoaded = true;
+        this.reconcileSidebarCacheMembership();
         globalThis.setTimeout(() => this.flushDeferredSubscriptions(), 0);
         log.log(`Sliding Sync all lists fully loaded for ${this.mx.getUserId()}`);
         const totalRooms = this.listKeys.reduce(

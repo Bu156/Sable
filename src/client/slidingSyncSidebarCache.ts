@@ -155,6 +155,17 @@ export class SlidingSyncSidebarCache {
     this.scheduleWrite();
   }
 
+  public reconcileRooms(validRoomIds: ReadonlySet<string>): string[] {
+    const removedRoomIds = Object.keys(this.data.rooms).filter(
+      (roomId) => !validRoomIds.has(roomId)
+    );
+    if (removedRoomIds.length === 0) return removedRoomIds;
+
+    removedRoomIds.forEach((roomId) => delete this.data.rooms[roomId]);
+    this.scheduleWrite();
+    return removedRoomIds;
+  }
+
   public cacheAccountData(event: MatrixEvent): void {
     if (!CACHED_ACCOUNT_DATA_TYPES.has(event.getType())) return;
     this.data.accountData[event.getType()] = event.getContent<Record<string, unknown>>();
