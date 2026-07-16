@@ -1,6 +1,5 @@
 import { revalidateCachedThemeCss, type ThemeCacheRevalidationResult } from './cache';
-import { fetchThemeCatalogBundle, type ThemeCatalogBundle } from './catalog';
-import { extractFullThemeUrlFromPreview } from './metadata';
+import { fetchThemeCatalogBundle } from './catalog';
 
 export const THEME_CATALOG_AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60_000;
 const lastCatalogChecks = new Map<string, number>();
@@ -22,23 +21,6 @@ export type UpdateInstalledCatalogPackagesOptions = {
   maxAgeMs?: number;
 };
 
-async function resolveCatalogThemeUrls(bundle: ThemeCatalogBundle): Promise<Set<string>> {
-  const urls = new Set(bundle.themes.map((theme) => theme.fullUrl));
-  await Promise.all(
-    bundle.themes.map(async (theme) => {
-      try {
-        const response = await fetch(theme.previewUrl, { mode: 'cors', cache: 'no-cache' });
-        if (!response.ok) return;
-        const fullUrl = extractFullThemeUrlFromPreview(await response.text());
-        if (fullUrl) urls.add(fullUrl);
-      } catch {
-        // The catalog pair's full URL remains a valid fallback membership signal.
-      }
-    })
-  );
-  return urls;
-}
-
 export async function updateInstalledCatalogPackages({
   catalogBase,
   manifestUrl,
@@ -52,7 +34,7 @@ export async function updateInstalledCatalogPackages({
     return { checked: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, results: [] };
   }
   const bundle = await fetchThemeCatalogBundle(catalogBase, { manifestUrl });
-  const catalogThemeUrls = await resolveCatalogThemeUrls(bundle);
+  const catalogThemeUrls = new Set(bundle.themes.map((theme) => theme.fullUrl));
   lastCatalogChecks.set(catalogCheckKey, Date.now());
   const catalogTweakUrls = new Set(bundle.tweaks.map((tweak) => tweak.fullUrl));
 
