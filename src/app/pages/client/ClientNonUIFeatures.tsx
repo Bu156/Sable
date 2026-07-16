@@ -39,7 +39,7 @@ import {
   isDMRoom,
   isNotificationEvent,
 } from '$utils/room';
-import { NotificationType } from '$types/matrix/room';
+import { NotificationType, type RoomToUnread } from '$types/matrix/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '$hooks/router/useInbox';
@@ -107,6 +107,40 @@ function PageZoomFeature() {
   return null;
 }
 
+// Sum only leaf rooms (from === null); space entries aggregate their children
+// and would double-count.
+function getUnreadTotals(roomToUnread: RoomToUnread) {
+  let total = 0;
+  let highlightTotal = 0;
+  let notification = false;
+  let highlight = false;
+  roomToUnread.forEach((unread) => {
+    if (unread.from === null) {
+      total += unread.total;
+      highlightTotal += unread.highlight;
+    }
+    if (unread.total > 0) {
+      notification = true;
+    }
+    if (unread.highlight > 0) {
+      highlight = true;
+    }
+  });
+  return { total, highlightTotal, notification, highlight };
+}
+
+// Show the mention count in the tab title.
+function PageTitleUpdater() {
+  const roomToUnread = useAtomValue(roomToUnreadAtom);
+
+  useEffect(() => {
+    const { highlightTotal } = getUnreadTotals(roomToUnread);
+    document.title = highlightTotal > 0 ? `(${highlightTotal}) Sable Client` : 'Sable Client';
+  }, [roomToUnread]);
+
+  return null;
+}
+
 function FaviconUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
@@ -114,22 +148,7 @@ function FaviconUpdater() {
   const registration = useAtomValue(registrationAtom);
 
   useEffect(() => {
-    let notification = false;
-    let highlight = false;
-    let total = 0;
-    let highlightTotal = 0;
-    roomToUnread.forEach((unread) => {
-      if (unread.from === null) {
-        total += unread.total;
-        highlightTotal += unread.highlight;
-      }
-      if (unread.total > 0) {
-        notification = true;
-      }
-      if (unread.highlight > 0) {
-        highlight = true;
-      }
-    });
+    const { total, highlightTotal, notification, highlight } = getUnreadTotals(roomToUnread);
 
     if (highlight) {
       setFavicon(LogoHighlightSVG);
@@ -907,6 +926,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PrivacyBlurFeature />
       <FaviconUpdater />
+      <PageTitleUpdater />
       <InviteNotifications />
       <MessageNotifications />
       <BackgroundNotifications />
