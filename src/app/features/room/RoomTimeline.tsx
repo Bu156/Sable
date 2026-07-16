@@ -830,9 +830,17 @@ export function RoomTimeline({
   useDocumentFocusChange(
     useCallback(
       (inFocus) => {
-        if (inFocus && atBottomState) tryAutoMarkAsRead();
+        if (inFocus) {
+          if (atBottomState) tryAutoMarkAsRead();
+          return;
+        }
+        // Re-anchor the divider at the last read when tabbing out while caught up.
+        if (atBottomState && timelineSync.liveTimelineLinked) {
+          readUptoEventIdRef.current = undefined;
+          setUnreadInfo(undefined);
+        }
       },
-      [tryAutoMarkAsRead, atBottomState]
+      [tryAutoMarkAsRead, atBottomState, timelineSync.liveTimelineLinked, setUnreadInfo]
     )
   );
 
