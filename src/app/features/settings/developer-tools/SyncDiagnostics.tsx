@@ -160,7 +160,8 @@ export function SyncDiagnostics() {
             {roomDiagnostics.inviteRooms} invites
           </Text>
           <Text size="T300">
-            Room-list atoms: {listedJoinedRoomIds.length} joined, {listedInviteRoomIds.length} invites
+            Room-list atoms: {listedJoinedRoomIds.length} joined, {listedInviteRoomIds.length}{' '}
+            invites
           </Text>
           <Text size="T300">
             SDK joined rooms missing from room list: {sdkRoomsMissingFromList.length}

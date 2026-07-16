@@ -37,11 +37,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   useSyncState(
     mx,
     useCallback((current, previous) => {
-      const showConnecting = shouldShowConnecting(
-        hasConnectedRef.current,
-        current,
-        previous
-      );
+      const showConnecting = shouldShowConnecting(hasConnectedRef.current, current, previous);
       if (current === SyncState.Syncing) hasConnectedRef.current = true;
 
       setStateData((s) => {
