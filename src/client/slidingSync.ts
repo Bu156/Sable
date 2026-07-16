@@ -97,6 +97,7 @@ const SPACE_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
   [EventType.RoomJoinRules, ''],
   [EventType.RoomEncryption, ''],
   [EventType.RoomTombstone, ''],
+  [CustomStateEvent.RoomBanner, ''],
   ['m.space.child', MSC3575_WILDCARD],
   ['m.space.parent', MSC3575_WILDCARD],
 ];
