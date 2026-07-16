@@ -82,6 +82,30 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+let dbPromise: Promise<IDBDatabase> | undefined;
+
+function getDb(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  const pending = openDb()
+    .then((db) => {
+      const forget = () => {
+        if (dbPromise === pending) dbPromise = undefined;
+      };
+      db.addEventListener('close', forget);
+      db.addEventListener('versionchange', () => {
+        forget();
+        db.close();
+      });
+      return db;
+    })
+    .catch((error) => {
+      if (dbPromise === pending) dbPromise = undefined;
+      throw error;
+    });
+  dbPromise = pending;
+  return pending;
+}
+
 export async function hashThemeCss(cssText: string): Promise<string> {
   try {
     const bytes = new TextEncoder().encode(cssText);
@@ -99,7 +123,7 @@ export async function hashThemeCss(cssText: string): Promise<string> {
 }
 
 export async function getCachedThemeEntry(url: string): Promise<CachedThemeEntry | undefined> {
-  const db = await openDb();
+  const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const req = tx.objectStore(STORE).get(url);
@@ -109,7 +133,7 @@ export async function getCachedThemeEntry(url: string): Promise<CachedThemeEntry
 }
 
 async function writeCachedThemeEntry(entry: CachedThemeEntry): Promise<void> {
-  const db = await openDb();
+  const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).put(entry);
@@ -196,7 +220,7 @@ export async function revalidateCachedThemeCss(
 }
 
 export async function clearThemeCache(): Promise<void> {
-  const db = await openDb();
+  const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).clear();
@@ -206,7 +230,7 @@ export async function clearThemeCache(): Promise<void> {
 }
 
 export async function getThemeCacheStats(): Promise<ThemeCacheStats> {
-  const db = await openDb();
+  const db = await getDb();
   const entries = await new Promise<CachedThemeEntry[]>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const req = tx.objectStore(STORE).getAll();
@@ -240,7 +264,7 @@ export async function getThemeCacheStats(): Promise<ThemeCacheStats> {
 
 /** Clears only refetchable network CSS. Uploaded local theme packages are preserved. */
 export async function clearRemoteThemeCache(): Promise<number> {
-  const db = await openDb();
+  const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
     const store = tx.objectStore(STORE);
