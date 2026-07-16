@@ -1,0 +1,10 @@
+---
+default: minor
+---
+
+Improve sliding sync.
+
+- Make sliding sync easier to enable during login or loading and from settings.
+- Start faster and restore rooms and spaces sooner.
+- Improve room details, memberships, presence, and unread indicators.
+- Make startup loading smoother for both sliding and classic sync.

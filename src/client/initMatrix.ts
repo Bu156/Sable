@@ -573,13 +573,13 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 
   debugLog.info('sync', 'Starting Matrix client', { userId: mx.getUserId() });
 
-  const presenceManager = new PresenceSyncManager(mx);
-  presenceSyncByClient.set(mx, presenceManager);
-  startPresenceAfterInitialSync(mx, presenceManager);
-
   let manager: SlidingSyncManager | undefined;
 
   if (useSliding) {
+    const presenceManager = new PresenceSyncManager(mx);
+    presenceSyncByClient.set(mx, presenceManager);
+    startPresenceAfterInitialSync(mx, presenceManager);
+
     manager = new SlidingSyncManager(mx, baseUrl, {
       pollTimeoutMs: config?.pollTimeoutMs ?? SLIDING_SYNC_POLL_TIMEOUT_MS,
       timelineLimit: config?.timelineLimit,
