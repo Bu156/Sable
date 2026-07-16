@@ -14,9 +14,8 @@ import {
 } from '$types/matrix-sdk';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
-import type { Session, Sessions, SessionStoreName } from '$state/sessions';
-import { getSessionStoreName, MATRIX_SESSIONS_KEY } from '$state/sessions';
-import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
+import type { Session, SessionStoreName } from '$state/sessions';
+import { getSessionStoreName } from '$state/sessions';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
@@ -191,14 +190,6 @@ const deleteDatabase = (name: string): Promise<void> =>
     req.addEventListener('blocked', () => resolve());
   });
 
-const deleteSyncStoreGroup = async (syncStoreName: string): Promise<void> => {
-  await Promise.all([
-    deleteDatabase(syncStoreName),
-    deleteDatabase(syncStoreName.replace(/^sync/, 'crypto')),
-    deleteDatabase(`${syncStoreName}::matrix-sdk-crypto`),
-  ]);
-};
-
 const deleteSessionStores = async (storeName: SessionStoreName): Promise<void> => {
   await Promise.all([
     deleteDatabase(storeName.sync),
@@ -207,60 +198,6 @@ const deleteSessionStores = async (storeName: SessionStoreName): Promise<void> =
   ]);
 };
 
-/**
- * Reads the account stored in an IndexedDB sync store without opening a full MatrixClient.
- * Returns undefined if the database doesn't exist or has no account record.
- */
-const readStoredAccount = (dbName: string): Promise<string | undefined> =>
-  new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: string | undefined) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-    const req = window.indexedDB.open(dbName);
-    req.addEventListener('error', () => finish(undefined));
-    req.addEventListener('success', () => {
-      const db = req.result;
-      try {
-        if (!db.objectStoreNames.contains('account')) {
-          db.close();
-          finish(undefined);
-        } else {
-          const tx = db.transaction('account', 'readonly');
-          const store = tx.objectStore('account');
-          const getReq = store.get('account');
-          getReq.addEventListener('success', () => {
-            db.close();
-            const record = getReq.result;
-            if (!record?.account_data) {
-              finish(undefined);
-            } else {
-              try {
-                const data = JSON.parse(record.account_data);
-                finish(data?.user_id ?? undefined);
-              } catch {
-                finish(undefined);
-              }
-            }
-          });
-          getReq.addEventListener('error', () => {
-            db.close();
-            finish(undefined);
-          });
-        }
-      } catch {
-        try {
-          db.close();
-        } catch {
-          /* ignore */
-        }
-        finish(undefined);
-      }
-    });
-  });
-
 const isMismatch = (err: unknown): boolean => {
   const msg = err instanceof Error ? err.message : String(err);
   return (
@@ -268,74 +205,6 @@ const isMismatch = (err: unknown): boolean => {
     msg.includes('does not match') ||
     msg.includes('account in the store') ||
     msg.includes('account in the constructor')
-  );
-};
-
-/**
- * Pre-flight check: scans every IndexedDB database and deletes any that
- * belong to a userId not present in the stored sessions list, or whose
- * sync-store data contradicts the expected session userId.
- * Call this once on startup before initClient.
- */
-export const clearMismatchedStores = async (): Promise<void> => {
-  const sessions = getLocalStorageItem<Sessions>(MATRIX_SESSIONS_KEY, []);
-  const knownUserIds = new Set(sessions.map((s) => s.userId));
-  const knownStoreNames = new Set(
-    sessions.flatMap((s) => {
-      const sn = getSessionStoreName(s);
-      return [sn.sync, sn.crypto, `${sn.rustCryptoPrefix}::matrix-sdk-crypto`];
-    })
-  );
-
-  let allDbs: IDBDatabaseInfo[] = [];
-  try {
-    allDbs = await window.indexedDB.databases();
-  } catch {
-    // databases() not supported in all browsers
-  }
-
-  await Promise.all(
-    allDbs.map(async ({ name }) => {
-      if (!name) return;
-
-      const containsKnownUser = Array.from(knownUserIds).some((uid) => name.includes(uid));
-      const looksLikeUserDb = name.includes('@');
-      if (looksLikeUserDb && !containsKnownUser && !knownStoreNames.has(name)) {
-        log.warn(`clearMismatchedStores: "${name}" has unknown user — deleting`);
-        await deleteDatabase(name);
-        return;
-      }
-
-      if (!name.startsWith('sync')) return;
-
-      const storedUserId = await readStoredAccount(name);
-      if (!storedUserId) return;
-
-      if (!knownUserIds.has(storedUserId)) {
-        log.warn(`clearMismatchedStores: "${name}" has unknown user ${storedUserId} — deleting`);
-        await deleteSyncStoreGroup(name);
-        return;
-      }
-
-      const expectedStore = `sync${storedUserId}`;
-      if (name !== expectedStore && !knownStoreNames.has(name)) {
-        log.warn(`clearMismatchedStores: "${name}" is misplaced for ${storedUserId} — deleting`);
-        await deleteSyncStoreGroup(name);
-      }
-    })
-  );
-
-  await Promise.all(
-    sessions.map(async (session) => {
-      const sn = getSessionStoreName(session);
-      const storedUserId = await readStoredAccount(sn.sync);
-      if (storedUserId && storedUserId !== session.userId) {
-        log.warn(
-          `clearMismatchedStores: "${sn.sync}" has ${storedUserId} but session is ${session.userId} — deleting`
-        );
-        await deleteSessionStores(sn);
-      }
-    })
   );
 };
 
