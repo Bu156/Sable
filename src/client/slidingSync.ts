@@ -30,16 +30,19 @@ const debugLog = createDebugLogger('slidingSync');
 
 export const LIST_JOINED = 'joined';
 export const LIST_INVITES = 'invites';
+export const LIST_UPDATES = 'updates';
 export const LIST_SEARCH = 'search';
 export const LIST_ROOM_SEARCH = 'room_search';
 export const LIST_SPACE = 'space';
 const LIST_TIMELINE_LIMIT = 1;
 const LIST_PAGE_SIZE = 30;
+const STEADY_STATE_DETAILED_ROOMS = 3;
 const DEFAULT_POLL_TIMEOUT_MS = 45000;
 
 const LIST_SORT_ORDER = ['by_recency', 'by_name'];
 
 const ACTIVE_ROOM_SUBSCRIPTION_KEY = 'active_room';
+const SIDEBAR_ROOM_SUBSCRIPTION_KEY = 'sidebar_room';
 const SPACE_SUBSCRIPTION_KEY = 'space';
 const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
 const ACTIVE_ROOM_TIMELINE_LIMIT = 30;
@@ -146,6 +149,11 @@ const buildSpaceSubscription = (): MSC3575RoomSubscription => ({
   required_state: SPACE_REQUIRED_STATE,
 });
 
+const buildSidebarRoomSubscription = (): MSC3575RoomSubscription => ({
+  timeline_limit: LIST_TIMELINE_LIMIT,
+  required_state: buildListRequiredState(),
+});
+
 const buildLists = (): Map<string, MSC3575List> => {
   const lists = new Map<string, MSC3575List>();
   const listRequiredState = buildListRequiredState();
@@ -166,6 +174,14 @@ const buildLists = (): Map<string, MSC3575List> => {
     filters: { is_invite: true },
   });
 
+  lists.set(LIST_UPDATES, {
+    ranges: [[0, LIST_PAGE_SIZE - 1]],
+    sort: LIST_SORT_ORDER,
+    timeline_limit: LIST_TIMELINE_LIMIT,
+    required_state: [[EventType.RoomMember, MSC3575_STATE_KEY_ME]],
+    filters: { is_invite: false },
+  });
+
   return lists;
 };
 
@@ -181,11 +197,15 @@ export class SlidingSyncManager {
 
   private readonly activeRoomSubscriptions = new Set<string>();
 
+  private readonly sidebarRoomSubscriptions = new Set<string>();
+
   private readonly spaceSubscriptions = new Set<string>();
 
   private deferredSpaceSubscriptions = new Set<string>();
 
   private readonly imagePackRoomSubscriptions = new Set<string>();
+
+  private roomSubscriptionSyncQueued = false;
 
   private readonly roomTimelineLimit: number;
 
@@ -217,6 +237,8 @@ export class SlidingSyncManager {
   ) => void;
 
   private listsFullyLoaded = false;
+
+  private initialListHydrationCompleted = false;
 
   private sidebarCacheReconciled = false;
 
@@ -289,6 +311,10 @@ export class SlidingSyncManager {
       buildUnencryptedSubscription(roomTimelineLimit)
     );
     this.slidingSync.addCustomSubscription(
+      SIDEBAR_ROOM_SUBSCRIPTION_KEY,
+      buildSidebarRoomSubscription()
+    );
+    this.slidingSync.addCustomSubscription(
       IMAGE_PACK_SUBSCRIPTION_KEY,
       buildImagePackSubscription()
     );
@@ -355,7 +381,7 @@ export class SlidingSyncManager {
         const currentCount = listData?.joinedCount ?? 0;
         const previousCount = this.previousListCounts.get(key) ?? 0;
 
-        totalRoomCount += currentCount;
+        if (key !== LIST_UPDATES) totalRoomCount += currentCount;
 
         if (currentCount !== previousCount) {
           changes[key] = {
@@ -431,11 +457,35 @@ export class SlidingSyncManager {
       if (member.membership !== KnownMembership.Leave && member.membership !== KnownMembership.Ban)
         return;
       this.sidebarCache.removeRoom(member.roomId);
-      if (!this.activeRoomSubscriptions.has(member.roomId)) return;
-      this.unsubscribeFromRoom(member.roomId);
+      const removedSpaceSubscription = this.spaceSubscriptions.delete(member.roomId);
+      const removedSidebarSubscription = this.sidebarRoomSubscriptions.delete(member.roomId);
+      if (this.activeRoomSubscriptions.has(member.roomId)) {
+        this.unsubscribeFromRoom(member.roomId);
+      } else if (removedSpaceSubscription || removedSidebarSubscription) {
+        this.queueRoomSubscriptionSync();
+      }
     };
 
-    this.onCacheRoomData = (roomId, data) => this.sidebarCache.cacheRoom(roomId, data);
+    this.onCacheRoomData = (roomId, data) => {
+      this.sidebarCache.cacheRoom(roomId, data);
+
+      if (!this.initialListHydrationCompleted || this.hydratingSidebarCache) return;
+
+      let subscriptionsChanged = false;
+      const completedSidebarHydration = this.sidebarRoomSubscriptions.delete(roomId);
+      if (completedSidebarHydration) subscriptionsChanged = true;
+
+      if (
+        data.initial === true &&
+        !completedSidebarHydration &&
+        !this.activeRoomSubscriptions.has(roomId)
+      ) {
+        this.sidebarRoomSubscriptions.add(roomId);
+        subscriptionsChanged = true;
+      }
+
+      if (subscriptionsChanged) this.queueRoomSubscriptionSync();
+    };
     this.onCacheAccountData = (event) => this.sidebarCache.cacheAccountData(event);
 
     for (const roomId of options.initialRoomIds ?? []) {
@@ -623,6 +673,7 @@ export class SlidingSyncManager {
 
   private expandListsByPage(): void {
     if (!this.initialSyncCompleted) return;
+    if (this.initialListHydrationCompleted) return;
 
     let allListsComplete = true;
     let expandedAny = false;
@@ -711,13 +762,14 @@ export class SlidingSyncManager {
     if (allListsComplete) {
       if (!this.listsFullyLoaded) {
         this.listsFullyLoaded = true;
+        this.initialListHydrationCompleted = true;
         this.reconcileSidebarCacheMembership();
         globalThis.setTimeout(() => this.flushDeferredSubscriptions(), 0);
+        this.applySteadyStateListRanges();
         log.log(`Sliding Sync all lists fully loaded for ${this.mx.getUserId()}`);
-        const totalRooms = this.listKeys.reduce(
-          (sum, key) => sum + (this.slidingSync.getListData(key)?.joinedCount ?? 0),
-          0
-        );
+        const totalRooms =
+          (this.slidingSync.getListData(LIST_JOINED)?.joinedCount ?? 0) +
+          (this.slidingSync.getListData(LIST_INVITES)?.joinedCount ?? 0);
         const listsLoadedMs =
           this.attachTime != null ? Math.round(performance.now() - this.attachTime) : 0;
         Sentry.metrics.distribution('sable.sync.lists_loaded_ms', listsLoadedMs, {
@@ -748,6 +800,34 @@ export class SlidingSyncManager {
         ),
       });
     }
+  }
+
+  private applySteadyStateListRanges(): void {
+    const joinedList = this.slidingSync.getListParams(LIST_JOINED);
+    const currentEnd = getListEndIndex(joinedList);
+    const steadyStateEnd = Math.min(currentEnd, STEADY_STATE_DETAILED_ROOMS - 1);
+    if (steadyStateEnd < 0 || steadyStateEnd === currentEnd) return;
+
+    const joinedCount = this.slidingSync.getListData(LIST_JOINED)?.joinedCount ?? 0;
+    const updatesCount = this.slidingSync.getListData(LIST_UPDATES)?.joinedCount ?? 0;
+    const updatesConfirmedEnd = this.confirmedListRangeEnds.get(LIST_UPDATES) ?? -1;
+    if (updatesCount !== joinedCount || updatesConfirmedEnd < joinedCount - 1) {
+      debugLog.warn('sync', 'Kept detailed joined list fully covered: updates list unavailable', {
+        joinedCount,
+        updatesCount,
+        updatesConfirmedEnd,
+      });
+      return;
+    }
+
+    this.slidingSync.setListRanges(LIST_JOINED, [[0, steadyStateEnd]]);
+    this.requestedListRangeEnds.set(LIST_JOINED, steadyStateEnd);
+    debugLog.info('sync', 'Reduced detailed joined list to steady-state window', {
+      previousEnd: currentEnd,
+      newEnd: steadyStateEnd,
+      retainedDetailedRooms: steadyStateEnd + 1,
+      updatesCoverageEnd: updatesConfirmedEnd,
+    });
   }
 
   public ensureListRegistered(listKey: string, updateArgs: PartialSlidingSyncRequest): MSC3575List {
@@ -826,7 +906,13 @@ export class SlidingSyncManager {
 
     if (membership === KnownMembership.Leave) {
       this.sidebarCache.removeRoom(roomId);
-      this.unsubscribeFromRoom(roomId);
+      const removedSpaceSubscription = this.spaceSubscriptions.delete(roomId);
+      const removedSidebarSubscription = this.sidebarRoomSubscriptions.delete(roomId);
+      if (this.activeRoomSubscriptions.has(roomId)) {
+        this.unsubscribeFromRoom(roomId);
+      } else if (removedSpaceSubscription || removedSidebarSubscription) {
+        this.queueRoomSubscriptionSync();
+      }
     }
   }
 
@@ -838,9 +924,19 @@ export class SlidingSyncManager {
     this.setSpaceSubscriptions(spaces);
   }
 
+  private queueRoomSubscriptionSync(): void {
+    if (this.disposed || this.roomSubscriptionSyncQueued) return;
+    this.roomSubscriptionSyncQueued = true;
+    globalThis.queueMicrotask(() => {
+      this.roomSubscriptionSyncQueued = false;
+      if (!this.disposed) this.syncRoomSubscriptions();
+    });
+  }
+
   private syncRoomSubscriptions(): void {
     const desiredSubscriptions = new Set([
       ...this.activeRoomSubscriptions,
+      ...this.sidebarRoomSubscriptions,
       ...this.spaceSubscriptions,
       ...this.imagePackRoomSubscriptions,
     ]);
@@ -848,6 +944,8 @@ export class SlidingSyncManager {
     desiredSubscriptions.forEach((roomId) => {
       if (this.activeRoomSubscriptions.has(roomId)) {
         this.slidingSync.useCustomSubscription(roomId, ACTIVE_ROOM_SUBSCRIPTION_KEY);
+      } else if (this.sidebarRoomSubscriptions.has(roomId)) {
+        this.slidingSync.useCustomSubscription(roomId, SIDEBAR_ROOM_SUBSCRIPTION_KEY);
       } else if (this.spaceSubscriptions.has(roomId)) {
         this.slidingSync.useCustomSubscription(roomId, SPACE_SUBSCRIPTION_KEY);
       } else {
@@ -919,17 +1017,12 @@ export class SlidingSyncManager {
     this.roomSubscriptionStatusListeners.get(roomId)?.forEach((listener) => listener(loading));
   }
 
-  public subscribeToRoom(roomId: string): void {
-    if (this.disposed) return;
-    if (this.activeRoomSubscriptions.has(roomId)) return;
+  private addActiveRoomSubscription(roomId: string): boolean {
+    if (this.activeRoomSubscriptions.has(roomId)) return false;
     const room = this.mx.getRoom(roomId);
     const isEncrypted = this.mx.isRoomEncrypted(roomId);
     this.activeRoomSubscriptions.add(roomId);
     this.pauseUnconfirmedListExpansion();
-    this.syncRoomSubscriptions();
-    Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
-      attributes: { transport: 'sliding' },
-    });
     log.log(`Sliding Sync active room subscription added: ${roomId}`);
     debugLog.info('sync', 'Room subscription requested (sliding)', {
       encrypted: isEncrypted,
@@ -981,11 +1074,11 @@ export class SlidingSyncManager {
     this.pendingRoomDataListeners.set(roomId, onFirstRoomData);
     this.slidingSync.on(SlidingSyncEvent.RoomData, onFirstRoomData);
     this.notifyRoomSubscriptionStatus(roomId, true);
+    return true;
   }
 
-  public unsubscribeFromRoom(roomId: string): void {
-    if (this.disposed) return;
-    if (!this.activeRoomSubscriptions.has(roomId)) return;
+  private removeActiveRoomSubscription(roomId: string): boolean {
+    if (!this.activeRoomSubscriptions.has(roomId)) return false;
     const pendingListener = this.pendingRoomDataListeners.get(roomId);
     if (pendingListener) {
       this.slidingSync.removeListener(SlidingSyncEvent.RoomData, pendingListener);
@@ -994,15 +1087,49 @@ export class SlidingSyncManager {
     this.roomDataAwaitingSyncCompletion.delete(roomId);
     this.notifyRoomSubscriptionStatus(roomId, false);
     this.activeRoomSubscriptions.delete(roomId);
-    this.syncRoomSubscriptions();
-    Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
-      attributes: { transport: 'sliding' },
-    });
     log.log(`Sliding Sync active room subscription removed: ${roomId}`);
     debugLog.info('sync', 'Room subscription removed (sliding)', {
       remainingSubscriptions: this.activeRoomSubscriptions.size,
       syncCycle: this.syncCount,
     });
+    return true;
+  }
+
+  private reportActiveSubscriptionCount(): void {
+    Sentry.metrics.gauge('sable.sync.active_subscriptions', this.activeRoomSubscriptions.size, {
+      attributes: { transport: 'sliding' },
+    });
+  }
+
+  public setActiveRoomSubscriptions(roomIds: Iterable<string>): void {
+    if (this.disposed) return;
+    const next = new Set(roomIds);
+    let changed = false;
+
+    this.activeRoomSubscriptions.forEach((roomId) => {
+      if (!next.has(roomId)) changed = this.removeActiveRoomSubscription(roomId) || changed;
+    });
+    next.forEach((roomId) => {
+      if (!this.activeRoomSubscriptions.has(roomId)) {
+        changed = this.addActiveRoomSubscription(roomId) || changed;
+      }
+    });
+
+    if (!changed) return;
+    this.syncRoomSubscriptions();
+    this.reportActiveSubscriptionCount();
+  }
+
+  public subscribeToRoom(roomId: string): void {
+    if (this.disposed || !this.addActiveRoomSubscription(roomId)) return;
+    this.syncRoomSubscriptions();
+    this.reportActiveSubscriptionCount();
+  }
+
+  public unsubscribeFromRoom(roomId: string): void {
+    if (this.disposed || !this.removeActiveRoomSubscription(roomId)) return;
+    this.syncRoomSubscriptions();
+    this.reportActiveSubscriptionCount();
   }
 
   public setSpaceSubscriptions(roomIds: Iterable<string>): void {

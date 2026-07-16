@@ -94,13 +94,13 @@ function fireLifecycle(state: SlidingSyncState, response: unknown = {}) {
   lifecycle?.(state, response);
 }
 
-function fireRoomData(roomId: string) {
+function fireRoomData(roomId: string, data: Record<string, unknown> = {}) {
   const roomDataHandler = mocks.slidingSyncInstance.on.mock.calls
     .toReversed()
     .find(([event]) => event === SlidingSyncEvent.RoomData)?.[1] as
     | ((dataRoomId: string, data: unknown) => void)
     | undefined;
-  roomDataHandler?.(roomId, {});
+  roomDataHandler?.(roomId, data);
 }
 
 describe('SlidingSyncManager initial request', () => {
@@ -109,6 +109,7 @@ describe('SlidingSyncManager initial request', () => {
 
     const lists = mocks.slidingSyncConstructorArgs?.[1] as Map<string, MSC3575List>;
     const joined = lists.get('joined');
+    const updates = lists.get('updates');
     const defaultSubscription = mocks.slidingSyncConstructorArgs?.[2] as {
       timeline_limit: number;
     };
@@ -118,6 +119,12 @@ describe('SlidingSyncManager initial request', () => {
     expect(joined?.required_state).toHaveLength(8);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
     expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
+    expect(updates).toMatchObject({
+      ranges: [[0, 29]],
+      timeline_limit: 1,
+      required_state: [[EventType.RoomMember, '$ME']],
+      filters: { is_invite: false },
+    });
     expect(defaultSubscription.timeline_limit).toBe(30);
     expect(mocks.slidingSyncConstructorArgs?.[4]).toBe(45000);
   });
@@ -230,9 +237,78 @@ describe('SlidingSyncManager initial request', () => {
       rangeEnd: 29,
     });
   });
+
+  it('keeps full lightweight event coverage after narrowing the detailed joined list', () => {
+    const listRanges = new Map<string, [number, number][]>([
+      ['joined', [[0, 29]]],
+      ['updates', [[0, 29]]],
+    ]);
+    const manager = makeManager(makeMockMx());
+    mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
+      key === 'joined' || key === 'updates' ? ({ joinedCount: 45 } as never) : null
+    );
+    mocks.slidingSyncInstance.getListParams.mockImplementation(
+      (key: string) => ({ ranges: listRanges.get(key) ?? [[0, 29]] }) as never
+    );
+    mocks.slidingSyncInstance.setListRanges.mockImplementation((key, ranges) => {
+      if (key === 'joined' || key === 'updates') {
+        listRanges.set(key, ranges as [number, number][]);
+      }
+    });
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.Complete);
+    expect(listRanges.get('joined')).toEqual([[0, 44]]);
+    expect(listRanges.get('updates')).toEqual([[0, 44]]);
+
+    fireLifecycle(SlidingSyncState.Complete);
+    fireLifecycle(SlidingSyncState.Complete);
+    expect(listRanges.get('joined')).toEqual([[0, 2]]);
+    expect(listRanges.get('updates')).toEqual([[0, 44]]);
+  });
+
+  it('keeps detailed coverage when the homeserver does not provide the updates list', () => {
+    let joinedRange: [number, number][] = [[0, 29]];
+    const manager = makeManager(makeMockMx());
+    mocks.slidingSyncInstance.getListData.mockImplementation((key: string) =>
+      key === 'joined' ? ({ joinedCount: 45 } as never) : null
+    );
+    mocks.slidingSyncInstance.getListParams.mockImplementation((key: string) =>
+      key === 'joined' ? ({ ranges: joinedRange } as never) : ({ ranges: [[0, 29]] } as never)
+    );
+    mocks.slidingSyncInstance.setListRanges.mockImplementation((key, ranges) => {
+      if (key === 'joined') joinedRange = ranges as [number, number][];
+    });
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.Complete);
+    fireLifecycle(SlidingSyncState.Complete);
+
+    expect(joinedRange).toEqual([[0, 44]]);
+  });
 });
 
 describe('SlidingSyncManager room subscription coordination', () => {
+  it('replaces route subscriptions atomically without cycling the retained space', () => {
+    const manager = makeManager(makeMockMx());
+    const spaceId = '!space:example.com';
+    const oldRoomId = '!old:example.com';
+    const newRoomId = '!new:example.com';
+
+    manager.setActiveRoomSubscriptions([spaceId, oldRoomId]);
+    mocks.slidingSyncInstance.modifyRoomSubscriptions.mockClear();
+
+    manager.setActiveRoomSubscriptions([spaceId, newRoomId]);
+
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenCalledOnce();
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenCalledWith(
+      new Set([spaceId, newRoomId])
+    );
+    expect(manager.isRoomActive(spaceId)).toBe(true);
+    expect(manager.isRoomActive(oldRoomId)).toBe(false);
+    expect(manager.isRoomActive(newRoomId)).toBe(true);
+  });
+
   it('reports loading until the subscribed room returns data', () => {
     const manager = makeManager(makeMockMx());
     const roomId = '!slow:example.com';
@@ -279,6 +355,44 @@ describe('SlidingSyncManager room subscription coordination', () => {
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
       new Set([roomId])
     );
+  });
+
+  it('keeps space subscriptions active for future hierarchy changes', async () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!space:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+    manager.attach();
+
+    manager.setSpaceSubscriptions([roomId]);
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set([roomId])
+    );
+
+    fireRoomData(roomId);
+    await Promise.resolve();
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set([roomId])
+    );
+  });
+
+  it('hydrates sidebar state once for rooms first seen after startup', async () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!new:example.com';
+    (
+      manager as unknown as { initialListHydrationCompleted: boolean }
+    ).initialListHydrationCompleted = true;
+    manager.attach();
+
+    fireRoomData(roomId, { initial: true, notification_count: 0, highlight_count: 0 });
+    await Promise.resolve();
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'sidebar_room'
+    );
+
+    fireRoomData(roomId, { initial: true });
+    await Promise.resolve();
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(new Set());
   });
 
   it('removes image-pack subscriptions which are no longer configured', () => {
@@ -359,9 +473,9 @@ describe('SlidingSyncManager local membership reconciliation', () => {
   });
 
   it('keeps cached rooms when authoritative membership cannot be fetched', async () => {
-    const getJoinedRooms = vi.fn<() => Promise<{ joined_rooms: string[] }>>().mockRejectedValue(
-      new Error('offline')
-    );
+    const getJoinedRooms = vi
+      .fn<() => Promise<{ joined_rooms: string[] }>>()
+      .mockRejectedValue(new Error('offline'));
     const manager = makeManager(makeMockMx({ getJoinedRooms }));
     const internals = manager as unknown as {
       reconcileSidebarCacheMembership: () => void;

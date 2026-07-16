@@ -84,10 +84,15 @@ export const useSlidingSyncRouteRooms = (): void => {
     if (!manager || resolvingRoom || resolvingSpace) return undefined;
 
     const activeRoomIds = [...new Set([spaceId, roomId].filter(Boolean))] as string[];
-    activeRoomIds.forEach((activeRoomId) => manager.subscribeToRoom(activeRoomId));
+    manager.setActiveRoomSubscriptions(activeRoomIds);
 
-    return () => activeRoomIds.forEach((activeRoomId) => manager.unsubscribeFromRoom(activeRoomId));
+    return undefined;
   }, [manager, resolvingRoom, resolvingSpace, roomId, spaceId]);
+
+  useEffect(() => {
+    if (!manager) return undefined;
+    return () => manager.setActiveRoomSubscriptions([]);
+  }, [manager]);
 };
 
 export const useSlidingSyncSpaceSubscriptions = (): void => {
