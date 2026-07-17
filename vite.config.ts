@@ -52,7 +52,6 @@ const buildHash = resolveBuildHash();
 const tauriDevHost = process.env.TAURI_DEV_HOST;
 const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);
 const isTauriDebug = process.env.TAURI_ENV_DEBUG === 'true';
-const tauriBuildTarget = process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13';
 const tauriBuildMinify = !isTauriDebug ? 'esbuild' : false;
 
 const isReleaseTag = (() => {
@@ -287,7 +286,7 @@ export default defineConfig(({ command }) => ({
   build: {
     // es2022+ avoids esbuild 0.27.7 failing to downlevel destructuring when
     // vite-plugin-top-level-await re-transpiles chunks (see vitejs/vite#22225).
-    target: isTauriBuild ? tauriBuildTarget : 'es2022',
+    target: 'es2022',
     minify: isTauriBuild ? tauriBuildMinify : undefined,
     sourcemap: isTauriBuild ? isTauriDebug : true,
     outDir: 'dist',
