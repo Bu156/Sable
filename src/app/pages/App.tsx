@@ -14,6 +14,7 @@ import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider, useScreenSize } from '$hooks/useScreenSize';
 import { useCompositionEndTracking } from '$hooks/useComposingCheck';
 import { ErrorPage } from '$components/DefaultErrorPage';
+import { TauriFrontendReady } from '$components/tauri/TauriFrontendReady';
 import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
@@ -82,6 +83,7 @@ function App() {
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
+      <TauriFrontendReady />
       <TooltipContainerProvider value={portalContainer}>
         <PopOutContainerProvider value={portalContainer}>
           <OverlayContainerProvider value={portalContainer}>
