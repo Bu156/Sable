@@ -8,6 +8,7 @@ import {
 } from '$state/sessions';
 import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { pushSessionToSW } from '../sw-session';
+import { getAppOrigin } from '$utils/platform';
 
 export class SessionOidcTokenRefresher extends OidcTokenRefresher {
   private readonly userId: string;
@@ -21,7 +22,7 @@ export class SessionOidcTokenRefresher extends OidcTokenRefresher {
     super(
       session.oidc.issuer,
       session.oidc.clientId,
-      window.location.origin,
+      getAppOrigin(),
       session.deviceId,
       session.oidc.idTokenClaims ?? ({} as never)
     );

@@ -1,6 +1,7 @@
 import type { Path } from 'react-router-dom';
 import { generatePath } from 'react-router-dom';
 import { trimLeadingSlash, trimTrailingSlash } from '$utils/common';
+import { getAppOrigin } from '$utils/platform';
 import type { HashRouterConfig } from '$hooks/useClientConfig';
 import type { SettingsPathSearchParams } from './paths';
 import {
@@ -44,7 +45,7 @@ export const encodeSearchParamValueArray = (ids: string[]): string => ids.join('
 export const decodeSearchParamValueArray = (idsParam: string): string[] => idsParam.split(',');
 
 export const getOriginBaseUrl = (hashRouterConfig?: HashRouterConfig): string => {
-  const baseUrl = `${trimTrailingSlash(window.location.origin)}${import.meta.env.BASE_URL}`;
+  const baseUrl = `${trimTrailingSlash(getAppOrigin())}${import.meta.env.BASE_URL}`;
 
   if (hashRouterConfig?.enabled) {
     return `${trimTrailingSlash(baseUrl)}/#${hashRouterConfig.basename}`;
