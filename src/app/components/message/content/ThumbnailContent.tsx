@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo } from 'react';
-import type { IThumbnailContent } from '$types/matrix/common';
+import { ReactNode, useCallback, useEffect, useMemo } from 'react';
+import { IThumbnailContent } from '$types/matrix/common';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '$utils/matrix';

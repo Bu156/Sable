@@ -133,12 +133,12 @@ pub fn run() {
     };
 
     app.run(|app, event| {
-            #[cfg(desktop)]
-            desktop::tray::handle_run_event(app, event);
+        #[cfg(desktop)]
+        desktop::tray::handle_run_event(app, event);
 
-            #[cfg(not(desktop))]
-            let _ = (app, event);
-        });
+        #[cfg(not(desktop))]
+        let _ = (app, event);
+    });
 }
 
 #[cfg(test)]

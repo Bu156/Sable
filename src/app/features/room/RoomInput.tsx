@@ -1345,10 +1345,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const stickerUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
       if (!stickerUrl) return;
 
-      const info = getImageInfo(
-        await loadImageElement(stickerUrl),
-        await getImageUrlBlob(stickerUrl)
-      );
+      const { blob, image } = await loadImageElementFromMediaUrl(stickerUrl);
+      const info = getImageInfo(image, blob);
 
       const content: StickerEventContent & ReplyEventContent & IContent & IGenericMSC4459 = {
         body: label,
@@ -2007,3 +2005,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
   }
 );
+function loadImageElementFromMediaUrl(stickerUrl: string): { blob: any; image: any; } | PromiseLike<{ blob: any; image: any; }> {
+  throw new Error('Function not implemented.');
+}
+

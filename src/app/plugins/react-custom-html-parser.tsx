@@ -33,6 +33,7 @@ import { onEnterOrSpace } from '$utils/keyboard';
 import { copyToClipboard } from '$utils/dom';
 import { isMatrixHexColor } from '$utils/matrixHtml';
 import { useTimeoutToggle } from '$hooks/useTimeoutToggle';
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { getSettingsLinkChipLabel, parseSettingsLink } from '$features/settings/settingsLink';
 import { ClientSideHoverFreeze } from '$components/ClientSideHoverFreeze';
 import { CodeHighlightRenderer } from '$components/code-highlight';
@@ -557,11 +558,13 @@ export function CodeBlock({
  */
 function FallbackImg({
   fallback,
+  src,
   ...props
 }: ComponentPropsWithoutRef<'img'> & { fallback: ReactNode }) {
   const [failed, setFailed] = useState(false);
+  const renderableSrc = useRenderableMediaUrl(typeof src === 'string' ? src : undefined);
   if (failed) return <>{fallback}</>;
-  return <img {...props} onError={() => setFailed(true)} />;
+  return <img {...props} src={renderableSrc ?? src} onError={() => setFailed(true)} />;
 }
 
 export const getReactCustomHtmlParser = (

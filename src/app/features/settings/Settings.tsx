@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
-import type { IconProps } from '@phosphor-icons/react';
+import { DesktopIcon, type IconProps } from '@phosphor-icons/react';
 import {
   Avatar,
   Box,
@@ -61,6 +61,7 @@ import { settingsHeader } from './styles.css';
 import { useSettingsFocus } from './useSettingsFocus';
 import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
+import { Desktop } from './desktop';
 
 export enum SettingsPages {
   GeneralPage,
@@ -68,6 +69,7 @@ export enum SettingsPages {
   PerMessageProfilesPage,
   NotificationPage,
   DevicesPage,
+  DesktopPage,
   EmojisStickersPage,
   CosmeticsPage,
   DeveloperToolsPage,
@@ -95,6 +97,7 @@ export const settingsMenuIcons: Record<
   appearance: { icon: Palette },
   notifications: { icon: Bell },
   devices: { icon: DevicesIcon },
+  desktop: { icon: DesktopIcon },
   emojis: { icon: Smiley },
   'developer-tools': { icon: Terminal },
   experimental: { icon: Flask },
@@ -108,6 +111,7 @@ const settingsPageToSectionId: Record<SettingsPages, SettingsSectionId> = {
   [SettingsPages.PerMessageProfilesPage]: 'persona',
   [SettingsPages.NotificationPage]: 'notifications',
   [SettingsPages.DevicesPage]: 'devices',
+  [SettingsPages.DesktopPage]: 'desktop',
   [SettingsPages.EmojisStickersPage]: 'emojis',
   [SettingsPages.CosmeticsPage]: 'appearance',
   [SettingsPages.DeveloperToolsPage]: 'developer-tools',
@@ -123,6 +127,7 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
   appearance: SettingsPages.CosmeticsPage,
   notifications: SettingsPages.NotificationPage,
   devices: SettingsPages.DevicesPage,
+  desktop: SettingsPages.DesktopPage,
   emojis: SettingsPages.EmojisStickersPage,
   'developer-tools': SettingsPages.DeveloperToolsPage,
   experimental: SettingsPages.ExperimentalPage,
@@ -132,7 +137,7 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
 
 const settingsSectionComponents: Record<
   SettingsSectionId,
-  (props: { requestBack?: () => void; requestClose: () => void }) => JSX.Element
+  (props: { requestBack?: () => void; requestClose: () => void }) => JSX.Element | null
 > = {
   general: General,
   account: Account,
@@ -140,6 +145,7 @@ const settingsSectionComponents: Record<
   appearance: Cosmetics,
   notifications: Notifications,
   devices: Devices,
+  desktop: Desktop,
   emojis: EmojisStickers,
   'developer-tools': DeveloperTools,
   experimental: Experimental,

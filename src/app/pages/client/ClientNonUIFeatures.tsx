@@ -58,7 +58,6 @@ import { NotificationBanner } from '$components/notification-banner';
 import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
 import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
-import { getBlobCacheStats } from '$hooks/useBlobCache';
 import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
 import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
@@ -67,6 +66,7 @@ import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
+import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
 
@@ -611,7 +611,7 @@ function PrivacyBlurFeature() {
 function HealthMonitor() {
   useEffect(() => {
     const id = window.setInterval(() => {
-      const { cacheSize, inflightCount } = getBlobCacheStats();
+      const { cacheSize, inflightCount } = getRenderableMediaUrlStats();
       Sentry.metrics.gauge('sable.media.blob_cache_size', cacheSize);
       if (inflightCount > 0) {
         Sentry.metrics.gauge('sable.media.inflight_requests', inflightCount);

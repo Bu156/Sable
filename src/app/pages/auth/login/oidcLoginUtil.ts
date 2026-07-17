@@ -70,7 +70,6 @@ export const startOidcLogin = async (
   });
 
   if (tauri) {
-    // Auth happens in the system browser and returns via the sable:// deep link.
     rememberTauriOidcServer(opts?.server);
     await openUrl(authUrl);
     return;

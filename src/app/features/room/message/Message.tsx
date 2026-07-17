@@ -48,7 +48,6 @@ import { SwipeableMessageWrapper } from '$components/SwipeableMessageWrapper';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useSetting } from '$state/hooks/settings';
-import { useBlobCache } from '$hooks/useBlobCache';
 import { filterPronounsByLanguage, getParsedPronouns } from '$utils/pronouns';
 import type { PronounSet } from '$utils/pronouns';
 import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
@@ -58,6 +57,7 @@ import { MessageEditor } from './MessageEditor';
 import * as css from './styles.css';
 import { modalAtom, ModalType } from '$state/modal';
 import { OptionQuickMenu } from '$components/message/modals/Options';
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 
@@ -465,7 +465,7 @@ function MessageInternal(
     return mxc ? mxcUrlToHttp(mx, mxc, useAuthentication, 48, 48, 'crop') : undefined;
   }, [pmp, memberAvatarMxc, profile.avatarUrl, mx, useAuthentication]);
 
-  const cachedAvatar = useBlobCache(avatarUrl ?? undefined);
+  const cachedAvatar = useRenderableMediaUrl(avatarUrl ?? undefined);
 
   // UI State
   const [isDesktopHover, setIsDesktopHover] = useState(false);

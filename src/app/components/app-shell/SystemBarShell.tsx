@@ -25,10 +25,10 @@ function SystemBarStrip({ position, size }: SystemBarStripProps) {
         style={{
           width: '100%',
           height: '100%',
-          background: 'var(--sable-bg-container)',
+          background: position === 'top' ? 'var(--sable-bg-container)' : 'var(--sable-surface-container)',
           ...(position === 'top'
             ? { borderBottom: '1px solid var(--sable-bg-container-line)' }
-            : { borderTop: '1px solid var(--sable-bg-container-line)' }),
+            : { borderTop: '1px solid var(--sable-surface-container-line)' }),
         }}
       />
     </div>

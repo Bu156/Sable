@@ -19,6 +19,7 @@ import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
 import { bootstrapSettingsStore } from '$state/settings';
+import { AppShell } from '$components/app-shell';
 
 const queryClient = new QueryClient();
 const ReactQueryDevtools = lazy(async () => {
@@ -67,7 +68,6 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
 function App() {
   const screenSize = useScreenSize();
   useCompositionEndTracking();
-  const portalContainer = document.getElementById('portalContainer') ?? undefined;
 
   const renderConfiguredApp = useCallback(
     (clientConfig: ClientConfig) => {
@@ -83,18 +83,11 @@ function App() {
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
-      <TauriFrontendReady />
-      <TooltipContainerProvider value={portalContainer}>
-        <PopOutContainerProvider value={portalContainer}>
-          <OverlayContainerProvider value={portalContainer}>
-            <ScreenSizeProvider value={screenSize}>
-              <FeatureCheck>
-                <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
-              </FeatureCheck>
-            </ScreenSizeProvider>
-          </OverlayContainerProvider>
-        </PopOutContainerProvider>
-      </TooltipContainerProvider>
+      <AppShell screenSize={screenSize} queryClient={queryClient}>
+        <FeatureCheck>
+          <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
+        </FeatureCheck>
+      </AppShell>
     </Sentry.ErrorBoundary>
   );
 }

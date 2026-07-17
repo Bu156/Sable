@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -40,8 +40,6 @@ import { bytesToSize } from '$utils/common';
 import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '$utils/matrix';
-import { fetchMediaBlob } from '$utils/mediaTransport';
-import { hasControllingServiceWorker } from '$utils/platform';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { ModalWide } from '$styles/Modal.css';
 import { validBlurHash } from '$utils/blurHash';
@@ -51,6 +49,7 @@ import {
   MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME,
 } from '../../../../unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
 function thumbnailDimsForMaxEdge(
   maxEdge: number,
@@ -102,15 +101,6 @@ export type ImageContentProps = {
   containedStripMinPx?: number;
   fillsPreviewSlot?: boolean;
 };
-// On web the service worker injects the media access token for <img src> URLs.
-// Under Tauri there is no controlling service worker, so fetch the blob with the
-// token (via mediaTransport) and render it as an object URL instead.
-const toRenderableMediaUrl = async (rawUrl: string): Promise<string> => {
-  if (hasControllingServiceWorker()) return rawUrl;
-  const blob = await fetchMediaBlob(rawUrl);
-  return URL.createObjectURL(blob);
-};
-
 export const ImageContent = as<'div', ImageContentProps>(
   (
     {
@@ -162,26 +152,24 @@ export const ImageContent = as<'div', ImageContentProps>(
       url.toLowerCase().endsWith('.apng') ||
       url.toLowerCase().endsWith('.webp');
 
+const rawMediaUrl = useMemo(() => {
+      if (url.startsWith('http')) return url;
+      return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
+    }, [mx, url, useAuthentication]);
+
+    const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
+
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
-        if (url.startsWith('http')) return url;
-
-        if (typeof matrixThumbnailMaxEdge === 'number' && matrixThumbnailMaxEdge > 0 && !encInfo) {
-          const { tw, th } = thumbnailDimsForMaxEdge(matrixThumbnailMaxEdge, info?.w, info?.h);
-          const thumbUrl = mxcUrlToHttp(mx, url, useAuthentication, tw, th, 'scale', false);
-          if (thumbUrl) return toRenderableMediaUrl(thumbUrl);
-        }
-
-        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-        if (!mediaUrl) throw new Error('Invalid media URL');
         if (encInfo) {
-          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+          if (!rawMediaUrl) throw new Error('Invalid media URL');
+          const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
             decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
           return URL.createObjectURL(fileContent);
         }
-        return toRenderableMediaUrl(mediaUrl);
-      }, [mx, url, useAuthentication, mimeType, encInfo, matrixThumbnailMaxEdge, info?.w, info?.h])
+        return resolvedMediaUrl ?? rawMediaUrl ?? url;
+      }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo])
     );
 
     useEffect(() => {
@@ -201,8 +189,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       void (async () => {
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl || cancelled) return;
-        const renderable = await toRenderableMediaUrl(mediaUrl);
-        if (!cancelled) setViewerFullSrc(renderable);
+        setViewerFullSrc(mediaUrl);
       })();
       return () => {
         cancelled = true;

@@ -111,6 +111,7 @@ import { reportMediaLoadFailure } from '$utils/mediaLoadDiagnostics';
 import * as css from './styles.css';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
 const debugLog = createDebugLogger('Space');
 
@@ -286,7 +287,8 @@ function SpaceHeader({ hideText, mx }: { hideText?: boolean; mx: MatrixClient })
 
   const bannerState = useStateEvent(space, CustomStateEvent.RoomBanner);
   const bannerMXC = bannerState?.getContent<RoomBannerContent>()?.url;
-  const bannerURI = mxcUrlToHttp(mx, bannerMXC ?? '', useAuthentication);
+  const rawBannerURI = mxcUrlToHttp(mx, bannerMXC ?? '', useAuthentication);
+  const bannerURI = rawBannerURI && useRenderableMediaUrl(rawBannerURI)
   const hasBanner = !!(bannerURI && !hideText && showBanners);
 
   const [bannerViewerOpen, setBannerViewerOpen] = useState(false);

@@ -34,14 +34,9 @@ export const buildTauriSsoRedirectUrl = (server?: string): string => {
   return redirectUrl.toString();
 };
 
-// OIDC (OAuth 2.0) native login for Tauri. The homeserver requires an HTTPS
-// client_uri and, for native apps, a private-use scheme redirect whose scheme is
-// the client_uri domain in reverse-DNS notation (app.sable.moe -> moe.sable.app).
 export const TAURI_OIDC_CLIENT_URI = 'https://app.sable.moe';
 
 const TAURI_OIDC_PROTOCOL = 'moe.sable.app:';
-// Private-use scheme redirects must not have an authority (RFC 8252 §7.1),
-// so use a path (moe.sable.app:/login), not moe.sable.app://login.
 const TAURI_OIDC_PATH = '/login';
 const TAURI_OIDC_SERVER_KEY = 'sable:tauri-oidc:server';
 
