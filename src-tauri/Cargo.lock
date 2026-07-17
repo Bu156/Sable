@@ -4084,6 +4084,7 @@ version = "0.1.0"
 dependencies = [
  "enigo",
  "gtk",
+ "jni",
  "log",
  "percent-encoding",
  "serde",

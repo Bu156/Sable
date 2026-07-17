@@ -1,5 +1,7 @@
 #[cfg(desktop)]
 mod desktop;
+#[cfg(target_os = "android")]
+mod mobile;
 mod network;
 
 use tauri::{AppHandle, Manager};
@@ -245,6 +247,8 @@ pub fn run() {
             network::loopback_http::loopback_fetch,
             network::media_protocol::set_media_session,
             network::media_protocol::clear_media_session,
+            #[cfg(target_os = "android")]
+            mobile::set_status_bar_color,
             #[cfg(desktop)]
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]
