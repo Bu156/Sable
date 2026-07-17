@@ -11,6 +11,7 @@ import {
 } from '$state/hooks/desktopSettings';
 import { SequenceCardStyle } from '$features/settings/styles.css';
 import { SettingsSectionPage } from '../SettingsSectionPage';
+import { type as osType } from '@tauri-apps/plugin-os';
 
 type DesktopProps = {
   requestBack?: () => void;
@@ -27,6 +28,9 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
   const [showSystemTrayIcon, setShowSystemTrayIcon] = useDesktopSetting('showSystemTrayIcon');
 
   if (!isTauri() || !ready) return null;
+
+  let type = osType()
+  if (type === 'android' || type === 'ios') return null;
 
   const trayFallback = showSystemTrayIcon && !runtimeState.trayAvailable && !syncing;
 
