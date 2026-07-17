@@ -217,11 +217,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
   const canDeleteOwn = permissions.event(EventType.RoomRedaction, mx.getSafeUserId());
   const canSendReaction = permissions.event(EventType.Reaction, mx.getSafeUserId());
   const canPinEvent = permissions.stateEvent(EventType.RoomPinnedEvents, mx.getSafeUserId());
-  const isReadOnly = useMemo(() => {
-    const myPowerLevel = powerLevels?.users?.[mx.getUserId()!] ?? powerLevels?.users_default ?? 0;
-    const sendLevel = powerLevels?.events?.['m.room.message'] ?? powerLevels?.events_default ?? 0;
-    return myPowerLevel < sendLevel;
-  }, [powerLevels, mx]);
+  const isReadOnly = !permissions.message(room.hasEncryptionStateEvent(), mx.getSafeUserId());
   const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
   const parseMemberEvent = useMemberEventParser();
 

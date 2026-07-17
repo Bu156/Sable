@@ -324,11 +324,8 @@ export function RoomTimeline({
 
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
-  const isReadOnly = useMemo(() => {
-    const myPowerLevel = powerLevels?.users?.[mx.getUserId()!] ?? powerLevels?.users_default ?? 0;
-    const sendLevel = powerLevels?.events?.['m.room.message'] ?? powerLevels?.events_default ?? 0;
-    return myPowerLevel < sendLevel;
-  }, [powerLevels, mx]);
+  const permissions = useRoomPermissions(creators, powerLevels);
+  const isReadOnly = !permissions.message(room.hasEncryptionStateEvent(), mx.getSafeUserId());
 
   const settings = useMemo(
     () => ({
@@ -377,8 +374,6 @@ export function RoomTimeline({
   const ignoredUsersSet = useMemo(() => new Set(ignoredUsersList), [ignoredUsersList]);
 
   const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
-  const permissions = useRoomPermissions(creators, powerLevels);
-
   const [unreadInfo, setUnreadInfo] = useState(() => getRoomUnreadInfo(room, true));
 
   const readUptoEventIdRef = useRef<string | undefined>(undefined);
