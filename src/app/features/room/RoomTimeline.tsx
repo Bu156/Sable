@@ -12,7 +12,7 @@ import {
 import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from '$types/matrix-sdk';
-import { PushProcessor, Direction } from '$types/matrix-sdk';
+import { PushProcessor, Direction, EventType } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import type { VListHandle } from 'virtua';
 import { VList } from 'virtua';
@@ -41,6 +41,7 @@ import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { useGetMemberPowerTag } from '$hooks/useMemberPowerTag';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { useSlidingSyncRoomLoading } from '$hooks/useSlidingSyncActiveRoom';
 import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
@@ -282,6 +283,7 @@ export function RoomTimeline({
 }: Readonly<RoomTimelineProps>) {
   const mx = useMatrixClient();
   const alive = useAlive();
+  const roomSyncLoading = useSlidingSyncRoomLoading(room.roomId);
 
   const { editId, handleEdit } = useMessageEdit(editor, { onReset: onEditorReset, alive });
   const { navigateRoom } = useRoomNavigate();
@@ -939,6 +941,8 @@ export function RoomTimeline({
     timelineSync.backwardStatus === 'loading' && timelineSync.eventsLength > 0;
   const showFrontPaginationSpinner =
     timelineSync.forwardStatus === 'loading' && timelineSync.eventsLength > 0;
+  const hasPowerLevelState = !!room.currentState.getStateEvents(EventType.RoomPowerLevels, '');
+  const hideTimelineForRoomState = roomSyncLoading && hideMemberInReadOnly && !hasPowerLevelState;
   const timelineBottomFloatLift =
     !atBottomState && isReady ? { bottom: `calc(${config.space.S400} + ${toRem(52)})` } : undefined;
   const timelineTopFloatLift =
@@ -1049,6 +1053,15 @@ export function RoomTimeline({
 
   return (
     <Box grow="Yes" style={{ position: 'relative' }}>
+      {(hideTimelineForRoomState || (roomSyncLoading && timelineSync.eventsLength === 0)) && (
+        <Box
+          justifyContent="Center"
+          alignItems="Center"
+          style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
+        >
+          <Spinner variant="Secondary" size="400" />
+        </Box>
+      )}
       {unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && isReady && (
         <TimelineFloat position="Top" style={{ background: 'transparent' }}>
           <Chip
@@ -1079,7 +1092,7 @@ export function RoomTimeline({
           minHeight: 0,
           overflow: 'hidden',
           position: 'relative',
-          opacity: isReady || showLoadingPlaceholders ? 1 : 0,
+          opacity: !hideTimelineForRoomState && (isReady || showLoadingPlaceholders) ? 1 : 0,
         }}
       >
         <VList<ProcessedEvent>

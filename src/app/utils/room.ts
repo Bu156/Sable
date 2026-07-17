@@ -457,10 +457,18 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
     // If we have no read receipt, SDK counts may be unreliable. Always check timeline.
     if (!readUpToId) {
       const liveEvents = room.getLiveTimeline().getEvents();
-
-      const hasActivity = liveEvents.some(
-        (event) => event.getSender() !== userId && isNotificationEvent(event, room, userId)
-      );
+      const fullyReadEventId = room
+        .getAccountData(EventType.FullyRead)
+        ?.getContent<{ event_id?: string }>()?.event_id;
+      let hasActivity = false;
+      for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
+        const event = liveEvents[i];
+        if (!event || event.getId() === fullyReadEventId) break;
+        if (event.getSender() !== userId && isNotificationEvent(event, room, userId)) {
+          hasActivity = true;
+          break;
+        }
+      }
 
       if (hasActivity) {
         // If SDK already has counts, use those. Otherwise show dot badge (count=1).
