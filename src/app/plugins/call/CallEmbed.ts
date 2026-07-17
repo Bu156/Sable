@@ -96,7 +96,12 @@ export class CallEmbed {
   ): Widget {
     const userId = mx.getSafeUserId();
     const deviceId = mx.getDeviceId() ?? '';
-    const clientOrigin = window.location.origin;
+    // window.location.origin is "null" on Tauri (tauri:// is opaque per WHATWG).
+    // The widget does new URL(parentUrl), which throws on "null".
+    const clientOrigin =
+      window.location.origin === 'null'
+        ? `${window.location.protocol}//${window.location.host}`
+        : window.location.origin;
     const widgetId = 'call-embed';
 
     const params = new URLSearchParams({
