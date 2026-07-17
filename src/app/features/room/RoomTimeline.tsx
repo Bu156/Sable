@@ -789,6 +789,7 @@ export function RoomTimeline({
     mx,
     pushProcessor,
     nicknames,
+    profiles: globalProfiles,
     imagePackRooms,
     settings,
     state: { focusItem: timelineSync.focusItem, editId, activeReplyId, openThreadId },

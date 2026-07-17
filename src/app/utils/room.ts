@@ -27,6 +27,7 @@ import {
 
 import type { IRoomCreateContent, RoomToParents, UnreadInfo } from '$types/matrix/room';
 import { NotificationType } from '$types/matrix/room';
+import { getMxIdLocalPart } from '$utils/matrix';
 import * as Sentry from '@sentry/react';
 
 export const getStateEvent = (
@@ -599,6 +600,17 @@ export const getMemberDisplayName = (
     return undefined;
   return name;
 };
+
+export const getTimelineSenderDisplayName = (
+  room: Room,
+  userId: string,
+  nicknames?: Record<string, string>,
+  profileDisplayName?: string
+): string =>
+  getMemberDisplayName(room, userId, nicknames) ??
+  profileDisplayName ??
+  getMxIdLocalPart(userId) ??
+  userId;
 
 export const getMemberSearchStr = (
   member: RoomMember,
