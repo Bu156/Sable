@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, sync::RwLock};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{OnceLock, RwLock},
+};
 
 use sha2::{Digest, Sha256};
 use tauri::{
@@ -18,6 +22,14 @@ const CACHE_SUBDIR: &str = "sable-media";
 #[derive(Default)]
 pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
+    client: OnceLock<Client>,
+}
+
+impl MediaSessionState {
+    // Shared across requests so the connection pool and TLS sessions stay warm.
+    fn client(&self) -> Client {
+        self.client.get_or_init(Client::new).clone()
+    }
 }
 
 #[derive(Clone)]
@@ -114,9 +126,7 @@ async fn handle_request<R: Runtime>(
         return Ok(ok_response(body, &content_type));
     }
 
-    let client = Client::builder()
-        .build()
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    let client = app.state::<MediaSessionState>().client();
     let upstream = client
         .get(media_url)
         .header(AUTHORIZATION, format!("Bearer {}", session.token))
