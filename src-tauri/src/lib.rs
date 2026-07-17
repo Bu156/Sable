@@ -117,6 +117,7 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_edge_to_edge::init());
 
     let app = builder
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())

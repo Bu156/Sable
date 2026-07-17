@@ -25,6 +25,9 @@
     "os:allow-hostname",
     "opener:default",
     "opener:allow-default-urls",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-image",
     {
       "identifier": "http:default",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
