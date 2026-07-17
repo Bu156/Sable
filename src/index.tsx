@@ -27,6 +27,7 @@ import { getLocalStorageItem } from './app/state/utils/atomWithLocalStorage';
 import { installConsolePasteScamWarning } from './app/utils/consolePasteScamWarning';
 import { registerMatrixUriProtocol } from './app/plugins/matrix-uri';
 import { initTauriMediaSession } from './app/utils/tauriMediaAuth';
+import { registerAppServiceWorker } from './serviceWorkerBootstrap';
 
 enableMapSet();
 installConsolePasteScamWarning();
@@ -34,6 +35,8 @@ registerMatrixUriProtocol();
 const log = createLogger('index');
 
 document.body.classList.add(configClass, varsClass);
+
+registerAppServiceWorker();
 
 const showUpdateAvailablePrompt = (registration: ServiceWorkerRegistration) => {
   const DONT_SHOW_PROMPT_KEY = 'cinny_dont_show_sw_update_prompt';
@@ -61,68 +64,6 @@ const sendSessionToSW = () => {
 };
 
 initTauriMediaSession();
-
-if ('serviceWorker' in navigator && !isTauri()) {
-  const isProduction = import.meta.env.MODE === 'production';
-  const swUrl = isProduction
-    ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
-    : `/dev-sw.js?dev-sw`;
-
-  const swRegisterOptions: RegistrationOptions = {};
-  if (!isProduction) {
-    swRegisterOptions.type = 'module';
-  }
-
-  navigator.serviceWorker.register(swUrl, swRegisterOptions).then((registration) => {
-    registration.addEventListener('updatefound', () => {
-      const installingWorker = registration.installing;
-      if (installingWorker) {
-        installingWorker.addEventListener('statechange', () => {
-          if (installingWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-              showUpdateAvailablePrompt(registration);
-            }
-          }
-        });
-      }
-    });
-  });
-
-  navigator.serviceWorker
-    .register(swUrl)
-    .then(sendSessionToSW)
-    .catch((err) => {
-      log.warn('SW registration failed:', err);
-    });
-  navigator.serviceWorker.ready.then(sendSessionToSW).catch((err) => {
-    log.warn('SW ready failed:', err);
-  });
-
-  navigator.serviceWorker.addEventListener('message', (ev) => {
-    const { data } = ev;
-    if (!data || typeof data !== 'object') return;
-    const { type } = data as { type?: unknown };
-
-    if (type === 'requestSession') {
-      sendSessionToSW();
-    }
-
-    if (data.type === 'token' && data.id) {
-      const token = localStorage.getItem('cinny_access_token') ?? undefined;
-      ev.source?.postMessage({
-        replyTo: data.id,
-        payload: token,
-      });
-    } else if (data.type === 'openRoom' && data.id) {
-      /* Example:
-      event.source.postMessage({
-        replyTo: event.data.id,
-        payload: success?,
-      });
-      */
-    }
-  });
-}
 
 const controllerRefreshed = localStorage.getItem('controllerRefreshed') === 'true';
 
