@@ -84,3 +84,9 @@ dependencies {
 }
 
 apply(from = "tauri.build.gradle.kts")
+
+// Native FCM push (Sygnal): applies only once google-services.json is added to this
+// directory, so builds without Firebase configured still succeed.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
