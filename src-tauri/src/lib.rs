@@ -54,7 +54,8 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     ))]
     {
         use tauri::Manager;
-        use webkit2gtk::{PermissionRequestExt, SettingsExt, WebViewExt};
+        use webkit2gtk::glib::prelude::Cast;
+        use webkit2gtk::{PermissionRequestExt, SettingsExt, UserMediaPermissionRequest, WebViewExt};
         if let Some(wv) = app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = wv.with_webview(|webview| {
                 let gtk_webview = webview.inner();
@@ -65,7 +66,15 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
                     settings.set_enable_media(true);
                 }
                 gtk_webview.connect_permission_request(move |_wv, request| {
-                    request.allow();
+                    // Only auto-grant camera/mic (for calls); deny geolocation, notifications, etc.
+                    if request
+                        .downcast_ref::<UserMediaPermissionRequest>()
+                        .is_some()
+                    {
+                        request.allow();
+                    } else {
+                        request.deny();
+                    }
                     true
                 });
             });
