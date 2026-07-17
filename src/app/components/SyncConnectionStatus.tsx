@@ -1,6 +1,6 @@
 import classNames from 'classnames';
 import { Box, config, Line, Text } from 'folds';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { SyncState } from '$types/matrix-sdk';
 import { type TitlebarStatusView } from '$state/titlebarStatus';
 import { ContainerColor } from '$styles/ContainerColor.css';

@@ -8,7 +8,6 @@ import { resolveNotificationPreviewText } from '$utils/notificationStyle';
 import { getMxIdLocalPart } from '$utils/matrix';
 import { getStateEvent, getMemberAvatarMxc } from '$utils/room';
 import { createDebugLogger } from '$utils/debugLogger';
-import { StateEvent } from '$types/matrix/room';
 import { fetch } from '$utils/fetch';
 import {
   getUnifiedPushDistributor,
@@ -67,6 +66,7 @@ async function discoverGateway(
     if (index >= probeCandidates.length) return undefined;
 
     const candidate = probeCandidates[index];
+    if (candidate === undefined) return undefined;
     const result = await probeCandidate(candidate);
     if (result) return result;
 
@@ -573,7 +573,7 @@ async function handleMinimalPushPayload(
 
   const room = settings.mx.getRoom(roomId);
   const roomName = room?.name ?? 'Unknown Room';
-  const isEncryptedRoom = room ? !!getStateEvent(room, StateEvent.RoomEncryption) : false;
+  const isEncryptedRoom = room ? !!getStateEvent(room, EventType.RoomEncryption) : false;
 
   let senderName: string | undefined;
   let senderId: string | undefined;

@@ -285,14 +285,13 @@ export default defineConfig(({ command }) => ({
     },
   },
   build: {
-    target: isTauriBuild ? tauriBuildTarget : undefined,
+    // es2022+ avoids esbuild 0.27.7 failing to downlevel destructuring when
+    // vite-plugin-top-level-await re-transpiles chunks (see vitejs/vite#22225).
+    target: isTauriBuild ? tauriBuildTarget : 'es2022',
     minify: isTauriBuild ? tauriBuildMinify : undefined,
     sourcemap: isTauriBuild ? isTauriDebug : true,
     outDir: 'dist',
     copyPublicDir: false,
-    // es2022+ avoids esbuild 0.27.7 failing to downlevel destructuring when
-    // vite-plugin-top-level-await re-transpiles chunks (see vitejs/vite#22225).
-    target: 'es2022',
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] }) as PluginOption],
       output: {

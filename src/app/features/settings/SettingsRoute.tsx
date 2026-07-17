@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { isTauri } from '@tauri-apps/api/core';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { getSettingsPath } from '$pages/pathUtils';
 import { useSetting } from '$state/hooks/settings';
@@ -24,10 +23,6 @@ function resolveSettingsSection(
   }
 
   if (section === 'persona' && !showPersona) {
-    return null;
-  }
-
-  if (section === 'desktop' && !isTauri()) {
     return null;
   }
 
