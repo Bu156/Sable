@@ -43,7 +43,35 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     #[cfg(target_os = "windows")]
     let builder = builder.decorations(false);
 
-    builder.build()?;
+    let _webview_window = builder.build()?;
+
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    {
+        use tauri::Manager;
+        use webkit2gtk::{PermissionRequestExt, SettingsExt, WebViewExt};
+        if let Some(wv) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = wv.with_webview(|webview| {
+                let gtk_webview = webview.inner();
+                if let Some(settings) = gtk_webview.settings() {
+                    settings.set_enable_webrtc(true);
+                    settings.set_enable_media_stream(true);
+                    settings.set_enable_mediasource(true);
+                    settings.set_enable_media(true);
+                }
+                gtk_webview.connect_permission_request(move |_wv, request| {
+                    request.allow();
+                    true
+                });
+            });
+        }
+    }
+
     Ok(())
 }
 
