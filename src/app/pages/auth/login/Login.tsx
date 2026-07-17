@@ -172,6 +172,7 @@ export function Login() {
             redirectUri={oidcRedirectUri}
             label={`Continue with ${server}`}
             notice={oidcNotice}
+            server={server}
           />
           <span data-spacing-node />
         </>

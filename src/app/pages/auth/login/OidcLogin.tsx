@@ -38,6 +38,7 @@ type OidcLoginButtonProps = {
   label: string;
   prompt?: string;
   notice?: string;
+  server?: string;
 };
 export function OidcLoginButton({
   authMetadata,
@@ -46,11 +47,12 @@ export function OidcLoginButton({
   label,
   prompt,
   notice,
+  server,
 }: OidcLoginButtonProps) {
   const [state, start] = useAsyncCallback(
     useCallback(
-      () => startOidcLogin(authMetadata, homeserverUrl, redirectUri, { prompt }),
-      [authMetadata, homeserverUrl, redirectUri, prompt]
+      () => startOidcLogin(authMetadata, homeserverUrl, redirectUri, { prompt, server }),
+      [authMetadata, homeserverUrl, redirectUri, prompt, server]
     )
   );
 

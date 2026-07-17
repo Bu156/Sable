@@ -60,6 +60,7 @@ export function Register() {
           redirectUri={oidcRedirectUri}
           label={`Continue with ${server}`}
           prompt="create"
+          server={server}
         />
         <span data-spacing-node />
         <Text align="Center">

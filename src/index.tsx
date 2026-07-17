@@ -18,7 +18,6 @@ import './app/styles/themes.css';
 import './app/styles/overrides/General.css';
 import './app/styles/overrides/Privacy.css';
 import './app/styles/overrides/TauriDesktop.css';
-import { isTauri } from '@tauri-apps/api/core';
 import { pushSessionToSW } from './sw-session';
 import type { Sessions } from './app/state/sessions';
 import { getFallbackSession, MATRIX_SESSIONS_KEY, ACTIVE_SESSION_KEY } from './app/state/sessions';
@@ -59,7 +58,7 @@ const sendSessionToSW = () => {
   pushSessionToSW(active?.baseUrl, active?.accessToken, active?.userId);
 };
 
-if ('serviceWorker' in navigator && !isTauri()) {
+if ('serviceWorker' in navigator) {
   const isProduction = import.meta.env.MODE === 'production';
   const swUrl = isProduction
     ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`

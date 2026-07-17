@@ -34,6 +34,57 @@ export const buildTauriSsoRedirectUrl = (server?: string): string => {
   return redirectUrl.toString();
 };
 
+// OIDC (OAuth 2.0) native login for Tauri. The homeserver requires an HTTPS
+// client_uri and, for native apps, a private-use scheme redirect whose scheme is
+// the client_uri domain in reverse-DNS notation (app.sable.moe -> moe.sable.app).
+export const TAURI_OIDC_CLIENT_URI = 'https://app.sable.moe';
+
+const TAURI_OIDC_PROTOCOL = 'moe.sable.app:';
+// Private-use scheme redirects must not have an authority (RFC 8252 §7.1),
+// so use a path (moe.sable.app:/login), not moe.sable.app://login.
+const TAURI_OIDC_PATH = '/login';
+const TAURI_OIDC_SERVER_KEY = 'sable:tauri-oidc:server';
+
+export const buildTauriOidcRedirectUrl = (): string =>
+  `${TAURI_OIDC_PROTOCOL}${TAURI_OIDC_PATH}`;
+
+export const rememberTauriOidcServer = (server?: string): void => {
+  try {
+    if (server) localStorage.setItem(TAURI_OIDC_SERVER_KEY, server);
+    else localStorage.removeItem(TAURI_OIDC_SERVER_KEY);
+  } catch {
+    // ignore storage failures
+  }
+};
+
+export const takeTauriOidcServer = (): string | undefined => {
+  try {
+    const server = localStorage.getItem(TAURI_OIDC_SERVER_KEY) ?? undefined;
+    localStorage.removeItem(TAURI_OIDC_SERVER_KEY);
+    return server;
+  } catch {
+    return undefined;
+  }
+};
+
+export const parseTauriOidcCallback = (
+  rawUrl: string
+): { code: string; state: string } | undefined => {
+  try {
+    const callbackUrl = new URL(rawUrl);
+    if (callbackUrl.protocol !== TAURI_OIDC_PROTOCOL) return undefined;
+    if (callbackUrl.pathname !== TAURI_OIDC_PATH) return undefined;
+
+    const code = callbackUrl.searchParams.get('code');
+    const state = callbackUrl.searchParams.get('state');
+    if (!code || !state) return undefined;
+
+    return { code, state };
+  } catch {
+    return undefined;
+  }
+};
+
 export const parseTauriSsoCallback = (rawUrl: string): TauriSsoCallback | undefined => {
   try {
     const callbackUrl = new URL(rawUrl);

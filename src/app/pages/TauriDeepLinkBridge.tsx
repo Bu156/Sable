@@ -2,16 +2,32 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isTauri } from '@tauri-apps/api/core';
 import { createLogger } from '$utils/debug';
-import { parseTauriSsoCallback } from '$pages/auth/SSOTauri';
+import {
+  parseTauriOidcCallback,
+  parseTauriSsoCallback,
+  takeTauriOidcServer,
+} from '$pages/auth/SSOTauri';
 import { getLoginPath, withSearchParam } from './pathUtils';
 
 const log = createLogger('TauriDeepLinkBridge');
 
 const mapDeepLinkToLoginPath = (rawUrl: string): string | undefined => {
-  const callback = parseTauriSsoCallback(rawUrl);
-  if (!callback) return undefined;
+  const ssoCallback = parseTauriSsoCallback(rawUrl);
+  if (ssoCallback) {
+    return withSearchParam(getLoginPath(ssoCallback.server), {
+      loginToken: ssoCallback.loginToken,
+    });
+  }
 
-  return withSearchParam(getLoginPath(callback.server), { loginToken: callback.loginToken });
+  const oidcCallback = parseTauriOidcCallback(rawUrl);
+  if (oidcCallback) {
+    return withSearchParam(getLoginPath(takeTauriOidcServer()), {
+      code: oidcCallback.code,
+      state: oidcCallback.state,
+    });
+  }
+
+  return undefined;
 };
 
 export function TauriDeepLinkBridge() {

@@ -6,8 +6,15 @@ import {
   generateOidcAuthorizationUrl,
   completeAuthorizationCodeGrant,
 } from '$types/matrix-sdk';
+import { isTauri } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { createLogger } from '$utils/debug';
 import type { Session } from '$state/sessions';
+import {
+  TAURI_OIDC_CLIENT_URI,
+  buildTauriOidcRedirectUrl,
+  rememberTauriOidcServer,
+} from '$pages/auth/SSOTauri';
 
 const log = createLogger('oidcLogin');
 
@@ -32,14 +39,17 @@ export const startOidcLogin = async (
   authMetadata: OidcClientConfig,
   homeserverUrl: string,
   redirectUri: string,
-  opts?: { prompt?: string }
+  opts?: { prompt?: string; server?: string }
 ): Promise<void> => {
+  const tauri = isTauri();
+  const effectiveRedirectUri = tauri ? buildTauriOidcRedirectUrl() : redirectUri;
+
   const [registerErr, clientId] = await to(
     registerOidcClient(authMetadata, {
       clientName: CLIENT_NAME,
-      clientUri: window.location.origin,
-      applicationType: 'web',
-      redirectUris: [redirectUri],
+      clientUri: tauri ? TAURI_OIDC_CLIENT_URI : window.location.origin,
+      applicationType: tauri ? 'native' : 'web',
+      redirectUris: [effectiveRedirectUri],
       contacts: undefined,
       tosUri: undefined,
       policyUri: undefined,
@@ -54,10 +64,17 @@ export const startOidcLogin = async (
     metadata: authMetadata,
     clientId,
     homeserverUrl,
-    redirectUri,
+    redirectUri: effectiveRedirectUri,
     nonce: crypto.randomUUID(),
     prompt: opts?.prompt,
   });
+
+  if (tauri) {
+    // Auth happens in the system browser and returns via the sable:// deep link.
+    rememberTauriOidcServer(opts?.server);
+    await openUrl(authUrl);
+    return;
+  }
 
   window.location.assign(authUrl);
 };

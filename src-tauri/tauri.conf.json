@@ -43,11 +43,11 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["sable"]
+        "schemes": ["sable", "moe.sable.app"]
       },
       "mobile": [
         {
-          "scheme": ["sable"],
+          "scheme": ["sable", "moe.sable.app"],
           "appLink": false
         }
       ]
