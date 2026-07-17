@@ -12,12 +12,15 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self' blob: data: filesystem: ws: wss: http: https: tauri:; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: data: filesystem: ws: wss: http: https: tauri:; img-src 'self' data: blob: filesystem: http: https: sable-media:; media-src 'self' blob: data: http: https: sable-media:; connect-src 'self' ipc: ws: wss: http: https: http://ipc.localhost sable-media: http://sable-media.localhost"
+      "csp": "default-src 'self' blob: data: filesystem: ws: wss: http: https: tauri:; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: data: filesystem: ws: wss: http: https: tauri:; style-src 'self' 'unsafe-inline' blob: data: filesystem: http: https: tauri:; img-src 'self' data: blob: filesystem: http: https: sable-media:; media-src 'self' blob: data: http: https: sable-media:; connect-src 'self' ipc: ws: wss: http: https: http://ipc.localhost sable-media: http://sable-media.localhost"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "infoPlist": "Info.plist"
+    },
     "linux": {
       "deb": {
         "depends": ["xwayland"]
