@@ -60,6 +60,9 @@ gtk = "0.18"
 tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "9d15b2b2c8798dc29ce723d743f0f3b4921d6a54", features = ["push-notifications", "unified-push"] }
 tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin-edge-to-edge.git", rev = "33c6116c27be28c06df5a9d02231ecc5fdeb93c5" }
 
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-android-fs = "=28.4.0"
+
 [features]
 default = ["wry"]
 custom-protocol = ["tauri/custom-protocol"]

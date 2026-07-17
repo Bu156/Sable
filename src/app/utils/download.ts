@@ -1,3 +1,8 @@
+import FileSaver from 'file-saver';
+import { isTauri } from '@tauri-apps/api/core';
+import { type as osType } from '@tauri-apps/plugin-os';
+import { fetch } from '$utils/fetch';
+
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*]/g;
 const CONTROL_CHARS = /\p{Cc}/gu;
 const BIDI_CONTROL_CHARS = /[\u202a-\u202e\u2066-\u2069]/g;
@@ -44,3 +49,34 @@ export const getDownloadFilename = (
   body?: unknown,
   fallback = 'download'
 ): string => sanitizeDownloadFilename(getAttachmentFilename(filename, body, fallback), fallback);
+
+async function resolveBlob(input: Blob | string): Promise<Blob> {
+  if (typeof input !== 'string') return input;
+  const response = await fetch(input);
+  return response.blob();
+}
+
+// On Android the browser anchor download is a no-op (the WebView has no download
+// handler), so route through the native file system plugin; elsewhere file-saver works.
+export async function saveFileToDevice(
+  input: Blob | string,
+  filename: string,
+  mimeType?: string
+): Promise<void> {
+  if (isTauri() && osType() === 'android') {
+    const blob = await resolveBlob(input);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const { AndroidFs, AndroidPublicGeneralPurposeDir } = await import(
+      'tauri-plugin-android-fs-api'
+    );
+    const uri = await AndroidFs.createNewPublicFile(
+      AndroidPublicGeneralPurposeDir.Download,
+      filename,
+      mimeType || blob.type || null
+    );
+    await AndroidFs.writeFile(uri, bytes);
+    return;
+  }
+
+  FileSaver.saveAs(input, filename);
+}
