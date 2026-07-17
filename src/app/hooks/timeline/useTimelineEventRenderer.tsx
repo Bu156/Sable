@@ -65,6 +65,7 @@ import {
   getEditTargetId,
   getEventReactions,
   getMemberDisplayName,
+  getTimelineSenderDisplayName,
   getPreviousEditId,
   getRedactionTargetEvent,
   getRedactionTargetId,
@@ -288,6 +289,7 @@ export interface TimelineEventRendererOptions {
   mx: MatrixClient;
   pushProcessor: PushProcessor;
   nicknames: Record<string, string>;
+  profiles: Record<string, { displayName?: string }>;
   imagePackRooms: Room[];
   settings: {
     messageLayout: MessageLayout;
@@ -346,6 +348,7 @@ export function useTimelineEventRenderer({
   mx,
   pushProcessor,
   nicknames,
+  profiles,
   imagePackRooms,
   settings: {
     messageLayout,
@@ -393,6 +396,9 @@ export function useTimelineEventRenderer({
   } = hiddenEvents;
   const useAuthentication = useMediaAuthentication();
 
+  const getSenderDisplayName = (userId: string): string =>
+    getTimelineSenderDisplayName(room, userId, nicknames, profiles[userId]?.displayName);
+
   const renderEditTimelineEvent = (
     mEventId: string,
     mEvent: MatrixEvent,
@@ -405,8 +411,7 @@ export function useTimelineEventRenderer({
     const highlighted = focusItem?.index === item && focusItem.highlight;
     const marked = activeReplyId === mEventId && suppressMark !== true;
     const senderId = mEvent.getSender() ?? '';
-    const senderName =
-      getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+    const senderName = getSenderDisplayName(senderId);
     const editTargetId = getEditTargetId(mEvent);
     const chain = editTargetId && getEditChain(timelineSet, editTargetId, mEvent.getType(), room);
     const previousEditId = chain ? getPreviousEditId(mEvent, chain) : undefined;
@@ -567,8 +572,7 @@ export function useTimelineEventRenderer({
         const getContent = (() => editedNewContent ?? safeContent) as GetContentCallback;
 
         const senderId = mEvent.getSender() ?? '';
-        const senderDisplayName =
-          getMemberDisplayName(room, senderId, nicknames) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const senderDisplayName = getSenderDisplayName(senderId);
 
         const forwardContent = safeContent['moe.sable.message.forward'] as
           | {
@@ -718,8 +722,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderDisplayName =
-          getMemberDisplayName(room, senderId, nicknames) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const senderDisplayName = getSenderDisplayName(senderId);
 
         const pushActions = pushProcessor.actionsForEvent(mEvent);
         let notifyHighlight: 'silent' | 'loud' | undefined;
@@ -898,8 +901,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderDisplayName =
-          getMemberDisplayName(room, senderId, nicknames) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const senderDisplayName = getSenderDisplayName(senderId);
         const content = mEvent.getContent() ?? {};
 
         return (
@@ -1045,8 +1047,7 @@ export function useTimelineEventRenderer({
         const getContent = (() => editedNewContent ?? safeContent) as GetContentCallback;
 
         const senderId = mEvent.getSender() ?? '';
-        const senderDisplayName =
-          getMemberDisplayName(room, senderId, nicknames) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const senderDisplayName = getSenderDisplayName(senderId);
 
         const forwardContent = safeContent['moe.sable.message.forward'] as
           | {
@@ -1281,8 +1282,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
         const timeJSX = (
           <Time
             ts={mEvent.getTs()}
@@ -1381,8 +1381,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
 
         const timeJSX = (
           <Time
@@ -1482,8 +1481,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
 
         const timeJSX = (
           <Time
@@ -1698,8 +1696,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
         const targetId = getReactionAnnotationTargetId(mEvent) ?? mEvent.getRelation()?.event_id;
 
         const timeJSX = (
@@ -1915,8 +1912,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
         const targetId = getRedactionTargetId(mEvent);
 
         const timeJSX = (
@@ -2025,8 +2021,7 @@ export function useTimelineEventRenderer({
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const marked = activeReplyId === mEventId && !suppressMark;
         const senderId = mEvent.getSender() ?? '';
-        const senderName =
-          getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+        const senderName = getSenderDisplayName(senderId);
 
         const { pinned } = mEvent.getContent();
         const prevPinned = mEvent.getPrevContent().pinned;
@@ -2164,8 +2159,7 @@ export function useTimelineEventRenderer({
       const highlighted = focusItem?.index === item && focusItem.highlight;
       const marked = activeReplyId === mEventId && !suppressMark;
       const senderId = mEvent.getSender() ?? '';
-      const senderName =
-        getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+      const senderName = getSenderDisplayName(senderId);
 
       const timeJSX = (
         <Time
@@ -2270,8 +2264,7 @@ export function useTimelineEventRenderer({
       const highlighted = focusItem?.index === item && focusItem.highlight;
       const marked = activeReplyId === mEventId && !suppressMark;
       const senderId = mEvent.getSender() ?? '';
-      const senderName =
-        getMemberDisplayName(room, senderId, nicknames) || getMxIdLocalPart(senderId);
+      const senderName = getSenderDisplayName(senderId);
 
       const timeJSX = (
         <Time
