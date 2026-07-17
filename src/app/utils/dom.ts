@@ -1,3 +1,5 @@
+import { fetchMediaBlob, type MediaTransportOptions } from './mediaTransport';
+
 export const targetFromEvent = (evt: Event, selector: string): Element | undefined => {
   const targets = evt.composedPath() as Element[];
   return targets.find((target) => target.matches?.(selector));
@@ -310,4 +312,19 @@ export const downloadTextFile = (
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+};
+
+export const loadImageElementFromMediaUrl = async (
+  url: string,
+  options?: MediaTransportOptions
+): Promise<{ blob: Blob; image: HTMLImageElement }> => {
+  const blob = await fetchMediaBlob(url, options);
+  const objectUrl = URL.createObjectURL(blob);
+
+  try {
+    const image = await loadImageElement(objectUrl);
+    return { blob, image };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 };

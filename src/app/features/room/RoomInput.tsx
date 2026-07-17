@@ -86,7 +86,7 @@ import type { UploadBoardImperativeHandlers } from '$components/upload-board';
 import { UploadBoard, UploadBoardContent, UploadBoardHeader } from '$components/upload-board';
 import type { Upload, UploadSuccess } from '$state/upload';
 import { UploadStatus, createUploadFamilyObserverAtom } from '$state/upload';
-import { getImageUrlBlob, loadImageElement } from '$utils/dom';
+import { loadImageElementFromMediaUrl } from '$utils/dom';
 import { safeFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
@@ -2005,7 +2005,4 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
   }
 );
-function loadImageElementFromMediaUrl(stickerUrl: string): { blob: any; image: any; } | PromiseLike<{ blob: any; image: any; }> {
-  throw new Error('Function not implemented.');
-}
 
