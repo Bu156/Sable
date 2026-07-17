@@ -14,6 +14,65 @@ use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+fn prompt_webview_permission(message: &str) -> bool {
+    use gtk::prelude::*;
+    use gtk::{ButtonsType, DialogFlags, MessageDialog, MessageType, ResponseType};
+
+    let dialog = MessageDialog::new(
+        None::<&gtk::Window>,
+        DialogFlags::MODAL,
+        MessageType::Question,
+        ButtonsType::YesNo,
+        message,
+    );
+    dialog.set_title("Permission request");
+    let response = dialog.run();
+    dialog.close();
+    matches!(response, ResponseType::Yes)
+}
+
+// Return the remembered decision for a webview permission, or prompt the user
+// once and persist their choice for next time.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+fn resolve_webview_permission(
+    app: &AppHandle<crate::BrowserEngine>,
+    key: &str,
+    message: &str,
+) -> bool {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app.store("permissions.json").ok();
+    if let Some(allowed) = store
+        .as_ref()
+        .and_then(|store| store.get(key))
+        .and_then(|value| value.as_bool())
+    {
+        return allowed;
+    }
+
+    let allowed = prompt_webview_permission(message);
+
+    if let Some(store) = &store {
+        store.set(key, allowed);
+        let _ = store.save();
+    }
+
+    allowed
+}
+
 pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         #[cfg(desktop)]
@@ -56,11 +115,12 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
         use tauri::Manager;
         use webkit2gtk::glib::prelude::Cast;
         use webkit2gtk::{
-            NotificationPermissionRequest, PermissionRequestExt, SettingsExt,
-            UserMediaPermissionRequest, WebViewExt,
+            GeolocationPermissionRequest, NotificationPermissionRequest, PermissionRequestExt,
+            SettingsExt, UserMediaPermissionRequest, WebViewExt,
         };
+        let app_handle = app.clone();
         if let Some(wv) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            let _ = wv.with_webview(|webview| {
+            let _ = wv.with_webview(move |webview| {
                 let gtk_webview = webview.inner();
                 if let Some(settings) = gtk_webview.settings() {
                     settings.set_enable_webrtc(true);
@@ -69,17 +129,34 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
                     settings.set_enable_media(true);
                 }
                 gtk_webview.connect_permission_request(move |_wv, request| {
-                    // Auto-grant camera/mic (for calls) and desktop notifications; deny the rest.
-                    if request
+                    // Ask the user (once per permission type, then remember the choice)
+                    // for the permissions Sable actually uses; deny anything else.
+                    let decision = if request
                         .downcast_ref::<UserMediaPermissionRequest>()
                         .is_some()
-                        || request
-                            .downcast_ref::<NotificationPermissionRequest>()
-                            .is_some()
                     {
-                        request.allow();
+                        Some(("media", "Allow Sable to use your camera and microphone?"))
+                    } else if request
+                        .downcast_ref::<NotificationPermissionRequest>()
+                        .is_some()
+                    {
+                        Some(("notifications", "Allow Sable to show desktop notifications?"))
+                    } else if request
+                        .downcast_ref::<GeolocationPermissionRequest>()
+                        .is_some()
+                    {
+                        Some(("geolocation", "Allow Sable to access your location?"))
                     } else {
-                        request.deny();
+                        None
+                    };
+
+                    match decision {
+                        Some((key, message))
+                            if resolve_webview_permission(&app_handle, key, message) =>
+                        {
+                            request.allow();
+                        }
+                        _ => request.deny(),
                     }
                     true
                 });
