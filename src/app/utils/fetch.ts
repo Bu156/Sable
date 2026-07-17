@@ -35,6 +35,9 @@ const isLoopbackHost = (hostname: string): boolean =>
 
 const isNetworkUrl = (url: URL): boolean => url.protocol === 'http:' || url.protocol === 'https:';
 
+// Tauri custom-protocol hosts (`<scheme>.localhost`) are served by the webview, not the network.
+const isTauriProtocolHost = (hostname: string): boolean => hostname.endsWith('.localhost');
+
 const getAbortSignal = (input: RequestInfo | URL, init?: RequestInit): AbortSignal | undefined => {
   if (input instanceof Request) {
     return init?.signal ?? input.signal ?? undefined;
@@ -161,7 +164,7 @@ export const fetch: AppFetch = async (input, init) => {
   const request = new Request(input, init);
   const url = new URL(request.url, window.location.href);
 
-  if (!isNetworkUrl(url) || isSameOriginUrl(url)) {
+  if (!isNetworkUrl(url) || isSameOriginUrl(url) || isTauriProtocolHost(url.hostname)) {
     return nativeFetch(input, init);
   }
 
