@@ -86,7 +86,7 @@ function isMatrixMediaPath(pathname: string): boolean {
   return MATRIX_MEDIA_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-function isTrustedMatrixMediaUrl(url: string, baseUrl: string | undefined): boolean {
+export function isTrustedMatrixMediaUrl(url: string, baseUrl: string | undefined): boolean {
   if (!baseUrl) return false;
 
   try {
@@ -120,6 +120,14 @@ function getStoredAccessToken(url: string): string | undefined {
     return fallbackAccessToken;
   }
 
+  return undefined;
+}
+
+export function getActiveMediaSession(): { baseUrl: string; accessToken: string } | undefined {
+  const activeSession = getActiveStoredSession();
+  if (activeSession?.baseUrl && activeSession.accessToken) {
+    return { baseUrl: activeSession.baseUrl, accessToken: activeSession.accessToken };
+  }
   return undefined;
 }
 

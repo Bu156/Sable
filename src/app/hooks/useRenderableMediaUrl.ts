@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
+import { isTauri } from '@tauri-apps/api/core';
 import { activeSessionIdAtom } from '$state/sessions';
 import { fetchMediaBlob, getCurrentMediaSessionScope } from '$utils/mediaTransport';
 import { hasControllingServiceWorker, hasServiceWorker } from '$utils/platform';
+import { rewriteAuthenticatedMediaUrl } from '$utils/matrix';
 
 type ObjectUrlEntry = {
   refs: number;
@@ -91,6 +93,7 @@ export function getRenderableMediaUrlStats(): { cacheSize: number; inflightCount
 }
 
 export function useRenderableMediaUrl(url: string | undefined): string | undefined {
+  const tauri = isTauri();
   const activeSessionId = useAtomValue(activeSessionIdAtom);
   const sessionScope = activeSessionId ?? getCurrentMediaSessionScope();
   const renderableUrl = normalizeRenderableMediaUrl(url);
@@ -109,6 +112,7 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
   }));
 
   useEffect(() => {
+    if (tauri) return undefined;
     if (!hasServiceWorker()) {
       setUsesControlledServiceWorker(false);
       return undefined;
@@ -134,6 +138,7 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
   }, []);
 
   useEffect(() => {
+    if (tauri) return undefined;
     if (!renderableUrl) {
       setResolvedState({ cacheKey: undefined, url: undefined });
       return undefined;
@@ -177,6 +182,10 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
       releaseObjectUrlEntry(objectUrlCacheKey);
     };
   }, [needsBlob, objectUrlCacheKey, renderableUrl, usesExistingObjectUrl]);
+
+  if (tauri) {
+    return rewriteAuthenticatedMediaUrl(url ?? null) ?? undefined;
+  }
 
   if (!needsBlob || usesExistingObjectUrl) {
     return renderableUrl;

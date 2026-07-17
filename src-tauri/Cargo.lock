@@ -3955,8 +3955,10 @@ version = "0.1.0"
 dependencies = [
  "enigo",
  "log",
+ "percent-encoding",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",

@@ -83,6 +83,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
+        .manage(network::media_protocol::MediaSessionState::default())
+        .register_asynchronous_uri_scheme_protocol(
+            network::media_protocol::MEDIA_URI_SCHEME,
+            network::media_protocol::respond,
+        )
         .setup(|app| {
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
@@ -107,6 +112,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             network::loopback_http::abort_loopback_fetch,
             network::loopback_http::loopback_fetch,
+            network::media_protocol::set_media_session,
+            network::media_protocol::clear_media_session,
             #[cfg(desktop)]
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]

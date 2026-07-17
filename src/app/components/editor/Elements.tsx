@@ -7,7 +7,6 @@ import * as css from '$styles/CustomHtml.css';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { AuthenticatedImg } from '$components/AuthenticatedImg';
 import { nicknamesAtom } from '$state/nicknames';
 import { BlockType } from './types';
 import { formatMentionElementDisplayName, getBeginCommand } from './utils';
@@ -92,7 +91,7 @@ function RenderEmoticonElement({
         contentEditable={false}
       >
         {element.key.startsWith('mxc://') ? (
-          <AuthenticatedImg
+          <img
             className={css.EmoticonImg}
             src={mxcUrlToHttp(mx, element.key, useAuthentication) ?? undefined}
             alt={element.shortcode}

@@ -26,6 +26,7 @@ import { createLogger } from './app/utils/debug';
 import { getLocalStorageItem } from './app/state/utils/atomWithLocalStorage';
 import { installConsolePasteScamWarning } from './app/utils/consolePasteScamWarning';
 import { registerMatrixUriProtocol } from './app/plugins/matrix-uri';
+import { initTauriMediaSession } from './app/utils/tauriMediaAuth';
 
 enableMapSet();
 installConsolePasteScamWarning();
@@ -58,6 +59,8 @@ const sendSessionToSW = () => {
   const active = sessions.find((s) => s.userId === activeId) ?? sessions[0] ?? getFallbackSession();
   pushSessionToSW(active?.baseUrl, active?.accessToken, active?.userId);
 };
+
+initTauriMediaSession();
 
 if ('serviceWorker' in navigator && !isTauri()) {
   const isProduction = import.meta.env.MODE === 'production';

@@ -1,5 +1,6 @@
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { decryptAttachment, encryptAttachment } from 'browser-encrypt-attachment';
+import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import type {
   AccountDataEvents,
   EventTimelineSet,
@@ -314,6 +315,14 @@ export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string):
   );
 };
 
+export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | null => {
+  if (!httpUrl) return null;
+  if (!isTauri()) return httpUrl;
+  if (httpUrl.startsWith('sable-media://')) return httpUrl;
+  if (!httpUrl.includes('/_matrix/client/v1/media/')) return httpUrl;
+  return convertFileSrc(httpUrl, 'sable-media');
+};
+
 export const mxcUrlToHttp = (
   mx: MatrixClient,
   mxcUrl: string,
@@ -322,8 +331,8 @@ export const mxcUrlToHttp = (
   height?: number,
   resizeMethod?: string,
   allowDirectLinks?: boolean
-): string | null =>
-  mx.mxcUrlToHttp(
+): string | null => {
+  const httpUrl = mx.mxcUrlToHttp(
     mxcUrl.replace(/^["']|["']$/g, ''),
     width,
     height,
@@ -332,6 +341,14 @@ export const mxcUrlToHttp = (
     undefined,
     useAuthentication
   );
+
+  // Authenticated media has no service worker under Tauri to attach the token, so route it
+  // through the native sable-media:// protocol which injects the token in Rust.
+  if (httpUrl && useAuthentication) {
+    return rewriteAuthenticatedMediaUrl(httpUrl);
+  }
+  return httpUrl;
+};
 
 export const downloadMedia = async (src: string, options?: MediaTransportOptions): Promise<Blob> =>
   fetchMediaBlob(src, options);

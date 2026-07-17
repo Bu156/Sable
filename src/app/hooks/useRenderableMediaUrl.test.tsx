@@ -13,8 +13,14 @@ const mediaTransport = vi.hoisted(() => ({
   getCurrentMediaSessionScope: vi.fn(() => 'anonymous'),
 }));
 
+const tauriApi = vi.hoisted(() => ({
+  isTauri: vi.fn(),
+  convertFileSrc: vi.fn((url: string, protocol: string) => `${protocol}://${url}`),
+}));
+
 vi.mock('$utils/platform', () => platform);
 vi.mock('$utils/mediaTransport', () => mediaTransport);
+vi.mock('@tauri-apps/api/core', () => tauriApi);
 
 describe('useRenderableMediaUrl', () => {
   beforeEach(() => {
@@ -24,6 +30,9 @@ describe('useRenderableMediaUrl', () => {
     mediaTransport.fetchMediaBlob.mockReset();
     mediaTransport.getCurrentMediaSessionScope.mockReset();
     mediaTransport.getCurrentMediaSessionScope.mockReturnValue('anonymous');
+    tauriApi.isTauri.mockReset();
+    tauriApi.convertFileSrc.mockReset();
+    tauriApi.convertFileSrc.mockImplementation((url: string, protocol: string) => `${protocol}://${url}`);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:rendered-media');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     Object.defineProperty(navigator, 'serviceWorker', {
@@ -190,5 +199,37 @@ describe('useRenderableMediaUrl', () => {
 
     second.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:rendered-media');
+  });
+
+  it('rewrites raw authenticated-media https URLs under Tauri', async () => {
+    tauriApi.isTauri.mockReturnValue(true);
+    const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
+
+    const rawAuthUrl = 'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96&height=96';
+    const { result } = renderHook(() => useRenderableMediaUrl(rawAuthUrl));
+
+    expect(result.current).toBe(`sable-media://${rawAuthUrl}`);
+    expect(tauriApi.convertFileSrc).toHaveBeenCalledWith(rawAuthUrl, 'sable-media');
+  });
+
+  it('passes through already-rewritten sable-media:// URLs under Tauri', async () => {
+    tauriApi.isTauri.mockReturnValue(true);
+    const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
+
+    const rewrittenUrl = 'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
+    const { result } = renderHook(() => useRenderableMediaUrl(rewrittenUrl));
+
+    expect(result.current).toBe(rewrittenUrl);
+    expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
+  });
+
+  it('passes through non-authenticated URLs unchanged under Tauri', async () => {
+    tauriApi.isTauri.mockReturnValue(true);
+    const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
+
+    const { result } = renderHook(() => useRenderableMediaUrl('https://example.org/avatar.png'));
+
+    expect(result.current).toBe('https://example.org/avatar.png');
+    expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
   });
 });
