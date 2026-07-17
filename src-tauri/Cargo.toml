@@ -27,7 +27,7 @@ ts-rs = "12.0.0"
 sha2 = "0.10"
 percent-encoding = "2"
 
-tauri = { version = "2.11.0", default-features = false, features = ["tray-icon", "dynamic-acl", "compression", "devtools", "x11", "common-controls-v6", "dbus"] }
+tauri = { version = "2.11.0", default-features = false, features = ["tray-icon", "dynamic-acl", "compression", "x11", "common-controls-v6", "dbus"] }
 
 tauri-plugin-log = "2.8.0"
 tauri-plugin-opener = "2.5.4"
