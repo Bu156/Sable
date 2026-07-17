@@ -55,7 +55,10 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     {
         use tauri::Manager;
         use webkit2gtk::glib::prelude::Cast;
-        use webkit2gtk::{PermissionRequestExt, SettingsExt, UserMediaPermissionRequest, WebViewExt};
+        use webkit2gtk::{
+            NotificationPermissionRequest, PermissionRequestExt, SettingsExt,
+            UserMediaPermissionRequest, WebViewExt,
+        };
         if let Some(wv) = app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = wv.with_webview(|webview| {
                 let gtk_webview = webview.inner();
@@ -66,10 +69,13 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
                     settings.set_enable_media(true);
                 }
                 gtk_webview.connect_permission_request(move |_wv, request| {
-                    // Only auto-grant camera/mic (for calls); deny geolocation, notifications, etc.
+                    // Auto-grant camera/mic (for calls) and desktop notifications; deny the rest.
                     if request
                         .downcast_ref::<UserMediaPermissionRequest>()
                         .is_some()
+                        || request
+                            .downcast_ref::<NotificationPermissionRequest>()
+                            .is_some()
                     {
                         request.allow();
                     } else {
@@ -87,6 +93,12 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::<BrowserEngine>::new();
+
+    // macOS needs a standard menu (with the Edit submenu) for keyboard
+    // copy/paste/select-all to work in the webview. It lives in the system menu
+    // bar, so it is macOS-only to avoid an in-window menu bar elsewhere.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(|handle| tauri::menu::Menu::default(handle));
 
     #[cfg(desktop)]
     let builder = builder.plugin(
