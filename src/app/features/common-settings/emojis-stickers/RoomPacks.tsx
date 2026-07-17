@@ -1,10 +1,9 @@
-import { FormEventHandler, useCallback, useMemo, useState } from 'react';
+import type { FormEventHandler } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Box,
   Text,
   Button,
-  Icon,
-  Icons,
   Avatar,
   AvatarImage,
   AvatarFallback,
@@ -16,15 +15,11 @@ import {
   IconButton,
   Menu,
 } from 'folds';
-import { MatrixError } from '$types/matrix-sdk';
+import { composerIcon, menuIcon, Plus, Sticker, X } from '$components/icons/phosphor';
+import type { MatrixError } from '$types/matrix-sdk';
 import { SequenceCard } from '$components/sequence-card';
-import {
-  ImagePack,
-  ImageUsage,
-  PackAddress,
-  packAddressEqual,
-  PackContent,
-} from '$plugins/custom-emoji';
+import type { ImagePack, PackAddress, PackContent } from '$plugins/custom-emoji';
+import { ImageUsage, packAddressEqual } from '$plugins/custom-emoji';
 import { useRoom } from '$hooks/useRoom';
 import { useRoomImagePacks } from '$hooks/useImagePacks';
 import { LineClamp2 } from '$styles/Text.css';
@@ -34,13 +29,14 @@ import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { usePowerLevels } from '$hooks/usePowerLevels';
-import { StateEvent } from '$types/matrix/room';
+
 import { suffixRename } from '$utils/common';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAlive } from '$hooks/useAlive';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { SequenceCardStyle } from '$features/common-settings/styles.css';
+import { CustomStateEvent } from '$types/matrix/room';
 
 function PackAvatarImage({ url }: { url: string }) {
   const resolved = useRenderableMediaUrl(url);
@@ -63,7 +59,7 @@ function CreatePackTile({ packs, roomId }: Readonly<CreatePackTileProps>) {
             display_name: name,
           },
         };
-        await mx.sendStateEvent(roomId, StateEvent.PoniesRoomEmotes as any, content, stateKey);
+        await mx.sendStateEvent(roomId, CustomStateEvent.ImagePack, content, stateKey);
       },
       [mx, roomId]
     )
@@ -157,7 +153,7 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canEdit = permissions.stateEvent(StateEvent.PoniesRoomEmotes, mx.getSafeUserId());
+  const canEdit = permissions.stateEvent(CustomStateEvent.ImagePack, mx.getSafeUserId());
 
   const unfilteredPacks = useRoomImagePacks(room);
   const packs = useMemo(() => unfilteredPacks.filter((pack) => !pack.deleted), [unfilteredPacks]);
@@ -169,8 +165,9 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
     useCallback(async () => {
       for (let i = 0; i < removedPacks.length; i += 1) {
         const addr = removedPacks[i];
-        // eslint-disable-next-line no-await-in-loop
-        await mx.sendStateEvent(room.roomId, StateEvent.PoniesRoomEmotes as any, {}, addr.stateKey);
+        if (!addr) continue;
+        // oxlint-disable-next-line no-await-in-loop
+        await mx.sendStateEvent(room.roomId, CustomStateEvent.ImagePack, {}, addr.stateKey);
       }
     }, [mx, room, removedPacks])
   );
@@ -227,7 +224,7 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
                     onClick={() => handleUndoRemove(address)}
                     disabled={applyingChanges}
                   >
-                    <Icon src={Icons.Plus} size="100" />
+                    {menuIcon(Plus)}
                   </IconButton>
                 ) : (
                   <IconButton
@@ -237,16 +234,14 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
                     onClick={() => handleRemove(address)}
                     disabled={applyingChanges}
                   >
-                    <Icon src={Icons.Cross} size="100" />
+                    {menuIcon(X)}
                   </IconButton>
                 ))}
               <Avatar size="300" radii="300">
                 {avatarUrl ? (
                   <PackAvatarImage url={avatarUrl} />
                 ) : (
-                  <AvatarFallback>
-                    <Icon size="400" src={Icons.Sticker} filled />
-                  </AvatarFallback>
+                  <AvatarFallback>{composerIcon(Sticker, { weight: 'fill' })}</AvatarFallback>
                 )}
               </Avatar>
             </Box>

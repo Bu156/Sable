@@ -1,5 +1,8 @@
-import { MouseEventHandler, useCallback, useMemo, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
+import { CaretDown, chipIcon, composerIcon, X } from '$components/icons/phosphor';
+import type { RectCords } from 'folds';
 import {
   Dialog,
   Overlay,
@@ -10,23 +13,21 @@ import {
   Box,
   Text,
   IconButton,
-  Icon,
-  Icons,
   color,
   Button,
   Spinner,
   Chip,
   PopOut,
-  RectCords,
 } from 'folds';
-import { Direction, MatrixError } from '$types/matrix-sdk';
+import type { MatrixError } from '$types/matrix-sdk';
+import { Direction, EventType } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { stopPropagation } from '$utils/keyboard';
 import { useAlive } from '$hooks/useAlive';
 import { useStateEvent } from '$hooks/useStateEvent';
 import { useRoom } from '$hooks/useRoom';
-import { StateEvent } from '$types/matrix/room';
+
 import { getToday, getYesterday, timeDayMonthYear, timeHourMinute } from '$utils/time';
 import { DatePicker, TimePicker } from '$components/time-date';
 import { useSetting } from '$state/hooks/settings';
@@ -40,7 +41,7 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
   const mx = useMatrixClient();
   const room = useRoom();
   const alive = useAlive();
-  const createStateEvent = useStateEvent(room, StateEvent.RoomCreate);
+  const createStateEvent = useStateEvent(room, EventType.RoomCreate);
 
   const todayTs = getToday();
   const yesterdayTs = getYesterday();
@@ -109,7 +110,7 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
                 <Text size="H4">Jump to Time</Text>
               </Box>
               <IconButton size="300" onClick={onCancel} radii="300">
-                <Icon src={Icons.Cross} />
+                {composerIcon(X)}
               </IconButton>
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="500">
@@ -126,7 +127,7 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
                       outlined
                       radii="300"
                       aria-pressed={!!timePickerCords}
-                      after={<Icon size="50" src={Icons.ChevronBottom} />}
+                      after={chipIcon(CaretDown)}
                       onClick={handleTimePicker}
                     >
                       <Text size="B300">{timeHourMinute(ts, hour24Clock)}</Text>
@@ -167,7 +168,7 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
                       outlined
                       radii="300"
                       aria-pressed={!!datePickerCords}
-                      after={<Icon size="50" src={Icons.ChevronBottom} />}
+                      after={chipIcon(CaretDown)}
                       onClick={handleDatePicker}
                     >
                       <Text size="B300">{timeDayMonthYear(ts)}</Text>

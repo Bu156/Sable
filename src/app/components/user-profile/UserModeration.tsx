@@ -1,4 +1,5 @@
-import { Box, Button, color, config, Icon, Icons, Spinner, Text, Input } from 'folds';
+import { Box, Button, color, config, Spinner, Text, Input } from 'folds';
+import { ArrowLeft, ArrowRight, profileIcon, Prohibit } from '$components/icons/phosphor';
 import { useCallback, useRef } from 'react';
 import { useRoom } from '$hooks/useRoom';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
@@ -256,7 +257,9 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
     <Box direction="Column" gap="400">
       <Box direction="Column" gap="200">
         <Box grow="Yes" direction="Column" gap="100">
-          <Text size="L400">Moderation</Text>
+          <Text size="L400" align="Center">
+            Moderation
+          </Text>
           <Input
             ref={reasonInputRef}
             placeholder="Reason"
@@ -293,7 +296,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
                 inviteState.status === AsyncStatus.Loading ? (
                   <Spinner size="50" variant="Secondary" fill="Soft" />
                 ) : (
-                  <Icon size="50" src={Icons.ArrowRight} />
+                  profileIcon(ArrowRight)
                 )
               }
               onClick={invite}
@@ -313,7 +316,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
                 kickState.status === AsyncStatus.Loading ? (
                   <Spinner size="50" variant="Critical" fill="Soft" />
                 ) : (
-                  <Icon size="50" src={Icons.ArrowLeft} />
+                  profileIcon(ArrowLeft)
                 )
               }
               onClick={kick}
@@ -333,7 +336,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
                 banState.status === AsyncStatus.Loading ? (
                   <Spinner size="50" variant="Critical" fill="Solid" />
                 ) : (
-                  <Icon size="50" src={Icons.Prohibited} />
+                  profileIcon(Prohibit)
                 )
               }
               onClick={ban}

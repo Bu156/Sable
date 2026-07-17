@@ -1,5 +1,7 @@
-import { Badge, Box, Icon, Icons, ProgressBar, Text, percent } from 'folds';
-import { ReactNode, forwardRef } from 'react';
+import { Badge, Box, ProgressBar, Text, percent } from 'folds';
+import { Warning, sizedIcon } from '$components/icons/phosphor';
+import type { ReactNode } from 'react';
+import { forwardRef } from 'react';
 
 import { bytesToSize } from '$utils/common';
 import * as css from './UploadCard.css';
@@ -11,25 +13,27 @@ type UploadCardProps = {
   bottom?: ReactNode;
 };
 
-export const UploadCard = forwardRef<HTMLDivElement, UploadCardProps & css.UploadCardVariant>(
-  ({ before, after, children, bottom, radii, outlined, compact }, ref) => (
-    <Box
-      className={css.UploadCard({ radii, outlined, compact })}
-      direction="Column"
-      gap="200"
-      ref={ref}
-    >
-      <Box alignItems="Center" gap="200">
-        {before}
-        <Box alignItems="Center" grow="Yes" gap="200">
-          {children}
-        </Box>
-        {after}
+export const UploadCard = forwardRef<
+  HTMLDivElement,
+  UploadCardProps & css.UploadCardVariant & { style?: React.CSSProperties }
+>(({ before, after, children, bottom, radii, outlined, compact, style }, ref) => (
+  <Box
+    className={css.UploadCard({ radii, outlined, compact })}
+    direction="Column"
+    gap="200"
+    style={style}
+    ref={ref}
+  >
+    <Box alignItems="Center" gap="200">
+      {before}
+      <Box alignItems="Center" grow="Yes" gap="200">
+        {children}
       </Box>
-      {bottom}
+      {after}
     </Box>
-  )
-);
+    {bottom}
+  </Box>
+));
 
 type UploadCardProgressProps = {
   sentBytes: number;
@@ -79,7 +83,7 @@ type UploadCardErrorProps = {
 export function UploadCardError({ children }: UploadCardErrorProps) {
   return (
     <Box className={css.UploadCardError} alignItems="Center" gap="300">
-      <Icon src={Icons.Warning} size="50" />
+      {sizedIcon(Warning, '50')}
       {children}
     </Box>
   );

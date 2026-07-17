@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Box, Button, config, Text, Input, IconButton, Icon, Icons } from 'folds';
+import { Box, Button, config, Text, Input, IconButton } from 'folds';
+import { menuIcon, X } from '$components/icons/phosphor';
 import { HexColorPicker } from 'react-colorful';
 import { SettingTile } from '$components/setting-tile';
 import { HexColorPickerPopOut } from '$components/HexColorPickerPopOut';
@@ -13,6 +14,11 @@ type NameColorEditorProps = {
   disabled?: boolean;
 };
 
+const stripQuotes = (str?: string) => {
+  if (!str) return '';
+  // to solve the silly tuwunel
+  return str.replaceAll(/^["']|["']$/g, '');
+};
 export function NameColorEditor({
   title,
   description,
@@ -21,12 +27,6 @@ export function NameColorEditor({
   onSave,
   disabled,
 }: Readonly<NameColorEditorProps>) {
-  const stripQuotes = (str?: string) => {
-    if (!str) return '';
-    // to solve the silly tuwunel
-    return str.replaceAll(/^["']|["']$/g, '');
-  };
-
   const [tempColor, setTempColor] = useState(stripQuotes(current) || '#FFFFFF');
   const [hasChanged, setHasChanged] = useState(false);
 
@@ -139,7 +139,7 @@ export function NameColorEditor({
                     onClick={handleReset}
                     title="Reset to default"
                   >
-                    <Icon src={Icons.Cross} size="100" />
+                    {menuIcon(X)}
                   </IconButton>
                 )}
               </Box>

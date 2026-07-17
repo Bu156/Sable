@@ -38,13 +38,18 @@ globalStyle(
 globalStyle(
   `
     button[class*="_1684mq51"]:has(img):hover,
-    [data-index] [class*="_1r9nvaso"]:hover,
-    [data-index] [class*="_1r9nvaso"] *:hover,
-    [data-index] button:has(p):hover,
     [data-index] button:hover,
     [data-index] [role="button"]:hover
 `,
   {
     transform: 'none !important',
+  }
+);
+
+globalStyle(
+  'button[data-no-button-motion], button[data-no-button-motion]:hover, button[data-no-button-motion]:active',
+  {
+    transform: 'none !important',
+    transition: 'none !important',
   }
 );

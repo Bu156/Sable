@@ -1,11 +1,6 @@
-import { Scroll, Text } from 'folds';
-import {
-  RenderElementProps,
-  RenderLeafProps,
-  useFocused,
-  useSelected,
-  useSlate,
-} from 'slate-react';
+import { Text } from 'folds';
+import type { RenderElementProps, RenderLeafProps } from 'slate-react';
+import { useFocused, useSelected, useSlate } from 'slate-react';
 import { useAtomValue } from 'jotai';
 
 import * as css from '$styles/CustomHtml.css';
@@ -15,8 +10,8 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { AuthenticatedImg } from '$components/AuthenticatedImg';
 import { nicknamesAtom } from '$state/nicknames';
 import { BlockType } from './types';
-import { getBeginCommand } from './utils';
-import { CommandElement, EmoticonElement, LinkElement, MentionElement } from './slate';
+import { formatMentionElementDisplayName, getBeginCommand } from './utils';
+import type { CommandElement, EmoticonElement, LinkElement, MentionElement } from './slate';
 
 // Put this at the start and end of an inline component to work around this Chromium bug:
 // https://bugs.chromium.org/p/chromium/issues/detail?id=1249405
@@ -38,7 +33,7 @@ function RenderMentionElement({
   const nicknames = useAtomValue(nicknamesAtom);
 
   const nickname = nicknames[element.id];
-  const displayName = nickname ? `@${nickname}` : element.name;
+  const displayName = nickname ? `@${nickname}` : formatMentionElementDisplayName(element);
 
   return (
     <span
@@ -136,72 +131,6 @@ export function RenderElement({ attributes, element, children }: RenderElementPr
           {children}
         </Text>
       );
-    case BlockType.Heading:
-      if (element.level === 1)
-        return (
-          <Text className={css.Heading} as="h2" size="H2" {...attributes}>
-            {children}
-          </Text>
-        );
-      if (element.level === 2)
-        return (
-          <Text className={css.Heading} as="h3" size="H3" {...attributes}>
-            {children}
-          </Text>
-        );
-      if (element.level === 3)
-        return (
-          <Text className={css.Heading} as="h4" size="H4" {...attributes}>
-            {children}
-          </Text>
-        );
-      return (
-        <Text className={css.Heading} as="h3" size="H3" {...attributes}>
-          {children}
-        </Text>
-      );
-    case BlockType.CodeLine:
-      return <div {...attributes}>{children}</div>;
-    case BlockType.CodeBlock:
-      return (
-        <Text as="pre" className={css.CodeBlock} {...attributes}>
-          <Scroll
-            direction="Horizontal"
-            variant="SurfaceVariant"
-            size="300"
-            visibility="Hover"
-            hideTrack
-          >
-            <div className={css.CodeBlockInternal}>{children}</div>
-          </Scroll>
-        </Text>
-      );
-    case BlockType.QuoteLine:
-      return <div {...attributes}>{children}</div>;
-    case BlockType.BlockQuote:
-      return (
-        <Text as="blockquote" className={css.BlockQuote} {...attributes}>
-          {children}
-        </Text>
-      );
-    case BlockType.ListItem:
-      return (
-        <Text as="li" {...attributes}>
-          {children}
-        </Text>
-      );
-    case BlockType.OrderedList:
-      return (
-        <ol className={css.List} {...attributes}>
-          {children}
-        </ol>
-      );
-    case BlockType.UnorderedList:
-      return (
-        <ul className={css.List} {...attributes}>
-          {children}
-        </ul>
-      );
     case BlockType.Mention:
       return (
         <RenderMentionElement attributes={attributes} element={element}>
@@ -226,19 +155,6 @@ export function RenderElement({ attributes, element, children }: RenderElementPr
           {children}
         </RenderCommandElement>
       );
-    case BlockType.Small:
-      return (
-        <Text {...attributes} className={css.Small}>
-          {children}
-        </Text>
-      );
-    case BlockType.HorizontalRule:
-      return (
-        <div {...attributes}>
-          <div contentEditable={false} className={css.HorizontalRule} />
-          {children}
-        </div>
-      );
     default:
       return (
         <Text
@@ -252,52 +168,6 @@ export function RenderElement({ attributes, element, children }: RenderElementPr
   }
 }
 
-export function RenderLeaf({ attributes, leaf, children }: RenderLeafProps) {
-  let child = children;
-  if (leaf.bold)
-    child = (
-      <strong {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </strong>
-    );
-  if (leaf.italic)
-    child = (
-      <i {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </i>
-    );
-  if (leaf.underline)
-    child = (
-      <u {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </u>
-    );
-  if (leaf.strikeThrough)
-    child = (
-      <s {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </s>
-    );
-  if (leaf.code)
-    child = (
-      <code className={css.Code} {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </code>
-    );
-  if (leaf.spoiler)
-    child = (
-      <span className={css.Spoiler()} {...attributes}>
-        <InlineChromiumBugfix />
-        {child}
-      </span>
-    );
-
-  if (child !== children) return child;
-
-  return <span {...attributes}>{child}</span>;
+export function RenderLeaf({ attributes, children }: RenderLeafProps) {
+  return <span {...attributes}>{children}</span>;
 }

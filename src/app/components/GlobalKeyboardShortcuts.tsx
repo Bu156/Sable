@@ -16,12 +16,22 @@ import { roomToParentsAtom } from '$state/room/roomToParents';
 import { mDirectAtom } from '$state/mDirectList';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useKeyDown } from '$hooks/useKeyDown';
-import { getDirectRoomPath, getHomeRoomPath, getSpaceRoomPath } from '$pages/pathUtils';
+import {
+  getDirectRoomPath,
+  getHomeRoomPath,
+  getHomeSearchPath,
+  getInboxBookmarksPath,
+  getSpaceRoomPath,
+  getSpaceSearchPath,
+  withSearchParam,
+} from '$pages/pathUtils';
+import type { SearchPathSearchParams } from '$pages/paths';
 import { HOME_ROOM_PATH, DIRECT_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
 import { announce } from '$utils/announce';
 import { roomIdToReplyDraftAtomFamily } from '$state/room/roomInputDrafts';
-import { Room } from 'matrix-js-sdk';
+import type { Room } from '$types/matrix-sdk';
+import { useSelectedSpace } from '$hooks/router/useSelectedSpace';
 
 export function GlobalKeyboardShortcuts() {
   const navigate = useNavigate();
@@ -40,7 +50,9 @@ export function GlobalKeyboardShortcuts() {
   const roomIdOrAlias = roomMatch?.params.roomIdOrAlias
     ? decodeURIComponent(roomMatch.params.roomIdOrAlias)
     : undefined;
+  const currentSpace = useSelectedSpace();
   let currentRoom: Room | null = null;
+
   if (roomIdOrAlias) {
     if (roomIdOrAlias.startsWith('!')) {
       currentRoom = mx.getRoom(roomIdOrAlias);
@@ -63,6 +75,10 @@ export function GlobalKeyboardShortcuts() {
         const parents = roomToParents.get(roomId);
         if (parents && parents.size > 0) {
           const spaceId = Array.from(parents)[0];
+          if (!spaceId) {
+            navigate(getHomeRoomPath(roomIdOrAliasToNav));
+            return;
+          }
           const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, spaceId);
           navigate(getSpaceRoomPath(spaceIdOrAlias, roomIdOrAliasToNav));
         } else {
@@ -82,11 +98,11 @@ export function GlobalKeyboardShortcuts() {
       if (!isKeyHotkey('alt+n', evt)) return;
       const unreadEntries = Array.from(roomToUnread.entries())
         .filter(([id, u]) => u.total > 0 && id !== currentRoom?.roomId)
-        .sort((a, b) => b[1].highlight - a[1].highlight || b[1].total - a[1].total);
+        .toSorted((a, b) => b[1].highlight - a[1].highlight || b[1].total - a[1].total);
       if (unreadEntries.length === 0) return;
       evt.preventDefault();
       unreadIndexRef.current = 0;
-      const [roomId] = unreadEntries[0];
+      const [roomId] = unreadEntries[0]!;
       navigateToRoom(roomId, unreadEntries.length - 1);
     },
     [roomToUnread, currentRoom?.roomId, navigateToRoom]
@@ -100,7 +116,7 @@ export function GlobalKeyboardShortcuts() {
       if (!isDown && !isUp) return;
       const unreadEntries = Array.from(roomToUnread.entries())
         .filter(([, u]) => u.total > 0)
-        .sort((a, b) => b[1].highlight - a[1].highlight || b[1].total - a[1].total);
+        .toSorted((a, b) => b[1].highlight - a[1].highlight || b[1].total - a[1].total);
       if (unreadEntries.length === 0) return;
       evt.preventDefault();
       if (isDown) {
@@ -109,7 +125,9 @@ export function GlobalKeyboardShortcuts() {
         unreadIndexRef.current =
           (unreadIndexRef.current - 1 + unreadEntries.length) % unreadEntries.length;
       }
-      const [roomId] = unreadEntries[unreadIndexRef.current];
+      const currentEntry = unreadEntries[unreadIndexRef.current];
+      if (!currentEntry) return;
+      const [roomId] = currentEntry;
       navigateToRoom(roomId, unreadEntries.length - 1);
     },
     [roomToUnread, navigateToRoom]
@@ -137,6 +155,7 @@ export function GlobalKeyboardShortcuts() {
       const currentReplyIndex = events.findIndex((e) => e.event.event_id === replyDraft.eventId);
       if (currentReplyIndex === events.length - 1 && isDown) return; // you cant go further down than that idiot
       const newTargetEvent = isUp ? events[currentReplyIndex - 1] : events[currentReplyIndex + 1];
+      if (!newTargetEvent) return;
       const eventId = newTargetEvent.event.event_id;
       if (eventId === undefined) return;
       setReplyDraft({ userId: currentRoom.myUserId, eventId, body: '' });
@@ -144,9 +163,41 @@ export function GlobalKeyboardShortcuts() {
     [currentRoom, replyDraft, setReplyDraft]
   );
 
+  const handleBookmarkKeyDown = useCallback(
+    (evt: KeyboardEvent) => {
+      if (!isKeyHotkey('mod+b', evt)) return;
+      evt.preventDefault();
+
+      navigate(getInboxBookmarksPath());
+      announce(`Navigated to bookmarks`);
+    },
+    [navigate]
+  );
+
+  /** Ctrl+F: Search for messages */
+  const handleSearchMessageInRoom = useCallback(
+    (evt: KeyboardEvent) => {
+      if (!isKeyHotkey('mod+f', evt)) return;
+      evt.preventDefault();
+
+      const searchParams: SearchPathSearchParams = {
+        rooms: currentRoom?.roomId,
+      };
+      const path = currentSpace
+        ? getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, currentSpace))
+        : getHomeSearchPath();
+      const roomName = mx.getRoom(currentRoom?.roomId)?.name;
+      navigate(withSearchParam(path, searchParams));
+      announce(`Start Searching messages ${roomName ? `in ${roomName}` : ''}`);
+    },
+    [mx, currentRoom, currentSpace, navigate]
+  );
+
   useKeyDown(window, handleNextUnreadKeyDown);
   useKeyDown(window, handleUnreadNavKeyDown);
   useKeyDown(window, handleReplyKeyDown);
+  useKeyDown(window, handleBookmarkKeyDown);
+  useKeyDown(window, handleSearchMessageInRoom);
 
   return null;
 }

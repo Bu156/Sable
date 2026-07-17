@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Transforms } from 'slate';
-import { Box, Text, config, toRem } from 'folds';
+import { Box, Text, config } from 'folds';
 import { EventType } from '$types/matrix-sdk';
 import { ReactEditor } from 'slate-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { useStateEvent } from '$hooks/useStateEvent';
-import { StateEvent } from '$types/matrix/room';
+
 import { usePowerLevelsContext } from '$hooks/usePowerLevels';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useEditor, resetEditor } from '$components/editor';
@@ -84,12 +84,12 @@ export function RoomView({ eventId }: { eventId?: string }) {
 
   const mx = useMatrixClient();
 
-  const tombstoneEvent = useStateEvent(room, StateEvent.RoomTombstone);
+  const tombstoneEvent = useStateEvent(room, EventType.RoomTombstone);
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canMessage = permissions.event(EventType.RoomMessage, mx.getSafeUserId());
+  const canMessage = permissions.message(room.hasEncryptionStateEvent(), mx.getSafeUserId());
 
   const [editorResetKey, setEditorResetKey] = useState(0);
   const handleResetEditor = useCallback(() => setEditorResetKey((prev) => prev + 1), []);
@@ -141,14 +141,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   return (
     <BackRouteHandler>
       {(onBack) => (
-        <Page
-          ref={roomViewRef}
-          style={
-            room.isCallRoom() && screenSize === ScreenSize.Desktop
-              ? { maxWidth: toRem(399), minWidth: toRem(399) }
-              : {}
-          }
-        >
+        <Page ref={roomViewRef}>
           <SwipeableChatWrapper onOpenSidebar={onBack} onOpenMembers={handleOpenMembers}>
             <Box grow="Yes" direction="Column">
               {showCallView && (
@@ -202,8 +195,8 @@ export function RoomView({ eventId }: { eventId?: string }) {
                     )}
                   </>
                 )}
+                {hideReads ? <RoomViewFollowingPlaceholder /> : <RoomViewFollowing room={room} />}
               </div>
-              {hideReads ? <RoomViewFollowingPlaceholder /> : <RoomViewFollowing room={room} />}
             </Box>
           </SwipeableChatWrapper>
         </Page>

@@ -1,33 +1,24 @@
+import type { ReactNode } from 'react';
 import {
   Fragment,
-  ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  memo,
 } from 'react';
-import { Editor } from 'slate';
+import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { PushProcessor, Room, Direction } from '$types/matrix-sdk';
+import type { Room } from '$types/matrix-sdk';
+import { PushProcessor, Direction, EventType } from '$types/matrix-sdk';
 import classNames from 'classnames';
-import { VList, VListHandle } from 'virtua';
-import {
-  as,
-  Box,
-  Chip,
-  Icon,
-  Icons,
-  Line,
-  Text,
-  Badge,
-  color,
-  config,
-  toRem,
-  ContainerColor,
-  Spinner,
-} from 'folds';
+import type { VListHandle } from 'virtua';
+import { VList } from 'virtua';
+import type { ContainerColor } from 'folds';
+import { as, Box, Chip, Line, Text, Badge, color, config, toRem, Spinner } from 'folds';
+import { ArrowDown, ChatTeardropDots, Checks, chipIcon } from '$components/icons/phosphor';
 import { MessageBase, CompactPlaceholder, DefaultPlaceholder } from '$components/message';
 import { RoomIntro } from '$components/room-intro';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -43,12 +34,14 @@ import {
   factoryRenderLinkifyWithMention,
 } from '$plugins/react-custom-html-parser';
 import { today, yesterday, timeDayMonthYear } from '$utils/time';
+import { unwrapRelationJumpTarget } from '$utils/room';
 import { useMemberEventParser } from '$hooks/useMemberEventParser';
 import { usePowerLevelsContext } from '$hooks/usePowerLevels';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { useGetMemberPowerTag } from '$hooks/useMemberPowerTag';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { useSlidingSyncRoomLoading } from '$hooks/useSlidingSyncActiveRoom';
 import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
@@ -57,8 +50,8 @@ import { useSpaceOptionally } from '$hooks/useSpace';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useIgnoredUsers } from '$hooks/useIgnoredUsers';
 import { useImagePackRooms } from '$hooks/useImagePackRooms';
-import { settingsAtom, MessageLayout } from '$state/settings';
-import { useSetting } from '$state/hooks/settings';
+import { settingsAtom, MessageLayout, type MessageSpacing } from '$state/settings';
+import { useHiddenEventSettings, useSetting } from '$state/hooks/settings';
 import { nicknamesAtom } from '$state/nicknames';
 import { useRoomAbbreviationsContext } from '$hooks/useRoomAbbreviations';
 import { buildAbbrReplaceTextNode } from '$components/message/RenderBody';
@@ -75,7 +68,11 @@ import {
 } from '$utils/timeline';
 import { useTimelineSync } from '$hooks/timeline/useTimelineSync';
 import { useTimelineActions } from '$hooks/timeline/useTimelineActions';
-import { ProcessedEvent, useProcessedTimeline } from '$hooks/timeline/useProcessedTimeline';
+import {
+  useProcessedTimeline,
+  getProcessedRowIndexForRawTimelineIndex,
+  type ProcessedEvent,
+} from '$hooks/timeline/useProcessedTimeline';
 import { useTimelineEventRenderer } from '$hooks/timeline/useTimelineEventRenderer';
 import * as css from './RoomTimeline.css';
 
@@ -108,6 +105,167 @@ const getDayDividerText = (ts: number) => {
   return timeDayMonthYear(ts);
 };
 
+const MemoizedTimelineItem = memo(
+  function MemoizedTimelineItem({
+    eventData,
+    index,
+    showLoadingPlaceholders,
+    canPaginateBack,
+    backPaginationJSX,
+    room,
+    messageLayout,
+    messageSpacing,
+    renderMatrixEvent,
+  }: {
+    eventData: ProcessedEvent | undefined;
+    index: number;
+    showLoadingPlaceholders: boolean;
+    canPaginateBack: boolean;
+    backPaginationJSX: ReactNode | undefined;
+    room: Room;
+    messageLayout: MessageLayout;
+    messageSpacing: MessageSpacing;
+    settings: Record<string, unknown>;
+    renderMatrixEvent: ReturnType<typeof useTimelineEventRenderer>;
+    focusItem: unknown;
+    editId: string | undefined;
+    activeReplyId: string | undefined | null;
+    openThreadId: string | undefined;
+  }) {
+    if (showLoadingPlaceholders) {
+      return (
+        <MessageBase key={`placeholder-${index}`}>
+          {messageLayout === MessageLayout.Compact ? (
+            <CompactPlaceholder />
+          ) : (
+            <DefaultPlaceholder />
+          )}
+        </MessageBase>
+      );
+    }
+
+    if (!eventData) {
+      if (index === 0 && !canPaginateBack) {
+        return (
+          <Fragment key="intro-and-first">
+            {backPaginationJSX}
+            <div
+              style={{
+                padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+              }}
+            >
+              <RoomIntro room={room} />
+            </div>
+          </Fragment>
+        );
+      }
+      if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
+      return <Fragment key={index} />;
+    }
+
+    const renderedEvent = renderMatrixEvent(
+      eventData.mEvent.getType(),
+      typeof eventData.mEvent.getStateKey() === 'string',
+      eventData.id,
+      eventData.mEvent,
+      eventData.itemIndex,
+      eventData.timelineSet,
+      eventData.collapsed
+    );
+
+    const showDividers = renderedEvent !== null;
+
+    const dividers = showDividers ? (
+      <>
+        {eventData.willRenderDayDivider && (
+          <MessageBase space={messageSpacing}>
+            <TimelineDivider variant="Surface">
+              <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
+                <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
+              </Badge>
+            </TimelineDivider>
+          </MessageBase>
+        )}
+        {eventData.willRenderNewDivider && (
+          <MessageBase space={messageSpacing}>
+            <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
+              <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
+                <Text size="L400">New Messages</Text>
+              </Badge>
+            </TimelineDivider>
+          </MessageBase>
+        )}
+      </>
+    ) : null;
+
+    if (index === 0) {
+      return (
+        <Fragment key="first-item-block">
+          {!canPaginateBack && (
+            <div
+              style={{
+                padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
+              }}
+            >
+              <RoomIntro room={room} />
+            </div>
+          )}
+          {backPaginationJSX}
+          {dividers}
+          {renderedEvent}
+        </Fragment>
+      );
+    }
+
+    return (
+      <Fragment key={eventData.id}>
+        {dividers}
+        {renderedEvent}
+      </Fragment>
+    );
+  },
+  (prev, next) => {
+    if (prev.index !== next.index) return false;
+    if (prev.showLoadingPlaceholders !== next.showLoadingPlaceholders) return false;
+    if (prev.canPaginateBack !== next.canPaginateBack) return false;
+    if (prev.room !== next.room) return false;
+    if (prev.messageLayout !== next.messageLayout) return false;
+    if (prev.messageSpacing !== next.messageSpacing) return false;
+    if (prev.renderMatrixEvent !== next.renderMatrixEvent) return false;
+
+    // Shallow compare settings since it contains primitive toggles
+    const pSettings = prev.settings as Record<string, unknown>;
+    const nSettings = next.settings as Record<string, unknown>;
+    if (pSettings !== nSettings) {
+      if (Object.keys(pSettings).length !== Object.keys(nSettings).length) return false;
+      for (const key in pSettings) {
+        if (pSettings[key] !== nSettings[key]) return false;
+      }
+    }
+
+    if (prev.focusItem !== next.focusItem) return false;
+    if (prev.editId !== next.editId) return false;
+    if (prev.activeReplyId !== next.activeReplyId) return false;
+    if (prev.openThreadId !== next.openThreadId) return false;
+
+    if (prev.index === 0 && prev.backPaginationJSX !== next.backPaginationJSX) return false;
+
+    if (prev.eventData === next.eventData) return true;
+    if (!prev.eventData || !next.eventData) return false;
+
+    return (
+      prev.eventData.id === next.eventData.id &&
+      prev.eventData.collapsed === next.eventData.collapsed &&
+      prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
+      prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
+      prev.eventData.mEvent === next.eventData.mEvent &&
+      prev.eventData.eventSender === next.eventData.eventSender &&
+      prev.eventData.editId === next.eventData.editId &&
+      prev.eventData.reactionsKey === next.eventData.reactionsKey &&
+      prev.eventData.content === next.eventData.content
+    );
+  }
+);
 export type RoomTimelineProps = {
   room: Room;
   eventId?: string;
@@ -125,6 +283,7 @@ export function RoomTimeline({
 }: Readonly<RoomTimelineProps>) {
   const mx = useMatrixClient();
   const alive = useAlive();
+  const roomSyncLoading = useSlidingSyncRoomLoading(room.roomId);
 
   const { editId, handleEdit } = useMessageEdit(editor, { onReset: onEditorReset, alive });
   const { navigateRoom } = useRoomNavigate();
@@ -140,36 +299,81 @@ export function RoomTimeline({
   const [encUrlPreview] = useSetting(settingsAtom, 'encUrlPreview');
   const [clientUrlPreview] = useSetting(settingsAtom, 'clientUrlPreview');
   const [encClientUrlPreview] = useSetting(settingsAtom, 'encClientUrlPreview');
-  const [showHiddenEvents] = useSetting(settingsAtom, 'showHiddenEvents');
-  const [showTombstoneEvents] = useSetting(settingsAtom, 'showTombstoneEvents');
+  const hiddenEvents = useHiddenEventSettings(settingsAtom);
   const [showDeveloperTools] = useSetting(settingsAtom, 'developerTools');
   const [reducedMotion] = useSetting(settingsAtom, 'reducedMotion');
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
   const [autoplayStickers] = useSetting(settingsAtom, 'autoplayStickers');
   const [autoplayEmojis] = useSetting(settingsAtom, 'autoplayEmojis');
+  const [incomingInlineImagesDefaultHeight] = useSetting(
+    settingsAtom,
+    'incomingInlineImagesDefaultHeight'
+  );
+  const [incomingInlineImagesMaxHeight] = useSetting(settingsAtom, 'incomingInlineImagesMaxHeight');
   const [hideMemberInReadOnly] = useSetting(settingsAtom, 'hideMembershipInReadOnly');
+
+  const [showInteractiveMap] = useSetting(settingsAtom, 'showInteractiveMap');
+  const [showEncInteractiveMap] = useSetting(settingsAtom, 'showEncInteractiveMap');
+  const showMaps = room.hasEncryptionStateEvent() ? showEncInteractiveMap : showInteractiveMap;
 
   const showUrlPreview = room.hasEncryptionStateEvent() ? encUrlPreview : urlPreview;
   const showClientUrlPreview = room.hasEncryptionStateEvent()
     ? clientUrlPreview && encClientUrlPreview
     : clientUrlPreview;
 
+  const powerLevels = usePowerLevelsContext();
+  const creators = useRoomCreators(room);
+  const permissions = useRoomPermissions(creators, powerLevels);
+  const isReadOnly = !permissions.message(room.hasEncryptionStateEvent(), mx.getSafeUserId());
+
+  const settings = useMemo(
+    () => ({
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    }),
+    [
+      messageLayout,
+      messageSpacing,
+      hideReads,
+      showDeveloperTools,
+      hour24Clock,
+      dateFormatString,
+      mediaAutoLoad,
+      showBundledPreview,
+      showUrlPreview,
+      showClientUrlPreview,
+      showMaps,
+      autoplayStickers,
+      hideMemberInReadOnly,
+      isReadOnly,
+      hideMembershipEvents,
+      hideNickAvatarEvents,
+      hiddenEvents,
+    ]
+  );
+
   const nicknames = useAtomValue(nicknamesAtom);
   const globalProfiles = useAtomValue(profilesCacheAtom);
   const ignoredUsersList = useIgnoredUsers();
   const ignoredUsersSet = useMemo(() => new Set(ignoredUsersList), [ignoredUsersList]);
 
-  const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
   const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
-  const permissions = useRoomPermissions(creators, powerLevels);
-  const isReadOnly = useMemo(() => {
-    const myPowerLevel = powerLevels?.users?.[mx.getUserId()!] ?? powerLevels?.users_default ?? 0;
-    const sendLevel = powerLevels?.events?.['m.room.message'] ?? powerLevels?.events_default ?? 0;
-    return myPowerLevel < sendLevel;
-  }, [powerLevels, mx]);
-
   const [unreadInfo, setUnreadInfo] = useState(() => getRoomUnreadInfo(room, true));
 
   const readUptoEventIdRef = useRef<string | undefined>(undefined);
@@ -408,7 +612,7 @@ export function RoomTimeline({
   useEffect(() => {
     if (!eventId) return;
     setIsReady(false);
-    timelineSyncRef.current.loadEventTimeline(eventId);
+    void timelineSyncRef.current.loadEventTimeline(eventId);
   }, [eventId, room.roomId]);
 
   useEffect(() => {
@@ -455,7 +659,7 @@ export function RoomTimeline({
     if (!el) return () => {};
 
     const observer = new ResizeObserver((entries) => {
-      const newHeight = entries[0].contentRect.height;
+      const newHeight = entries[0]!.contentRect.height;
       const prev = prevViewportHeightRef.current;
       const atBottom = atBottomRef.current;
       const shrank = newHeight < prev;
@@ -477,26 +681,54 @@ export function RoomTimeline({
     nicknames,
     globalProfiles,
     spaceId: optionalSpace?.roomId,
-    openUserRoomProfile,
+    openUserRoomProfile: openUserRoomProfile as unknown as (
+      roomId: string,
+      spaceId: string | undefined,
+      userId: string,
+      rect: DOMRect,
+      undefinedArg?: undefined,
+      options?: unknown
+    ) => void,
     activeReplyId,
-    setReplyDraft,
+    setReplyDraft: setReplyDraft as unknown as (draft: unknown) => void,
     openThreadId,
-    setOpenThread,
+    setOpenThread: setOpenThread as unknown as (threadId: string | undefined) => void,
     handleEdit,
     handleOpenEvent: (id) => {
-      const evtTimeline = getEventTimeline(room, id);
+      const anchorId = unwrapRelationJumpTarget(room, id);
+      let evtTimeline = getEventTimeline(room, anchorId);
+      let resolvedForIndex = anchorId;
+      if (!evtTimeline && anchorId !== id) {
+        evtTimeline = getEventTimeline(room, id);
+        resolvedForIndex = id;
+      }
       const absoluteIndex = evtTimeline
-        ? getEventIdAbsoluteIndex(timelineSync.timeline.linkedTimelines, evtTimeline, id)
+        ? getEventIdAbsoluteIndex(
+            timelineSync.timeline.linkedTimelines,
+            evtTimeline,
+            resolvedForIndex
+          )
         : undefined;
 
       if (typeof absoluteIndex === 'number') {
-        const processedIndex = getRawIndexToProcessedIndex(absoluteIndex);
+        let processedIndex = getRawIndexToProcessedIndex(absoluteIndex);
+        let focusRawIndex = absoluteIndex;
+        if (processedIndex === undefined) {
+          const nearest = getProcessedRowIndexForRawTimelineIndex(
+            processedEventsRef.current,
+            absoluteIndex
+          );
+          if (nearest) {
+            processedIndex = nearest.rowIndex;
+            focusRawIndex = nearest.focusRawIndex;
+          }
+        }
         if (vListRef.current && processedIndex !== undefined) {
           vListRef.current.scrollToIndex(processedIndex, { align: 'center' });
         }
-        timelineSync.setFocusItem({ index: absoluteIndex, scrollTo: false, highlight: true });
+        timelineSync.setFocusItem({ index: focusRawIndex, scrollTo: false, highlight: true });
       } else {
-        timelineSync.loadEventTimeline(id);
+        void timelineSync.loadEventTimeline(anchorId);
       }
     },
   });
@@ -532,6 +764,8 @@ export function RoomTimeline({
         handleMentionClick: mentionClickHandler,
         nicknames,
         autoplayEmojis,
+        incomingInlineImagesDefaultHeight,
+        incomingInlineImagesMaxHeight,
         replaceTextNode: buildAbbrReplaceTextNode(abbrMap, linkifyOpts),
       }),
     [
@@ -539,6 +773,8 @@ export function RoomTimeline({
       room.roomId,
       linkifyOpts,
       autoplayEmojis,
+      incomingInlineImagesDefaultHeight,
+      incomingInlineImagesMaxHeight,
       mentionClickHandler,
       nicknames,
       mediaAuthentication,
@@ -554,24 +790,7 @@ export function RoomTimeline({
     pushProcessor,
     nicknames,
     imagePackRooms,
-    settings: {
-      messageLayout,
-      messageSpacing,
-      hideReads,
-      showDeveloperTools,
-      hour24Clock,
-      dateFormatString,
-      mediaAutoLoad,
-      showBundledPreview,
-      showUrlPreview,
-      showClientUrlPreview,
-      autoplayStickers,
-      hideMemberInReadOnly,
-      isReadOnly,
-      hideMembershipEvents,
-      hideNickAvatarEvents,
-      showHiddenEvents,
-    },
+    settings,
     state: { focusItem: timelineSync.focusItem, editId, activeReplyId, openThreadId },
     permissions: {
       canRedact: permissions.action('redact', mx.getSafeUserId()),
@@ -608,9 +827,17 @@ export function RoomTimeline({
   useDocumentFocusChange(
     useCallback(
       (inFocus) => {
-        if (inFocus && atBottomState) tryAutoMarkAsRead();
+        if (inFocus) {
+          if (atBottomState) tryAutoMarkAsRead();
+          return;
+        }
+        // Re-anchor the divider at the last read when tabbing out while caught up.
+        if (atBottomState && timelineSync.liveTimelineLinked) {
+          readUptoEventIdRef.current = undefined;
+          setUnreadInfo(undefined);
+        }
       },
-      [tryAutoMarkAsRead, atBottomState]
+      [tryAutoMarkAsRead, atBottomState, timelineSync.liveTimelineLinked, setUnreadInfo]
     )
   );
 
@@ -636,14 +863,14 @@ export function RoomTimeline({
       }
 
       if (offset < 500 && canPaginateBackRef.current && backwardStatusRef.current === 'idle') {
-        timelineSyncRef.current.handleTimelinePagination(true);
+        void timelineSyncRef.current.handleTimelinePagination(true);
       }
       if (
         distanceFromBottom < 500 &&
         !liveTimelineLinkedRef.current &&
         forwardStatusRef.current === 'idle'
       ) {
-        timelineSyncRef.current.handleTimelinePagination(false);
+        void timelineSyncRef.current.handleTimelinePagination(false);
       }
     },
     [setAtBottom]
@@ -676,12 +903,6 @@ export function RoomTimeline({
           </Chip>
         </Box>
       );
-    } else if (timelineSync.backwardStatus === 'loading' && timelineSync.eventsLength > 0) {
-      backPaginationJSX = (
-        <Box justifyContent="Center" style={{ padding: config.space.S300 }}>
-          <Spinner variant="Secondary" size="400" />
-        </Box>
-      );
     }
   }
 
@@ -708,32 +929,38 @@ export function RoomTimeline({
           </Chip>
         </Box>
       );
-    } else if (timelineSync.forwardStatus === 'loading' && timelineSync.eventsLength > 0) {
-      frontPaginationJSX = (
-        <Box justifyContent="Center" style={{ padding: config.space.S300 }}>
-          <Spinner variant="Secondary" size="400" />
-        </Box>
-      );
     }
   }
+
+  const showBackPaginationSpinner =
+    timelineSync.backwardStatus === 'loading' && timelineSync.eventsLength > 0;
+  const showFrontPaginationSpinner =
+    timelineSync.forwardStatus === 'loading' && timelineSync.eventsLength > 0;
+  const hasPowerLevelState = !!room.currentState.getStateEvents(EventType.RoomPowerLevels, '');
+  const hideTimelineForRoomState = roomSyncLoading && hideMemberInReadOnly && !hasPowerLevelState;
+  const timelineBottomFloatLift =
+    !atBottomState && isReady ? { bottom: `calc(${config.space.S400} + ${toRem(52)})` } : undefined;
+  const timelineTopFloatLift =
+    unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && isReady
+      ? { top: `calc(${config.space.S400} + ${toRem(52)})` }
+      : undefined;
 
   const vListItemCount =
     timelineSync.eventsLength === 0 &&
     (!isReady || timelineSync.canPaginateBack || timelineSync.backwardStatus === 'loading')
       ? 3
       : timelineSync.eventsLength;
-  const vListIndices = useMemo(
-    () => Array.from({ length: vListItemCount }, (_, i) => i),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vListItemCount, timelineSync.timeline]
-  );
+  const vListIndices = useMemo(() => {
+    // Keep the cache-busting timeline identity explicit for exhaustive-deps.
+    void timelineSync.timeline;
+    return Array.from({ length: vListItemCount }, (_, i) => i);
+  }, [vListItemCount, timelineSync.timeline]);
 
   const processedEvents = useProcessedTimeline({
     items: vListIndices,
     linkedTimelines: timelineSync.timeline.linkedTimelines,
     ignoredUsersSet,
-    showHiddenEvents,
-    showTombstoneEvents,
+    hiddenEvents,
     mxUserId: mx.getUserId(),
     readUptoEventId: readUptoEventIdRef.current,
     hideMembershipEvents,
@@ -762,7 +989,7 @@ export function RoomTimeline({
     ref.current = () => {
       const myUserId = mx.getUserId();
       const found = [...processedEventsRef.current]
-        .reverse()
+        .toReversed()
         .find(
           (e) =>
             e.mEvent.getSender() === myUserId &&
@@ -781,7 +1008,7 @@ export function RoomTimeline({
       backwardStatusRef.current === 'idle' &&
       v.scrollSize <= v.viewportSize
     ) {
-      timelineSyncRef.current.handleTimelinePagination(true);
+      void timelineSyncRef.current.handleTimelinePagination(true);
     }
   }, [timelineSync.eventsLength, timelineSync.backwardStatus]);
 
@@ -811,7 +1038,7 @@ export function RoomTimeline({
       const hasRealScrollRoom = v.scrollSize > v.viewportSize + 300;
 
       if (!hasRealScrollRoom || (atTop && noVisibleGrowth)) {
-        timelineSyncRef.current.handleTimelinePagination(true);
+        void timelineSyncRef.current.handleTimelinePagination(true);
       }
     };
 
@@ -821,13 +1048,22 @@ export function RoomTimeline({
 
   return (
     <Box grow="Yes" style={{ position: 'relative' }}>
+      {(hideTimelineForRoomState || (roomSyncLoading && timelineSync.eventsLength === 0)) && (
+        <Box
+          justifyContent="Center"
+          alignItems="Center"
+          style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
+        >
+          <Spinner variant="Secondary" size="400" />
+        </Box>
+      )}
       {unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && isReady && (
-        <TimelineFloat position="Top">
+        <TimelineFloat position="Top" style={{ background: 'transparent' }}>
           <Chip
             variant="Primary"
             radii="Pill"
             outlined
-            before={<Icon size="50" src={Icons.MessageUnread} />}
+            before={chipIcon(ChatTeardropDots)}
             onClick={() => timelineSync.loadEventTimeline(unreadInfo.readUptoEventId)}
           >
             <Text size="L400">Jump to Unread</Text>
@@ -836,7 +1072,7 @@ export function RoomTimeline({
             variant="SurfaceVariant"
             radii="Pill"
             outlined
-            before={<Icon size="50" src={Icons.CheckTwice} />}
+            before={chipIcon(Checks)}
             onClick={() => markAsRead(mx, room.roomId, hideReads)}
           >
             <Text size="L400">Mark as Read</Text>
@@ -851,7 +1087,7 @@ export function RoomTimeline({
           minHeight: 0,
           overflow: 'hidden',
           position: 'relative',
-          opacity: isReady || showLoadingPlaceholders ? 1 : 0,
+          opacity: !hideTimelineForRoomState && (isReady || showLoadingPlaceholders) ? 1 : 0,
         }}
       >
         <VList<ProcessedEvent>
@@ -869,101 +1105,45 @@ export function RoomTimeline({
           }}
           onScroll={handleVListScroll}
         >
-          {(eventData, index) => {
-            if (showLoadingPlaceholders) {
-              return (
-                <MessageBase key={`placeholder-${index}`}>
-                  {messageLayout === MessageLayout.Compact ? (
-                    <CompactPlaceholder />
-                  ) : (
-                    <DefaultPlaceholder />
-                  )}
-                </MessageBase>
-              );
-            }
-
-            if (!eventData) {
-              if (index === 0 && !timelineSync.canPaginateBack) {
-                return (
-                  <Fragment key="intro-and-first">
-                    {backPaginationJSX}
-                    <div
-                      style={{
-                        padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-                      }}
-                    >
-                      <RoomIntro room={room} />
-                    </div>
-                  </Fragment>
-                );
-              }
-              if (index === 0) return <Fragment key="first">{backPaginationJSX}</Fragment>;
-              return <Fragment key={index} />;
-            }
-
-            const renderedEvent = renderMatrixEvent(
-              eventData.mEvent.getType(),
-              typeof eventData.mEvent.getStateKey() === 'string',
-              eventData.id,
-              eventData.mEvent,
-              eventData.itemIndex,
-              eventData.timelineSet,
-              eventData.collapsed
-            );
-
-            const dividers = (
-              <>
-                {eventData.willRenderDayDivider && (
-                  <MessageBase space={messageSpacing}>
-                    <TimelineDivider variant="Surface">
-                      <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
-                        <Text size="L400">{getDayDividerText(eventData.mEvent.getTs())}</Text>
-                      </Badge>
-                    </TimelineDivider>
-                  </MessageBase>
-                )}
-                {eventData.willRenderNewDivider && (
-                  <MessageBase space={messageSpacing}>
-                    <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
-                      <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
-                        <Text size="L400">New Messages</Text>
-                      </Badge>
-                    </TimelineDivider>
-                  </MessageBase>
-                )}
-              </>
-            );
-
-            if (index === 0) {
-              return (
-                <Fragment key="first-item-block">
-                  {!timelineSync.canPaginateBack && (
-                    <div
-                      style={{
-                        padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${messageLayout === MessageLayout.Compact ? config.space.S400 : toRem(64)}`,
-                      }}
-                    >
-                      <RoomIntro room={room} />
-                    </div>
-                  )}
-                  {backPaginationJSX}
-                  {dividers}
-                  {renderedEvent}
-                </Fragment>
-              );
-            }
-
-            return (
-              <Fragment key={eventData.id}>
-                {dividers}
-                {renderedEvent}
-              </Fragment>
-            );
-          }}
+          {(eventData, index) => (
+            <MemoizedTimelineItem
+              key={eventData ? eventData.id : `placeholder-${index}`}
+              eventData={eventData}
+              index={index}
+              showLoadingPlaceholders={showLoadingPlaceholders}
+              canPaginateBack={timelineSync.canPaginateBack}
+              backPaginationJSX={backPaginationJSX}
+              room={room}
+              messageLayout={messageLayout}
+              messageSpacing={messageSpacing}
+              settings={settings}
+              renderMatrixEvent={renderMatrixEvent}
+              focusItem={timelineSync.focusItem}
+              editId={editId}
+              activeReplyId={activeReplyId}
+              openThreadId={openThreadId}
+            />
+          )}
         </VList>
       </div>
 
-      {frontPaginationJSX}
+      {showBackPaginationSpinner && (
+        <TimelineFloat position="Top" style={timelineTopFloatLift}>
+          <Spinner variant="Secondary" size="400" style={{ backgroundColor: 'transparent' }} />
+        </TimelineFloat>
+      )}
+
+      {showFrontPaginationSpinner && (
+        <TimelineFloat position="Bottom" style={timelineBottomFloatLift}>
+          <Spinner variant="Secondary" size="400" style={{ backgroundColor: 'transparent' }} />
+        </TimelineFloat>
+      )}
+
+      {frontPaginationJSX && (
+        <TimelineFloat position="Bottom" style={timelineBottomFloatLift}>
+          {frontPaginationJSX}
+        </TimelineFloat>
+      )}
 
       {!atBottomState && isReady && (
         <TimelineFloat position="Bottom">
@@ -971,11 +1151,17 @@ export function RoomTimeline({
             variant="SurfaceVariant"
             radii="Pill"
             outlined
-            before={<Icon size="50" src={Icons.ArrowBottom} />}
+            before={chipIcon(ArrowDown)}
             onClick={() => {
               if (eventId) navigateRoom(room.roomId, undefined, { replace: true });
               timelineSync.setTimeline(getInitialTimeline(room));
               scrollToBottom();
+            }}
+            style={{
+              WebkitUserSelect: 'none',
+              msUserSelect: 'none',
+              userSelect: 'none',
+              MozUserSelect: 'none',
             }}
           >
             <Text size="L400">Jump to Latest</Text>

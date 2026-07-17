@@ -1,5 +1,6 @@
 import { createVar, keyframes, style, styleVariants } from '@vanilla-extract/css';
-import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
+import type { RecipeVariants } from '@vanilla-extract/recipes';
+import { recipe } from '@vanilla-extract/recipes';
 import { DefaultReset, color, config, toRem } from 'folds';
 
 export const StickySection = style({
@@ -64,6 +65,15 @@ export const messageJumpHighlight = style({
   animationIterationCount: 'infinite',
 });
 
+const MobileVariant = styleVariants({
+  true: {
+    WebkitUserSelect: 'none',
+    msUserSelect: 'none',
+    userSelect: 'none',
+    MozUserSelect: 'none',
+  },
+});
+
 const HighlightVariant = styleVariants({
   true: [messageJumpHighlight],
 });
@@ -84,6 +94,11 @@ const SelectedVariant = styleVariants({
     backgroundColor: color.Surface.ContainerActive,
   },
 });
+const MarkedVariant = styleVariants({
+  true: {
+    backgroundColor: color.Other.Overlay,
+  },
+});
 
 const AutoCollapse = style({
   selectors: {
@@ -102,6 +117,8 @@ export const MessageBase = recipe({
       borderRadius: `0 ${config.radii.R400} ${config.radii.R400} 0`,
       minHeight: toRem(16),
       contain: 'layout',
+      flexGrow: '1',
+      width: '100',
     },
   ],
   variants: {
@@ -117,6 +134,8 @@ export const MessageBase = recipe({
     highlight: HighlightVariant,
     notifyHighlight: NotifyHighlightVariant,
     selected: SelectedVariant,
+    isMarked: MarkedVariant,
+    mobile: MobileVariant,
   },
   defaultVariants: {
     space: '400',
@@ -228,6 +247,8 @@ export const PronounPill = style({
 
 export const MessageTextBody = recipe({
   base: {
+    unicodeBidi: 'plaintext',
+    alignSelf: 'start',
     wordBreak: 'break-word',
     fontSize: '1rem !important', // Override folds Text component to enable page zoom scaling
   },

@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Box, Icon, IconButton, Icons, Scroll, Text } from 'folds';
+import { Box, IconButton, Scroll, Text } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import { Page, PageContent, PageHeader } from '$components/page';
 import { useRoom } from '$hooks/useRoom';
 import { usePowerLevels } from '$hooks/usePowerLevels';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { StateEvent } from '$types/matrix/room';
+
 import { PermissionGroups, Powers, PowersEditor } from '$features/common-settings/permissions';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { usePermissionGroups } from './usePermissionItems';
+import { EventType } from '$types/matrix-sdk';
+import { CustomStateEvent } from '$types/matrix/room';
 
 type PermissionsProps = {
   requestClose: () => void;
@@ -21,9 +24,9 @@ export function Permissions({ requestClose }: PermissionsProps) {
 
   const permissions = useRoomPermissions(creators, powerLevels);
 
-  const canEditPowers = permissions.stateEvent(StateEvent.PowerLevelTags, mx.getSafeUserId());
-  const canEditPermissions = permissions.stateEvent(StateEvent.RoomPowerLevels, mx.getSafeUserId());
-  const permissionGroups = usePermissionGroups(room.isCallRoom());
+  const canEditPowers = permissions.stateEvent(CustomStateEvent.PowerLevelTags, mx.getSafeUserId());
+  const canEditPermissions = permissions.stateEvent(EventType.RoomPowerLevels, mx.getSafeUserId());
+  const permissionGroups = usePermissionGroups();
 
   const [powerEditor, setPowerEditor] = useState(false);
 
@@ -46,7 +49,7 @@ export function Permissions({ requestClose }: PermissionsProps) {
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>

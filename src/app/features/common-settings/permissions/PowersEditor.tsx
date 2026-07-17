@@ -1,15 +1,14 @@
-import { FormEventHandler, MouseEventHandler, useCallback, useMemo, useState } from 'react';
+import type { FormEventHandler, MouseEventHandler } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import type { RectCords } from 'folds';
 import {
   Box,
   Text,
   Chip,
-  Icon,
-  Icons,
   IconButton,
   Scroll,
   Button,
   Input,
-  RectCords,
   PopOut,
   Menu,
   config,
@@ -18,18 +17,23 @@ import {
   TooltipProvider,
   Tooltip,
 } from 'folds';
+import {
+  ArrowLeft,
+  chipIcon,
+  composerIcon,
+  menuIcon,
+  SmileySticker,
+  Trash,
+  X,
+} from '$components/icons/phosphor';
 import { HexColorPicker } from 'react-colorful';
 import { useAtomValue } from 'jotai';
 import { Page, PageContent, PageHeader } from '$components/page';
-import { IPowerLevels } from '$hooks/usePowerLevels';
+import type { IPowerLevels } from '$hooks/usePowerLevels';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
-import {
-  getPowers,
-  getUsedPowers,
-  PowerLevelTags,
-  usePowerLevelTags,
-} from '$hooks/usePowerLevelTags';
+import type { PowerLevelTags } from '$hooks/usePowerLevelTags';
+import { getPowers, getUsedPowers, usePowerLevelTags } from '$hooks/usePowerLevelTags';
 import { useRoom } from '$hooks/useRoom';
 import { HexColorPickerPopOut } from '$components/HexColorPickerPopOut';
 import { PowerColorBadge, PowerIcon } from '$components/power';
@@ -41,14 +45,16 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { CompactUploadCardRenderer } from '$components/upload-card';
-import { createUploadAtom, UploadSuccess } from '$state/upload';
+import type { UploadSuccess } from '$state/upload';
+import { createUploadAtom } from '$state/upload';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { MemberPowerTag, MemberPowerTagIcon, StateEvent } from '$types/matrix/room';
+import { CustomStateEvent, type MemberPowerTag, type MemberPowerTagIcon } from '$types/matrix/room';
+
 import { useAlive } from '$hooks/useAlive';
 import { BetaNoticeBadge } from '$components/BetaNoticeBadge';
 import { getPowerTagIconSrc } from '$hooks/useMemberPowerTag';
-import { creatorsSupported } from '$utils/matrix';
 import { SequenceCardStyle } from '$features/common-settings/styles.css';
+import { creatorsSupported } from '$utils/roomSupport';
 
 type EditPowerProps = {
   maxPower: number;
@@ -255,7 +261,7 @@ function EditPower({ maxPower, power, tag, onSave, onClose }: Readonly<EditPower
                         variant="Secondary"
                         fill="Soft"
                         radii="300"
-                        before={<Icon size="50" src={Icons.SmilePlus} />}
+                        before={chipIcon(SmileySticker)}
                       >
                         <Text size="B300">Pick</Text>
                       </Button>
@@ -352,7 +358,7 @@ export function PowersEditor({ powerLevels, requestClose }: Readonly<PowersEdito
       deleted.forEach((power) => {
         delete content[power];
       });
-      await mx.sendStateEvent(room.roomId, StateEvent.PowerLevelTags as any, content);
+      await mx.sendStateEvent(room.roomId, CustomStateEvent.PowerLevelTags, content);
     }, [mx, room, powerLevelTags, editedPowerTags, deleted])
   );
 
@@ -378,18 +384,13 @@ export function PowersEditor({ powerLevels, requestClose }: Readonly<PowersEdito
       <PageHeader outlined={false} balance>
         <Box alignItems="Center" grow="Yes" gap="200">
           <Box alignItems="Inherit" grow="Yes" gap="200">
-            <Chip
-              size="500"
-              radii="Pill"
-              onClick={requestClose}
-              before={<Icon size="100" src={Icons.ArrowLeft} />}
-            >
+            <Chip size="500" radii="Pill" onClick={requestClose} before={menuIcon(ArrowLeft)}>
               <Text size="T300">Permissions</Text>
             </Chip>
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>
@@ -437,7 +438,7 @@ export function PowersEditor({ powerLevels, requestClose }: Readonly<PowersEdito
                   )}
                 </SequenceCard>
                 {getPowers(powerTags).map((power) => {
-                  const tag = powerTags[power];
+                  const tag = powerTags[power]!;
                   const tagIconSrc =
                     tag.icon && getPowerTagIconSrc(mx, useAuthentication, tag.icon);
 
@@ -515,7 +516,7 @@ export function PowersEditor({ powerLevels, requestClose }: Readonly<PowersEdito
                                               : () => handleToggleDelete(power)
                                           }
                                         >
-                                          <Icon size="50" src={Icons.Delete} />
+                                          {chipIcon(Trash)}
                                         </Chip>
                                       )}
                                     </TooltipProvider>

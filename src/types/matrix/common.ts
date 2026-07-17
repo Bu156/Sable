@@ -1,23 +1,71 @@
-import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { MsgType } from '$types/matrix-sdk';
-
-export const MATRIX_BLUR_HASH_PROPERTY_NAME = 'xyz.amorgan.blurhash';
-export const MATRIX_SPOILER_PROPERTY_NAME = 'page.codeberg.everypizza.msc4193.spoiler';
-export const MATRIX_SPOILER_REASON_PROPERTY_NAME =
-  'page.codeberg.everypizza.msc4193.spoiler.reason';
+import type { SerializableMap } from '$types/wrapper/SerializableMap';
+import type { SerializableSet } from '$types/wrapper/SerializableSet';
+import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
+import type { MsgType } from '$types/matrix-sdk';
+import type * as prefix from '$unstable/prefixes';
 
 export type IImageInfo = {
   w?: number;
   h?: number;
   mimetype?: string;
   size?: number;
-  [MATRIX_BLUR_HASH_PROPERTY_NAME]?: string;
+  [prefix.MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]?: string;
+};
+
+export type MatrixRelatesTo = {
+  rel_type: 'm.annotation';
+  event_id: string;
+  key?: string;
+};
+
+/**
+ * Image Pack Reference
+ * as per https://github.com/matrix-org/matrix-spec-proposals/pull/4459
+ */
+export type MSC4459ImagePackReference = {
+  /**
+   * Id of the room where the image pack lives
+   */
+  room_id?: string;
+  /**
+   * via servers to help join the room,
+   * optional
+   */
+  via?: SerializableSet<string>;
+  /**
+   * TODO doc
+   */
+  state_key?: string;
+  /**
+   * the shortcode this emoji is refered by
+   */
+  shortcode?: string;
 };
 
 export type MSC1767Text = {
   body: string;
   mimetype?: string;
 };
+
+export type MatrixReactionEvent = {
+  'm.relates_to': MatrixRelatesTo;
+  shortcode?: string;
+  'com.beeper.reaction.shortcode'?: string;
+  /**
+   * a map of image pack references
+   */
+  [prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME]?: SerializableMap<
+    string,
+    MSC4459ImagePackReference
+  >;
+};
+
+export interface IGenericMSC4459 {
+  [prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME]?: SerializableMap<
+    string,
+    MSC4459ImagePackReference
+  >;
+}
 
 export type IVideoInfo = {
   w?: number;
@@ -55,8 +103,8 @@ export type IImageContent = {
   url?: string;
   info?: IImageInfo & IThumbnailContent;
   file?: IEncryptedFile;
-  [MATRIX_SPOILER_PROPERTY_NAME]?: boolean;
-  [MATRIX_SPOILER_REASON_PROPERTY_NAME]?: string;
+  [prefix.MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]?: boolean;
+  [prefix.MATRIX_UNSTABLE_SPOILER_REASON_PROPERTY_NAME]?: string;
 };
 
 export type IVideoContent = {
@@ -66,8 +114,8 @@ export type IVideoContent = {
   url?: string;
   info?: IVideoInfo & IThumbnailContent;
   file?: IEncryptedFile;
-  [MATRIX_SPOILER_PROPERTY_NAME]?: boolean;
-  [MATRIX_SPOILER_REASON_PROPERTY_NAME]?: string;
+  [prefix.MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]?: boolean;
+  [prefix.MATRIX_UNSTABLE_SPOILER_REASON_PROPERTY_NAME]?: string;
 };
 
 export type IAudioContent = {
@@ -93,4 +141,24 @@ export type ILocationContent = {
   body?: string;
   geo_uri?: string;
   info?: IThumbnailContent;
+};
+
+export type IGalleryImageItem = Omit<IImageContent, 'msgtype'> & { itemtype: MsgType.Image };
+export type IGalleryVideoItem = Omit<IVideoContent, 'msgtype'> & { itemtype: MsgType.Video };
+export type IGalleryAudioItem = Omit<IAudioContent, 'msgtype'> & { itemtype: MsgType.Audio };
+export type IGalleryFileItem = Omit<IFileContent, 'msgtype'> & { itemtype: MsgType.File };
+export type IGalleryItem =
+  | IGalleryImageItem
+  | IGalleryVideoItem
+  | IGalleryAudioItem
+  | IGalleryFileItem;
+
+export const GALLERY_MSGTYPE = 'dm.filament.gallery';
+
+export type IGalleryContent = {
+  msgtype: typeof GALLERY_MSGTYPE;
+  body: string;
+  format?: string;
+  formatted_body?: string;
+  itemtypes: IGalleryItem[];
 };

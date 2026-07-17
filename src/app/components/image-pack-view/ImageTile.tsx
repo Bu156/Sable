@@ -1,10 +1,14 @@
-import { FormEventHandler, ReactNode, useMemo, useState } from 'react';
-import { Badge, Box, Button, Chip, Icon, Icons, Input, Text } from 'folds';
+import type { FormEventHandler, ReactNode } from 'react';
+import { useMemo, useState } from 'react';
+import { Badge, Box, Button, Chip, Input, Text } from 'folds';
+import { sizedIcon, Trash } from '$components/icons/phosphor';
 import { mxcUrlToHttp } from '$utils/matrix';
-import { ImageUsage, imageUsageEqual, PackImageReader } from '$plugins/custom-emoji';
+import type { ImageUsage } from '$plugins/custom-emoji';
+import { imageUsageEqual, PackImageReader } from '$plugins/custom-emoji';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useObjectURL } from '$hooks/useObjectURL';
-import { createUploadAtom, TUploadAtom } from '$state/upload';
+import type { TUploadAtom } from '$state/upload';
+import { createUploadAtom } from '$state/upload';
 import { replaceSpaceWithDash } from '$utils/common';
 import { SettingTile } from '$components/setting-tile';
 import { AuthenticatedImg } from '$components/AuthenticatedImg';
@@ -72,7 +76,7 @@ export function ImageTile({
               radii="Pill"
               onClick={() => onDeleteToggle?.(defaultShortcode)}
             >
-              {deleted ? <Text size="B300">Undo</Text> : <Icon size="50" src={Icons.Delete} />}
+              {deleted ? <Text size="B300">Undo</Text> : sizedIcon(Trash, '50')}
             </Chip>
             {!deleted && (
               <Chip

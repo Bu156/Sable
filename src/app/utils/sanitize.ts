@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { isMatrixHexColor } from './matrixHtml';
+import { testMatrixUri } from '../plugins/matrix-uri';
 
 const MAX_TAG_NESTING = 100;
 const INTERNAL_IMG_SRC_ATTR = 'data-sable-img-src';
@@ -46,7 +47,7 @@ const permittedHtmlTags = [
 
 const permittedTagToAttributes = {
   span: ['data-mx-bg-color', 'data-mx-color', 'data-mx-spoiler', 'data-mx-maths', 'data-md'],
-  a: ['target', 'href', 'data-md'],
+  a: ['href', 'data-md'],
   img: ['width', 'height', 'alt', 'title', 'src', 'data-mx-emoticon'], // data-mx-emoticon is for MSC2545
   ol: ['start', 'data-md'],
   ul: ['data-md'],
@@ -77,7 +78,7 @@ const forbiddenContentTags = ['mx-reply', 'script', 'style', 'textarea', 'option
 
 const codeLanguageClassRegex = /^language-[A-Za-z0-9_-]+$/;
 const orderedListStartRegex = /^-?\d+$/;
-const allowedUriRegex = /^(?:https?|ftp|mailto|magnet|mxc):/i;
+const allowedUriRegex = /^(?:https?|ftp|mailto|magnet|mxc|matrix):/i;
 
 export function sanitizeText(body: string): string {
   const tagsToReplace: Record<string, string> = {
@@ -105,6 +106,10 @@ function isAllowedAbsoluteLink(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isAllowedMatrixUri(value: string): boolean {
+  return testMatrixUri(value);
 }
 
 function isAllowedMxcUri(value: string): boolean {
@@ -176,7 +181,12 @@ function getValidatedAttributeValue(
     return undefined;
   }
 
-  if (tagName === 'a' && attrName === 'href' && !isAllowedAbsoluteLink(attrValue)) {
+  if (
+    tagName === 'a' &&
+    attrName === 'href' &&
+    !isAllowedAbsoluteLink(attrValue) &&
+    !isAllowedMatrixUri(attrValue)
+  ) {
     return undefined;
   }
 
@@ -274,7 +284,7 @@ const enforceNestingLimit = (fragment: DocumentFragment): void => {
   collect(fragment, 0);
 
   overlyNestedElements
-    .sort((a, b) => b.depth - a.depth)
+    .toSorted((a, b) => b.depth - a.depth)
     .forEach(({ element }) => {
       if (!element.parentNode) return;
       element.replaceWith(...Array.from(element.childNodes));
@@ -297,13 +307,22 @@ const pruneInvalidEmptyElements = (
   });
 };
 
+let purifyInstance: ReturnType<typeof DOMPurify> | undefined;
+function getPurify(): ReturnType<typeof DOMPurify> {
+  if (!purifyInstance) {
+    purifyInstance = DOMPurify(window);
+  }
+  return purifyInstance;
+}
+
 export const sanitizeCustomHtml = (customHtml: string): string => {
   if (typeof window === 'undefined') {
     return sanitizeText(customHtml);
   }
 
   const { protectedHtml, protectedSources } = protectImageSources(customHtml);
-  const purify = DOMPurify(window);
+  const purify = getPurify();
+  purify.removeAllHooks();
   const allowedHtmlAttributes = [...permittedHtmlAttributes, INTERNAL_IMG_SRC_ATTR];
 
   purify.addHook('uponSanitizeAttribute', (currentNode, hookEvent) => {
@@ -312,33 +331,27 @@ export const sanitizeCustomHtml = (customHtml: string): string => {
 
     if (tagName === 'img' && attrName === INTERNAL_IMG_SRC_ATTR) {
       if (!protectedSources.has(hookEvent.attrValue)) {
-        // eslint-disable-next-line no-param-reassign
         hookEvent.keepAttr = false;
         return;
       }
 
-      // eslint-disable-next-line no-param-reassign
       hookEvent.forceKeepAttr = true;
       return;
     }
 
     if (!tagAllowsAttribute(tagName, attrName)) {
       // DOMPurify exposes attribute decisions by mutating the hook event.
-      // eslint-disable-next-line no-param-reassign
       hookEvent.keepAttr = false;
       return;
     }
 
     const validatedAttrValue = getValidatedAttributeValue(tagName, attrName, hookEvent.attrValue);
     if (validatedAttrValue === undefined) {
-      // eslint-disable-next-line no-param-reassign
       hookEvent.keepAttr = false;
       return;
     }
 
-    // eslint-disable-next-line no-param-reassign
     hookEvent.attrValue = validatedAttrValue;
-    // eslint-disable-next-line no-param-reassign
     hookEvent.forceKeepAttr = true;
   });
 

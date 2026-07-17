@@ -1,10 +1,9 @@
-import { FormEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import type { FormEventHandler, ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Text,
   IconButton,
-  Icon,
-  Icons,
   Chip,
   Input,
   Button,
@@ -15,7 +14,8 @@ import {
   OverlayBackdrop,
   OverlayCenter,
 } from 'folds';
-import { CryptoApi, IMyDevice, MatrixError } from '$types/matrix-sdk';
+import { CaretDown, CaretRight, chipIcon, Trash } from '$components/icons/phosphor';
+import type { CryptoApi, IMyDevice, MatrixError } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
 import { SettingTile } from '$components/setting-tile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -254,7 +254,7 @@ export function DeviceDeleteBtn({
       onClick={() => onDeleteToggle(deviceId)}
       disabled={disabled}
     >
-      <Icon size="50" src={Icons.Delete} />
+      {chipIcon(Trash)}
     </Chip>
   );
 }
@@ -295,7 +295,7 @@ export function DeviceTile({
             radii="300"
             onClick={() => setDetails(!details)}
           >
-            <Icon size="50" src={details ? Icons.ChevronBottom : Icons.ChevronRight} />
+            {chipIcon(details ? CaretDown : CaretRight)}
           </IconButton>
         }
         after={

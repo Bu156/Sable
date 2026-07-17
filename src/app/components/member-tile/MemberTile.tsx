@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
-import { as, Avatar, Box, Icon, Icons, Text } from 'folds';
-import { MatrixClient, Room, RoomMember } from '$types/matrix-sdk';
+import type { ReactNode } from 'react';
+import { as, Avatar, Box, Text } from 'folds';
+import { userFallbackIcon } from '$components/icons/phosphor';
+import type { MatrixClient, Room, RoomMember } from '$types/matrix-sdk';
 import { getMemberDisplayName } from '$utils/room';
 import { getMxIdLocalPart } from '$utils/matrix';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
@@ -29,7 +30,7 @@ export const MemberTile = as<'button', MemberTileProps>(
     const name = getName(room, member, nicknames);
     const presence = useUserPresence(member.userId ?? '');
 
-    const avatarMxcUrl = member.getMxcAvatarUrl();
+    const avatarMxcUrl = member.getMxcAvatarUrl() ?? mx.getUser(member.userId)?.avatarUrl;
     const avatarUrl = avatarMxcUrl
       ? mx.mxcUrlToHttp(avatarMxcUrl, 100, 100, 'crop', undefined, false, useAuthentication)
       : undefined;
@@ -44,7 +45,7 @@ export const MemberTile = as<'button', MemberTileProps>(
             userId={member.userId}
             src={avatarUrl ?? undefined}
             alt={name}
-            renderFallback={() => <Icon size="300" src={Icons.User} filled />}
+            renderFallback={() => userFallbackIcon('xl')}
           />
         </Avatar>
         <Box grow="Yes" as="span" direction="Column">

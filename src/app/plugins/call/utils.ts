@@ -4,7 +4,7 @@ import {
   MatrixCapabilities,
   WidgetEventCapability,
 } from 'matrix-widget-api';
-import { EventType } from 'matrix-js-sdk';
+import { EventType } from '$types/matrix-sdk';
 
 export function getCallCapabilities(
   roomId: string,
@@ -16,6 +16,8 @@ export function getCallCapabilities(
   capabilities.add(MatrixCapabilities.Screenshots);
   capabilities.add(MatrixCapabilities.AlwaysOnScreen);
   capabilities.add(MatrixCapabilities.MSC3846TurnServers);
+  capabilities.add(MatrixCapabilities.MSC4039UploadFile);
+  capabilities.add(MatrixCapabilities.MSC4039DownloadFile);
   capabilities.add(MatrixCapabilities.MSC4157SendDelayedEvent);
   capabilities.add(MatrixCapabilities.MSC4157UpdateDelayedEvent);
   capabilities.add('moe.sable.thumbnails');

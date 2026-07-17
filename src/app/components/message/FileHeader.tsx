@@ -1,12 +1,15 @@
-import { Badge, Box, Icon, IconButton, Icons, Spinner, Text, as, toRem } from 'folds';
-import { ReactNode, useCallback } from 'react';
-import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
+import { Badge, Box, IconButton, Spinner, Text, as, toRem } from 'folds';
+import { Download, sizedIcon } from '$components/icons/phosphor';
+import type { ReactNode } from 'react';
+import { useCallback } from 'react';
+import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import FileSaver from 'file-saver';
 import { mimeTypeToExt } from '$utils/mimeTypes';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
+import { getDownloadFilename } from '$utils/download';
 
 const badgeStyles = { maxWidth: toRem(100) };
 
@@ -29,7 +32,7 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
         : await downloadMedia(mediaUrl);
 
       const fileURL = URL.createObjectURL(fileContent);
-      FileSaver.saveAs(fileURL, filename);
+      FileSaver.saveAs(fileURL, getDownloadFilename(filename));
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, filename])
   );
@@ -47,7 +50,7 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
       {downloading ? (
         <Spinner size="100" variant={hasError ? 'Critical' : 'Secondary'} />
       ) : (
-        <Icon size="100" src={Icons.Download} />
+        sizedIcon(Download, '100')
       )}
     </IconButton>
   );

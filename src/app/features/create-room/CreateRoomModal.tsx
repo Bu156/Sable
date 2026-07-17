@@ -2,9 +2,7 @@ import {
   Box,
   config,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Modal,
   Overlay,
   OverlayBackdrop,
@@ -12,11 +10,12 @@ import {
   Scroll,
   Text,
 } from 'folds';
+import { X, composerIcon } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
 import { useAllJoinedRoomsSet, useGetRoom } from '$hooks/useGetRoom';
 import { SpaceProvider } from '$hooks/useSpace';
 import { useCloseCreateRoomModal, useCreateRoomModalState } from '$state/hooks/createRoomModal';
-import { CreateRoomModalState } from '$state/createRoomModal';
+import type { CreateRoomModalState } from '$state/createRoomModal';
 import { stopPropagation } from '$utils/keyboard';
 import { CreateRoomType } from '$components/create-room/types';
 import { CreateRoomForm } from './CreateRoom';
@@ -60,7 +59,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>
-                      <Icon src={Icons.Cross} />
+                      {composerIcon(X)}
                     </IconButton>
                   </Box>
                 </Header>

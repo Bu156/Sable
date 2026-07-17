@@ -1,28 +1,19 @@
+import type { ChangeEventHandler, MouseEventHandler } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { RectCords } from 'folds';
+import { Box, Chip, config, IconButton, Input, PopOut, Scroll, Spinner, Text, toRem } from 'folds';
 import {
-  ChangeEventHandler,
-  MouseEventHandler,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {
-  Box,
-  Chip,
-  config,
-  Icon,
-  IconButton,
-  Icons,
-  Input,
-  PopOut,
-  RectCords,
-  Scroll,
-  Spinner,
-  Text,
-  toRem,
-} from 'folds';
+  ArrowsDownUp,
+  CaretUp,
+  chipIcon,
+  composerIcon,
+  Funnel,
+  MagnifyingGlass,
+  menuIcon,
+  X,
+} from '$components/icons/phosphor';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { RoomMember } from '$types/matrix-sdk';
+import type { RoomMember } from '$types/matrix-sdk';
 import { Page, PageContent, PageHeader } from '$components/page';
 import { useRoom } from '$hooks/useRoom';
 import { useRoomMembers } from '$hooks/useRoomMembers';
@@ -31,10 +22,11 @@ import { useGetMemberPowerLevel, usePowerLevels } from '$hooks/usePowerLevels';
 import { VirtualTile } from '$components/virtualizer';
 import { MemberTile } from '$components/member-tile';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { getMxIdLocalPart, getMxIdServer } from '$utils/matrix';
+import { getMxIdLocalPart } from '$utils/matrix';
 import { ServerBadge } from '$components/server-badge';
 import { useDebounce } from '$hooks/useDebounce';
-import { SearchItemStrGetter, useAsyncSearch, UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
+import type { SearchItemStrGetter, UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
+import { useAsyncSearch } from '$hooks/useAsyncSearch';
 import { getMemberSearchStr } from '$utils/room';
 import { useMembershipFilter, useMembershipFilterMenu } from '$hooks/useMemberFilter';
 import { useMemberPowerSort, useMemberSort, useMemberSortMenu } from '$hooks/useMemberSort';
@@ -49,6 +41,9 @@ import { useSpaceOptionally } from '$hooks/useSpace';
 import { useFlattenPowerTagMembers, useGetMemberPowerTag } from '$hooks/useMemberPowerTag';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { getMouseEventCords } from '$utils/dom';
+import { getMxIdServer } from '$utils/mxIdHelper';
+import { useAtomValue } from 'jotai';
+import { nicknamesAtom } from '$state/nicknames';
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   limit: 1000,
@@ -61,14 +56,13 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 };
 
 const mxIdToName = (mxId: string) => getMxIdLocalPart(mxId) ?? mxId;
-const getRoomMemberStr: SearchItemStrGetter<RoomMember> = (m, query) =>
-  getMemberSearchStr(m, query, mxIdToName);
 
 type MembersProps = {
   requestClose: () => void;
 };
 export function Members({ requestClose }: MembersProps) {
   const mx = useMatrixClient();
+  const nicknames = useAtomValue(nicknamesAtom);
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const members = useRoomMembers(mx, room.roomId);
@@ -96,9 +90,14 @@ export function Members({ requestClose }: MembersProps) {
     () =>
       Array.from(members)
         .filter(membershipFilter.filterFn)
-        .sort(memberSort.sortFn)
+        .toSorted(memberSort.sortFn)
         .sort(memberPowerSort),
     [members, membershipFilter, memberSort, memberPowerSort]
+  );
+
+  const getRoomMemberStr = useCallback<SearchItemStrGetter<RoomMember>>(
+    (m, query) => getMemberSearchStr(m, query, mxIdToName, nicknames),
+    [nicknames]
   );
 
   const [result, search, resetSearch] = useAsyncSearch(
@@ -155,7 +154,7 @@ export function Members({ requestClose }: MembersProps) {
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>
@@ -172,7 +171,7 @@ export function Members({ requestClose }: MembersProps) {
                 <Input
                   ref={searchInputRef}
                   onChange={handleSearchChange}
-                  before={<Icon size="200" src={Icons.Search} />}
+                  before={menuIcon(MagnifyingGlass)}
                   variant="SurfaceVariant"
                   size="500"
                   placeholder="Search"
@@ -186,7 +185,7 @@ export function Members({ requestClose }: MembersProps) {
                         radii="Pill"
                         aria-pressed
                         onClick={handleSearchReset}
-                        after={<Icon size="50" src={Icons.Cross} />}
+                        after={chipIcon(X)}
                       >
                         <Text size="B300">
                           {result.items.length === 0
@@ -224,7 +223,7 @@ export function Members({ requestClose }: MembersProps) {
                         variant="SurfaceVariant"
                         size="400"
                         radii="300"
-                        before={<Icon src={Icons.Filter} size="50" />}
+                        before={chipIcon(Funnel)}
                       >
                         <Text size="T200">{membershipFilter.name}</Text>
                       </Chip>
@@ -256,7 +255,7 @@ export function Members({ requestClose }: MembersProps) {
                         variant="SurfaceVariant"
                         size="400"
                         radii="300"
-                        after={<Icon src={Icons.Sort} size="50" />}
+                        after={chipIcon(ArrowsDownUp)}
                       >
                         <Text size="T200">{memberSort.name}</Text>
                       </Chip>
@@ -277,7 +276,7 @@ export function Members({ requestClose }: MembersProps) {
                   size="300"
                   aria-label="Scroll to Top"
                 >
-                  <Icon src={Icons.ChevronTop} size="300" />
+                  {composerIcon(CaretUp)}
                 </IconButton>
               </ScrollTopContainer>
               {fetchingMembers && (
@@ -301,7 +300,7 @@ export function Members({ requestClose }: MembersProps) {
                 gap="100"
               >
                 {virtualizer.getVirtualItems().map((vItem) => {
-                  const tagOrMember = flattenTagMembers[vItem.index];
+                  const tagOrMember = flattenTagMembers[vItem.index]!;
 
                   if ('userId' in tagOrMember) {
                     const server = getMxIdServer(tagOrMember.userId);

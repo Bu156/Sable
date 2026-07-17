@@ -1,4 +1,5 @@
-import { Box, Button, Icon, Icons, Spinner, Text, toRem } from 'folds';
+import { Box, Button, Spinner, Text, toRem } from 'folds';
+import { sizedIcon, Phone } from '$components/icons/phosphor';
 import { SequenceCard } from '../../components/sequence-card';
 import * as css from './styles.css';
 import { ChatButton, ControlDivider, MicrophoneButton, SoundButton, VideoButton } from './Controls';
@@ -74,7 +75,10 @@ export function PrescreenControls({ canJoin }: PrescreenControlsProps) {
 
         <Box shrink="No" alignItems="Center" justifyContent="Center" direction="Row">
           <Button
-            style={{ minWidth: compact ? toRem(48) : toRem(88), padding: compact ? 0 : undefined }}
+            style={{
+              minWidth: compact ? toRem(48) : toRem(88),
+              padding: compact ? 0 : undefined,
+            }}
             variant={disabled ? 'Secondary' : 'Success'}
             fill={disabled ? 'Soft' : 'Solid'}
             onClick={() => startCall(room, { microphone, video, sound })}
@@ -83,7 +87,7 @@ export function PrescreenControls({ canJoin }: PrescreenControlsProps) {
               joining ? (
                 <Spinner variant="Success" fill="Solid" size="200" />
               ) : (
-                <Icon src={Icons.Phone} size="200" filled />
+                sizedIcon(Phone, '200', { filled: true })
               )
             }
           >

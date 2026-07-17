@@ -1,26 +1,21 @@
-import {
-  ShowSasCallbacks,
-  VerificationPhase,
-  VerificationRequest,
-  Verifier,
-  VerificationMethod,
-} from '$types/matrix-sdk';
-import { CSSProperties, useCallback, useEffect, useState } from 'react';
+import type { ShowSasCallbacks, VerificationRequest, Verifier } from '$types/matrix-sdk';
+import { VerificationPhase, VerificationMethod } from '$types/matrix-sdk';
+import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
   config,
   Dialog,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   Spinner,
   Text,
 } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
 import * as Sentry from '@sentry/react';
 import {
@@ -43,7 +38,7 @@ type WaitingMessageProps = {
 function WaitingMessage({ message }: WaitingMessageProps) {
   return (
     <Box alignItems="Center" gap="200">
-      <Spinner variant="Secondary" size="200" />
+      <Spinner variant="Secondary" size="200" style={{ backgroundColor: 'transparent' }} />
       <Text size="T300">{message}</Text>
     </Box>
   );
@@ -119,6 +114,15 @@ function AutoVerificationStart({ onStart }: VerificationStartProps) {
 
 function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
   const [confirmState, confirm] = useAsyncCallback(useCallback(() => sasData.confirm(), [sasData]));
+  const emojiEntries = useMemo<{ id: string; emoji: string; name: string }[]>(
+    () =>
+      (sasData.sas.emoji ?? []).map(([emoji, name], index) => ({
+        id: `emoji-${index}`,
+        emoji,
+        name,
+      })),
+    [sasData]
+  );
 
   const confirming =
     confirmState.status === AsyncStatus.Loading || confirmState.status === AsyncStatus.Success;
@@ -136,15 +140,8 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         wrap="Wrap"
         justifyContent="Center"
       >
-        {sasData.sas.emoji?.map(([emoji, name], index) => (
-          <Box
-            // eslint-disable-next-line react/no-array-index-key
-            key={`${emoji}${name}${index}`}
-            direction="Column"
-            gap="100"
-            justifyContent="Center"
-            alignItems="Center"
-          >
+        {emojiEntries.map(({ id, emoji, name }) => (
+          <Box key={id} direction="Column" gap="100" justifyContent="Center" alignItems="Center">
             <Text size="H1">{emoji}</Text>
             <Text size="T200">{name}</Text>
           </Box>
@@ -275,7 +272,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                 <Text size="H4">Device Verification</Text>
               </Box>
               <IconButton size="300" radii="300" onClick={handleCancel}>
-                <Icon src={Icons.Cross} />
+                {composerIcon(X)}
               </IconButton>
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">

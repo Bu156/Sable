@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Box, Text, Icon, Icons, Scroll, Button, config, toRem, Spinner } from 'folds';
+import { Box, Text, Scroll, Button, config, toRem, Spinner } from 'folds';
+import { Code, Heart, menuIcon } from '$components/icons/phosphor';
 import { PageContent } from '$components/page';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
-import CinnySVG from '$public/res/svg/cinny-logo.svg';
+import LogoSVG from '$public/res/svg/logo.svg';
 import { clearCacheAndReload } from '$client/initMatrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { SequenceCardStyle } from '$features/settings/styles.css';
@@ -11,10 +12,15 @@ import { Method } from '$types/matrix-sdk';
 import { useOpenBugReportModal } from '$state/hooks/bugReportModal';
 import { SettingsSectionPage } from '../SettingsSectionPage';
 
+type VersionResult =
+  | { error: { message: string } }
+  | { server: { name?: string; version?: string; compiler?: string } }
+  | undefined;
+
 export function HomeserverInfo() {
   const mx = useMatrixClient();
   const [federationUrl, setFederationUrl] = useState<string>(mx.baseUrl);
-  const [version, setVersion] = useState<any>(undefined);
+  const [version, setVersion] = useState<VersionResult>(undefined);
 
   if (!version)
     mx.http
@@ -22,7 +28,11 @@ export function HomeserverInfo() {
         prefix: '/_matrix/federation/v1',
         baseUrl: federationUrl,
       })
-      .then((fetched_version) => setVersion(fetched_version))
+      .then((fetched_version) =>
+        setVersion({
+          server: fetched_version as { name?: string; version?: string; compiler?: string },
+        })
+      )
       .catch((error) => {
         if (federationUrl === mx.baseUrl) {
           mx.http
@@ -30,15 +40,16 @@ export function HomeserverInfo() {
               prefix: '/.well-known/matrix',
               baseUrl: `https://${mx.getSafeUserId().split(':')[1]}`,
             })
-            .then((well_known: any) => {
-              const newUrl = `https://${well_known['m.server'].split(':')[0]}`;
+            .then((well_known) => {
+              const mServer = (well_known as { 'm.server'?: string })['m.server'];
+              const newUrl = mServer ? `https://${mServer.split(':')[0]}` : federationUrl;
               if (newUrl !== federationUrl) {
                 setFederationUrl(newUrl);
               }
             })
-            .catch((error_) => setVersion({ error: error_ }));
+            .catch((error_) => setVersion({ error: { message: String(error_) } }));
         } else {
-          setVersion({ error });
+          setVersion({ error: { message: String(error) } });
         }
       });
 
@@ -93,7 +104,7 @@ export function HomeserverInfo() {
       )}
       {version ? (
         <>
-          {version.error && (
+          {'error' in version && version.error && (
             <SequenceCard
               className={SequenceCardStyle}
               variant="SurfaceVariant"
@@ -103,7 +114,7 @@ export function HomeserverInfo() {
               {version.error.message}
             </SequenceCard>
           )}
-          {version.server?.name && (
+          {'server' in version && version.server?.name && (
             <SequenceCard
               className={SequenceCardStyle}
               variant="SurfaceVariant"
@@ -117,7 +128,7 @@ export function HomeserverInfo() {
               />
             </SequenceCard>
           )}
-          {version.server?.version && (
+          {'server' in version && version.server?.version && (
             <SequenceCard
               className={SequenceCardStyle}
               variant="SurfaceVariant"
@@ -131,7 +142,7 @@ export function HomeserverInfo() {
               />
             </SequenceCard>
           )}
-          {version.server?.compiler && (
+          {'server' in version && version.server?.compiler && (
             <SequenceCard
               className={SequenceCardStyle}
               variant="SurfaceVariant"
@@ -180,8 +191,8 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                 <Box shrink="No">
                   <img
                     style={{ width: toRem(60), height: toRem(60) }}
-                    src={CinnySVG}
-                    alt="Cinny logo"
+                    src={LogoSVG}
+                    alt="Sable logo"
                   />
                 </Box>
                 <Box direction="Column" gap="300">
@@ -203,7 +214,7 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                       fill="Soft"
                       size="300"
                       radii="300"
-                      before={<Icon src={Icons.Code} size="100" filled />}
+                      before={menuIcon(Code, { weight: 'fill' })}
                     >
                       <Text size="B300">Source Code</Text>
                     </Button>
@@ -216,7 +227,7 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                       fill="Soft"
                       size="300"
                       radii="300"
-                      before={<Icon src={Icons.Heart} size="100" filled />}
+                      before={menuIcon(Heart, { weight: 'fill' })}
                     >
                       <Text size="B300">Support</Text>
                     </Button>
@@ -294,7 +305,6 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                   >
                     <li>
                       <Text size="T300">
-                        {' '}
                         <a
                           href="https://github.com/cinnyapp/cinny"
                           rel="noreferrer noopener"
@@ -302,15 +312,15 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                         >
                           Cinny
                         </a>
-                        is ©{' '}
+                        {', © '}
                         <a
                           href="https://github.com/ajbura"
                           rel="noreferrer noopener"
                           target="_blank"
                         >
                           Ajay Bura
-                        </a>{' '}
-                        used under the terms of{' '}
+                        </a>
+                        {', is used under the terms of '}
                         <a
                           href="https://github.com/cinnyapp/cinny/blob/dev/LICENSE"
                           rel="noreferrer noopener"
@@ -323,23 +333,23 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                     </li>
                     <li>
                       <Text size="T300">
-                        The{' '}
+                        {'The '}
                         <a
                           href="https://github.com/matrix-org/matrix-js-sdk"
                           rel="noreferrer noopener"
                           target="_blank"
                         >
                           matrix-js-sdk
-                        </a>{' '}
-                        is ©{' '}
+                        </a>
+                        {', © '}
                         <a
                           href="https://matrix.org/foundation"
                           rel="noreferrer noopener"
                           target="_blank"
                         >
                           The Matrix.org Foundation C.I.C
-                        </a>{' '}
-                        used under the terms of{' '}
+                        </a>
+                        {', is used under the terms of '}
                         <a
                           href="http://www.apache.org/licenses/LICENSE-2.0"
                           rel="noreferrer noopener"
@@ -352,19 +362,19 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                     </li>
                     <li>
                       <Text size="T300">
-                        The{' '}
+                        {'The '}
                         <a
                           href="https://github.com/mozilla/twemoji-colr"
                           target="_blank"
                           rel="noreferrer noopener"
                         >
                           twemoji-colr
-                        </a>{' '}
-                        font is ©{' '}
+                        </a>
+                        {' font, © '}
                         <a href="https://mozilla.org/" target="_blank" rel="noreferrer noopener">
                           Mozilla Foundation
-                        </a>{' '}
-                        used under the terms of{' '}
+                        </a>
+                        {', is used under the terms of '}
                         <a
                           href="http://www.apache.org/licenses/LICENSE-2.0"
                           target="_blank"
@@ -377,23 +387,23 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                     </li>
                     <li>
                       <Text size="T300">
-                        The{' '}
+                        {'The '}
                         <a
-                          href="https://twemoji.twitter.com"
+                          href="https://github.com/twitter/twemoji"
                           target="_blank"
                           rel="noreferrer noopener"
                         >
                           Twemoji
-                        </a>{' '}
-                        emoji art is ©{' '}
+                        </a>
+                        {' emoji art, © '}
                         <a
-                          href="https://twemoji.twitter.com"
+                          href="https://github.com/twitter/twemoji"
                           target="_blank"
                           rel="noreferrer noopener"
                         >
                           Twitter, Inc and other contributors
-                        </a>{' '}
-                        used under the terms of{' '}
+                        </a>
+                        {', is used under the terms of '}
                         <a
                           href="https://creativecommons.org/licenses/by/4.0/"
                           target="_blank"
@@ -406,7 +416,7 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                     </li>
                     <li>
                       <Text size="T300">
-                        The{' '}
+                        {'The '}
                         <a
                           href="https://material.io/design/sound/sound-resources.html"
                           target="_blank"
@@ -414,11 +424,11 @@ export function About({ requestBack, requestClose }: Readonly<AboutProps>) {
                         >
                           Material sound resources
                         </a>{' '}
-                        are ©{' '}
+                        {', © '}
                         <a href="https://google.com" target="_blank" rel="noreferrer noopener">
                           Google
-                        </a>{' '}
-                        used under the terms of{' '}
+                        </a>
+                        {', are used under the terms of '}
                         <a
                           href="https://creativecommons.org/licenses/by/4.0/"
                           target="_blank"

@@ -1,13 +1,15 @@
 import { useMemo } from 'react';
-import {
+import { EventType } from '$types/matrix-sdk';
+import type {
   IPowerLevels,
   PowerLevelActions,
   PowerLevelNotificationsAction,
-  readPowerLevel,
 } from './usePowerLevels';
+import { readPowerLevel } from './usePowerLevels';
 
 export type RoomPermissionsAPI = {
   event: (type: string, userId: string) => boolean;
+  message: (encrypted: boolean, userId: string) => boolean;
   stateEvent: (type: string, userId: string) => boolean;
   action: (action: PowerLevelActions, userId: string) => boolean;
   notificationAction: (action: PowerLevelNotificationsAction, userId: string) => boolean;
@@ -24,6 +26,11 @@ export const getRoomPermissionsAPI = (
       const requiredPL = readPowerLevel.event(powerLevels, type);
       return userPower >= requiredPL;
     },
+    message: (encrypted, userId) =>
+      api.event(
+        encrypted ? (EventType.RoomMessageEncrypted as string) : EventType.RoomMessage,
+        userId
+      ),
     stateEvent: (type, userId) => {
       if (creators.has(userId)) return true;
       const userPower = readPowerLevel.user(powerLevels, userId);

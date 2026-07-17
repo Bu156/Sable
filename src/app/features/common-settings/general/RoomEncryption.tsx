@@ -6,28 +6,28 @@ import {
   config,
   Dialog,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   Spinner,
   Text,
 } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import { useCallback, useState } from 'react';
-import { MatrixError } from '$types/matrix-sdk';
+import type { MatrixError, StateEvents } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
 import { SequenceCard } from '$components/sequence-card';
 import { SequenceCardStyle } from '$features/room-settings/styles.css';
 import { SettingTile } from '$components/setting-tile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { StateEvent } from '$types/matrix/room';
+
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useRoom } from '$hooks/useRoom';
 import { useStateEvent } from '$hooks/useStateEvent';
 import { stopPropagation } from '$utils/keyboard';
-import { RoomPermissionsAPI } from '$hooks/useRoomPermissions';
+import type { RoomPermissionsAPI } from '$hooks/useRoomPermissions';
+import { EventType } from '$types/matrix-sdk';
 
 const ROOM_ENC_ALGO = 'm.megolm.v1.aes-sha2';
 
@@ -38,15 +38,15 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
   const mx = useMatrixClient();
   const room = useRoom();
 
-  const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, mx.getSafeUserId());
-  const content = useStateEvent(room, StateEvent.RoomEncryption)?.getContent<{
+  const canEnable = permissions.stateEvent(EventType.RoomEncryption, mx.getSafeUserId());
+  const content = useStateEvent(room, EventType.RoomEncryption)?.getContent<{
     algorithm: string;
   }>();
   const enabled = content?.algorithm === ROOM_ENC_ALGO;
 
   const [enableState, enable] = useAsyncCallback(
     useCallback(async () => {
-      await mx.sendStateEvent(room.roomId, StateEvent.RoomEncryption as any, {
+      await mx.sendStateEvent(room.roomId, EventType.RoomEncryption as keyof StateEvents, {
         algorithm: ROOM_ENC_ALGO,
       });
     }, [mx, room.roomId])
@@ -124,7 +124,7 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
                       <Text size="H4">Enable Encryption</Text>
                     </Box>
                     <IconButton size="300" onClick={() => setPrompt(false)} radii="300">
-                      <Icon src={Icons.Cross} />
+                      {composerIcon(X)}
                     </IconButton>
                   </Header>
                   <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">

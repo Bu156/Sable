@@ -1,7 +1,8 @@
-import { Avatar, Box, Icon, Icons, Text } from 'folds';
-import { MouseEventHandler } from 'react';
+import { Avatar, Box, Text } from 'folds';
+import { userFallbackIcon } from '$components/icons/phosphor';
+import type { MouseEventHandler } from 'react';
 import { useAtomValue } from 'jotai';
-import { Room, CallMembership } from '$types/matrix-sdk';
+import type { Room, CallMembership } from '$types/matrix-sdk';
 import { NavButton, NavItem, NavItemContent } from '$components/nav';
 import { UserAvatar } from '$components/user-avatar';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -16,9 +17,10 @@ import { useCallEmbed } from '$hooks/useCallEmbed';
 type RoomNavUserProps = {
   room: Room;
   callMembership: CallMembership;
+  hideText?: boolean;
 };
 
-export function RoomNavUser({ room, callMembership }: RoomNavUserProps) {
+export function RoomNavUser({ room, callMembership, hideText }: RoomNavUserProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const openProfile = useOpenUserRoomProfile();
@@ -45,20 +47,22 @@ export function RoomNavUser({ room, callMembership }: RoomNavUserProps) {
   return (
     <NavItem variant="Background" radii="400">
       <NavButton onClick={handleNavUserClick} aria-label={ariaLabel}>
-        <NavItemContent as="div">
+        <NavItemContent as="div" style={hideText ? { padding: '0' } : {}}>
           <Box direction="Column" grow="Yes" gap="200" justifyContent="Stretch">
-            <Box alignItems="Center" gap="200">
+            <Box alignItems="Center" gap="200" justifyContent={hideText ? 'Center' : 'Start'}>
               <Avatar size="200">
                 <UserAvatar
                   userId={userId}
                   src={avatarUrl ?? undefined}
                   alt={name}
-                  renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+                  renderFallback={() => userFallbackIcon('sm')}
                 />
               </Avatar>
-              <Text as="span" size="B400" priority="300" truncate>
-                {name}
-              </Text>
+              {!hideText && (
+                <Text as="span" size="B400" priority="300" truncate>
+                  {name}
+                </Text>
+              )}
             </Box>
           </Box>
         </NavItemContent>

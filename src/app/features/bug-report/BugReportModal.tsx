@@ -6,9 +6,7 @@ import {
   Chip,
   config,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Input,
   Modal,
   Overlay,
@@ -20,6 +18,7 @@ import {
   TextArea,
   Checkbox,
 } from 'folds';
+import { ArrowRight, X, chipIcon, composerIcon } from '$components/icons/phosphor';
 import * as Sentry from '@sentry/react';
 import { useCloseBugReportModal, useBugReportModalOpen } from '$state/hooks/bugReportModal';
 import { stopPropagation } from '$utils/keyboard';
@@ -238,18 +237,24 @@ function BugReportModal() {
             <Box direction="Column" style={{ maxHeight: '90vh', overflow: 'hidden' }}>
               <Header
                 size="500"
-                style={{ padding: config.space.S200, paddingLeft: config.space.S400 }}
+                style={{
+                  padding: config.space.S200,
+                  paddingLeft: config.space.S400,
+                }}
               >
                 <Box grow="Yes">
                   <Text size="H4">Report an Issue</Text>
                 </Box>
                 <IconButton size="300" radii="300" onClick={close}>
-                  <Icon src={Icons.Cross} />
+                  {composerIcon(X)}
                 </IconButton>
               </Header>
               <Scroll size="300" hideTrack>
                 <Box
-                  style={{ padding: config.space.S400, paddingRight: config.space.S200 }}
+                  style={{
+                    padding: config.space.S400,
+                    paddingRight: config.space.S200,
+                  }}
                   direction="Column"
                   gap="500"
                 >
@@ -450,7 +455,10 @@ function BugReportModal() {
                           as="label"
                           gap="200"
                           alignItems="Center"
-                          style={{ cursor: 'pointer', paddingLeft: config.space.S400 }}
+                          style={{
+                            cursor: 'pointer',
+                            paddingLeft: config.space.S400,
+                          }}
                         >
                           <Checkbox
                             variant="Primary"
@@ -493,7 +501,7 @@ function BugReportModal() {
                       radii="400"
                       disabled={!canSubmit}
                       onClick={handleSubmit}
-                      after={<Icon src={Icons.ArrowRight} size="100" />}
+                      after={chipIcon(ArrowRight)}
                     >
                       <Text size="B400">
                         {sentryEnabled && type === 'bug' ? 'Submit Report' : 'Open on GitHub'}

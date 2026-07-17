@@ -1,5 +1,7 @@
-import { Box, Icon, IconButton, Icons, Scroll, Text, toRem } from 'folds';
+import { Box, IconButton, Scroll, Text, toRem } from 'folds';
+import { ArrowLeft, composerIcon } from '$components/icons/phosphor';
 import { useAtomValue } from 'jotai';
+import { RoomType } from '$types/matrix-sdk';
 import { RoomCard } from '$components/room-card';
 import { RoomTopicViewer } from '$components/room-topic-viewer';
 import { Page, PageHeader } from '$components/page';
@@ -21,8 +23,8 @@ export function JoinBeforeNavigate({
   const { navigateRoom, navigateSpace } = useRoomNavigate();
   const screenSize = useScreenSizeContext();
 
-  const handleView = (roomId: string) => {
-    if (mx.getRoom(roomId)?.isSpaceRoom()) {
+  const handleView = (roomId: string, roomType?: string) => {
+    if (mx.getRoom(roomId)?.isSpaceRoom() || roomType === RoomType.Space) {
       navigateSpace(roomId);
       return;
     }
@@ -36,11 +38,7 @@ export function JoinBeforeNavigate({
           <Box shrink="No">
             {screenSize === ScreenSize.Mobile && (
               <BackRouteHandler>
-                {(onBack) => (
-                  <IconButton onClick={onBack}>
-                    <Icon src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
+                {(onBack) => <IconButton onClick={onBack}>{composerIcon(ArrowLeft)}</IconButton>}
               </BackRouteHandler>
             )}
           </Box>
@@ -70,7 +68,7 @@ export function JoinBeforeNavigate({
                   renderTopicViewer={(name, topic, requestClose) => (
                     <RoomTopicViewer name={name} topic={topic} requestClose={requestClose} />
                   )}
-                  onView={handleView}
+                  onView={(roomId) => handleView(roomId, summary?.room_type)}
                 />
               )}
             </RoomSummaryLoader>

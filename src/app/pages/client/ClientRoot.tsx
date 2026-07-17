@@ -1,30 +1,27 @@
+import type { RectCords } from 'folds';
 import {
   Box,
   Button,
   config,
   Dialog,
-  Icon,
   IconButton,
-  Icons,
   Menu,
   MenuItem,
   PopOut,
-  RectCords,
   Spinner,
   Text,
 } from 'folds';
-import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient } from '$types/matrix-sdk';
+import type { HttpApiEventHandlerMap, MatrixClient } from '$types/matrix-sdk';
+import { HttpApiEvent } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
-import { useRef, MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { isTauri } from '@tauri-apps/api/core';
-import { type as osType } from '@tauri-apps/plugin-os';
 import {
   clearCacheAndReload,
   clearLoginData,
-  clearMismatchedStores,
   initClient,
   logoutClient,
   startClient,
@@ -48,25 +45,92 @@ import {
 import { createLogger } from '$utils/debug';
 import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
+import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
-import { useClientConfig } from '$hooks/useClientConfig';
+import { DIRECT_ROOM_PATH, HOME_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
+import { getCanonicalAliasRoomId, isRoomAlias, isRoomId } from '$utils/matrix';
 import { pushSessionToSW } from '../../../sw-session';
-import { createSessionRefreshHandler } from './sessionRefresh';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
 import { AutoDiscovery } from './AutoDiscovery';
+import { useSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
 
 const log = createLogger('ClientRoot');
 
 const isClientReady = (syncState: string | null): boolean =>
   syncState === 'PREPARED' || syncState === 'SYNCING' || syncState === 'CATCHUP';
 
+const resolveLocalRoomId = (
+  mx: MatrixClient,
+  encodedRoomIdOrAlias?: string
+): string | undefined => {
+  if (!encodedRoomIdOrAlias) return undefined;
+  try {
+    const roomIdOrAlias = decodeURIComponent(encodedRoomIdOrAlias);
+    if (isRoomId(roomIdOrAlias)) return roomIdOrAlias;
+    if (isRoomAlias(roomIdOrAlias)) return getCanonicalAliasRoomId(mx, roomIdOrAlias);
+  } catch {
+    // Ignore malformed route values and let the normal router handle them.
+  }
+  return undefined;
+};
+
 function ClientRootLoading() {
+  const sessions = useAtomValue(sessionsAtom);
+  const activeSessionId = useAtomValue(activeSessionIdAtom);
+  const setSessions = useSetAtom(sessionsAtom);
+
+  const [showEasterEggs] = useSetting(settingsAtom, 'showEasterEggs');
+  const [animalKind] = useSetting(settingsAtom, 'animalKind');
+
+  const activeSession: Session | undefined =
+    sessions.find((session) => session.userId === activeSessionId) ?? sessions[0];
+
+  const usingSlidingSync = activeSession?.slidingSyncOptIn === true;
+
+  const handleSwap = () => {
+    if (!activeSession) return;
+
+    setSessions({
+      type: 'PUT',
+      session: {
+        ...activeSession,
+        slidingSyncOptIn: !usingSlidingSync,
+      },
+    });
+
+    window.location.reload();
+  };
+
+  const loadingAnimal = showEasterEggs && animalKind ? animalKind : 'cats';
+
   return (
     <SplashScreen>
       <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
         <Spinner variant="Secondary" size="600" />
-        <Text>Petting cats</Text>
+
+        <Text>{`Petting ${loadingAnimal}`}</Text>
+
+        {activeSession && (
+          <Text
+            as="button"
+            type="button"
+            onClick={handleSwap}
+            size="T200"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'inherit',
+              cursor: 'pointer',
+              opacity: 0.7,
+              textDecoration: 'underline',
+            }}
+          >
+            {usingSlidingSync ? 'Swap to classic sync' : 'Swap to sliding sync'}
+          </Text>
+        )}
       </Box>
     </SplashScreen>
   );
@@ -78,10 +142,6 @@ type ClientRootOptionsProps = {
 };
 function ClientRootOptions({ mx, onLogout }: ClientRootOptionsProps) {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
-  const isWindowsTauri = isTauri() && osType() === 'windows';
-  const topOffset = isWindowsTauri
-    ? `calc(var(--tauri-titlebar-height) + ${config.space.S100})`
-    : config.space.S100;
 
   const handleToggle: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const cords = evt.currentTarget.getBoundingClientRect();
@@ -95,14 +155,17 @@ function ClientRootOptions({ mx, onLogout }: ClientRootOptionsProps) {
     <IconButton
       style={{
         position: 'absolute',
-        top: topOffset,
+        top: config.space.S100,
         right: config.space.S100,
       }}
       variant="Background"
       fill="None"
+      aria-pressed={!!menuAnchor}
       onClick={handleToggle}
     >
-      <Icon size="200" src={Icons.VerticalDots} />
+      {composerIcon(DotsThreeOutlineVerticalIcon, {
+        weight: menuAnchor ? 'fill' : 'regular',
+      })}
       <PopOut
         anchor={menuAnchor}
         position="Bottom"
@@ -180,12 +243,9 @@ type ClientRootProps = {
   children: ReactNode;
 };
 export function ClientRoot({ children }: ClientRootProps) {
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const clientConfig = useClientConfig();
+  const location = useLocation();
   const sessions = useAtomValue(sessionsAtom);
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
 
@@ -197,7 +257,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   const loadedUserIdRef = useRef<string | undefined>(undefined);
   const syncStartTimeRef = useRef(performance.now());
   const firstSyncReadyRef = useRef(false);
-  const loadingStateLoggedRef = useRef<'unknown' | 'true' | 'false'>('unknown');
+  const [syncReadyClient, setSyncReadyClient] = useState<MatrixClient>();
 
   const [loadState, loadMatrix, setLoadState] = useAsyncCallback<MatrixClient, Error, []>(
     useCallback(async () => {
@@ -209,49 +269,37 @@ export function ClientRoot({ children }: ClientRootProps) {
         log.log('persisting activeSessionId →', activeSession.userId);
         setActiveSessionId(activeSession.userId);
       }
-      await clearMismatchedStores();
       log.log('initClient for', activeSession.userId);
-      const newMx = await initClient(
-        activeSession,
-        createSessionRefreshHandler(
-          activeSession.userId,
-          () => sessionsRef.current.find((session) => session.userId === activeSession.userId),
-          setSessions,
-          pushSessionToSW
-        )
-      );
+      const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;
-      pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
+      pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
       return newMx;
-    }, [activeSession, activeSessionId, setActiveSessionId, setSessions])
+    }, [activeSession, activeSessionId, setActiveSessionId])
   );
 
   const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
 
-  const [startState, startMatrix, setStartState] = useAsyncCallback<void, Error, [MatrixClient]>(
+  const roomMatch =
+    matchPath(HOME_ROOM_PATH, location.pathname) ??
+    matchPath(DIRECT_ROOM_PATH, location.pathname) ??
+    matchPath(SPACE_ROOM_PATH, location.pathname);
+  const encodedInitialRoomIdOrAlias = roomMatch?.params.roomIdOrAlias;
+
+  const [startState, startMatrix] = useAsyncCallback<void, Error, [MatrixClient]>(
     useCallback(
-      (m) =>
-        startClient(m, {
+      (m) => {
+        const initialRoomId = resolveLocalRoomId(m, encodedInitialRoomIdOrAlias);
+
+        return startClient(m, {
           baseUrl: activeSession?.baseUrl,
-          slidingSync: clientConfig.slidingSync,
           sessionSlidingSyncOptIn: activeSession?.slidingSyncOptIn,
-        }),
-      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn, clientConfig.slidingSync]
+          initialRoomIds: initialRoomId ? [initialRoomId] : undefined,
+          onCachedRoomsLoaded: () => setSyncReadyClient(m),
+        });
+      },
+      [activeSession?.baseUrl, activeSession?.slidingSyncOptIn, encodedInitialRoomIdOrAlias]
     )
   );
-
-  useEffect(() => {
-    if (loadState.status === AsyncStatus.Loading) {
-      firstSyncReadyRef.current = false;
-      syncStartTimeRef.current = performance.now();
-    }
-    if (loadState.status !== AsyncStatus.Success) {
-      setStartState((prev) => {
-        if (prev.status === AsyncStatus.Idle) return prev;
-        return { status: AsyncStatus.Idle };
-      });
-    }
-  }, [loadState.status, setStartState]);
 
   useEffect(() => {
     if (!activeSession) return;
@@ -263,11 +311,10 @@ export function ClientRoot({ children }: ClientRootProps) {
         activeSession.userId,
         '— reloading client'
       );
-      pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
+      pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
       if (mx?.clientRunning) {
         stopClient(mx);
       }
-      setLoading(true);
       loadedUserIdRef.current = undefined;
       setLoadState({ status: AsyncStatus.Idle });
       navigate(getHomePath(), { replace: true });
@@ -278,8 +325,9 @@ export function ClientRoot({ children }: ClientRootProps) {
     if (!mx || !activeSession) return;
     await logoutClient(mx, activeSession);
     setSessions({ type: 'DELETE', session: activeSession } as SessionsAction);
-    const remaining = sessions.filter((s) => s.userId !== activeSession.userId);
-    setActiveSessionId(remaining[0]?.userId ?? undefined);
+    setActiveSessionId(
+      sessions.find((s) => s.userId !== activeSession.userId)?.userId ?? undefined
+    );
     window.location.reload();
   }, [mx, activeSession, sessions, setSessions, setActiveSessionId]);
 
@@ -303,32 +351,6 @@ export function ClientRoot({ children }: ClientRootProps) {
     }
   }, [loadState, loadMatrix]);
 
-  useSyncState(
-    mx,
-    useCallback((state: string) => {
-      if (isClientReady(state)) {
-        if (!firstSyncReadyRef.current) {
-          firstSyncReadyRef.current = true;
-          try {
-            Sentry.metrics.distribution(
-              'sable.sync.time_to_ready_ms',
-              performance.now() - syncStartTimeRef.current
-            );
-          } catch {
-            // no-op: never block loading gate on telemetry
-          }
-        }
-        setLoading(false);
-      }
-    }, [])
-  );
-
-  useEffect(() => {
-    const next = loading ? 'true' : 'false';
-    if (loadingStateLoggedRef.current === next) return;
-    loadingStateLoggedRef.current = next;
-  }, [loading]);
-
   useEffect(() => {
     if (mx && !mx.clientRunning) {
       startMatrix(mx);
@@ -336,30 +358,52 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [mx, startMatrix]);
 
   useEffect(() => {
-    if (!mx) return;
+    firstSyncReadyRef.current = false;
+    syncStartTimeRef.current = performance.now();
+
+    if (!mx) {
+      setSyncReadyClient(undefined);
+      return;
+    }
+
     if (isClientReady(mx.getSyncState())) {
-      setLoading(false);
+      setSyncReadyClient(mx);
+      firstSyncReadyRef.current = true;
     }
   }, [mx]);
 
-  useEffect(() => {
-    if (startState.status !== AsyncStatus.Success || !mx) return;
-    const syncState = mx.getSyncState();
-    if (!isClientReady(syncState)) return;
-    setLoading(false);
-  }, [startState.status, mx]);
+  useSyncState(
+    mx,
+    useCallback(
+      (state: string) => {
+        if (isClientReady(state)) {
+          setSyncReadyClient((current) => (current === mx ? current : mx));
+          if (!firstSyncReadyRef.current) {
+            firstSyncReadyRef.current = true;
+            Sentry.metrics.distribution(
+              'sable.sync.time_to_ready_ms',
+              performance.now() - syncStartTimeRef.current
+            );
+          }
+        }
+      },
+      [mx]
+    )
+  );
+
+  const isError = loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
 
   // Set matrix client context: homeserver and sync type (not PII)
   useEffect(() => {
     if (!activeSession?.baseUrl) return undefined;
     Sentry.setContext('client', {
       homeserver: activeSession.baseUrl,
-      sliding_sync: clientConfig.slidingSync,
+      sliding_sync: activeSession.slidingSyncOptIn === true,
     });
     return () => {
       Sentry.setContext('client', null);
     };
-  }, [activeSession?.baseUrl, clientConfig.slidingSync]);
+  }, [activeSession?.baseUrl, activeSession?.slidingSyncOptIn]);
 
   // Set a pseudonymous hashed user ID for error grouping — never sends raw Matrix ID
   useEffect(() => {
@@ -400,55 +444,53 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [startState]);
 
   return (
-    <AutoDiscovery userId={userId} baseUrl={baseUrl}>
-      <SpecVersions baseUrl={baseUrl}>
-        {mx && <SyncStatus mx={mx} />}
-        {loading && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
-        {(loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error) && (
-          <SplashScreen>
-            <Box
-              direction="Column"
-              grow="Yes"
-              alignItems="Center"
-              justifyContent="Center"
-              gap="400"
-            >
-              <Dialog>
-                <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
-                  {loadState.status === AsyncStatus.Error && (
-                    <Text>{`Failed to load. ${loadState.error.message}`}</Text>
-                  )}
-                  {startState.status === AsyncStatus.Error && (
-                    <Text>{`Failed to start. ${startState.error.message}`}</Text>
-                  )}
-                  <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
-                    <Text as="span" size="B400">
-                      Retry
-                    </Text>
-                  </Button>
-                </Box>
-              </Dialog>
-            </Box>
-          </SplashScreen>
-        )}
-        {loading || !mx ? (
-          <ClientRootLoading />
-        ) : (
-          <MatrixClientProvider value={mx}>
-            <ServerConfigsLoader>
-              {(serverConfigs) => (
-                <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
-                  <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
-                    <AuthMetadataProvider value={serverConfigs.authMetadata}>
-                      {children}
-                    </AuthMetadataProvider>
-                  </MediaConfigProvider>
-                </CapabilitiesProvider>
-              )}
-            </ServerConfigsLoader>
-          </MatrixClientProvider>
-        )}
-      </SpecVersions>
+    <AutoDiscovery userId={userId ?? ''} baseUrl={baseUrl ?? ''}>
+      {mx && <SyncStatus mx={mx} />}
+      {(!mx || isError) && <ClientRootOptions mx={mx} onLogout={handleLogout} />}
+      {isError && (
+        <SplashScreen>
+          <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
+            <Dialog>
+              <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
+                {loadState.status === AsyncStatus.Error && (
+                  <Text>{`Failed to load. ${loadState.error.message}`}</Text>
+                )}
+                {startState.status === AsyncStatus.Error && (
+                  <Text>{`Failed to start. ${startState.error.message}`}</Text>
+                )}
+                <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
+                  <Text as="span" size="B400">
+                    Retry
+                  </Text>
+                </Button>
+              </Box>
+            </Dialog>
+          </Box>
+        </SplashScreen>
+      )}
+      {!mx ? (
+        <ClientRootLoading />
+      ) : isError ? null : (
+        <MatrixClientProvider value={mx}>
+          {!syncReadyClient ? (
+            <ClientRootLoading />
+          ) : (
+            <SpecVersions baseUrl={baseUrl ?? ''}>
+              <ServerConfigsLoader>
+                {(serverConfigs) => (
+                  <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
+                    <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
+                      <AuthMetadataProvider value={serverConfigs.authMetadata}>
+                        {children}
+                      </AuthMetadataProvider>
+                    </MediaConfigProvider>
+                  </CapabilitiesProvider>
+                )}
+              </ServerConfigsLoader>
+            </SpecVersions>
+          )}
+        </MatrixClientProvider>
+      )}
     </AutoDiscovery>
   );
 }

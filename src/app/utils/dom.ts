@@ -95,11 +95,12 @@ export const getImageFileUrl = (fileOrBlob: File | Blob) => URL.createObjectURL(
 
 export const getVideoFileUrl = (fileOrBlob: File | Blob) => URL.createObjectURL(fileOrBlob);
 
-export const loadImageElement = (url: string): Promise<HTMLImageElement> =>
+export const loadImageElement = (url: string, crossOrigin?: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = document.createElement('img');
-    img.onload = () => resolve(img);
-    img.onerror = (err) => reject(err);
+    if (crossOrigin) img.crossOrigin = crossOrigin;
+    img.addEventListener('load', () => resolve(img));
+    img.addEventListener('error', (err) => reject(err));
     img.src = url;
   });
 
@@ -128,13 +129,13 @@ export const loadVideoElement = (url: string): Promise<HTMLVideoElement> =>
     video.playsInline = true;
     video.muted = true;
 
-    video.onloadeddata = () => {
+    video.addEventListener('loadeddata', () => {
       resolve(video);
       video.pause();
-    };
-    video.onerror = (e) => {
+    });
+    video.addEventListener('error', (e) => {
       reject(e);
-    };
+    });
 
     video.src = url;
     video.load();
@@ -201,6 +202,53 @@ export const scrollToBottom = (scrollEl: HTMLElement, behavior?: 'auto' | 'insta
   });
 };
 
+async function getBitmap(blob: Blob): Promise<ImageBitmap> {
+  if (!blob.type.startsWith('image/svg+xml')) return createImageBitmap(blob);
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+
+    await new Promise<void>((resolve, reject) => {
+      img.addEventListener('load', () => resolve(), { once: true });
+      img.addEventListener('error', reject, { once: true });
+      img.src = url;
+    });
+
+    return await createImageBitmap(img);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export const copyImageToClipboard = async (blob: Blob): Promise<boolean> => {
+  const bitmap = await getBitmap(blob);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const ctx = canvas.getContext('2d');
+  ctx?.drawImage(bitmap, 0, 0);
+
+  try {
+    const finalBlob = await new Promise<Blob>((resolve) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+      }, 'image/png');
+    });
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': finalBlob,
+      }),
+    ]);
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const copyToClipboard = async (text: string): Promise<boolean> => {
   if (navigator.clipboard) {
     try {
@@ -242,7 +290,7 @@ export const syntaxErrorPosition = (error: SyntaxError): number | undefined => {
   const match = error.message.match(/position\s(\d+)\s/);
   if (!match) return undefined;
 
-  const posStr = match[1];
+  const posStr = match[1]!;
   const position = parseInt(posStr, 10);
   if (Number.isNaN(position)) return undefined;
   return position;
@@ -261,3 +309,19 @@ export const getMouseEventCords = (event: MouseEvent) => ({
   width: 0,
   height: 0,
 });
+
+export const downloadTextFile = (
+  content: string,
+  filename: string,
+  mimeType = 'text/css'
+): void => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};

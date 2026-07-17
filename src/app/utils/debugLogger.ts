@@ -6,6 +6,7 @@
  */
 
 import * as Sentry from '@sentry/react';
+import { sanitizeSentryPayload } from './sentryScrubbers';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -122,7 +123,6 @@ class DebugLoggerService {
     // Also log to console for developer convenience
     const prefix = `[sable:${category}:${namespace}]`;
     const consoleLevel = level === 'debug' ? 'log' : level;
-    // eslint-disable-next-line no-console
     console[consoleLevel](prefix, message, data !== undefined ? data : '');
   }
 
@@ -161,13 +161,18 @@ class DebugLoggerService {
     };
     const sentryLevel: Sentry.SeverityLevel = sentryLevelMap[entry.level] ?? 'error';
 
+    const sanitizedData = entry.data !== undefined ? sanitizeSentryPayload(entry.data) : undefined;
+
     // Add breadcrumb for all logs (helps with debugging in Sentry), unless category is disabled
     if (!this.disabledBreadcrumbCategories.has(entry.category))
       Sentry.addBreadcrumb({
         category: `${entry.category}.${entry.namespace}`,
         message: entry.message,
         level: sentryLevel,
-        data: entry.data ? { data: entry.data } : undefined,
+        data:
+          sanitizedData !== undefined && sanitizedData !== null
+            ? { data: sanitizedData }
+            : undefined,
         timestamp: entry.timestamp / 1000, // Sentry expects seconds
       });
 
@@ -175,14 +180,18 @@ class DebugLoggerService {
     const logMsg = `[${entry.category}:${entry.namespace}] ${entry.message}`;
     // Flatten primitive values from entry.data so they become searchable attributes in Sentry Logs
     const logDataAttrs: Record<string, string | number | boolean> = {};
-    if (entry.data && typeof entry.data === 'object' && !(entry.data instanceof Error)) {
-      Object.entries(entry.data).forEach(([k, v]) => {
+    if (sanitizedData && typeof sanitizedData === 'object' && !(sanitizedData instanceof Error)) {
+      Object.entries(sanitizedData as Record<string, unknown>).forEach(([k, v]) => {
         if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
           logDataAttrs[k] = v;
         }
       });
     }
-    const logAttrs = { category: entry.category, namespace: entry.namespace, ...logDataAttrs };
+    const logAttrs = {
+      category: entry.category,
+      namespace: entry.namespace,
+      ...logDataAttrs,
+    };
     if (entry.level === 'debug') Sentry.logger.debug(logMsg, logAttrs);
     else if (entry.level === 'info') Sentry.logger.info(logMsg, logAttrs);
     else if (entry.level === 'warn') Sentry.logger.warn(logMsg, logAttrs);
@@ -223,7 +232,7 @@ class DebugLoggerService {
           },
           contexts: {
             debugLog: {
-              data: entry.data,
+              data: sanitizedData,
               timestamp: new Date(entry.timestamp).toISOString(),
             },
           },
@@ -240,7 +249,7 @@ class DebugLoggerService {
         },
         contexts: {
           debugLog: {
-            data: entry.data,
+            data: sanitizedData,
             timestamp: new Date(entry.timestamp).toISOString(),
           },
         },

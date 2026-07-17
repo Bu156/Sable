@@ -1,10 +1,12 @@
-import { atom } from 'jotai';
+import { atom, type WritableAtom } from 'jotai';
+import type { Store } from 'jotai/vanilla/store';
 import { mobileOrTablet } from '$utils/user-agent';
 import type {
   NotificationTransportMode,
   NotificationTransportProvider,
   PushTransportOverrides,
 } from '$features/settings/notifications/NotificationTransport';
+import type { IImageInfo } from '$types/matrix/common';
 
 const STORAGE_KEY = 'settings';
 export type DateFormat = 'D MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY/MM/DD' | '';
@@ -26,7 +28,69 @@ export enum CaptionPosition {
   Hidden = 'hidden',
   Below = 'below',
 }
+
+export enum ShowRoomIcon {
+  Always = 'always',
+  Strict = 'strict',
+  Smart = 'smart',
+  Never = 'never',
+}
+export type PerRoomShowRoomIcon = {
+  roomId: string;
+  display: ShowRoomIcon;
+};
+
 export type JumboEmojiSize = 'none' | 'extraSmall' | 'small' | 'normal' | 'large' | 'extraLarge';
+export const CALL_TONE_IDS = [
+  'sable-default',
+  'classic-soft',
+  'minimal-ping',
+  'silent',
+  'custom',
+] as const;
+export type CallRingtoneId = (typeof CALL_TONE_IDS)[number];
+
+export type ThemeRemoteFavorite = {
+  fullUrl: string;
+  displayName: string;
+  basename: string;
+  kind: 'light' | 'dark';
+  pinned?: boolean;
+  importedLocal?: boolean;
+};
+
+export type ThemeRemoteTweakFavorite = {
+  fullUrl: string;
+  displayName: string;
+  basename: string;
+  pinned?: boolean;
+  importedLocal?: boolean;
+};
+
+/** Custom profile card hero colors: which brightness schemes to honor. */
+export type RenderUserCardsMode = 'both' | 'light' | 'dark' | 'none';
+
+/** Where to use crisp nearest-neighbor (pixelated) image scaling. */
+export type PixelatedImageRenderingMode = 'always' | 'smart' | 'never';
+
+export function isPixelatedRendering(
+  mode: PixelatedImageRenderingMode,
+  info?: IImageInfo
+): boolean {
+  if (mode === 'smart') return !!info && !!info.w && !!info.h && (info.w < 192 || info.h < 192);
+  return mode === 'always';
+}
+
+export function shouldApplyUserHeroCards(
+  mode: RenderUserCardsMode,
+  brightness?: string,
+  color?: string
+): boolean {
+  if (!color || (brightness !== 'light' && brightness !== 'dark')) return false;
+  if (mode === 'none') return false;
+  if (mode === 'both') return true;
+  return brightness === mode;
+}
 
 export interface Settings {
   themeId?: string;
@@ -39,8 +103,6 @@ export interface Settings {
   arboriumDarkTheme?: string;
   saturationLevel?: number;
   uniformIcons: boolean;
-  isMarkdown: boolean;
-  editorToolbar: boolean;
   twitterEmoji: boolean;
   pageZoom: number;
   hideActivity: boolean;
@@ -49,27 +111,41 @@ export interface Settings {
   isWidgetDrawer: boolean;
   memberSortFilterIndex: number;
   enterForNewline: boolean;
+  editorToolbar: boolean;
+  editorOldAddFile: boolean;
+  composerToolbarOpen: boolean;
   messageLayout: MessageLayout;
   messageSpacing: MessageSpacing;
   hideMembershipEvents: boolean;
   hideNickAvatarEvents: boolean;
   showHiddenEvents: boolean;
   showTombstoneEvents: boolean;
+  hiddenEventEdits: boolean;
+  hiddenEventRedactionTimeline: boolean;
+  hiddenEventReactions: boolean;
+  hiddenEventReactionTombstone: boolean;
+  hiddenEventReactionRedactionTimeline: boolean;
+  hiddenEventOther: boolean;
   legacyUsernameColor: boolean;
 
   mediaAutoLoad: boolean;
+  multiplePreviews: boolean;
   bundledPreview: boolean;
   urlPreview: boolean;
   encUrlPreview: boolean;
   clientUrlPreview: boolean;
   encClientUrlPreview: boolean;
   clientPreviewYoutube: boolean;
+  enableGifPicker: boolean;
+  showInteractiveMap: boolean;
+  showEncInteractiveMap: boolean;
 
   usePushNotifications: boolean;
   useUnifiedPush: boolean;
   useInAppNotifications: boolean;
   useSystemNotifications: boolean;
   isNotificationSounds: boolean;
+  backgroundNotificationSounds: boolean;
   showMessageContentInNotifications: boolean;
   showMessageContentInEncryptedNotifications: boolean;
   clearNotificationsOnRead: boolean;
@@ -83,17 +159,24 @@ export interface Settings {
 
   developerTools: boolean;
   enableMSC4268CMD: boolean;
+  enableMediaGalleries: boolean;
   settingsSyncEnabled: boolean;
-  settingsLinkBaseUrlOverride?: string;
 
   // Cosmetics!
+  iconCompactSizePx: number;
+  iconInlineSizePx: number;
+  iconToolbarSizePx: number;
+  iconEmptySizePx: number;
   jumboEmojiSize: JumboEmojiSize;
   privacyBlur: boolean;
   privacyBlurAvatars: boolean;
   privacyBlurEmotes: boolean;
   showPronouns: boolean;
   parsePronouns: boolean;
+  pronounPillMaxCount: number;
+  pronounPillMaxLength: number;
   renderGlobalNameColors: boolean;
+  renderUserCards: RenderUserCardsMode;
   filterPronounsBasedOnLanguage?: boolean;
   filterPronounsLanguages?: string[];
   renderRoomColors: boolean;
@@ -118,9 +201,22 @@ export interface Settings {
   autoplayGifs: boolean;
   autoplayStickers: boolean;
   autoplayEmojis: boolean;
+  oldSidebar: boolean;
+  pixelatedImageRendering: PixelatedImageRenderingMode;
+  incomingInlineImagesDefaultHeight: number;
+  incomingInlineImagesMaxHeight: number;
+  linkPreviewImageMaxHeight: number;
   saveStickerEmojiBandwidth: boolean;
   subspaceHierarchyLimit: number;
   alwaysShowCallButton: boolean;
+  joinCallOnSingleClick: boolean;
+  incomingCallSoundEnabled: boolean;
+  incomingVoiceRoomCallSoundEnabled: boolean;
+  outgoingRingbackEnabled: boolean;
+  callRingtoneVolume: number;
+  callRingtoneId: CallRingtoneId;
+  callRingbackTone: CallRingtoneId;
+  callSoundOverrideGlobalNotifications: boolean;
   faviconForMentionsOnly: boolean;
   highlightMentions: boolean;
   pkCompat: boolean;
@@ -128,12 +224,43 @@ export interface Settings {
   mentionInReplies: boolean;
   showPersonaSetting: boolean;
   closeFoldersByDefault: boolean;
+  perRoomShowRoomIcon: PerRoomShowRoomIcon[];
+  showRoomIcon: ShowRoomIcon;
+  roomIconOverlay: boolean;
+  showRoomBanners: boolean;
+  roomSidebarWidth: number;
+  roomBannerHeight: number;
+  memberSidebarWidth: number;
+  threadSidebarWidth: number;
+  threadRootHeight: number;
+  vcmsgSidebarWidth: number;
+  widgetSidebarWidth: number;
+  isShowingAllRoomsInHome: boolean;
+  sendIndividualAttachmentAsCaption: boolean;
 
   // furry stuff
   renderAnimals: boolean;
+  animalKind: string | undefined;
+
+  // theme catalog
+  themeCatalogOnboardingDone: boolean;
+  themeRemoteFavorites: ThemeRemoteFavorite[];
+  themeRemoteCatalogEnabled: boolean;
+  themeChatSableWidgetsEnabled: boolean;
+  themeChatAutoPreviewApprovedUrls: boolean;
+  themeChatAutoPreviewAnyUrl: boolean;
+  themeRemoteManualFullUrl?: string;
+  themeRemoteLightFullUrl?: string;
+  themeRemoteDarkFullUrl?: string;
+  themeRemoteManualKind?: 'light' | 'dark';
+  themeRemoteLightKind?: 'light' | 'dark';
+  themeRemoteDarkKind?: 'light' | 'dark';
+  themeMigrationDismissed: boolean;
+  themeRemoteTweakFavorites: ThemeRemoteTweakFavorite[];
+  themeRemoteEnabledTweakFullUrls: string[];
 }
 
-const defaultSettings: Settings = {
+export const defaultSettings: Settings = {
   themeId: undefined,
   useSystemTheme: true,
   lightThemeId: undefined,
@@ -144,8 +271,6 @@ const defaultSettings: Settings = {
   arboriumDarkTheme: 'dracula',
   saturationLevel: 100,
   uniformIcons: false,
-  isMarkdown: true,
-  editorToolbar: false,
   twitterEmoji: true,
   pageZoom: 100,
   hideActivity: false,
@@ -154,22 +279,36 @@ const defaultSettings: Settings = {
   isWidgetDrawer: false,
   memberSortFilterIndex: 0,
   enterForNewline: false,
+  editorToolbar: false,
+  editorOldAddFile: false,
+  composerToolbarOpen: false,
   messageLayout: 0,
   messageSpacing: '400',
   hideMembershipEvents: false,
   hideNickAvatarEvents: true,
   mediaAutoLoad: true,
+  multiplePreviews: true,
   bundledPreview: true,
   urlPreview: true,
   encUrlPreview: false,
   clientUrlPreview: false,
   encClientUrlPreview: false,
   clientPreviewYoutube: false,
+  enableGifPicker: true,
+  showInteractiveMap: true,
+  showEncInteractiveMap: false,
   showHiddenEvents: false,
-  showTombstoneEvents: false,
+  showTombstoneEvents: true,
+  hiddenEventEdits: true,
+  hiddenEventRedactionTimeline: true,
+  hiddenEventReactions: true,
+  hiddenEventReactionTombstone: true,
+  hiddenEventReactionRedactionTimeline: true,
+  hiddenEventOther: true,
   legacyUsernameColor: false,
 
   enableMSC4268CMD: false,
+  enableMediaGalleries: false,
 
   // Push notifications (SW/Sygnal): default on for mobile, opt-in on desktop.
   // In-app pill banner: default on for mobile (primary foreground alert), opt-in on desktop.
@@ -179,6 +318,7 @@ const defaultSettings: Settings = {
   useInAppNotifications: mobileOrTablet(),
   useSystemNotifications: !mobileOrTablet(),
   isNotificationSounds: true,
+  backgroundNotificationSounds: true,
   showMessageContentInNotifications: false,
   showMessageContentInEncryptedNotifications: false,
   clearNotificationsOnRead: false,
@@ -192,16 +332,22 @@ const defaultSettings: Settings = {
 
   developerTools: false,
   settingsSyncEnabled: false,
-  settingsLinkBaseUrlOverride: undefined,
 
   // Cosmetics!
+  iconCompactSizePx: 16,
+  iconInlineSizePx: 20,
+  iconToolbarSizePx: 24,
+  iconEmptySizePx: 32,
   jumboEmojiSize: 'normal',
   privacyBlur: false,
   privacyBlurAvatars: false,
   privacyBlurEmotes: false,
   showPronouns: true,
   parsePronouns: true,
+  pronounPillMaxCount: 3,
+  pronounPillMaxLength: 16,
   renderGlobalNameColors: true,
+  renderUserCards: 'both',
   renderRoomColors: true,
   renderRoomFonts: true,
   captionPosition: CaptionPosition.Below,
@@ -224,9 +370,22 @@ const defaultSettings: Settings = {
   autoplayGifs: true,
   autoplayStickers: true,
   autoplayEmojis: true,
+  oldSidebar: false,
+  pixelatedImageRendering: 'smart',
+  incomingInlineImagesDefaultHeight: 32,
+  incomingInlineImagesMaxHeight: 64,
+  linkPreviewImageMaxHeight: 640,
   saveStickerEmojiBandwidth: false,
   subspaceHierarchyLimit: 3,
   alwaysShowCallButton: false,
+  joinCallOnSingleClick: false,
+  incomingCallSoundEnabled: true,
+  incomingVoiceRoomCallSoundEnabled: false,
+  outgoingRingbackEnabled: true,
+  callRingtoneVolume: 80,
+  callRingtoneId: 'sable-default',
+  callRingbackTone: 'sable-default',
+  callSoundOverrideGlobalNotifications: false,
   faviconForMentionsOnly: false,
   highlightMentions: true,
   pkCompat: false,
@@ -234,18 +393,59 @@ const defaultSettings: Settings = {
   mentionInReplies: true,
   showPersonaSetting: false,
   closeFoldersByDefault: false,
-
+  perRoomShowRoomIcon: [],
+  showRoomIcon: ShowRoomIcon.Strict,
+  roomIconOverlay: true,
+  showRoomBanners: true,
+  roomSidebarWidth: 256,
+  roomBannerHeight: 190,
+  memberSidebarWidth: 262,
+  threadSidebarWidth: 440,
+  threadRootHeight: 220,
+  vcmsgSidebarWidth: 399,
+  widgetSidebarWidth: 420,
+  isShowingAllRoomsInHome: false,
+  sendIndividualAttachmentAsCaption: true,
   // furry stuff
   renderAnimals: true,
+  animalKind: undefined,
+
+  // theme catalog
+  themeCatalogOnboardingDone: false,
+  themeRemoteFavorites: [],
+  themeRemoteCatalogEnabled: false,
+  themeChatSableWidgetsEnabled: true,
+  themeChatAutoPreviewApprovedUrls: true,
+  themeChatAutoPreviewAnyUrl: false,
+  themeRemoteManualFullUrl: undefined,
+  themeRemoteLightFullUrl: undefined,
+  themeRemoteDarkFullUrl: undefined,
+  themeRemoteManualKind: undefined,
+  themeRemoteLightKind: undefined,
+  themeRemoteDarkKind: undefined,
+  themeMigrationDismissed: false,
+  themeRemoteTweakFavorites: [],
+  themeRemoteEnabledTweakFullUrls: [],
 };
 
-export const getSettings = () => {
-  const settings = localStorage.getItem(STORAGE_KEY);
-  if (settings === null) return defaultSettings;
+function cloneDefaultSettings(): Settings {
+  return {
+    ...defaultSettings,
+    themeRemoteFavorites: defaultSettings.themeRemoteFavorites.map((x) => ({
+      ...x,
+    })),
+    themeRemoteTweakFavorites: defaultSettings.themeRemoteTweakFavorites.map((x) => ({ ...x })),
+    themeRemoteEnabledTweakFullUrls: [...defaultSettings.themeRemoteEnabledTweakFullUrls],
+  };
+}
 
-  // migration for old keys
-  // monochrome -> saturation
-  const parsed = JSON.parse(settings);
+const CALL_TONE_ID_SET = new Set<unknown>(CALL_TONE_IDS);
+
+const isCallToneId = (value: unknown): value is CallRingtoneId => CALL_TONE_ID_SET.has(value);
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
+
+function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
   if (parsed.monochromeMode === true && parsed.saturationLevel === undefined) {
     parsed.saturationLevel = 0;
   } else if (parsed.monochromeMode === false && parsed.saturationLevel === undefined) {
@@ -253,21 +453,299 @@ export const getSettings = () => {
   }
   delete parsed.monochromeMode;
 
+  if (typeof parsed.renderUserCards === 'boolean') {
+    parsed.renderUserCards = parsed.renderUserCards ? 'both' : 'none';
+  } else if (
+    parsed.renderUserCards !== 'both' &&
+    parsed.renderUserCards !== 'light' &&
+    parsed.renderUserCards !== 'dark' &&
+    parsed.renderUserCards !== 'none'
+  ) {
+    parsed.renderUserCards = 'both';
+  }
+
+  if (typeof parsed.pixelatedImageRendering === 'boolean') {
+    parsed.pixelatedImageRendering = parsed.pixelatedImageRendering ? 'both' : 'none';
+  } else if (
+    parsed.pixelatedImageRendering !== 'always' &&
+    parsed.pixelatedImageRendering !== 'smart' &&
+    parsed.pixelatedImageRendering !== 'never'
+  ) {
+    delete parsed.pixelatedImageRendering;
+  }
+
+  if (
+    typeof parsed.themeChatAutoPreviewAnyUrl !== 'boolean' &&
+    typeof parsed.themeChatPreviewAnyUrl === 'boolean'
+  ) {
+    parsed.themeChatAutoPreviewAnyUrl = parsed.themeChatPreviewAnyUrl;
+  }
+  delete parsed.themeChatPreviewAnyUrl;
+  delete parsed.themeChatPreviewApprovedCatalogOnly;
+
+  if (typeof parsed.callRingtoneVolume === 'number' && Number.isFinite(parsed.callRingtoneVolume)) {
+    parsed.callRingtoneVolume = clampPercent(parsed.callRingtoneVolume);
+  }
+
+  if (!isCallToneId(parsed.callRingtoneId)) {
+    delete parsed.callRingtoneId;
+  }
+
+  if (parsed.callRingbackTone === 'same-as-ringtone') {
+    parsed.callRingbackTone = parsed.callRingtoneId ?? defaultSettings.callRingtoneId;
+  } else if (parsed.callRingbackTone === 'default-ringback') {
+    parsed.callRingbackTone = 'classic-soft';
+  }
+
+  if (!isCallToneId(parsed.callRingbackTone)) {
+    delete parsed.callRingbackTone;
+  }
+
+  const legacyCallCustomMetadataKeys = [
+    'callCustomRingtoneName',
+    'callCustomRingtoneSizeBytes',
+    'callCustomRingtoneDurationMs',
+    'callCustomRingbackName',
+    'callCustomRingbackSizeBytes',
+    'callCustomRingbackDurationMs',
+  ] as const;
+
+  for (const key of legacyCallCustomMetadataKeys) {
+    delete parsed[key];
+  }
+}
+
+export function mergePersistedSettings(
+  rawLocalStorage: string | null,
+  fileDefaults: Partial<Settings>
+): Settings {
+  const base = { ...defaultSettings, ...fileDefaults };
+  if (rawLocalStorage === null) return base;
+
+  const parsed = JSON.parse(rawLocalStorage) as Record<string, unknown>;
+  migrateParsedLocalStorage(parsed);
+
   return {
-    ...defaultSettings,
-    ...(parsed as Settings),
+    ...base,
+    ...(parsed as unknown as Settings),
   };
-};
+}
+
+const MESSAGE_SPACING_VALUES = new Set<MessageSpacing>(['0', '100', '200', '300', '400', '500']);
+const JUMBO_EMOJI_VALUES = new Set<JumboEmojiSize>([
+  'none',
+  'extraSmall',
+  'small',
+  'normal',
+  'large',
+  'extraLarge',
+]);
+
+function sanitizeIconSizePx(val: unknown): number | undefined {
+  return typeof val === 'number' && Number.isInteger(val) && val >= 0 ? val : undefined;
+}
+
+function sanitizeStringArray(val: unknown): string[] | undefined {
+  if (!Array.isArray(val)) return undefined;
+  const out = val.filter((x): x is string => typeof x === 'string');
+  return out;
+}
+
+function sanitizeThemeRemoteFavorites(val: unknown): ThemeRemoteFavorite[] | undefined {
+  if (!Array.isArray(val)) return undefined;
+  const out: ThemeRemoteFavorite[] = [];
+  for (const item of val) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (
+      typeof o.fullUrl === 'string' &&
+      typeof o.displayName === 'string' &&
+      typeof o.basename === 'string' &&
+      (o.kind === 'light' || o.kind === 'dark')
+    ) {
+      out.push({
+        fullUrl: o.fullUrl,
+        displayName: o.displayName,
+        basename: o.basename,
+        kind: o.kind,
+        pinned: typeof o.pinned === 'boolean' ? o.pinned : undefined,
+        importedLocal: typeof o.importedLocal === 'boolean' ? o.importedLocal : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+function sanitizeThemeRemoteTweakFavorites(val: unknown): ThemeRemoteTweakFavorite[] | undefined {
+  if (!Array.isArray(val)) return undefined;
+  const out: ThemeRemoteTweakFavorite[] = [];
+  for (const item of val) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (
+      typeof o.fullUrl === 'string' &&
+      typeof o.displayName === 'string' &&
+      typeof o.basename === 'string'
+    ) {
+      out.push({
+        fullUrl: o.fullUrl,
+        displayName: o.displayName,
+        basename: o.basename,
+        pinned: typeof o.pinned === 'boolean' ? o.pinned : undefined,
+        importedLocal: typeof o.importedLocal === 'boolean' ? o.importedLocal : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+function isSanitizableSettingsKey(k: string): k is keyof Settings {
+  return (
+    k in defaultSettings || k === 'filterPronounsBasedOnLanguage' || k === 'filterPronounsLanguages'
+  );
+}
+
+function sanitizeSettingsKey(key: keyof Settings, val: unknown): unknown {
+  switch (key) {
+    case 'filterPronounsBasedOnLanguage':
+      return typeof val === 'boolean' ? val : undefined;
+    case 'filterPronounsLanguages':
+      return sanitizeStringArray(val);
+    case 'messageLayout':
+      return typeof val === 'number' && Number.isInteger(val) && val >= 0 && val <= 2
+        ? val
+        : undefined;
+    case 'messageSpacing':
+      return typeof val === 'string' && MESSAGE_SPACING_VALUES.has(val as MessageSpacing)
+        ? val
+        : undefined;
+    case 'captionPosition':
+      return val === CaptionPosition.Above ||
+        val === CaptionPosition.Inline ||
+        val === CaptionPosition.Hidden ||
+        val === CaptionPosition.Below
+        ? val
+        : undefined;
+    case 'rightSwipeAction':
+      return val === RightSwipeAction.Members || val === RightSwipeAction.Reply ? val : undefined;
+    case 'callRingtoneId':
+    case 'callRingbackTone':
+      return isCallToneId(val) ? val : undefined;
+    case 'callRingtoneVolume':
+      if (typeof val !== 'number' || !Number.isFinite(val)) return undefined;
+      return clampPercent(val);
+    case 'renderUserCards':
+      return val === 'both' || val === 'light' || val === 'dark' || val === 'none'
+        ? val
+        : undefined;
+    case 'pixelatedImageRendering':
+      return val === 'always' || val === 'smart' || val === 'never' ? val : undefined;
+    case 'iconCompactSizePx':
+    case 'iconInlineSizePx':
+    case 'iconToolbarSizePx':
+    case 'iconEmptySizePx':
+      return sanitizeIconSizePx(val);
+    case 'jumboEmojiSize':
+      return typeof val === 'string' && JUMBO_EMOJI_VALUES.has(val as JumboEmojiSize)
+        ? val
+        : undefined;
+    case 'pronounPillMaxCount':
+      return typeof val === 'number' && Number.isInteger(val) && val >= 1 && val <= 10
+        ? val
+        : undefined;
+    case 'pronounPillMaxLength':
+      return typeof val === 'number' && Number.isInteger(val) && val >= 1 && val <= 64
+        ? val
+        : undefined;
+    case 'themeRemoteManualKind':
+    case 'themeRemoteLightKind':
+    case 'themeRemoteDarkKind':
+      return val === 'light' || val === 'dark' ? val : undefined;
+    case 'themeRemoteFavorites':
+      return sanitizeThemeRemoteFavorites(val);
+    case 'themeRemoteTweakFavorites':
+      return sanitizeThemeRemoteTweakFavorites(val);
+    case 'themeRemoteEnabledTweakFullUrls':
+      return sanitizeStringArray(val);
+    default: {
+      if (!(key in defaultSettings)) return undefined;
+      const sample = defaultSettings[key];
+      if (typeof sample === 'boolean') {
+        return typeof val === 'boolean' ? val : undefined;
+      }
+      if (typeof sample === 'number') {
+        return typeof val === 'number' && Number.isFinite(val) ? val : undefined;
+      }
+      if (typeof sample === 'string') {
+        return typeof val === 'string' ? val : undefined;
+      }
+      if (sample === undefined) {
+        return typeof val === 'string' ? val : undefined;
+      }
+      return undefined;
+    }
+  }
+}
+
+export function sanitizeSettingsDefaults(raw: unknown): Partial<Settings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const src = raw as Record<string, unknown>;
+  const out: Partial<Settings> = {};
+  const warnings: string[] = [];
+
+  for (const k of Object.keys(src)) {
+    if (!isSanitizableSettingsKey(k)) {
+      warnings.push(k);
+      continue;
+    }
+    const sanitized = sanitizeSettingsKey(k, src[k]);
+    if (sanitized !== undefined) {
+      (out as Record<string, unknown>)[k] = sanitized;
+    } else if (src[k] !== undefined) {
+      warnings.push(k);
+    }
+  }
+
+  if (import.meta.env.DEV && warnings.length > 0) {
+    console.warn(
+      '[config.settingsDefaults] ignored unknown or invalid keys:',
+      [...new Set(warnings)].slice(0, 25).join(', ')
+    );
+  }
+
+  return out;
+}
+
+let runtimeSettingsDefaults: Partial<Settings> = {};
+
+/** @internal Resets deploy-time defaults, only used in tests. */
+export function resetRuntimeSettingsDefaults(): void {
+  runtimeSettingsDefaults = {};
+}
+
+export const baseSettings = atom<Settings>(cloneDefaultSettings());
+
+export function bootstrapSettingsStore(store: Store, rawSettingsDefaults: unknown): void {
+  const sanitized = sanitizeSettingsDefaults(rawSettingsDefaults);
+  runtimeSettingsDefaults = sanitized;
+  const merged = mergePersistedSettings(localStorage.getItem(STORAGE_KEY), sanitized);
+  store.set(baseSettings, merged);
+}
+
+export const getSettings = (): Settings =>
+  mergePersistedSettings(localStorage.getItem(STORAGE_KEY), runtimeSettingsDefaults);
 
 export const setSettings = (settings: Settings) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 };
 
-const baseSettings = atom<Settings>(getSettings());
 export const settingsAtom = atom<Settings, [Settings], undefined>(
   (get) => get(baseSettings),
-  (get, set, update) => {
-    set(baseSettings, update);
+  (_get, set, update) => {
+    (set as (atom: WritableAtom<Settings, [Settings], void>, val: Settings) => void)(
+      baseSettings as WritableAtom<Settings, [Settings], void>,
+      update
+    );
     setSettings(update);
   }
 );

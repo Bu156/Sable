@@ -2,17 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   Spinner,
   Text,
 } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
-import { Room } from '$types/matrix-sdk';
+import type { Room } from '$types/matrix-sdk';
 
 import { useIntegrationManager, buildIntegrationManagerUrl } from '$hooks/useIntegrationManager';
 import * as css from './IntegrationManager.css';
@@ -80,7 +79,7 @@ export function IntegrationManager({ room, open, onClose }: IntegrationManagerPr
                 </Box>
                 <Box shrink="No" alignItems="Center">
                   <IconButton variant="Background" onClick={onClose}>
-                    <Icon src={Icons.Cross} />
+                    {composerIcon(X)}
                   </IconButton>
                 </Box>
               </Box>

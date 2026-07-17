@@ -16,6 +16,12 @@ export const ImageViewerHeader = style([
     borderBottomWidth: config.borderWidth.B300,
     flexShrink: 0,
     gap: config.space.S200,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    height: 'auto',
+    minHeight: config.space.S400,
+    paddingTop: config.space.S100,
+    paddingBottom: config.space.S100,
   },
 ]);
 
@@ -28,15 +34,35 @@ export const ImageViewerContent = style([
   },
 ]);
 
+export const ImageViewerInput = style([
+  DefaultReset,
+  {
+    all: 'unset',
+    fieldSizing: 'content',
+    textAlign: 'center',
+    font: 'inherit',
+    color: 'inherit',
+  },
+]);
+
 export const ImageViewerImg = style([
   DefaultReset,
   {
+    userSelect: 'none',
+    touchAction: 'none',
+    display: 'block',
     objectFit: 'contain',
     width: 'auto',
     height: 'auto',
-    maxWidth: '100%',
-    maxHeight: '100%',
+    maxWidth: 'none',
+    maxHeight: 'none',
     backgroundColor: color.Surface.Container,
     transition: 'transform 100ms linear',
+    willChange: 'transform',
   },
 ]);
+
+export const ImageViewerImgPixelated = style({
+  imageRendering: 'pixelated',
+  willChange: 'auto',
+});

@@ -1,4 +1,5 @@
-import { RefObject, useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   dropTargetForElements,
   draggable,
@@ -7,8 +8,9 @@ import {
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import classNames from 'classnames';
-import { Box, Icon, Icons, as } from 'folds';
-import { HierarchyItem } from '$hooks/useSpaceHierarchy';
+import { Box, as } from 'folds';
+import type { HierarchyItem } from '$hooks/useSpaceHierarchy';
+import { chipIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import * as css from './DnD.css';
 
 export type DropContainerData = {
@@ -57,7 +59,7 @@ export const ItemDraggableTarget = as<'div'>(({ className, ...props }, ref) => (
     ref={ref}
     {...props}
   >
-    <Icon size="50" src={Icons.VerticalDots} />
+    {chipIcon(DotsThreeOutlineVerticalIcon)}
   </Box>
 ));
 
@@ -135,7 +137,7 @@ export const useDnDMonitor = (
           onDragging(undefined);
           const { dropTargets } = location.current;
           if (dropTargets.length === 0) return;
-          onReorder(source.data as HierarchyItem, dropTargets[0].data as DropContainerData);
+          onReorder(source.data as HierarchyItem, dropTargets[0]!.data as DropContainerData);
         },
       }),
       autoScrollForElements({

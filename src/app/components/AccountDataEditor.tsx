@@ -1,9 +1,8 @@
-import { FormEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEventHandler } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Text,
-  Icon,
-  Icons,
   IconButton,
   Input,
   Button,
@@ -14,7 +13,8 @@ import {
   Scroll,
   config,
 } from 'folds';
-import { MatrixError } from '$types/matrix-sdk';
+import { ArrowLeft, composerIcon, sizedIcon, X } from '$components/icons/phosphor';
+import type { MatrixError } from '$types/matrix-sdk';
 import { Cursor } from '$plugins/text-area';
 import { syntaxErrorPosition } from '$utils/dom';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
@@ -288,14 +288,14 @@ export function AccountDataEditor({
               size="500"
               radii="Pill"
               onClick={requestClose}
-              before={<Icon size="100" src={Icons.ArrowLeft} />}
+              before={sizedIcon(ArrowLeft, '100')}
             >
               <Text size="T300">Developer Tools</Text>
             </Chip>
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>

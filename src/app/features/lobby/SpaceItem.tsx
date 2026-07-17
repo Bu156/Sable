@@ -1,11 +1,11 @@
-import { MouseEventHandler, ReactNode, useCallback, useRef, useState } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { RectCords } from 'folds';
 import {
   Box,
   Avatar,
   Text,
   Chip,
-  Icon,
-  Icons,
   as,
   Badge,
   toRem,
@@ -14,11 +14,10 @@ import {
   config,
   Menu,
   MenuItem,
-  RectCords,
 } from 'folds';
 import classNames from 'classnames';
-import { MatrixError, Room, IHierarchyRoom } from '$types/matrix-sdk';
-import { HierarchyItem } from '$hooks/useSpaceHierarchy';
+import type { MatrixError, Room, IHierarchyRoom } from '$types/matrix-sdk';
+import type { HierarchyItem } from '$hooks/useSpaceHierarchy';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { RoomAvatar } from '$components/room-avatar';
 import { nameInitials } from '$utils/common';
@@ -37,6 +36,7 @@ import FocusTrap from 'focus-trap-react';
 import * as css from './SpaceItem.css';
 import * as styleCss from './style.css';
 import { useDraggableItem } from './DnD';
+import { CaretDown, CaretRight, chipCaretIcon, chipIcon, Plus } from '$components/icons/phosphor';
 
 function SpaceProfileLoading() {
   return (
@@ -137,9 +137,7 @@ export function UnjoinedSpaceProfile({
           />
         </Avatar>
       }
-      after={
-        canJoin ? <Icon src={Icons.Plus} size="50" /> : <Spinner variant="Secondary" size="200" />
-      }
+      after={canJoin ? chipIcon(Plus) : <Spinner variant="Secondary" size="200" />}
     >
       <Box alignItems="Center" gap="200">
         <Text size="H4" truncate>
@@ -201,7 +199,7 @@ function SpaceProfile({
           />
         </Avatar>
       }
-      after={<Icon src={closed ? Icons.ChevronRight : Icons.ChevronBottom} size="50" />}
+      after={closed ? chipCaretIcon(CaretRight) : chipCaretIcon(CaretDown)}
     >
       <Box alignItems="Center" gap="200">
         <Text size="H4" truncate>
@@ -230,7 +228,7 @@ function RootSpaceProfile({ closed, categoryId, handleClose }: RootSpaceProfileP
       className={css.HeaderChip}
       variant="Surface"
       size="500"
-      after={<Icon src={closed ? Icons.ChevronRight : Icons.ChevronBottom} size="50" />}
+      after={closed ? chipCaretIcon(CaretRight) : chipCaretIcon(CaretDown)}
     >
       <Box alignItems="Center" gap="200">
         <Text size="H4" truncate>
@@ -307,7 +305,7 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
         <Chip
           variant="Primary"
           radii="Pill"
-          before={<Icon src={Icons.Plus} size="50" />}
+          before={chipIcon(Plus)}
           onClick={handleAddRoom}
           aria-pressed={!!cords}
         >
@@ -331,7 +329,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
   };
 
   const handleCreateSpace = () => {
-    openCreateSpaceModal(item.roomId as any);
+    openCreateSpaceModal(item.roomId);
     setCords(undefined);
   };
 
@@ -376,7 +374,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
         <Chip
           variant="SurfaceVariant"
           radii="Pill"
-          before={<Icon src={Icons.Plus} size="50" />}
+          before={chipIcon(Plus)}
           onClick={handleAddSpace}
           aria-pressed={!!cords}
         >

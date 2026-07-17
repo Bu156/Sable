@@ -1,4 +1,4 @@
-import { Settings } from '$state/settings';
+import type { Settings } from '$state/settings';
 
 /**
  * Keys excluded from cross-device sync.
@@ -16,7 +16,13 @@ export const NON_SYNCABLE_KEYS = new Set<keyof Settings>([
   'isPeopleDrawer',
   'isWidgetDrawer',
   'memberSortFilterIndex',
-  'settingsLinkBaseUrlOverride',
+  // Call audio is device-local (speaker setup + custom files in IndexedDB)
+  'incomingCallSoundEnabled',
+  'outgoingRingbackEnabled',
+  'callRingtoneVolume',
+  'callRingtoneId',
+  'callRingbackTone',
+  'callSoundOverrideGlobalNotifications',
   // Developer / diagnostic
   'developerTools',
   // Sync toggle itself must never be uploaded (it's device-local)
@@ -81,24 +87,24 @@ export const importSettingsFromJson = (currentSettings: Settings): Promise<Setti
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json,.json';
-    input.onchange = () => {
+    input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) {
         resolve(null);
         return;
       }
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.addEventListener('load', (e) => {
         try {
           const data = JSON.parse(e.target?.result as string);
           resolve(deserializeFromSync(data, currentSettings));
         } catch {
           resolve(null);
         }
-      };
-      reader.onerror = () => resolve(null);
+      });
+      reader.addEventListener('error', () => resolve(null));
       reader.readAsText(file);
-    };
+    });
     // oncancel is not widely supported; clicking away without selecting resolves naturally via onchange with empty files
     input.click();
   });

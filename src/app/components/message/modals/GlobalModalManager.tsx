@@ -10,14 +10,23 @@ import { MessageSourceInternal } from './MessageSource';
 import { MessageForwardInternal } from './MessageForward';
 import { MessageAllReactionInternal } from './MessageReactions';
 import { MessageReadReceiptInternal } from './MessageReadRecipts';
+import { MobileOptionsInternal } from './Options';
 
 export function GlobalModalManager() {
   const [modal, setModal] = useAtom(modalAtom);
 
+  const close = () => {
+    setModal(null);
+  };
+
   if (!modal) return null;
 
-  const close = () => setModal(null);
-
+  if (modal.type === ModalType.Forward) {
+    return <MessageForwardInternal room={modal.room} mEvent={modal.mEvent} onClose={close} />;
+  }
+  if (modal.type === ModalType.MobileOptions) {
+    return <MobileOptionsInternal options={modal.options} />;
+  }
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
       <OverlayCenter>
@@ -25,35 +34,31 @@ export function GlobalModalManager() {
           focusTrapOptions={{
             initialFocus: false,
             onDeactivate: close,
-            clickOutsideDeactivates: true,
+            allowOutsideClick: (e: { preventDefault?: () => void }) => {
+              if (e.preventDefault) e.preventDefault();
+              close();
+              return false;
+            },
             escapeDeactivates: stopPropagation,
           }}
         >
           <div>
+            {' '}
             {modal.type === ModalType.Report && (
               <Box>
                 <MessageReportInternal room={modal.room} mEvent={modal.mEvent} onClose={close} />
               </Box>
             )}
-
             {modal.type === ModalType.Delete && (
               <Box>
                 <MessageDeleteInternal room={modal.room} mEvent={modal.mEvent} onClose={close} />
               </Box>
             )}
-
-            {modal.type === ModalType.Forward && (
-              <Box>
-                <MessageForwardInternal room={modal.room} mEvent={modal.mEvent} onClose={close} />
-              </Box>
-            )}
-
             {modal.type === ModalType.Source && (
               <Modal variant="Surface" size="300">
                 <MessageSourceInternal room={modal.room} mEvent={modal.mEvent} onClose={close} />
               </Modal>
             )}
-
             {modal.type === ModalType.Reactions && (
               <Modal variant="Surface" size="300">
                 <MessageAllReactionInternal
@@ -63,7 +68,6 @@ export function GlobalModalManager() {
                 />
               </Modal>
             )}
-
             {modal.type === ModalType.EditHistory && (
               <Modal variant="Surface" size="300">
                 <MessageEditHistoryInternal
@@ -73,7 +77,6 @@ export function GlobalModalManager() {
                 />
               </Modal>
             )}
-
             {modal.type === ModalType.ReadReceipts && (
               <Modal variant="Surface" size="300">
                 <MessageReadReceiptInternal

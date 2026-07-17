@@ -1,9 +1,11 @@
-import { useMemo, useState, useEffect, ChangeEvent } from 'react';
-import { Box, IconButton, Button, Icon, Icons, Input, Text } from 'folds';
+import type { ChangeEvent } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { Box, IconButton, Button, Input, Text } from 'folds';
+import { menuIcon, X } from '$components/icons/phosphor';
 import { SettingTile } from '$components/setting-tile';
 
 interface IntlWithSupportedValues {
-  supportedValuesOf(key: 'timeZone' | string): string[];
+  supportedValuesOf(key: 'timeZone' | (string & {})): string[];
 }
 
 type TimezoneEditorProps = {
@@ -88,7 +90,7 @@ export function TimezoneEditor({ current, onSave }: TimezoneEditorProps) {
             radii="300"
             title="Reset"
           >
-            <Icon src={Icons.Cross} size="100" />
+            {menuIcon(X)}
           </IconButton>
         </Box>
       }

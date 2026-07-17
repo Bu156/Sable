@@ -10,30 +10,29 @@ import {
   getReactCustomHtmlParser,
   makeMentionCustomProps,
   renderMatrixMention,
+  scaleSystemEmoji,
 } from './react-custom-html-parser';
+import { registerMatrixUriProtocol } from './matrix-uri';
+import { markdownToHtml } from './markdown/markdownToHtml';
 
 const settingsLinkBaseUrl = 'https://app.example';
 
+// Ensure linkify recognizes `matrix:` URIs in plain text before any tokenization
+// happens in this file.
+registerMatrixUriProtocol();
+
 const { CodeHighlightRenderer } = vi.hoisted(() => ({
-  CodeHighlightRenderer: vi.fn(
-    ({
-      code,
-      language,
-      allowDetect,
-    }: {
-      code: string;
-      language?: string;
-      allowDetect?: boolean;
-    }) => (
-      <code
-        data-testid="arborium-code"
-        data-language={language}
-        data-allow-detect={String(Boolean(allowDetect))}
-      >
-        {code}
-      </code>
-    )
-  ),
+  CodeHighlightRenderer: vi.fn<
+    (props: { code: string; language?: string; allowDetect?: boolean }) => JSX.Element
+  >(({ code, language, allowDetect }) => (
+    <code
+      data-testid="arborium-code"
+      data-language={language}
+      data-allow-detect={String(Boolean(allowDetect))}
+    >
+      {code}
+    </code>
+  )),
 }));
 
 vi.mock('$components/code-highlight', () => ({
@@ -136,6 +135,52 @@ describe('getReactCustomHtmlParser code blocks', () => {
 });
 
 describe('react custom html parser', () => {
+  it('defaults custom emoji img height to 32 when missing', () => {
+    const { container } = renderParsedHtml(
+      '<img data-mx-emoticon src="mxc://example.org/emote" alt="blobcat" title="blobcat" />',
+      {
+        sanitize: false,
+        mx: createMatrixClient({
+          mxcUrlToHttp: () => 'https://cdn.example/emote.png',
+        }),
+      }
+    );
+
+    const img = container.querySelector('img');
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute('height', '32');
+  });
+
+  it('clamps incoming inline image height to the configured max', () => {
+    const { container } = renderParsedHtml(
+      '<img data-mx-emoticon src="mxc://example.org/emote" alt="blobcat" title="blobcat" height="128" />',
+      {
+        sanitize: false,
+        mx: createMatrixClient({
+          mxcUrlToHttp: () => 'https://cdn.example/emote.png',
+        }),
+      }
+    );
+
+    const img = container.querySelector('img');
+    expect(img).toBeInTheDocument();
+    // Default max is 64 unless overridden by settings.
+    expect(img).toHaveAttribute('height', '64');
+  });
+
+  it.each(['🫩', '🫪', '🫯', '🇩🇪', '🙂‍↔️'])(
+    'wraps modern emoji text %s in emoticon markup',
+    (emoji) => {
+      const result = scaleSystemEmoji(emoji);
+      expect(result).toHaveLength(1);
+      expect(typeof result[0]).not.toBe('string');
+    }
+  );
+
+  it('does not wrap emojis inside urls', () => {
+    expect(scaleSystemEmoji('https://example.com/🫩')).toEqual(['https://example.com/🫩']);
+  });
+
   it('renders same-origin raw settings links as mention-style chips through the factory link render path', () => {
     const renderLink = factoryRenderLinkifyWithMention(
       settingsLinkBaseUrl,
@@ -148,9 +193,10 @@ describe('react custom html parser', () => {
         {renderLink({
           tagName: 'a',
           attributes: {
-            href: 'https://app.example/settings/appearance?focus=message-link-preview',
+            href: 'https://app.example/settings/appearance?focus=message-link-preview&moe.sable.client.action=settings',
           },
-          content: 'https://app.example/settings/appearance?focus=message-link-preview',
+          content:
+            'https://app.example/settings/appearance?focus=message-link-preview&moe.sable.client.action=settings',
         } as never)}
       </div>
     );
@@ -159,26 +205,84 @@ describe('react custom html parser', () => {
     expect(link).toHaveAttribute('data-settings-link-section', 'appearance');
     expect(link).toHaveAttribute('data-settings-link-focus', 'message-link-preview');
     expect(link.className).toContain(customHtmlCss.Mention({}));
-    expect(link).not.toHaveTextContent('Settings:');
+    expect(link).not.toHaveTextContent('Settings >');
     expect(link.className).toContain(customHtmlCss.MentionWithIcon);
   });
 
   it('renders same-origin settings links as internal app links with settings metadata', () => {
     renderParsedHtml(
-      '<a href="https://app.example/settings/appearance?focus=message-link-preview">Appearance</a>',
+      '<a href="https://app.example/settings/appearance?focus=message-link-preview&amp;moe.sable.client.action=settings">Appearance</a>',
       { sanitize: false }
     );
 
-    const link = screen.getByRole('link', { name: 'Appearance' });
+    const link = screen.getByRole('link', { name: 'Appearance / Message Link Preview' });
     expect(link).toHaveAttribute(
       'href',
-      'https://app.example/settings/appearance?focus=message-link-preview'
+      'https://app.example/settings/appearance?focus=message-link-preview&moe.sable.client.action=settings'
     );
     expect(link).toHaveAttribute('data-settings-link-section', 'appearance');
     expect(link).toHaveAttribute('data-settings-link-focus', 'message-link-preview');
     expect(link).not.toHaveAttribute('data-mention-id');
     expect(link.className).toContain(customHtmlCss.Mention({}));
     expect(link.className).toContain(customHtmlCss.MentionWithIcon);
+  });
+
+  it('renders marked cross-instance settings links as internal app links with settings metadata', () => {
+    renderParsedHtml(
+      '<a href="https://other.example/#/client/settings/account?focus=status&amp;moe.sable.client.action=settings">Account</a>',
+      { sanitize: false }
+    );
+
+    const link = screen.getByRole('link', { name: 'Account / Status' });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://other.example/#/client/settings/account?focus=status&moe.sable.client.action=settings'
+    );
+    expect(link).toHaveAttribute('data-settings-link-section', 'account');
+    expect(link).toHaveAttribute('data-settings-link-focus', 'status');
+  });
+
+  it('keeps malformed settings-looking linkified tokens as normal links', () => {
+    const renderLink = factoryRenderLinkifyWithMention(
+      settingsLinkBaseUrl,
+      () => undefined,
+      undefined
+    ) as (ir: never) => JSX.Element;
+    const malformedToken =
+      'https://app.example/settings/account?focus=status&moe.sable.client.action=settings">Settings';
+
+    render(
+      <div>
+        {renderLink({
+          tagName: 'a',
+          attributes: {
+            href: malformedToken,
+          },
+          content: malformedToken,
+        } as never)}
+      </div>
+    );
+
+    const link = screen.getByRole('link', { name: malformedToken });
+    expect(link).not.toHaveAttribute('data-settings-link-section');
+    expect(link).not.toHaveAttribute('data-settings-link-focus');
+    expect(link.className).not.toContain(customHtmlCss.MentionWithIcon);
+  });
+
+  it('keeps settings links with unknown focus ids as normal links', () => {
+    renderParsedHtml(
+      '<a href="https://app.example/settings/account?focus=display-name2">Settings &gt; Account &gt; Display Name2</a>',
+      { sanitize: false }
+    );
+
+    const link = screen.getByRole('link', { name: 'Settings > Account > Display Name2' });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://app.example/settings/account?focus=display-name2'
+    );
+    expect(link).not.toHaveAttribute('data-settings-link-section');
+    expect(link).not.toHaveAttribute('data-settings-link-focus');
+    expect(link.className).not.toContain(customHtmlCss.MentionWithIcon);
   });
 
   it('renders matrix message permalinks with an icon instead of the Message prefix', () => {
@@ -202,6 +306,50 @@ describe('react custom html parser', () => {
     expect(link.className).toContain(customHtmlCss.MentionWithIcon);
     expect(link).not.toHaveTextContent('Message:');
     expect(link.querySelector('[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('uses room name when formatted body uses the full matrix.to URL as link text', () => {
+    const url = 'https://matrix.to/#/!room:example.org';
+    const mx = createMatrixClient({
+      getRoom: (id: string) =>
+        id === '!room:example.org' ? { roomId: '!room:example.org', name: 'Lobby' } : undefined,
+    });
+    renderParsedHtml(`<a href="${url}">${url}</a>`, { sanitize: false, mx });
+
+    expect(screen.getByRole('link', { name: '#Lobby' })).toHaveAttribute('href', url);
+  });
+
+  it('uses message snippet for event permalinks when the event is in the store', () => {
+    const url = 'https://matrix.to/#/!room:example.org/$eventABC';
+    const mx = createMatrixClient({
+      getRoom: () => ({
+        roomId: '!room:example.org',
+        name: 'Lobby',
+        findEventById: (id: string) =>
+          id === '$eventABC'
+            ? {
+                getContent: () => ({
+                  body: `${'Hello world '.repeat(12)}tail`,
+                }),
+              }
+            : null,
+      }),
+    });
+    renderParsedHtml(`<a href="${url}">${url}</a>`, { sanitize: false, mx });
+
+    const link = screen.getByRole('link', { name: /#Lobby: Hello world/ });
+    expect(link).toHaveAttribute('data-mention-event-id', '$eventABC');
+    expect(link.textContent).toMatch(/…/);
+  });
+
+  it('keeps custom link text when it is not just the permalink URL', () => {
+    const url = 'https://matrix.to/#/!room:example.org/$event123';
+    const mx = createMatrixClient({
+      getRoom: () => ({ roomId: '!room:example.org', name: 'Lobby' }),
+    });
+    renderParsedHtml(`<a href="${url}">see this thread</a>`, { sanitize: false, mx });
+
+    expect(screen.getByRole('link', { name: 'see this thread' })).toBeInTheDocument();
   });
 
   it('translates Matrix color data attributes into rendered styles', () => {
@@ -250,7 +398,7 @@ describe('react custom html parser', () => {
   });
 
   it('renders unresolved MXC fallbacks without emitting debug logs', () => {
-    const logSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, 'warn').mockImplementation(vi.fn<() => void>());
 
     renderParsedHtml('<img src="mxc://example.org/image" alt="media" title="media" />', {
       sanitize: false,
@@ -317,5 +465,97 @@ describe('react custom html parser', () => {
         name: 'https://github.com/SableClient/Sable/pull/PR/626',
       })
     ).toHaveAttribute('href', 'https://github.com/SableClient/Sable/pull/PR/626');
+  });
+
+  it.each([String.raw`\<test\>`, String.raw`\<test>`])(
+    'renders %s as literal angle brackets, not entity text',
+    (md) => {
+      renderParsedHtml(markdownToHtml(md));
+
+      expect(screen.getByText('<test>')).toBeInTheDocument();
+      expect(screen.queryByText('&lt;test&gt;')).not.toBeInTheDocument();
+    }
+  );
+
+  it('unwraps paragraph tags inside list items instead of rendering block breaks', () => {
+    const { container } = renderMessage(
+      '<ol><li><p>one</p></li><li><p>two</p></li></ol><ul><li><p>bullet</p></li></ul>'
+    );
+
+    expect(container.querySelector('p')).toBeNull();
+    expect(container.textContent).toContain('one');
+    expect(container.textContent).toContain('two');
+    expect(container.textContent).toContain('bullet');
+  });
+});
+
+describe('matrix: URI mentions', () => {
+  const roomMx = () =>
+    createMatrixClient({
+      getRoom: () => ({ roomId: '!room:example.org', name: 'Lobby' }),
+      getRooms: () => [],
+    });
+
+  it('renders a matrix: user URI in an html anchor as a mention pill', () => {
+    renderParsedHtml('<a href="matrix:u/bob:example.org">bob</a>', { sanitize: false });
+
+    const link = screen.getByRole('link', { name: '@bob' });
+    expect(link).toHaveAttribute('data-mention-id', '@bob:example.org');
+    expect(link.className).toContain(customHtmlCss.Mention({}));
+  });
+
+  it('keeps valid matrix: URIs through sanitization and renders them as mentions', () => {
+    renderParsedHtml('<a href="matrix:u/bob:example.org">bob</a>', { sanitize: true });
+
+    expect(screen.getByRole('link', { name: '@bob' })).toHaveAttribute(
+      'data-mention-id',
+      '@bob:example.org'
+    );
+  });
+
+  it('renders a matrix: room URI with via servers and falls back to the room name', () => {
+    renderParsedHtml(
+      '<a href="matrix:roomid/room:example.org?via=elsewhere.ca">matrix:roomid/room:example.org?via=elsewhere.ca</a>',
+      { sanitize: false, mx: roomMx() }
+    );
+
+    const link = screen.getByRole('link', { name: '#Lobby' });
+    expect(link).toHaveAttribute('data-mention-id', '!room:example.org');
+    expect(link).toHaveAttribute('data-mention-via', 'elsewhere.ca');
+  });
+
+  it('renders a matrix: event URI with the event id and message icon', () => {
+    renderParsedHtml('<a href="matrix:roomid/room:example.org/e/event123">see this</a>', {
+      sanitize: false,
+      mx: roomMx(),
+    });
+
+    const link = screen.getByRole('link', { name: 'see this' });
+    expect(link).toHaveAttribute('data-mention-id', '!room:example.org');
+    expect(link).toHaveAttribute('data-mention-event-id', '$event123');
+    expect(link.className).toContain(customHtmlCss.MentionWithIcon);
+  });
+
+  it('autolinks bare matrix: URIs in plain text as mention pills', () => {
+    const mx = roomMx();
+    const linkifyOpts = {
+      ...LINKIFY_OPTS,
+      render: factoryRenderLinkifyWithMention(
+        settingsLinkBaseUrl,
+        (href) =>
+          renderMatrixMention(mx, '!room:example.com', href, makeMentionCustomProps(undefined)),
+        undefined
+      ),
+    };
+    const parserOptions = getReactCustomHtmlParser(mx, '!room:example.com', {
+      settingsLinkBaseUrl,
+      linkifyOpts,
+      handleMentionClick: undefined,
+    });
+
+    render(<div>{parse('<p>see matrix:r/room:example.org now</p>', parserOptions)}</div>);
+
+    const link = screen.getByRole('link', { name: '#Lobby' });
+    expect(link).toHaveAttribute('data-mention-id', '!room:example.org');
   });
 });

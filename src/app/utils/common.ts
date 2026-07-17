@@ -1,4 +1,4 @@
-import { IconName, IconSrc } from 'folds';
+import { File, Image, Play, VideoCamera, type PhosphorIcon } from '$components/icons/phosphor';
 
 export const bytesToSize = (bytes: number): string => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -31,18 +31,18 @@ export const secondsToMinutesAndSeconds = (seconds: number): string => {
   return `${mm}:${ss < 10 ? '0' : ''}${ss}`;
 };
 
-export const getFileTypeIcon = (icons: Record<IconName, IconSrc>, fileType: string): IconSrc => {
+export const getFileTypeIconComponent = (fileType: string): PhosphorIcon => {
   const type = fileType.toLowerCase();
   if (type.startsWith('audio')) {
-    return icons.Play;
+    return Play;
   }
   if (type.startsWith('video')) {
-    return icons.Vlc;
+    return VideoCamera;
   }
   if (type.startsWith('image')) {
-    return icons.Photo;
+    return Image;
   }
-  return icons.File;
+  return File;
 };
 
 export const fulfilledPromiseSettledResult = <T>(prs: PromiseSettledResult<T>[]): T[] =>
@@ -57,7 +57,7 @@ export const promiseFulfilledResult = <T>(
   if (settledResult.status === 'fulfilled') return settledResult.value;
   return undefined;
 };
-export const promiseRejectedResult = <T>(settledResult: PromiseSettledResult<T>): any => {
+export const promiseRejectedResult = <T>(settledResult: PromiseSettledResult<T>): unknown => {
   if (settledResult.status === 'rejected') return settledResult.reason;
   return undefined;
 };
@@ -68,7 +68,7 @@ export const binarySearch = <T>(items: T[], match: (item: T) => -1 | 0 | 1): T |
 
     const mid = Math.floor((start + end) / 2);
 
-    const result = match(items[mid]);
+    const result = match(items[mid]!);
     if (result === 0) return items[mid];
 
     if (result === 1) return search(start, mid - 1);
@@ -113,7 +113,7 @@ export const trimSlash = (str: string): string => trimLeadingSlash(trimTrailingS
 
 export const nameInitials = (str: string | undefined | null, len = 1): string => {
   if (!str) return '';
-  return [...str].slice(0, len).join('') || '';
+  return Array.from(str).slice(0, len).join('') || '';
 };
 
 export const randomStr = (len = 12): string => {

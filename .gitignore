@@ -49,3 +49,14 @@ src-tauri/gen/android/app/build/
 # Worktrees
 .worktrees
 
+# the following line was added with nvim by Shea because its annoying to clear every so often
+.vscode/bookmarks.json
+
+# Nix things
+## nix build output
+result
+## direnv config + local state
+.envrc
+.direnv
+## auto-generated pre-commit config
+.pre-commit-config.yaml

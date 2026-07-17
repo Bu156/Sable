@@ -1,11 +1,13 @@
-import { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { StateEvent } from '$types/matrix/room';
+import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
+
 import { getAccountData, getStateEvent, getStateEvents } from '$utils/room';
-import { AccountDataEvent } from '$types/matrix/accountData';
-import { ImageUsage } from './types';
+
+import type { ImageUsage } from './types';
 import { ImagePack } from './ImagePack';
-import { PackMetaReader } from './PackMetaReader';
-import { PackAddress } from './PackAddress';
+import type { PackMetaReader } from './PackMetaReader';
+import type { PackAddress } from './PackAddress';
+import { CustomAccountDataEvent } from '$types/matrix/accountData';
+import { CustomStateEvent } from '$types/matrix/room';
 
 export function packAddressEqual(a1?: PackAddress, a2?: PackAddress): boolean {
   if (!a1 && !a2) return true;
@@ -36,7 +38,9 @@ export function makeImagePacks(packEvents: MatrixEvent[]): ImagePack[] {
 }
 
 export function getRoomImagePack(room: Room, stateKey: string): ImagePack | undefined {
-  const packEvent = getStateEvent(room, StateEvent.PoniesRoomEmotes, stateKey);
+  const packEvent =
+    getStateEvent(room, CustomStateEvent.ImagePack, stateKey) ||
+    getStateEvent(room, CustomStateEvent.PoniesRoomEmotes, stateKey);
   if (!packEvent) return undefined;
   const packId = packEvent.getId();
   if (!packId) return undefined;
@@ -44,12 +48,27 @@ export function getRoomImagePack(room: Room, stateKey: string): ImagePack | unde
 }
 
 export function getRoomImagePacks(room: Room): ImagePack[] {
-  const packEvents = getStateEvents(room, StateEvent.PoniesRoomEmotes);
-  return makeImagePacks(packEvents);
+  const packEventsStable = getStateEvents(room, CustomStateEvent.ImagePack);
+  const packEventsUnstable = getStateEvents(room, CustomStateEvent.PoniesRoomEmotes);
+
+  const uniquePackEvents = new Map<string, MatrixEvent>();
+  packEventsUnstable.forEach((ev) => {
+    const key = ev.getStateKey();
+    if (typeof key === 'string') uniquePackEvents.set(key, ev);
+  });
+  packEventsStable.forEach((ev) => {
+    const key = ev.getStateKey();
+    if (typeof key === 'string') uniquePackEvents.set(key, ev);
+  });
+
+  return makeImagePacks(Array.from(uniquePackEvents.values()));
 }
 
 export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
-  const emoteRoomsContent = getAccountData(mx, AccountDataEvent.PoniesEmoteRooms)?.getContent();
+  const emoteRoomsContent =
+    getAccountData(mx, CustomAccountDataEvent.ImagePackRooms)?.getContent() ||
+    getAccountData(mx, CustomAccountDataEvent.PoniesEmoteRooms)?.getContent();
+
   if (typeof emoteRoomsContent !== 'object') return [];
 
   const { rooms: roomIdToPackInfo } = emoteRoomsContent;
@@ -62,20 +81,44 @@ export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
     const room = mx.getRoom(roomId);
     if (!room) return [];
     const packStateKeyToUnknown = roomIdToPackInfo[roomId];
-    const packEvents = getStateEvents(room, StateEvent.PoniesRoomEmotes);
-    const globalPackEvents = packEvents.filter((mE) => {
-      const stateKey = mE.getStateKey();
-      if (typeof stateKey === 'string') return !!packStateKeyToUnknown[stateKey];
-      return false;
+
+    const packEventsStable = getStateEvents(room, CustomStateEvent.ImagePack);
+    const packEventsUnstable = getStateEvents(room, CustomStateEvent.PoniesRoomEmotes);
+
+    const uniquePackEvents = new Map<string, MatrixEvent>();
+    packEventsUnstable.forEach((ev) => {
+      const key = ev.getStateKey();
+      if (typeof key === 'string' && !!packStateKeyToUnknown[key]) {
+        uniquePackEvents.set(key, ev);
+      }
     });
-    return makeImagePacks(globalPackEvents);
+    packEventsStable.forEach((ev) => {
+      const key = ev.getStateKey();
+      if (typeof key === 'string' && !!packStateKeyToUnknown[key]) {
+        uniquePackEvents.set(key, ev);
+      }
+    });
+
+    return makeImagePacks(Array.from(uniquePackEvents.values()));
   });
 
   return packs;
 }
 
+export function getGlobalImagePackRoomIds(mx: MatrixClient): string[] {
+  const emoteRoomsContent =
+    getAccountData(mx, CustomAccountDataEvent.ImagePackRooms)?.getContent() ||
+    getAccountData(mx, CustomAccountDataEvent.PoniesEmoteRooms)?.getContent();
+
+  if (typeof emoteRoomsContent !== 'object' || !emoteRoomsContent) return [];
+  const { rooms: roomIdToPackInfo } = emoteRoomsContent as { rooms?: unknown };
+  if (typeof roomIdToPackInfo !== 'object' || !roomIdToPackInfo) return [];
+
+  return Object.keys(roomIdToPackInfo);
+}
+
 export function getUserImagePack(mx: MatrixClient): ImagePack | undefined {
-  const packEvent = getAccountData(mx, AccountDataEvent.PoniesUserEmotes);
+  const packEvent = getAccountData(mx, CustomAccountDataEvent.PoniesUserEmotes);
   const userId = mx.getUserId();
   if (!packEvent || !userId) {
     return undefined;

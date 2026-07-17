@@ -4,7 +4,8 @@ import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
 import { SequenceCardStyle } from '$features/settings/styles.css';
 import { toSettingsFocusIdPart } from '$features/settings/settingsLink';
-import { getDebugLogger, LogCategory } from '$utils/debugLogger';
+import type { LogCategory } from '$utils/debugLogger';
+import { getDebugLogger } from '$utils/debugLogger';
 
 const ALL_CATEGORIES: LogCategory[] = [
   'sync',
@@ -17,6 +18,17 @@ const ALL_CATEGORIES: LogCategory[] = [
   'error',
   'general',
 ];
+
+const handleExportLogs = () => {
+  const data = getDebugLogger().exportLogs();
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sable-debug-logs-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 export function SentrySettings() {
   const [categoryEnabled, setCategoryEnabled] = useState<Record<LogCategory, boolean>>(() => {
@@ -37,17 +49,6 @@ export function SentrySettings() {
   const handleCategoryToggle = (category: LogCategory, enabled: boolean) => {
     getDebugLogger().setBreadcrumbCategoryEnabled(category, enabled);
     setCategoryEnabled((prev) => ({ ...prev, [category]: enabled }));
-  };
-
-  const handleExportLogs = () => {
-    const data = getDebugLogger().exportLogs();
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sable-debug-logs-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const isSentryConfigured = Boolean(import.meta.env.VITE_SENTRY_DSN);

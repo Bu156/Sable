@@ -1,12 +1,10 @@
-/* eslint-disable no-console */
 /// <reference lib="WebWorker" />
 
+/* oxlint-disable no-console, unicorn/require-post-message-target-origin */
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 
 import { createPushNotifications } from './sw/pushNotification';
-import { readPersistedSession } from './sw-session-persistence';
 
-export type {};
 declare const self: ServiceWorkerGlobalScope;
 
 let notificationSoundEnabled = true;
@@ -71,10 +69,9 @@ async function loadPersistedSettings() {
 async function persistSession(session: SessionInfo): Promise<void> {
   try {
     const cache = await self.caches.open(SW_SESSION_CACHE);
-    const sessionWithTimestamp = { ...session, persistedAt: Date.now() };
     await cache.put(
       SW_SESSION_URL,
-      new Response(JSON.stringify(sessionWithTimestamp), {
+      new Response(JSON.stringify(session), {
         headers: { 'Content-Type': 'application/json' },
       })
     );
@@ -96,8 +93,14 @@ async function loadPersistedSession(): Promise<SessionInfo | undefined> {
   try {
     const cache = await self.caches.open(SW_SESSION_CACHE);
     const response = await cache.match(SW_SESSION_URL);
-    if (response) {
-      return readPersistedSession(await response.json());
+    if (!response) return undefined;
+    const s = await response.json();
+    if (typeof s.accessToken === 'string' && typeof s.baseUrl === 'string') {
+      return {
+        accessToken: s.accessToken,
+        baseUrl: s.baseUrl,
+        userId: typeof s.userId === 'string' ? s.userId : undefined,
+      };
     }
     return undefined;
   } catch {
@@ -110,8 +113,6 @@ type SessionInfo = {
   baseUrl: string;
   /** Matrix user ID of the account, used to identify which account a push belongs to. */
   userId?: string;
-  /** Timestamp when this session was persisted to cache. */
-  persistedAt?: number;
 };
 
 /**
@@ -268,7 +269,9 @@ async function fetchRoomName(
 ): Promise<string | undefined> {
   try {
     const url = `${baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.name`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     if (!res.ok) return undefined;
     const data = (await res.json()) as Record<string, unknown>;
     const { name } = data;
@@ -295,7 +298,9 @@ async function fetchMemberInfo(
 ): Promise<MemberInfo> {
   try {
     const url = `${baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.member/${encodeURIComponent(userId)}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     if (!res.ok) return { displayname: undefined, avatarUrl: undefined };
     const data = (await res.json()) as Record<string, unknown>;
     const displayname =
@@ -323,7 +328,9 @@ async function fetchRoomAvatar(
 ): Promise<string | undefined> {
   try {
     const url = `${baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.avatar`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     if (!res.ok) return undefined;
     const data = (await res.json()) as Record<string, unknown>;
     const avatarUrl = data.url;
@@ -340,7 +347,7 @@ async function fetchRoomAvatar(
  */
 function mxcToNotificationUrl(mxcUrl: string, baseUrl: string): string | undefined {
   const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/([^?#]+)/);
-  if (!match) return undefined;
+  if (!match || !match[1] || !match[2]) return undefined;
   const [, server, mediaId] = match;
   return `${baseUrl}/_matrix/media/v3/thumbnail/${encodeURIComponent(server)}/${encodeURIComponent(mediaId)}?width=96&height=96&method=crop`;
 }
@@ -389,7 +396,10 @@ async function requestDecryptionFromClient(
       });
 
       try {
-        (client as WindowClient).postMessage({ type: 'decryptPushEvent', rawEvent });
+        (client as WindowClient).postMessage({
+          type: 'decryptPushEvent',
+          rawEvent,
+        });
       } catch (err) {
         decryptionPendingMap.delete(eventId);
         console.warn('[SW decryptRelay] postMessage error', err);
@@ -423,8 +433,8 @@ async function handleMinimalPushPayload(
     console.debug('[SW push] minimal payload: no session, showing generic notification');
     await self.registration.showNotification('New Message', {
       body: undefined,
-      icon: '/public/res/logo-maskable/cinny-logo-maskable-180x180.png',
-      badge: '/public/res/logo-maskable/cinny-logo-maskable-72x72.png',
+      icon: '/public/res/logo-maskable/logo-maskable-180x180.png',
+      badge: '/public/res/logo-maskable/logo-maskable-72x72.png',
       tag: `room-${roomId}`,
       renotify: true,
       data: { room_id: roomId, event_id: eventId },
@@ -442,8 +452,8 @@ async function handleMinimalPushPayload(
   if (!rawEvent) {
     await self.registration.showNotification('New Message', {
       body: undefined,
-      icon: '/public/res/logo-maskable/cinny-logo-maskable-180x180.png',
-      badge: '/public/res/logo-maskable/cinny-logo-maskable-72x72.png',
+      icon: '/public/res/logo-maskable/logo-maskable-180x180.png',
+      badge: '/public/res/logo-maskable/logo-maskable-72x72.png',
       tag: `room-${roomId}`,
       renotify: true,
       data: { room_id: roomId, event_id: eventId, user_id: session.userId },
@@ -471,6 +481,7 @@ async function handleMinimalPushPayload(
     room_id: roomId,
     event_id: eventId,
     user_id: session.userId,
+    sender_id: sender,
   };
 
   if (eventType === 'm.room.encrypted') {
@@ -491,7 +502,7 @@ async function handleMinimalPushPayload(
       await handlePushNotificationPushData({
         ...baseData,
         type: result.eventType,
-        content: result.content,
+        content: result.content as { notification_type?: string; membership?: string } | undefined,
         sender_display_name: senderDisplay,
         // Prefer relay's room name (has m.direct / computed SDK name); fall back to state fetch.
         room_name: result.room_name || resolvedRoomName,
@@ -513,7 +524,7 @@ async function handleMinimalPushPayload(
     await handlePushNotificationPushData({
       ...baseData,
       type: eventType,
-      content: rawEvent.content,
+      content: rawEvent.content as { notification_type?: string; membership?: string } | undefined,
       sender_display_name: senderDisplay,
       room_name: resolvedRoomName,
       room_avatar_url: notificationAvatarUrl,
@@ -556,10 +567,6 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 
   if (type === 'setSession') {
     setSession(client.id, accessToken, baseUrl, userId);
-    const persisted = sessions.get(client.id);
-    event.waitUntil(
-      (persisted ? persistSession(persisted) : clearPersistedSession()).catch(() => undefined)
-    );
     event.waitUntil(cleanupDeadClients());
   }
   if (type === 'pushDecryptResult') {
@@ -609,25 +616,64 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 const MEDIA_PATHS = [
   '/_matrix/client/v1/media/download',
   '/_matrix/client/v1/media/thumbnail',
-  '/_matrix/client/v1/media/preview_url',
-  '/_matrix/client/v3/media/download',
-  '/_matrix/client/v3/media/thumbnail',
-  '/_matrix/client/v3/media/preview_url',
-  '/_matrix/client/r0/media/download',
-  '/_matrix/client/r0/media/thumbnail',
-  '/_matrix/client/r0/media/preview_url',
-  '/_matrix/client/unstable/org.matrix.msc3916/media/download',
-  '/_matrix/client/unstable/org.matrix.msc3916/media/thumbnail',
-  '/_matrix/client/unstable/org.matrix.msc3916/media/preview_url',
   // Legacy unauthenticated endpoints — servers that require auth return 404/403
   // for these when no token is present, so intercept and add auth here too.
   '/_matrix/media/v3/download',
   '/_matrix/media/v3/thumbnail',
-  '/_matrix/media/v3/preview_url',
   '/_matrix/media/r0/download',
   '/_matrix/media/r0/thumbnail',
-  '/_matrix/media/r0/preview_url',
 ];
+
+const ELEMENT_CALL_RINGTONE_PATH = '/public/element-call/assets/ringtone-';
+let silentWavBytesCache: Uint8Array | undefined;
+
+function createSilentWavBytes(durationMs = 250): Uint8Array {
+  if (silentWavBytesCache) return silentWavBytesCache;
+
+  const sampleRate = 8000;
+  const channels = 1;
+  const bitsPerSample = 16;
+  const bytesPerSample = bitsPerSample / 8;
+  const frameCount = Math.max(1, Math.floor((sampleRate * durationMs) / 1000));
+  const dataSize = frameCount * channels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // RIFF header
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + dataSize, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+
+  // fmt chunk
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true); // PCM chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
+  view.setUint16(32, channels * bytesPerSample, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data chunk
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, dataSize, true);
+
+  // PCM data is already zeroed => silence.
+  silentWavBytesCache = new Uint8Array(buffer);
+  return silentWavBytesCache;
+}
+
+function isElementCallRingtoneRequest(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return (
+      pathname.startsWith(ELEMENT_CALL_RINGTONE_PATH) &&
+      (pathname.endsWith('.mp3') || pathname.endsWith('.ogg') || pathname.endsWith('.wav'))
+    );
+  } catch {
+    return false;
+  }
+}
 
 function mediaPath(url: string): boolean {
   try {
@@ -645,14 +691,6 @@ function validMediaRequest(url: string, baseUrl: string): boolean {
   });
 }
 
-function getMatchingSessions(url: string): SessionInfo[] {
-  return [...sessions.values()].filter((s) => validMediaRequest(url, s.baseUrl));
-}
-
-function isAuthFailureStatus(status: number): boolean {
-  return status === 401 || status === 403;
-}
-
 function fetchConfig(token: string): RequestInit {
   return {
     headers: {
@@ -660,75 +698,6 @@ function fetchConfig(token: string): RequestInit {
     },
     cache: 'default',
   };
-}
-
-async function getLiveWindowSessions(url: string, clientId: string): Promise<SessionInfo[]> {
-  const collected: SessionInfo[] = [];
-  const seen = new Set<string>();
-
-  const add = (session?: SessionInfo) => {
-    if (!session || !validMediaRequest(url, session.baseUrl)) return;
-    const key = `${session.baseUrl}\x00${session.accessToken}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    collected.push(session);
-  };
-
-  if (clientId) {
-    add(await requestSessionWithTimeout(clientId, 1500));
-    return collected;
-  }
-
-  const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  const liveSessions = await Promise.all(
-    windowClients.map((client) => requestSessionWithTimeout(client.id, 750))
-  );
-  liveSessions.forEach((session) => add(session));
-
-  return collected;
-}
-
-async function fetchMediaWithRetry(
-  url: string,
-  token: string,
-  redirect: RequestRedirect,
-  clientId: string
-): Promise<Response> {
-  let response = await fetch(url, { ...fetchConfig(token), redirect });
-  if (!isAuthFailureStatus(response.status)) return response;
-
-  const attemptedTokens = new Set<string>([token]);
-  const retrySessions: SessionInfo[] = [];
-  const seenSessions = new Set<string>();
-
-  const addRetrySession = (session?: SessionInfo) => {
-    if (!session || !validMediaRequest(url, session.baseUrl)) return;
-    const key = `${session.baseUrl}\x00${session.accessToken}`;
-    if (seenSessions.has(key)) return;
-    seenSessions.add(key);
-    retrySessions.push(session);
-  };
-
-  if (clientId) addRetrySession(sessions.get(clientId));
-  getMatchingSessions(url).forEach((session) => addRetrySession(session));
-  addRetrySession(preloadedSession);
-  addRetrySession(await loadPersistedSession());
-  (await getLiveWindowSessions(url, clientId)).forEach((session) => addRetrySession(session));
-
-  /* eslint-disable no-await-in-loop */
-  for (let i = 0; i < retrySessions.length; i += 1) {
-    const candidate = retrySessions[i];
-    if (candidate && !attemptedTokens.has(candidate.accessToken)) {
-      attemptedTokens.add(candidate.accessToken);
-      response = await fetch(url, { ...fetchConfig(candidate.accessToken), redirect });
-      if (!isAuthFailureStatus(response.status)) {
-        return response;
-      }
-    }
-  }
-  /* eslint-enable no-await-in-loop */
-
-  return response;
 }
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
@@ -748,7 +717,26 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 self.addEventListener('fetch', (event: FetchEvent) => {
   const { url, method } = event.request;
 
-  if (method !== 'GET' || !mediaPath(url)) return;
+  if (method !== 'GET') return;
+
+  if (isElementCallRingtoneRequest(url)) {
+    const silentWavBytes = createSilentWavBytes();
+    const silentWavBuffer = new Uint8Array(silentWavBytes).buffer;
+    event.respondWith(
+      Promise.resolve(
+        new Response(silentWavBuffer, {
+          status: 200,
+          headers: {
+            'Content-Type': 'audio/wav',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        })
+      )
+    );
+    return;
+  }
+
+  if (!mediaPath(url)) return;
 
   const { clientId } = event;
 
@@ -761,7 +749,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const session = clientId ? sessions.get(clientId) : undefined;
   if (session && validMediaRequest(url, session.baseUrl)) {
-    event.respondWith(fetchMediaWithRetry(url, session.accessToken, redirect, clientId));
+    event.respondWith(fetch(url, { ...fetchConfig(session.accessToken), redirect }));
     return;
   }
 
@@ -781,7 +769,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       ? preloadedSession
       : undefined);
   if (byBaseUrl) {
-    event.respondWith(fetchMediaWithRetry(url, byBaseUrl.accessToken, redirect, clientId));
+    event.respondWith(fetch(url, { ...fetchConfig(byBaseUrl.accessToken), redirect }));
     return;
   }
 
@@ -791,14 +779,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       loadPersistedSession().then((persisted) => {
         if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-          return fetchMediaWithRetry(url, persisted.accessToken, redirect, '');
-        }
-        const matching = getMatchingSessions(url);
-        if (matching.length === 1) {
-          return fetchMediaWithRetry(url, matching[0].accessToken, redirect, '');
-        }
-        if (preloadedSession && validMediaRequest(url, preloadedSession.baseUrl)) {
-          return fetchMediaWithRetry(url, preloadedSession.accessToken, redirect, '');
+          return fetch(url, {
+            ...fetchConfig(persisted.accessToken),
+            redirect,
+          });
         }
         return fetch(event.request);
       })
@@ -806,27 +790,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     return;
   }
 
-  const syncByBaseUrl = getMatchingSessions(url);
-  if (syncByBaseUrl.length === 1) {
-    event.respondWith(fetchMediaWithRetry(url, syncByBaseUrl[0].accessToken, redirect, clientId));
-    return;
-  }
-  if (preloadedSession && validMediaRequest(url, preloadedSession.baseUrl)) {
-    event.respondWith(fetchMediaWithRetry(url, preloadedSession.accessToken, redirect, clientId));
-    return;
-  }
-
   event.respondWith(
     requestSessionWithTimeout(clientId).then(async (s) => {
       // Primary: session received from the live client window.
       if (s && validMediaRequest(url, s.baseUrl)) {
-        return fetchMediaWithRetry(url, s.accessToken, redirect, clientId);
+        return fetch(url, { ...fetchConfig(s.accessToken), redirect });
       }
       // Fallback: try the persisted session (helps when SW restarts on iOS and
       // the client window hasn't responded to requestSession yet).
       const persisted = await loadPersistedSession();
       if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-        return fetchMediaWithRetry(url, persisted.accessToken, redirect, clientId);
+        return fetch(url, { ...fetchConfig(persisted.accessToken), redirect });
       }
       console.warn(
         '[SW fetch] No valid session for media request',
@@ -884,7 +858,9 @@ const onPushNotification = async (event: PushEvent) => {
       if (pushData.unread === 0) {
         // All messages read elsewhere — clear the home-screen badge and,
         // if the user opted in, dismiss outstanding lock-screen notifications.
-        await (self.navigator as any).clearAppBadge();
+        await (
+          self.navigator as unknown as { clearAppBadge?: () => Promise<void> }
+        ).clearAppBadge?.();
         if (clearNotificationsOnRead) {
           const notifs = await self.registration.getNotifications();
           notifs.forEach((n) => n.close());
@@ -892,10 +868,14 @@ const onPushNotification = async (event: PushEvent) => {
         return;
       }
       // unread > 0: update the PWA badge with the current count.
-      await (self.navigator as any).setAppBadge(pushData.unread);
+      await (
+        self.navigator as unknown as { setAppBadge?: (count: number) => Promise<void> }
+      ).setAppBadge?.(pushData.unread);
     } else {
       // No unread field in payload — clear badge to avoid a stale count.
-      await (self.navigator as any).clearAppBadge();
+      await (
+        self.navigator as unknown as { clearAppBadge?: () => Promise<void> }
+      ).clearAppBadge?.();
     }
   } catch {
     // Badging API absent (Firefox/Gecko) — continue to show the notification.
@@ -928,6 +908,15 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
   const pushRoomId: string | undefined = data?.room_id ?? undefined;
   const pushEventId: string | undefined = data?.event_id ?? undefined;
   const isInvite = data?.content?.membership === 'invite';
+  const callNotificationType: string | undefined = data?.callNotificationType ?? undefined;
+  const callIntentKind: string | undefined = data?.callIntentKind ?? undefined;
+  const callIntentRaw: string | undefined = data?.callIntentRaw ?? undefined;
+  const callRefEventId: string | undefined = data?.callRefEventId ?? undefined;
+  const callSenderId: string | undefined = data?.sender_id ?? data?.callSenderId ?? undefined;
+  const callSenderTs: number | undefined =
+    typeof data?.callSenderTs === 'number' ? data.callSenderTs : undefined;
+  const callExpiresAt: number | undefined =
+    typeof data?.callExpiresAt === 'number' ? data.callExpiresAt : undefined;
 
   console.debug('[SW notificationclick] notification data:', JSON.stringify(data, null, 2));
   console.debug('[SW notificationclick] resolved fields:', {
@@ -955,11 +944,25 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
     if (pushUserId) u.searchParams.set('uid', pushUserId);
     targetUrl = u.href;
   } else if (pushUserId && pushRoomId) {
-    const callParam = isCall ? '?joinCall=true' : '';
     const segments = pushEventId
-      ? `to/${encodeURIComponent(pushUserId)}/${encodeURIComponent(pushRoomId)}/${encodeURIComponent(pushEventId)}/${callParam}`
-      : `to/${encodeURIComponent(pushUserId)}/${encodeURIComponent(pushRoomId)}/${callParam}`;
-    targetUrl = new URL(segments, scope).href;
+      ? `to/${encodeURIComponent(pushUserId)}/${encodeURIComponent(pushRoomId)}/${encodeURIComponent(pushEventId)}`
+      : `to/${encodeURIComponent(pushUserId)}/${encodeURIComponent(pushRoomId)}`;
+    const target = new URL(segments, scope);
+    if (isCall) {
+      target.searchParams.set('call', '1');
+      if (callNotificationType) target.searchParams.set('callType', callNotificationType);
+      if (callIntentKind) target.searchParams.set('callIntentKind', callIntentKind);
+      if (callIntentRaw) target.searchParams.set('callIntentRaw', callIntentRaw);
+      if (callRefEventId) target.searchParams.set('callRefEventId', callRefEventId);
+      if (callSenderId) target.searchParams.set('callSenderId', callSenderId);
+      if (typeof callSenderTs === 'number') {
+        target.searchParams.set('callSenderTs', String(callSenderTs));
+      }
+      if (typeof callExpiresAt === 'number') {
+        target.searchParams.set('callExpiresAt', String(callExpiresAt));
+      }
+    }
+    targetUrl = target.href;
   } else {
     // Fallback: no room ID or no user ID in payload.
     targetUrl = new URL('inbox/notifications/', scope).href;
@@ -976,10 +979,13 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
 
       console.debug(
         '[SW notificationclick] window clients:',
-        clientList.map((c) => ({ url: c.url, visibility: c.visibilityState, focused: c.focused }))
+        clientList.map((c) => ({
+          url: c.url,
+          visibility: c.visibilityState,
+          focused: c.focused,
+        }))
       );
 
-      // eslint-disable-next-line no-restricted-syntax
       for (const wc of clientList) {
         console.debug('[SW notificationclick] postMessage to existing client:', wc.url);
         try {
@@ -994,8 +1000,15 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
             eventId: pushEventId,
             isInvite,
             isCall,
+            callNotificationType,
+            callIntentKind,
+            callIntentRaw,
+            callRefEventId,
+            callSenderId,
+            callSenderTs,
+            callExpiresAt,
           });
-          // eslint-disable-next-line no-await-in-loop
+          // oxlint-disable-next-line no-await-in-loop
           await wc.focus();
           return;
         } catch (err) {
@@ -1013,7 +1026,5 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
   );
 });
 
-if (self.__WB_MANIFEST) {
-  precacheAndRoute(self.__WB_MANIFEST);
-}
+precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();

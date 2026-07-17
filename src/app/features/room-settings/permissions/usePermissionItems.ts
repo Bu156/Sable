@@ -1,27 +1,30 @@
 import { useMemo } from 'react';
-import { MessageEvent, StateEvent } from '$types/matrix/room';
-import { PermissionGroup } from '$features/common-settings/permissions';
 
-export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
+import type { PermissionGroup } from '$features/common-settings/permissions';
+import { CALL_PERMISSIONS_GROUP } from '$features/common-settings/permissions';
+import { EventType } from '$types/matrix-sdk';
+import { CustomStateEvent } from '$types/matrix/room';
+
+export const usePermissionGroups = (): PermissionGroup[] => {
   const groups: PermissionGroup[] = useMemo(() => {
     const messagesGroup: PermissionGroup = {
       name: 'Messages',
       items: [
         {
           location: {
-            key: MessageEvent.RoomMessage,
+            key: EventType.RoomMessage,
           },
           name: 'Send Messages',
         },
         {
           location: {
-            key: MessageEvent.Sticker,
+            key: EventType.Sticker,
           },
           name: 'Send Stickers',
         },
         {
           location: {
-            key: MessageEvent.Reaction,
+            key: EventType.Reaction,
           },
           name: 'Send Reactions',
         },
@@ -35,26 +38,13 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
         {
           location: {
             state: true,
-            key: StateEvent.RoomPinnedEvents,
+            key: EventType.RoomPinnedEvents,
           },
           name: 'Pin Messages',
         },
         {
           location: {},
           name: 'Other Message Events',
-        },
-      ],
-    };
-
-    const callSettingsGroup: PermissionGroup = {
-      name: 'Calls',
-      items: [
-        {
-          location: {
-            state: true,
-            key: StateEvent.GroupCallMemberPrefix,
-          },
-          name: 'Join Call',
         },
       ],
     };
@@ -92,7 +82,7 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
         },
         {
           location: {
-            key: MessageEvent.RoomRedaction,
+            key: EventType.RoomRedaction,
           },
           name: 'Delete Self Messages',
         },
@@ -105,21 +95,21 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
         {
           location: {
             state: true,
-            key: StateEvent.RoomAvatar,
+            key: EventType.RoomAvatar,
           },
           name: 'Room Avatar',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomName,
+            key: EventType.RoomName,
           },
           name: 'Room Name',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomTopic,
+            key: EventType.RoomTopic,
           },
           name: 'Room Topic',
         },
@@ -132,49 +122,49 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
         {
           location: {
             state: true,
-            key: StateEvent.RoomJoinRules,
+            key: EventType.RoomJoinRules,
           },
           name: 'Change Room Access',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomCanonicalAlias,
+            key: EventType.RoomCanonicalAlias,
           },
           name: 'Publish Address',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomPowerLevels,
+            key: EventType.RoomPowerLevels,
           },
           name: 'Change All Permission',
         },
         {
           location: {
             state: true,
-            key: StateEvent.PowerLevelTags,
+            key: CustomStateEvent.PowerLevelTags,
           },
           name: 'Edit Power Levels',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomEncryption,
+            key: EventType.RoomEncryption,
           },
           name: 'Enable Encryption',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomHistoryVisibility,
+            key: EventType.RoomHistoryVisibility,
           },
           name: 'History Visibility',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomTombstone,
+            key: EventType.RoomTombstone,
           },
           name: 'Upgrade Room',
         },
@@ -193,14 +183,14 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
         {
           location: {
             state: true,
-            key: StateEvent.PoniesRoomEmotes,
+            key: CustomStateEvent.ImagePack,
           },
           name: 'Manage Emojis & Stickers',
         },
         {
           location: {
             state: true,
-            key: StateEvent.RoomServerAcl,
+            key: EventType.RoomServerAcl,
           },
           name: 'Change Server ACLs',
         },
@@ -216,13 +206,13 @@ export const usePermissionGroups = (isCallRoom: boolean): PermissionGroup[] => {
 
     return [
       messagesGroup,
-      ...(isCallRoom ? [callSettingsGroup] : []),
+      CALL_PERMISSIONS_GROUP,
       moderationGroup,
       roomOverviewGroup,
       roomSettingsGroup,
       otherSettingsGroup,
     ];
-  }, [isCallRoom]);
+  }, []);
 
   return groups;
 };

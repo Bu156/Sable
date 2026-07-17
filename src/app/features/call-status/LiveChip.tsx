@@ -1,23 +1,23 @@
-import { MouseEventHandler, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useState } from 'react';
+import type { RectCords } from 'folds';
 import {
   Avatar,
   Badge,
   Box,
   Chip,
   config,
-  Icon,
-  Icons,
   Menu,
   MenuItem,
   PopOut,
-  RectCords,
   Scroll,
   Text,
   toRem,
 } from 'folds';
-import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import { CaretDown, CaretUp, sizedIcon, userFallbackIcon } from '$components/icons/phosphor';
+import type { CallMembership } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
-import { Room } from 'matrix-js-sdk';
+import type { Room } from '$types/matrix-sdk';
 import * as css from './styles.css';
 import { stopPropagation } from '../../utils/keyboard';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
@@ -102,7 +102,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
                               userId={userId}
                               src={avatarUrl}
                               alt={name}
-                              renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+                              renderFallback={() => userFallbackIcon('sm')}
                             />
                           </Avatar>
                         }
@@ -124,7 +124,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
         variant="Surface"
         fill="Soft"
         before={<Badge variant="Critical" fill="Solid" size="200" />}
-        after={<Icon size="50" src={cords ? Icons.ChevronBottom : Icons.ChevronTop} />}
+        after={sizedIcon(cords ? CaretDown : CaretUp, '50')}
         radii="Pill"
         onClick={handleOpenMenu}
       >

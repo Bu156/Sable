@@ -1,11 +1,10 @@
-import { MouseEventHandler, ReactNode, useCallback, useRef } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
+import { useCallback, useRef } from 'react';
 import {
   Avatar,
   Badge,
   Box,
   Chip,
-  Icon,
-  Icons,
   Line,
   Overlay,
   OverlayBackdrop,
@@ -19,23 +18,33 @@ import {
   toRem,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { JoinRule, MatrixError, Room, IHierarchyRoom } from '$types/matrix-sdk';
+import type { MatrixError, Room, IHierarchyRoom } from '$types/matrix-sdk';
+import { JoinRule, KnownMembership } from '$types/matrix-sdk';
 import { RoomAvatar, RoomIcon } from '$components/room-avatar';
 import { SequenceCard } from '$components/sequence-card';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { HierarchyItem } from '$hooks/useSpaceHierarchy';
+import type { HierarchyItem } from '$hooks/useSpaceHierarchy';
 import { KnockRoomPrompt } from '$components/knock-room-prompt';
 import { LocalRoomSummaryLoader } from '$components/RoomSummaryLoader';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { RoomTopicViewer } from '$components/room-topic-viewer';
 import { onEnterOrSpace, stopPropagation } from '$utils/keyboard';
-import { Membership } from '$types/matrix/room';
+
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '$utils/room';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { formatCompactNumber } from '$utils/formatCompactNumber';
 import { ItemDraggableTarget, useDraggableItem } from './DnD';
+import * as dndCss from './DnD.css';
+import {
+  ArrowRight,
+  chipIcon,
+  composerIcon,
+  EnvelopeSimple,
+  Plus,
+  Warning,
+} from '$components/icons/phosphor';
 import * as styleCss from './style.css';
 import * as css from './RoomItem.css';
 
@@ -67,15 +76,14 @@ function RoomJoinButton({ roomId, via }: RoomJoinButtonProps) {
           }
         >
           {(triggerRef) => (
-            <Icon
+            <Box
               ref={triggerRef}
-              style={{ color: color.Critical.Main, cursor: 'pointer' }}
-              src={Icons.Warning}
-              size="400"
-              filled
+              style={{ color: color.Critical.Main, cursor: 'pointer', display: 'flex' }}
               tabIndex={0}
               aria-label={joinState.error.data?.error || joinState.error.message}
-            />
+            >
+              {composerIcon(Warning, { weight: 'fill' })}
+            </Box>
           )}
         </TooltipProvider>
       )}
@@ -84,9 +92,7 @@ function RoomJoinButton({ roomId, via }: RoomJoinButtonProps) {
         fill="Soft"
         size="400"
         radii="Pill"
-        before={
-          canJoin ? <Icon src={Icons.Plus} size="50" /> : <Spinner variant="Secondary" size="100" />
-        }
+        before={canJoin ? chipIcon(Plus) : <Spinner variant="Secondary" size="100" />}
         onClick={join}
         disabled={!canJoin}
       >
@@ -106,7 +112,7 @@ function RoomKnockButton({ roomId, via }: RoomJoinButtonProps) {
             fill="Soft"
             size="400"
             radii="Pill"
-            before={<Icon src={Icons.MailPlus} size="50" />}
+            before={chipIcon(EnvelopeSimple)}
             onClick={() => setKnocking(true)}
           >
             <Text size="B300">Knock</Text>
@@ -362,7 +368,7 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
     const targetHandleRef = useRef<HTMLDivElement>(null);
     useDraggableItem(item, targetRef, onDragging, targetHandleRef);
 
-    const joined = room?.getMyMembership() === Membership.Join;
+    const joined = room?.getMyMembership() === KnownMembership.Join;
 
     return (
       <SequenceCard
@@ -374,7 +380,11 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
         ref={ref}
       >
         {before}
-        <Box ref={canReorder ? targetRef : null} grow="Yes">
+        <Box
+          ref={canReorder ? targetRef : null}
+          grow="Yes"
+          className={canReorder ? dndCss.ReorderableContent : undefined}
+        >
           {canReorder && <ItemDraggableTarget ref={targetHandleRef} />}
           {room ? (
             <LocalRoomSummaryLoader room={room}>
@@ -404,7 +414,7 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
                           radii="Pill"
                           aria-label="Open Room"
                         >
-                          <Icon size="50" src={Icons.ArrowRight} />
+                          {chipIcon(ArrowRight)}
                         </Chip>
                       </Box>
                     ) : (

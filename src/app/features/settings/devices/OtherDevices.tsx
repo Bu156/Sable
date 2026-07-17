@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import { Box, Button, config, Menu, Spinner, Text } from 'folds';
-import { AuthDict, IMyDevice, MatrixError } from '$types/matrix-sdk';
+import type { AuthDict, IAuthData, IMyDevice, MatrixError, UIAFlow } from '$types/matrix-sdk';
 import { SequenceCard } from '$components/sequence-card';
 import { ActionUIA, ActionUIAFlowsLoader } from '$components/ActionUIA';
-import { AsyncState, AsyncStatus, useAsync } from '$hooks/useAsyncCallback';
+import type { AsyncState } from '$hooks/useAsyncCallback';
+import { AsyncStatus, useAsync } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useUIAMatrixError } from '$hooks/useUIAFlows';
 import { DeviceVerificationStatus } from '$components/DeviceVerificationStatus';
@@ -16,6 +17,37 @@ import { SequenceCardStyle } from '$features/settings/styles.css';
 import { VerifyOtherDeviceTile } from './Verification';
 import { DeviceDeleteBtn, DeviceTile } from './DeviceTile';
 
+function renderUnsupportedUIAFlow() {
+  return (
+    <Text size="T200">
+      Authentication steps to perform this action are not supported by client.
+    </Text>
+  );
+}
+
+type DeleteDevicesUIAProps = {
+  authData: IAuthData;
+  ongoingFlow: UIAFlow;
+  deleteDevices: (authDict?: AuthDict) => void;
+  onCancel: () => void;
+};
+
+function DeleteDevicesUIA({
+  authData,
+  ongoingFlow,
+  deleteDevices,
+  onCancel,
+}: DeleteDevicesUIAProps) {
+  return (
+    <ActionUIA
+      authData={authData}
+      ongoingFlow={ongoingFlow}
+      action={deleteDevices}
+      onCancel={onCancel}
+    />
+  );
+}
+
 type OtherDevicesProps = {
   devices: IMyDevice[];
   refreshDeviceList: () => Promise<void>;
@@ -27,7 +59,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const authMetadata = useAuthMetadata();
   const accountManagementActions = useAccountManagementActions();
 
-  const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [deleted, setDeleted] = useState(new Set());
 
   const handleDashboardOIDC = useCallback(() => {
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
@@ -76,7 +108,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const deleteDevices = useAsync(
     useCallback(
       async (authDict?: AuthDict) => {
-        await mx.deleteMultipleDevices(Array.from(deleted), authDict);
+        await mx.deleteMultipleDevices(Array.from(deleted) as string[], authDict);
       },
       [mx, deleted]
     ),
@@ -100,6 +132,19 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const handleCancelAuth = useCallback(() => {
     setDeleteState({ status: AsyncStatus.Idle });
   }, []);
+
+  const renderDeleteDevicesUIA = useCallback(
+    (ongoingFlow: UIAFlow) =>
+      authData ? (
+        <DeleteDevicesUIA
+          authData={authData}
+          ongoingFlow={ongoingFlow}
+          deleteDevices={deleteDevices}
+          onCancel={handleCancelAuth}
+        />
+      ) : null,
+    [authData, deleteDevices, handleCancelAuth]
+  );
 
   return devices.length > 0 ? (
     <>
@@ -132,7 +177,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
           </SequenceCard>
         )}
         {devices
-          .sort((d1, d2) => {
+          .toSorted((d1, d2) => {
             if (!d1.last_seen_ts || !d2.last_seen_ts) return 0;
             return d1.last_seen_ts < d2.last_seen_ts ? 1 : -1;
           })
@@ -207,22 +252,8 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 </Text>
               )}
               {authData && (
-                <ActionUIAFlowsLoader
-                  authData={authData}
-                  unsupported={() => (
-                    <Text size="T200">
-                      Authentication steps to perform this action are not supported by client.
-                    </Text>
-                  )}
-                >
-                  {(ongoingFlow) => (
-                    <ActionUIA
-                      authData={authData}
-                      ongoingFlow={ongoingFlow}
-                      action={deleteDevices}
-                      onCancel={handleCancelAuth}
-                    />
-                  )}
+                <ActionUIAFlowsLoader authData={authData} unsupported={renderUnsupportedUIAFlow}>
+                  {renderDeleteDevicesUIA}
                 </ActionUIAFlowsLoader>
               )}
             </Box>

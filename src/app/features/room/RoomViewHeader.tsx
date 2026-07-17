@@ -1,6 +1,8 @@
-import { MouseEventHandler, forwardRef, useCallback, useEffect, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { forwardRef, useCallback, useEffect, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useAtom, useAtomValue } from 'jotai';
+import type { RectCords } from 'folds';
 import {
   Box,
   Avatar,
@@ -9,8 +11,6 @@ import {
   OverlayCenter,
   OverlayBackdrop,
   IconButton,
-  Icon,
-  Icons,
   Tooltip,
   TooltipProvider,
   Menu,
@@ -19,26 +19,44 @@ import {
   config,
   Line,
   PopOut,
-  RectCords,
   Badge,
   Spinner,
 } from 'folds';
 import { useNavigate } from 'react-router-dom';
+import type { Room, MatrixEvent } from '$types/matrix-sdk';
 import {
-  EventTimeline,
-  Room,
+  Direction,
+  type EventTimeline,
+  NotificationCountType,
   ThreadEvent,
   RoomEvent,
-  MatrixEvent,
-  NotificationCountType,
+  EventType,
 } from '$types/matrix-sdk';
 
 import { useStateEvent } from '$hooks/useStateEvent';
 import { PageHeader } from '$components/page';
+import {
+  ArrowLeft,
+  ChatCircleDots,
+  Checks,
+  Chats,
+  ClockCounterClockwise,
+  composerIcon,
+  DotsThreeOutlineVerticalIcon,
+  GearSix,
+  GridFour,
+  Link,
+  MagnifyingGlass,
+  menuIcon,
+  PushPin,
+  SignOut,
+  UserCircle,
+  UserPlus,
+} from '$components/icons/phosphor';
 import { RoomAvatar, RoomIcon } from '$components/room-avatar';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { RoomTopicViewer } from '$components/room-topic-viewer';
-import { StateEvent } from '$types/matrix/room';
+
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useIsDirectRoom, useRoom } from '$hooks/useRoom';
 import { useSetting } from '$state/hooks/settings';
@@ -71,7 +89,7 @@ import { useOpenRoomSettings } from '$state/hooks/roomSettings';
 import { RoomNotificationModeSwitcher } from '$components/RoomNotificationSwitcher';
 import {
   getRoomNotificationMode,
-  getRoomNotificationModeIcon,
+  roomNotificationModeIcon,
   useRoomsNotificationPreferencesContext,
 } from '$hooks/useRoomsNotificationPreferences';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
@@ -80,7 +98,8 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { useRoomWidgets } from '$hooks/useRoomWidgets';
-import { AccountDataEvent } from '$types/matrix/accountData';
+import { hasThreadRootAggregation, isThreadRelationEvent } from '$utils/room';
+
 import { DirectInvitePrompt } from '$components/direct-invite-prompt';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { mDirectAtom } from '$state/mDirectList';
@@ -88,15 +107,18 @@ import { callChatAtom } from '$state/callEmbed';
 import { RoomSettingsPage } from '$state/roomSettings';
 import { roomIdToThreadBrowserAtomFamily } from '$state/room/roomToThreadBrowser';
 import { roomIdToOpenThreadAtomFamily } from '$state/room/roomToOpenThread';
+import { useCallPreferences } from '$state/hooks/callPreferences';
+import { useCallStartCapabilities } from '$hooks/useCallStartCapabilities';
 import { JumpToTime } from './jump-to-time';
 import { RoomPinMenu } from './room-pin-menu';
 import * as css from './RoomViewHeader.css';
 import { RoomCallButton } from './RoomCallButton';
+import { CustomAccountDataEvent } from '$types/matrix/accountData';
 
 const log = createLogger('RoomViewHeader');
 
 async function getPinsHash(pinnedIds: string[]): Promise<string> {
-  const sorted = [...pinnedIds].sort().join(',');
+  const sorted = [...pinnedIds].toSorted().join(',');
   const encoder = new TextEncoder();
   const data = encoder.encode(sorted);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -212,7 +234,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
         <MenuItem
           onClick={handleMarkAsRead}
           size="300"
-          after={<Icon size="100" src={Icons.CheckTwice} />}
+          after={menuIcon(Checks)}
           radii="300"
           disabled={!unread}
         >
@@ -228,7 +250,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 changing ? (
                   <Spinner size="100" variant="Secondary" />
                 ) : (
-                  <Icon size="100" src={getRoomNotificationModeIcon(notificationMode)} />
+                  roomNotificationModeIcon(notificationMode)
                 )
               }
               radii="300"
@@ -249,7 +271,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           variant="Primary"
           fill="None"
           size="300"
-          after={<Icon size="100" src={Icons.UserPlus} />}
+          after={menuIcon(UserPlus)}
           radii="300"
           aria-pressed={invitePrompt}
           disabled={!canInvite}
@@ -258,22 +280,12 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
             Invite
           </Text>
         </MenuItem>
-        <MenuItem
-          onClick={handleCopyLink}
-          size="300"
-          after={<Icon size="100" src={Icons.Link} />}
-          radii="300"
-        >
+        <MenuItem onClick={handleCopyLink} size="300" after={menuIcon(Link)} radii="300">
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
             Copy Link
           </Text>
         </MenuItem>
-        <MenuItem
-          onClick={handleOpenSettings}
-          size="300"
-          after={<Icon size="100" src={Icons.Setting} />}
-          radii="300"
-        >
+        <MenuItem onClick={handleOpenSettings} size="300" after={menuIcon(GearSix)} radii="300">
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
             Room Settings
           </Text>
@@ -284,7 +296,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
               <MenuItem
                 onClick={() => setPromptJump(true)}
                 size="300"
-                after={<Icon size="100" src={Icons.RecentClock} />}
+                after={menuIcon(ClockCounterClockwise)}
                 radii="300"
                 aria-pressed={promptJump}
               >
@@ -316,7 +328,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 variant="Critical"
                 fill="None"
                 size="300"
-                after={<Icon size="100" src={Icons.ArrowGoLeft} />}
+                after={menuIcon(SignOut)}
                 radii="300"
                 aria-pressed={promptLeave}
               >
@@ -351,6 +363,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
   const [pinMenuAnchor, setPinMenuAnchor] = useState<RectCords>();
   const direct = useIsDirectRoom();
   const [customDMCards] = useSetting(settingsAtom, 'customDMCards');
+  const { microphone, video, sound } = useCallPreferences();
 
   const [chat, setChat] = useAtom(callChatAtom);
   const [threadBrowserOpen, setThreadBrowserOpen] = useAtom(
@@ -358,14 +371,11 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
   );
   const [openThreadId, setOpenThread] = useAtom(roomIdToOpenThreadAtomFamily(room.roomId));
 
-  const canUseCalls = room
-    .getLiveTimeline()
-    .getState(EventTimeline.FORWARDS)
-    ?.maySendStateEvent('org.matrix.msc3401.call.member', mx.getUserId()!);
+  const callStartCapabilities = useCallStartCapabilities(room);
   const [alwaysShowCallButton] = useSetting(settingsAtom, 'alwaysShowCallButton');
   const shouldShowCallButton = alwaysShowCallButton || room.getJoinedMemberCount() <= 10;
 
-  const encryptionEvent = useStateEvent(room, StateEvent.RoomEncryption);
+  const encryptionEvent = useStateEvent(room, EventType.RoomEncryption);
   const encryptedRoom = !!encryptionEvent;
   const avatarMxc = useRoomAvatar(room, direct && !customDMCards);
   const name = useRoomName(room);
@@ -380,13 +390,13 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
 
   const pinnedIds = useRoomPinnedEvents(room);
   const pinMarker = room
-    .getAccountData(AccountDataEvent.SablePinStatus)
+    .getAccountData(CustomAccountDataEvent.SablePinStatus)
     ?.getContent() as PinReadMarker;
   const [unreadPinsCount, setUnreadPinsCount] = useState(0);
   const [unreadThreadsCount, setUnreadThreadsCount] = useState(0);
   const [hasThreadHighlights, setHasThreadHighlights] = useState(false);
 
-  const [currentHash, setCurrentHash] = useState<string>('');
+  const [currentHash, setCurrentHash] = useState('');
 
   useEffect(() => {
     getPinsHash(pinnedIds)
@@ -428,7 +438,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
 
   // Initialize Thread objects from room history on mount and create them for new timeline events
   useEffect(() => {
-    const scanTimelineForThreads = (timeline: any) => {
+    const scanTimelineForThreads = (timeline: EventTimeline) => {
       const events = timeline.getEvents();
       const threadRoots = new Set<string>();
 
@@ -436,8 +446,9 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
       // 1. Events that ARE thread roots (have isThreadRoot = true or have replies)
       // 2. Events that are IN threads (have threadRootId)
       events.forEach((event: MatrixEvent) => {
-        // Check if this event is a thread root
-        if (event.isThreadRoot) {
+        // Check if this event is an actual thread root. `isThreadRoot` can be
+        // polluted by locally-created Thread shells, so require the server bundle.
+        if (hasThreadRootAggregation(event)) {
           const rootId = event.getId();
           if (rootId && !room.getThread(rootId)) {
             threadRoots.add(rootId);
@@ -446,7 +457,11 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
 
         // Check if this event is a reply in a thread
         const { threadRootId } = event;
-        if (threadRootId && !room.getThread(threadRootId)) {
+        if (
+          threadRootId &&
+          isThreadRelationEvent(event, threadRootId) &&
+          !room.getThread(threadRootId)
+        ) {
           threadRoots.add(threadRootId);
         }
       });
@@ -465,16 +480,17 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
     scanTimelineForThreads(liveTimeline);
 
     // Also scan backward timelines (historical messages already loaded)
-    let backwardTimeline = liveTimeline.getNeighbouringTimeline('b' as any);
+    let backwardTimeline = liveTimeline.getNeighbouringTimeline(Direction.Backward);
     while (backwardTimeline) {
       scanTimelineForThreads(backwardTimeline);
-      backwardTimeline = backwardTimeline.getNeighbouringTimeline('b' as any);
+      backwardTimeline = backwardTimeline.getNeighbouringTimeline(Direction.Backward);
     }
 
     // Listen for new timeline events (including pagination)
     const handleTimelineEvent = (mEvent: MatrixEvent) => {
-      // Check if this event is a thread root
-      if (mEvent.isThreadRoot) {
+      // Check if this event is an actual thread root. `isThreadRoot` can be
+      // polluted by locally-created Thread shells, so require the server bundle.
+      if (hasThreadRootAggregation(mEvent)) {
         const rootId = mEvent.getId();
         if (rootId && !room.getThread(rootId)) {
           const rootEvent = room.findEventById(rootId);
@@ -486,7 +502,11 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
 
       // Check if this is a reply in a thread
       const { threadRootId } = mEvent;
-      if (threadRootId && !room.getThread(threadRootId)) {
+      if (
+        threadRootId &&
+        isThreadRelationEvent(mEvent, threadRootId) &&
+        !room.getThread(threadRootId)
+      ) {
         const rootEvent = room.findEventById(threadRootId);
         if (rootEvent) {
           room.createThread(threadRootId, rootEvent, [], false);
@@ -494,9 +514,9 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
       }
     };
 
-    mx.on(RoomEvent.Timeline as any, handleTimelineEvent);
+    mx.on(RoomEvent.Timeline, handleTimelineEvent);
     return () => {
-      mx.off(RoomEvent.Timeline as any, handleTimelineEvent);
+      mx.off(RoomEvent.Timeline, handleTimelineEvent);
     };
   }, [room, mx]);
 
@@ -525,14 +545,14 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
 
     // Listen for thread updates
     const onThreadUpdate = () => checkThreadUnreads();
-    room.on(ThreadEvent.New as any, onThreadUpdate);
-    room.on(ThreadEvent.Update as any, onThreadUpdate);
-    room.on(ThreadEvent.NewReply as any, onThreadUpdate);
+    room.on(ThreadEvent.New, onThreadUpdate);
+    room.on(ThreadEvent.Update, onThreadUpdate);
+    room.on(ThreadEvent.NewReply, onThreadUpdate);
 
     return () => {
-      room.off(ThreadEvent.New as any, onThreadUpdate);
-      room.off(ThreadEvent.Update as any, onThreadUpdate);
-      room.off(ThreadEvent.NewReply as any, onThreadUpdate);
+      room.off(ThreadEvent.New, onThreadUpdate);
+      room.off(ThreadEvent.Update, onThreadUpdate);
+      room.off(ThreadEvent.NewReply, onThreadUpdate);
     };
   }, [room, mx]);
 
@@ -557,7 +577,8 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
       if (pinnedIds.length === 0) return;
 
       const hash = await getPinsHash(pinnedIds);
-      await mx.setRoomAccountData(room.roomId, AccountDataEvent.SablePinStatus, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await mx.setRoomAccountData(room.roomId, CustomAccountDataEvent.SablePinStatus as any, {
         hash,
         count: pinnedIds.length,
         last_seen_id: pinnedIds.at(-1),
@@ -590,7 +611,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
             {(onBack) => (
               <Box shrink="No" alignItems="Center">
                 <IconButton fill="None" onClick={onBack}>
-                  <Icon src={Icons.ArrowLeft} />
+                  {composerIcon(ArrowLeft)}
                 </IconButton>
               </Box>
             )}
@@ -604,7 +625,12 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                 src={avatarUrl}
                 alt={name}
                 renderFallback={() => (
-                  <RoomIcon size="200" joinRule={room.getJoinRule()} roomType={room.getType()} />
+                  <RoomIcon
+                    size="200"
+                    joinRule={room.getJoinRule()}
+                    roomType={room.getType()}
+                    withOverlay={false}
+                  />
                 )}
               />
             </Avatar>
@@ -668,7 +694,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                 >
                   {(triggerRef) => (
                     <IconButton fill="None" ref={triggerRef} onClick={handleSearchClick}>
-                      <Icon size="400" src={Icons.Search} />
+                      {composerIcon(MagnifyingGlass)}
                     </IconButton>
                   )}
                 </TooltipProvider>
@@ -707,11 +733,29 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                         </Text>
                       </Badge>
                     )}
-                    <Icon size="400" src={Icons.Pin} filled={!!pinMenuAnchor} />
+                    {composerIcon(PushPin, { weight: pinMenuAnchor ? 'fill' : 'regular' })}
                   </IconButton>
                 )}
               </TooltipProvider>
-              {canUseCalls && shouldShowCallButton && <RoomCallButton room={room} />}
+              {!room.isCallRoom() &&
+                callStartCapabilities.canRenderCallButton &&
+                shouldShowCallButton && (
+                  <>
+                    <RoomCallButton
+                      room={room}
+                      direct={direct}
+                      kind="voice"
+                      defaultPreferences={{ microphone, video, sound }}
+                    />
+                    <RoomCallButton
+                      room={room}
+                      direct={direct}
+                      kind="video"
+                      defaultPreferences={{ microphone, video, sound }}
+                      allowVideoStart
+                    />
+                  </>
+                )}
               <PopOut
                 anchor={pinMenuAnchor}
                 position="Bottom"
@@ -778,7 +822,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                         </Text>
                       </Badge>
                     )}
-                    <Icon size="400" src={Icons.Thread} filled={threadBrowserOpen} />
+                    {composerIcon(Chats, { weight: threadBrowserOpen ? 'fill' : 'regular' })}
                   </IconButton>
                 )}
               </TooltipProvider>
@@ -819,7 +863,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                       </Text>
                     </Badge>
                   )}
-                  <Icon size="400" src={Icons.Category} filled={widgetDrawer} />
+                  {composerIcon(GridFour, { weight: widgetDrawer ? 'fill' : 'regular' })}
                 </IconButton>
               )}
             </TooltipProvider>
@@ -840,7 +884,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
             >
               {(triggerRef) => (
                 <IconButton fill="None" ref={triggerRef} onClick={handleMemberToggle}>
-                  <Icon size="400" src={Icons.User} filled={peopleDrawer} />
+                  {composerIcon(UserCircle, { weight: peopleDrawer ? 'fill' : 'regular' })}
                 </IconButton>
               )}
             </TooltipProvider>
@@ -864,7 +908,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                     setChat(!chat);
                   }}
                 >
-                  <Icon size="400" src={Icons.Message} filled={chat} />
+                  {composerIcon(ChatCircleDots, { weight: chat ? 'fill' : 'regular' })}
                 </IconButton>
               )}
             </TooltipProvider>
@@ -887,7 +931,9 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
                 ref={triggerRef}
                 aria-pressed={!!menuAnchor}
               >
-                <Icon size="400" src={Icons.VerticalDots} filled={!!menuAnchor} />
+                {composerIcon(DotsThreeOutlineVerticalIcon, {
+                  weight: menuAnchor ? 'fill' : 'regular',
+                })}
               </IconButton>
             )}
           </TooltipProvider>

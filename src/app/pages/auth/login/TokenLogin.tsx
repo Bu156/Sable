@@ -1,21 +1,12 @@
-import {
-  Box,
-  Icon,
-  Icons,
-  Overlay,
-  OverlayBackdrop,
-  OverlayCenter,
-  Spinner,
-  Text,
-  color,
-  config,
-} from 'folds';
+import { Box, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text, color, config } from 'folds';
+import { sizedIcon, Warning } from '$components/icons/phosphor';
 import { useCallback, useEffect } from 'react';
-import { MatrixError } from '$types/matrix-sdk';
+import type { MatrixError } from '$types/matrix-sdk';
 import { useAutoDiscoveryInfo } from '$hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { deviceDisplayName } from '$utils/user-agent';
-import { CustomLoginResponse, LoginError, login, useLoginComplete } from './loginUtil';
+import type { CustomLoginResponse } from './loginUtil';
+import { LoginError, login, useLoginComplete } from './loginUtil';
 
 function LoginTokenError({ message }: { message: string }) {
   return (
@@ -30,7 +21,7 @@ function LoginTokenError({ message }: { message: string }) {
       alignItems="Start"
       gap="300"
     >
-      <Icon size="300" filled src={Icons.Warning} />
+      {sizedIcon(Warning, '300', { filled: true })}
       <Box direction="Column" gap="100">
         <Text size="L400">Token Login</Text>
         <Text size="T300">
@@ -43,8 +34,9 @@ function LoginTokenError({ message }: { message: string }) {
 
 type TokenLoginProps = {
   token: string;
+  slidingSyncOptIn: boolean;
 };
-export function TokenLogin({ token }: TokenLoginProps) {
+export function TokenLogin({ token, slidingSyncOptIn }: TokenLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
 
@@ -62,7 +54,10 @@ export function TokenLogin({ token }: TokenLoginProps) {
     });
   }, [baseUrl, token, startLogin]);
 
-  useLoginComplete(loginState.status === AsyncStatus.Success ? loginState.data : undefined);
+  useLoginComplete(
+    loginState.status === AsyncStatus.Success ? loginState.data : undefined,
+    slidingSyncOptIn
+  );
 
   return (
     <>

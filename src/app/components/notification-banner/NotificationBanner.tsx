@@ -1,8 +1,11 @@
 import { useAtom } from 'jotai';
-import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Icon, IconButton, Icons, Text } from 'folds';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, IconButton, Text } from 'folds';
+import { sizedIcon, X } from '$components/icons/phosphor';
 import { createLogger } from '$utils/debug';
-import { inAppBannerAtom, InAppBannerNotification } from '$state/sessions';
+import type { InAppBannerNotification } from '$state/sessions';
+import { inAppBannerAtom } from '$state/sessions';
 import * as css from './NotificationBanner.css';
 
 const log = createLogger('NotificationBanner');
@@ -68,7 +71,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
     dismissAnimTimerRef.current = setTimeout(() => onDismiss(notification.id), 200);
   }, [notification.id, onDismiss]);
 
-  // Auto-dismiss timer — only runs when not paused.
+  // Auto-dismiss timer  Eonly runs when not paused.
   useEffect(() => {
     if (paused) return undefined;
     const remaining = BANNER_DURATION_MS - elapsedRef.current;
@@ -130,7 +133,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
           {notification.senderName ?? notification.title}
           {(notification.roomName || notification.serverName) && (
             <span className={css.BannerSubtitle}>
-              {' (​'}
+              {' ('}
               {notification.roomName && `#${notification.roomName}`}
               {notification.roomName && notification.serverName && ', '}
               {notification.serverName})
@@ -155,7 +158,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
           }}
           aria-label="Dismiss notification"
         >
-          <Icon size="100" src={Icons.Cross} />
+          {sizedIcon(X, '100')}
         </IconButton>
       </Box>
       <div
@@ -224,7 +227,7 @@ export function NotificationBanner() {
         log.log('[Banner] Duplicate banner, skipping:', banner.id);
         return prev;
       }
-      // Keep at most 3 visible at once — drop the oldest if over limit.
+      // Keep at most 3 visible at once  Edrop the oldest if over limit.
       const next = [...prev, banner];
       log.log('[Banner] Adding to queue, new length:', next.length);
       return next.length > 3 ? next.slice(next.length - 3) : next;

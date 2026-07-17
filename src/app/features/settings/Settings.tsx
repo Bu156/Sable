@@ -1,20 +1,18 @@
 import { useMemo, useState } from 'react';
+import type { ComponentType } from 'react';
+import type { IconProps } from '@phosphor-icons/react';
 import {
   Avatar,
   Box,
   Button,
   config,
-  Icon,
   IconButton,
-  Icons,
-  IconSrc,
   MenuItem,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   Text,
 } from 'folds';
-import { isTauri } from '@tauri-apps/api/core';
 import FocusTrap from 'focus-trap-react';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '$components/page';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -29,6 +27,24 @@ import { stopPropagation } from '$utils/keyboard';
 import { LogoutDialog } from '$components/LogoutDialog';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import {
+  Bell,
+  composerIcon,
+  Devices as DevicesIcon,
+  Flask,
+  GearSix,
+  Info,
+  Keyboard,
+  menuIcon,
+  settingsNavIcon,
+  SignOut,
+  Palette,
+  Smiley,
+  Terminal,
+  User,
+  UsersThree,
+  X,
+} from '$components/icons/phosphor';
 import { About } from './about';
 import { Account } from './account';
 import { Cosmetics } from './cosmetics/Cosmetics';
@@ -38,7 +54,6 @@ import { EmojisStickers } from './emojis-stickers';
 import { Experimental } from './experimental/Experimental';
 import { General } from './general';
 import { KeyboardShortcuts } from './keyboard-shortcuts';
-import { Desktop } from './desktop';
 import { Notifications } from './notifications';
 import { PerMessageProfilePage } from './Persona/ProfilesPage';
 import { settingsSections, type SettingsSectionId } from './routes';
@@ -53,7 +68,6 @@ export enum SettingsPages {
   PerMessageProfilesPage,
   NotificationPage,
   DevicesPage,
-  DesktopPage,
   EmojisStickersPage,
   CosmeticsPage,
   DeveloperToolsPage,
@@ -62,29 +76,30 @@ export enum SettingsPages {
   KeyboardShortcutsPage,
 }
 
-type SettingsMenuItem = {
+type PhosphorIcon = ComponentType<IconProps>;
+
+export type SettingsMenuItem = {
   id: SettingsSectionId;
   name: string;
-  icon: IconSrc;
-  activeIcon?: IconSrc;
+  icon: PhosphorIcon;
+  activeIcon?: PhosphorIcon;
 };
 
-const settingsMenuIcons: Record<
+export const settingsMenuIcons: Record<
   SettingsSectionId,
   Pick<SettingsMenuItem, 'icon' | 'activeIcon'>
 > = {
-  general: { icon: Icons.Setting },
-  account: { icon: Icons.User },
-  persona: { icon: Icons.User },
-  appearance: { icon: Icons.Alphabet, activeIcon: Icons.AlphabetUnderline },
-  notifications: { icon: Icons.Bell },
-  devices: { icon: Icons.Monitor },
-  desktop: { icon: Icons.Monitor },
-  emojis: { icon: Icons.Smile },
-  'developer-tools': { icon: Icons.Terminal },
-  experimental: { icon: Icons.Funnel },
-  about: { icon: Icons.Info },
-  'keyboard-shortcuts': { icon: Icons.BlockCode },
+  general: { icon: GearSix },
+  account: { icon: User },
+  persona: { icon: UsersThree },
+  appearance: { icon: Palette },
+  notifications: { icon: Bell },
+  devices: { icon: DevicesIcon },
+  emojis: { icon: Smiley },
+  'developer-tools': { icon: Terminal },
+  experimental: { icon: Flask },
+  about: { icon: Info },
+  'keyboard-shortcuts': { icon: Keyboard },
 };
 
 const settingsPageToSectionId: Record<SettingsPages, SettingsSectionId> = {
@@ -93,7 +108,6 @@ const settingsPageToSectionId: Record<SettingsPages, SettingsSectionId> = {
   [SettingsPages.PerMessageProfilesPage]: 'persona',
   [SettingsPages.NotificationPage]: 'notifications',
   [SettingsPages.DevicesPage]: 'devices',
-  [SettingsPages.DesktopPage]: 'desktop',
   [SettingsPages.EmojisStickersPage]: 'emojis',
   [SettingsPages.CosmeticsPage]: 'appearance',
   [SettingsPages.DeveloperToolsPage]: 'developer-tools',
@@ -109,7 +123,6 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
   appearance: SettingsPages.CosmeticsPage,
   notifications: SettingsPages.NotificationPage,
   devices: SettingsPages.DevicesPage,
-  desktop: SettingsPages.DesktopPage,
   emojis: SettingsPages.EmojisStickersPage,
   'developer-tools': SettingsPages.DeveloperToolsPage,
   experimental: SettingsPages.ExperimentalPage,
@@ -119,7 +132,7 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
 
 const settingsSectionComponents: Record<
   SettingsSectionId,
-  (props: { requestBack?: () => void; requestClose: () => void }) => JSX.Element | null
+  (props: { requestBack?: () => void; requestClose: () => void }) => JSX.Element
 > = {
   general: General,
   account: Account,
@@ -127,7 +140,6 @@ const settingsSectionComponents: Record<
   appearance: Cosmetics,
   notifications: Notifications,
   devices: Devices,
-  desktop: Desktop,
   emojis: EmojisStickers,
   'developer-tools': DeveloperTools,
   experimental: Experimental,
@@ -174,7 +186,6 @@ export function Settings({
     : undefined;
 
   const [showPersona] = useSetting(settingsAtom, 'showPersonaSetting');
-  const showDesktop = isTauri();
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
   const screenSize = useScreenSizeContext();
   const isControlled = activeSection !== undefined;
@@ -188,12 +199,7 @@ export function Settings({
   });
 
   const visibleSection = useMemo<SettingsSectionId | null>(() => {
-    if (isControlled) {
-      if (activeSection === 'desktop' && !showDesktop) {
-        return null;
-      }
-      return activeSection;
-    }
+    if (isControlled) return activeSection;
 
     if (legacyActivePage === undefined) {
       return null;
@@ -203,25 +209,18 @@ export function Settings({
     if (section === 'persona' && !showPersona) {
       return 'general';
     }
-    if (section === 'desktop' && !showDesktop) {
-      return 'general';
-    }
     return section;
-  }, [activeSection, isControlled, legacyActivePage, showDesktop, showPersona]);
+  }, [activeSection, isControlled, legacyActivePage, showPersona]);
 
   const menuItems = useMemo<SettingsMenuItem[]>(
     () =>
       settingsSections
-        .filter(
-          (section) =>
-            (showPersona || section.id !== 'persona') && (showDesktop || section.id !== 'desktop')
-        )
-        .map((section) => ({
-          id: section.id,
-          name: section.label,
-          ...settingsMenuIcons[section.id],
-        })),
-    [showDesktop, showPersona]
+        .filter((section) => showPersona || section.id !== 'persona')
+        .map((section) => {
+          const icon = settingsMenuIcons[section.id];
+          return { id: section.id, name: section.label, ...icon };
+        }),
+    [showPersona]
   );
 
   const handleSelectSection = (section: SettingsSectionId) => {
@@ -269,57 +268,52 @@ export function Settings({
       nav={
         screenSize === ScreenSize.Mobile && visibleSection !== null ? undefined : (
           <PageNav size="300">
-            <PageNavHeader className={settingsHeader}>
+            <PageNavHeader className={settingsHeader} size="600">
               <Box grow="Yes" gap="200">
-                <Avatar size="200" radii="300">
-                  <UserAvatar
-                    userId={userId}
-                    src={avatarUrl}
-                    renderFallback={() => <Text size="H6">{nameInitials(displayName)}</Text>}
-                  />
-                </Avatar>
-                <Text size="H4" truncate>
-                  Settings
-                </Text>
-              </Box>
-              <Box shrink="No">
-                {visibleSection === null && (
-                  <IconButton
-                    aria-label="Close settings"
-                    onClick={handleRequestClose}
-                    variant="Background"
-                  >
-                    <Icon src={Icons.Cross} />
-                  </IconButton>
-                )}
+                <Box grow="Yes" alignItems="Center" gap="200">
+                  <Avatar size="200" radii="300">
+                    <UserAvatar
+                      userId={userId}
+                      src={avatarUrl}
+                      renderFallback={() => <Text size="H6">{nameInitials(displayName)}</Text>}
+                    />
+                  </Avatar>
+                  <Text size="H4" truncate>
+                    Settings
+                  </Text>
+                </Box>
+                <Box shrink="No">
+                  {visibleSection === null && (
+                    <IconButton
+                      aria-label="Close settings"
+                      onClick={handleRequestClose}
+                      variant="Background"
+                    >
+                      {composerIcon(X)}
+                    </IconButton>
+                  )}
+                </Box>
               </Box>
             </PageNavHeader>
             <Box grow="Yes" direction="Column">
               <PageNavContent>
                 <div style={{ flexGrow: 1 }}>
                   {menuItems.map((item) => {
-                    const currentIcon =
-                      visibleSection === item.id && item.activeIcon ? item.activeIcon : item.icon;
+                    const active = visibleSection === item.id;
+                    const IconComponent = active && item.activeIcon ? item.activeIcon : item.icon;
 
                     return (
                       <MenuItem
                         key={item.id}
                         variant="Background"
                         radii="400"
-                        aria-pressed={visibleSection === item.id}
-                        before={
-                          <Icon
-                            src={currentIcon}
-                            size={screenSize === ScreenSize.Mobile ? '200' : '100'}
-                            filled={visibleSection === item.id}
-                          />
-                        }
+                        aria-pressed={active}
+                        before={settingsNavIcon(IconComponent, active)}
                         onClick={() => handleSelectSection(item.id)}
                       >
                         <Text
                           style={{
-                            fontWeight:
-                              visibleSection === item.id ? config.fontWeight.W600 : undefined,
+                            fontWeight: active ? config.fontWeight.W600 : undefined,
                           }}
                           size={screenSize === ScreenSize.Mobile ? 'T400' : 'T300'}
                           truncate
@@ -340,7 +334,7 @@ export function Settings({
                         variant="Critical"
                         fill="None"
                         radii="Pill"
-                        before={<Icon src={Icons.Power} size="100" />}
+                        before={menuIcon(SignOut)}
                         onClick={() => setLogout(true)}
                       >
                         <Text size="B400">Logout</Text>

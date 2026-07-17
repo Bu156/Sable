@@ -1,4 +1,4 @@
-import { Room } from '$types/matrix-sdk';
+import type { Room } from '$types/matrix-sdk';
 import { createContext, useContext } from 'react';
 
 const RoomContext = createContext<Room | null>(null);
@@ -11,7 +11,11 @@ export function useRoom(): Room {
   return room;
 }
 
-const IsDirectRoomContext = createContext<boolean>(false);
+export function useRoomOptionally(): Room | null {
+  return useContext(RoomContext);
+}
+
+const IsDirectRoomContext = createContext(false);
 
 export const IsDirectRoomProvider = IsDirectRoomContext.Provider;
 

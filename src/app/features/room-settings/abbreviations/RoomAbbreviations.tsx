@@ -1,18 +1,8 @@
-import { FormEventHandler, useCallback, useMemo } from 'react';
+import type { FormEventHandler } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import {
-  Box,
-  Button,
-  Chip,
-  Icon,
-  IconButton,
-  Icons,
-  Input,
-  Scroll,
-  Spinner,
-  Text,
-  config,
-} from 'folds';
+import { Box, Button, Chip, IconButton, Input, Scroll, Spinner, Text, config } from 'folds';
+import { composerIcon, menuIcon, Trash, X } from '$components/icons/phosphor';
 import { Page, PageContent, PageHeader } from '$components/page';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
@@ -24,13 +14,14 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { useStateEvent } from '$hooks/useStateEvent';
 import { useStateEventCallback } from '$hooks/useStateEventCallback';
 import { useForceUpdate } from '$hooks/useForceUpdate';
-import { StateEvent } from '$types/matrix/room';
+
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { MatrixError } from '$types/matrix-sdk';
-import { AbbreviationEntry, RoomAbbreviationsContent } from '$utils/abbreviations';
+import type { MatrixError } from '$types/matrix-sdk';
+import type { AbbreviationEntry, RoomAbbreviationsContent } from '$utils/abbreviations';
 import { getAllParents, getStateEvent } from '$utils/room';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { SequenceCardStyle } from '$features/common-settings/styles.css';
+import { CustomStateEvent } from '$types/matrix/room';
 
 type AbbreviationsProps = {
   requestClose: () => void;
@@ -45,7 +36,7 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
   const permissions = useRoomPermissions(creators, powerLevels);
   const userId = mx.getUserId() ?? '';
 
-  const stateEvent = useStateEvent(room, StateEvent.RoomAbbreviations);
+  const stateEvent = useStateEvent(room, CustomStateEvent.RoomAbbreviations);
   const content = stateEvent?.getContent<RoomAbbreviationsContent>();
   const entries: AbbreviationEntry[] = Array.isArray(content?.entries) ? content.entries : [];
 
@@ -57,7 +48,7 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
     mx,
     useCallback(
       (event) => {
-        if (event.getType() !== StateEvent.RoomAbbreviations) return;
+        if (event.getType() !== (CustomStateEvent.RoomAbbreviations as string)) return;
         const eventRoomId = event.getRoomId();
         if (eventRoomId && getAllParents(roomToParents, room.roomId).has(eventRoomId)) {
           forceAncestorUpdate();
@@ -68,37 +59,39 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
   );
 
   type SpaceEntryGroup = { spaceId: string; spaceName: string; entries: AbbreviationEntry[] };
-  const ancestorGroups = useMemo(
-    (): SpaceEntryGroup[] =>
-      Array.from(getAllParents(roomToParents, room.roomId)).reduce<SpaceEntryGroup[]>(
-        (groups, parentId) => {
-          const parentRoom = mx.getRoom(parentId);
-          if (!parentRoom) return groups;
-          const ev = getStateEvent(parentRoom, StateEvent.RoomAbbreviations);
-          const c = ev?.getContent<RoomAbbreviationsContent>();
-          const parentEntries: AbbreviationEntry[] = Array.isArray(c?.entries) ? c.entries : [];
-          if (parentEntries.length > 0) {
-            groups.push({ spaceId: parentId, spaceName: parentRoom.name, entries: parentEntries });
-          }
-          return groups;
-        },
-        []
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mx, roomToParents, room.roomId, ancestorUpdateCount]
-  );
+  const ancestorGroups = useMemo((): SpaceEntryGroup[] => {
+    void ancestorUpdateCount;
+    return Array.from(getAllParents(roomToParents, room.roomId)).reduce<SpaceEntryGroup[]>(
+      (groups, parentId) => {
+        const parentRoom = mx.getRoom(parentId);
+        if (!parentRoom) return groups;
+        const ev = getStateEvent(parentRoom, CustomStateEvent.RoomAbbreviations);
+        const c = ev?.getContent<RoomAbbreviationsContent>();
+        const parentEntries: AbbreviationEntry[] = Array.isArray(c?.entries) ? c.entries : [];
+        if (parentEntries.length > 0) {
+          groups.push({
+            spaceId: parentId,
+            spaceName: parentRoom.name,
+            entries: parentEntries,
+          });
+        }
+        return groups;
+      },
+      []
+    );
+  }, [mx, roomToParents, room.roomId, ancestorUpdateCount]);
   const allAncestorEntries = useMemo(
     () => ancestorGroups.flatMap((g) => g.entries),
     [ancestorGroups]
   );
 
-  const canEdit = permissions.stateEvent(StateEvent.RoomAbbreviations, userId);
+  const canEdit = permissions.stateEvent(CustomStateEvent.RoomAbbreviations, userId);
 
   const [saveState, saveAbbreviations] = useAsyncCallback<void, MatrixError, [AbbreviationEntry[]]>(
     useCallback(
       async (newEntries) => {
         const newContent: RoomAbbreviationsContent = { entries: newEntries };
-        await mx.sendStateEvent(room.roomId, StateEvent.RoomAbbreviations as any, newContent, '');
+        await mx.sendStateEvent(room.roomId, CustomStateEvent.RoomAbbreviations, newContent, '');
       },
       [mx, room.roomId]
     )
@@ -150,7 +143,7 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>
@@ -244,7 +237,12 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
                           variant="SurfaceVariant"
                           direction="Column"
                         >
-                          <Text size="T300" style={{ color: 'var(--mx-surface-variant-on)' }}>
+                          <Text
+                            size="T300"
+                            style={{
+                              color: 'var(--mx-surface-variant-on)',
+                            }}
+                          >
                             No {isSpace ? 'space' : 'room'}-level abbreviations defined yet.
                             {canEdit && ' Use the form above to add some.'}
                           </Text>
@@ -278,7 +276,7 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
                                     disabled={saving}
                                     aria-label={`Remove abbreviation ${entry.term}`}
                                   >
-                                    <Icon src={Icons.Delete} size="100" />
+                                    {menuIcon(Trash)}
                                   </IconButton>
                                 </Box>
                               )}
@@ -304,7 +302,12 @@ export function RoomAbbreviations({ requestClose, isSpace }: AbbreviationsProps)
                                         <Text size="T200">Space - {spaceName}</Text>
                                       </Chip>
                                     </Box>
-                                    <Text size="T200" style={{ opacity: 0.7 }}>
+                                    <Text
+                                      size="T200"
+                                      style={{
+                                        opacity: 0.7,
+                                      }}
+                                    >
                                       {entry.definition}
                                     </Text>
                                   </Box>

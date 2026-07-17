@@ -12,32 +12,33 @@ import {
   config,
   Box,
   IconButton,
-  Icon,
-  Icons,
 } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
-import { MatrixError, Method, RoomTombstoneEventContent } from '$types/matrix-sdk';
+import type { MatrixError, RoomTombstoneEventContent } from '$types/matrix-sdk';
+import { Method, EventType } from '$types/matrix-sdk';
 import { SequenceCard } from '$components/sequence-card';
 import { SequenceCardStyle } from '$features/room-settings/styles.css';
 import { SettingTile } from '$components/setting-tile';
 import { useRoom } from '$hooks/useRoom';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { IRoomCreateContent, StateEvent } from '$types/matrix/room';
+import type { IRoomCreateContent } from '$types/matrix/room';
+
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useStateEvent } from '$hooks/useStateEvent';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { useCapabilities } from '$hooks/useCapabilities';
 import { stopPropagation } from '$utils/keyboard';
-import { RoomPermissionsAPI } from '$hooks/useRoomPermissions';
+import type { RoomPermissionsAPI } from '$hooks/useRoomPermissions';
 import {
   AdditionalCreatorInput,
   RoomVersionSelector,
   useAdditionalCreators,
 } from '$components/create-room';
 import { useAlive } from '$hooks/useAlive';
-import { creatorsSupported } from '$utils/matrix';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { BreakWord } from '$styles/Text.css';
+import { creatorsSupported } from '$utils/roomSupport';
 
 function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
   const mx = useMatrixClient();
@@ -105,7 +106,7 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
                 <Text size="H4">{room.isSpaceRoom() ? 'Space Upgrade' : 'Room Upgrade'}</Text>
               </Box>
               <IconButton size="300" onClick={requestClose} radii="300">
-                <Icon src={Icons.Cross} />
+                {composerIcon(X)}
               </IconButton>
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
@@ -165,20 +166,17 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
   const mx = useMatrixClient();
   const room = useRoom();
   const { navigateRoom, navigateSpace } = useRoomNavigate();
-  const createContent = useStateEvent(
-    room,
-    StateEvent.RoomCreate
-  )?.getContent<IRoomCreateContent>();
+  const createContent = useStateEvent(room, EventType.RoomCreate)?.getContent<IRoomCreateContent>();
   const roomVersion = createContent?.room_version ?? '1';
   const predecessorRoomId = createContent?.predecessor?.room_id;
 
   const tombstoneContent = useStateEvent(
     room,
-    StateEvent.RoomTombstone
+    EventType.RoomTombstone
   )?.getContent<RoomTombstoneEventContent>();
   const replacementRoom = tombstoneContent?.replacement_room;
 
-  const canUpgrade = permissions.stateEvent(StateEvent.RoomTombstone, mx.getSafeUserId());
+  const canUpgrade = permissions.stateEvent(EventType.RoomTombstone, mx.getSafeUserId());
 
   const handleOpenRoom = () => {
     if (replacementRoom) {

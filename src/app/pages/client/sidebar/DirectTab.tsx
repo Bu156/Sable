@@ -1,6 +1,8 @@
-import { MouseEventHandler, forwardRef, useMemo, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { forwardRef, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRem } from 'folds';
+import type { RectCords } from 'folds';
+import { Box, Menu, MenuItem, PopOut, Text, config, toRem } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue } from 'jotai';
 import { useDirects } from '$state/hooks/roomList';
@@ -12,7 +14,7 @@ import { getDirectPath, joinPathComponent } from '$pages/pathUtils';
 import { useRoomsUnread } from '$state/hooks/unread';
 import {
   SidebarAvatar,
-  SidebarItem,
+  SidebarItemLeft,
   SidebarUnreadBadge,
   SidebarItemTooltip,
 } from '$components/sidebar';
@@ -21,6 +23,7 @@ import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useNavToActivePathAtom } from '$state/hooks/navToActivePath';
 import { markAsRead } from '$utils/notifications';
 import { stopPropagation } from '$utils/keyboard';
+import { Checks, menuIcon, getPhosphorIconSize, User } from '$components/icons/phosphor';
 import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
 import { useDirectRooms } from '$pages/client/direct/useDirectRooms';
@@ -47,7 +50,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
         <MenuItem
           onClick={handleMarkAsRead}
           size="300"
-          after={<Icon size="100" src={Icons.CheckTwice} />}
+          after={menuIcon(Checks)}
           radii="300"
           aria-disabled={!unread}
         >
@@ -102,7 +105,7 @@ export function DirectTab() {
     });
   };
   return (
-    <SidebarItem active={directSelected}>
+    <SidebarItemLeft active={directSelected}>
       <SidebarItemTooltip tooltip="Direct Messages">
         {(triggerRef) => (
           <SidebarAvatar
@@ -112,7 +115,10 @@ export function DirectTab() {
             onClick={handleDirectClick}
             onContextMenu={handleContextMenu}
           >
-            <Icon src={Icons.User} filled={directSelected} />
+            <User
+              size={getPhosphorIconSize('toolbar')}
+              weight={directSelected ? 'fill' : 'regular'}
+            />
           </SidebarAvatar>
         )}
       </SidebarItemTooltip>
@@ -145,6 +151,6 @@ export function DirectTab() {
           }
         />
       )}
-    </SidebarItem>
+    </SidebarItemLeft>
   );
 }

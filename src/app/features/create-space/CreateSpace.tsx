@@ -1,49 +1,52 @@
-import { FormEventHandler, useCallback, useEffect, useState } from 'react';
-import { MatrixError, Room } from '$types/matrix-sdk';
-import {
-  Box,
-  Button,
-  Chip,
-  color,
-  config,
-  Icon,
-  Icons,
-  Input,
-  Spinner,
-  Switch,
-  Text,
-  TextArea,
-} from 'folds';
+import type { ReactNode, FormEventHandler } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { Room } from '$types/matrix-sdk';
+import { MatrixError, RoomType } from '$types/matrix-sdk';
+import { Box, Button, Chip, color, config, Input, Spinner, Switch, Text, TextArea } from 'folds';
 import { SettingTile } from '$components/setting-tile';
 import { SequenceCard } from '$components/sequence-card';
-import {
-  creatorsSupported,
-  knockRestrictedSupported,
-  knockSupported,
-  restrictedSupported,
-} from '$utils/matrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { millisecondsToMinutes, replaceSpaceWithDash } from '$utils/common';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useCapabilities } from '$hooks/useCapabilities';
 import { useAlive } from '$hooks/useAlive';
+import type { CreateRoomData } from '$components/create-room';
 import {
   AdditionalCreatorInput,
   createRoom,
   CreateRoomAliasInput,
-  CreateRoomData,
   CreateRoomAccess,
   CreateRoomAccessSelector,
   RoomVersionSelector,
   useAdditionalCreators,
 } from '$components/create-room';
-import { RoomType } from '$types/matrix/room';
+import {
+  restrictedSupported,
+  creatorsSupported,
+  knockSupported,
+  knockRestrictedSupported,
+} from '$utils/roomSupport';
+import { JoinRule } from '$types/matrix-sdk';
+import { getRoomIconComponent } from '$components/icons/roomIcons';
+import {
+  CaretDown,
+  CaretUp,
+  sizedIcon,
+  Warning,
+  type IconSizeToken,
+} from '$components/icons/phosphor';
+
 import { ErrorCode } from '../../cs-errorcode';
 
-const getCreateSpaceAccessToIcon = (access: CreateRoomAccess) => {
-  if (access === CreateRoomAccess.Private) return Icons.SpaceLock;
-  if (access === CreateRoomAccess.Restricted) return Icons.Space;
-  return Icons.SpaceGlobe;
+const getCreateSpaceAccessToIcon = (
+  access: CreateRoomAccess,
+  size: IconSizeToken = '400'
+): ReactNode => {
+  let joinRule: JoinRule = JoinRule.Public;
+  if (access === CreateRoomAccess.Restricted) joinRule = JoinRule.Restricted;
+  if (access === CreateRoomAccess.Private) joinRule = JoinRule.Knock;
+
+  return sizedIcon(getRoomIconComponent(RoomType.Space, joinRule), size);
 };
 
 type CreateSpaceFormProps = {
@@ -151,7 +154,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
         <Text size="L400">Name</Text>
         <Input
           required
-          before={<Icon size="100" src={getCreateSpaceAccessToIcon(access)} />}
+          before={getCreateSpaceAccessToIcon(access, '100')}
           name="nameInput"
           autoFocus
           size="500"
@@ -180,7 +183,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
           <Box grow="Yes" justifyContent="End">
             <Chip
               radii="Pill"
-              before={<Icon src={advance ? Icons.ChevronTop : Icons.ChevronBottom} size="50" />}
+              before={sizedIcon(advance ? CaretUp : CaretDown, '50')}
               onClick={() => setAdvance(!advance)}
               type="button"
             >
@@ -250,10 +253,10 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
 
       {error && (
         <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="200">
-          <Icon src={Icons.Warning} filled size="100" />
+          {sizedIcon(Warning, '100', { filled: true })}
           <Text size="T300" style={{ color: color.Critical.Main }}>
             <b>
-              {error instanceof MatrixError && error.name === ErrorCode.M_LIMIT_EXCEEDED
+              {error instanceof MatrixError && error.name === (ErrorCode.M_LIMIT_EXCEEDED as string)
                 ? `Server rate-limited your request for ${millisecondsToMinutes(
                     (error.data.retry_after_ms as number | undefined) ?? 0
                   )} minutes!`

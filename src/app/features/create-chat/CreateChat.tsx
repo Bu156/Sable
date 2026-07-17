@@ -1,6 +1,9 @@
-import { Box, Button, color, config, Icon, Icons, Input, Spinner, Switch, Text } from 'folds';
-import { FormEventHandler, useCallback, useState } from 'react';
-import { ICreateRoomStateEvent, MatrixError, Preset, Visibility } from '$types/matrix-sdk';
+import { Box, Button, color, config, Input, Spinner, Switch, Text } from 'folds';
+import { sizedIcon, Warning } from '$components/icons/phosphor';
+import type { FormEventHandler } from 'react';
+import { useCallback, useState } from 'react';
+import type { ICreateRoomStateEvent } from '$types/matrix-sdk';
+import { MatrixError, Preset, Visibility } from '$types/matrix-sdk';
 import { useNavigate } from 'react-router-dom';
 import { SettingTile } from '$components/setting-tile';
 import { SequenceCard } from '$components/sequence-card';
@@ -37,6 +40,9 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
           visibility: Visibility.Private,
           preset: Preset.TrustedPrivateChat,
           initial_state: initialState,
+          creation_content: {
+            additional_creators: [userId],
+          },
         });
 
         addRoomIdToMDirect(mx, result.room_id, userId);
@@ -90,7 +96,7 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
         />
         {invalidUserId && (
           <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="100">
-            <Icon src={Icons.Warning} filled size="50" />
+            {sizedIcon(Warning, '50', { filled: true })}
             <Text size="T200" style={{ color: color.Critical.Main }}>
               <b>Please enter a valid User ID.</b>
             </Text>
@@ -121,10 +127,10 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
       </Box>
       {error && (
         <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="200">
-          <Icon src={Icons.Warning} filled size="100" />
+          {sizedIcon(Warning, '100', { filled: true })}
           <Text size="T300" style={{ color: color.Critical.Main }}>
             <b>
-              {error instanceof MatrixError && error.name === ErrorCode.M_LIMIT_EXCEEDED
+              {error instanceof MatrixError && error.name === (ErrorCode.M_LIMIT_EXCEEDED as string)
                 ? `Server rate-limited your request for ${millisecondsToMinutes(
                     (error.data.retry_after_ms as number | undefined) ?? 0
                   )} minutes!`

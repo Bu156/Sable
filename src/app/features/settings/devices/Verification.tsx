@@ -1,30 +1,31 @@
-import { MouseEventHandler, useCallback, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useCallback, useState } from 'react';
+import type { RectCords } from 'folds';
 import {
   Badge,
   Box,
   Button,
   Chip,
   config,
-  Icon,
-  Icons,
   Spinner,
   Text,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   IconButton,
-  RectCords,
   PopOut,
   Menu,
   MenuItem,
 } from 'folds';
+import { DotsThreeOutlineVerticalIcon, menuIcon, X } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
-import { CryptoApi, VerificationRequest } from '$types/matrix-sdk';
+import type { CryptoApi, VerificationRequest } from '$types/matrix-sdk';
 import { VerificationStatus } from '$hooks/useDeviceVerificationStatus';
 import { InfoCard } from '$components/info-card';
 import { ManualVerificationTile } from '$components/ManualVerification';
-import { SecretStorageKeyContent } from '$types/matrix/accountData';
-import { AsyncState, AsyncStatus, useAsync } from '$hooks/useAsyncCallback';
+import type { SecretStorageKeyContent } from '$types/matrix/accountData';
+import type { AsyncState } from '$hooks/useAsyncCallback';
+import { AsyncStatus, useAsync } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { DeviceVerification } from '$components/DeviceVerification';
 import {
@@ -153,7 +154,7 @@ export function VerifyCurrentDeviceTile({
               radii="Pill"
               onClick={handleCancelVerification}
             >
-              <Icon size="100" src={Icons.Cross} />
+              {menuIcon(X)}
             </Chip>
           }
         />
@@ -294,7 +295,7 @@ export function DeviceVerificationOptions() {
         radii="300"
         onClick={handleMenu}
       >
-        <Icon size="100" src={Icons.VerticalDots} />
+        {menuIcon(DotsThreeOutlineVerticalIcon, { weight: menuCords ? 'fill' : 'regular' })}
       </IconButton>
       <PopOut
         anchor={menuCords}

@@ -1,9 +1,11 @@
-import { ReactNode, useCallback, useMemo } from 'react';
+import { getMxIdServer } from '$utils/mxIdHelper';
+import type { ReactNode } from 'react';
+import { useCallback, useMemo } from 'react';
 import { AutoDiscoveryInfoProvider } from '../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallbackValue } from '../../hooks/useAsyncCallback';
 import { fetch } from '../../utils/fetch';
-import { autoDiscovery, AutoDiscoveryInfo } from '../../cs-api';
-import { getMxIdServer } from '../../utils/matrix';
+import type { AutoDiscoveryInfo } from '../../cs-api';
+import { autoDiscovery } from '../../cs-api';
 
 type AutoDiscoveryProps = {
   userId: string;

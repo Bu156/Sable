@@ -1,24 +1,22 @@
-/* eslint-disable react/no-array-index-key */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Button, Chip, config, Icon, Icons, Menu, Spinner, Text } from 'folds';
+import { Badge, Box, Button, Chip, config, Menu, Spinner, Text } from 'folds';
+import { CaretDown, CaretUp, chipIcon } from '$components/icons/phosphor';
 import { produce } from 'immer';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
-import {
-  applyPermissionPower,
-  getPermissionPower,
-  IPowerLevels,
-  PermissionLocation,
-} from '$hooks/usePowerLevels';
+import type { IPowerLevels, PermissionLocation } from '$hooks/usePowerLevels';
+import { applyPermissionPower, getPermissionPower } from '$hooks/usePowerLevels';
 import { getPowerLevelTag, getPowers, usePowerLevelTags } from '$hooks/usePowerLevelTags';
 import { useRoom } from '$hooks/useRoom';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { StateEvent } from '$types/matrix/room';
+import type { StateEvents } from '$types/matrix-sdk';
+
 import { PowerSwitcher } from '$components/power';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAlive } from '$hooks/useAlive';
 import { SequenceCardStyle } from '$features/common-settings/styles.css';
-import { PermissionGroup } from './types';
+import type { PermissionGroup } from './types';
+import { EventType } from '$types/matrix-sdk';
 
 const USER_DEFAULT_LOCATION: PermissionLocation = {
   user: true,
@@ -29,6 +27,10 @@ type PermissionGroupsProps = {
   powerLevels: IPowerLevels;
   permissionGroups: PermissionGroup[];
 };
+
+const getPermissionLocationKey = (location: PermissionLocation | PermissionLocation[]): string =>
+  JSON.stringify(location);
+
 export function PermissionGroups({
   powerLevels,
   permissionGroups,
@@ -41,9 +43,7 @@ export function PermissionGroups({
   const powerLevelTags = usePowerLevelTags(room, powerLevels);
   const maxPower = useMemo(() => Math.max(...getPowers(powerLevelTags)), [powerLevelTags]);
 
-  const [permissionUpdate, setPermissionUpdate] = useState<Map<PermissionLocation, number>>(
-    new Map()
-  );
+  const [permissionUpdate, setPermissionUpdate] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     // reset permission update if component rerender
@@ -52,19 +52,20 @@ export function PermissionGroups({
   }, [permissionGroups]);
 
   const handleChangePermission = (
-    location: PermissionLocation,
+    location: PermissionLocation | PermissionLocation[],
     newPower: number,
     currentPower: number
   ) => {
+    const locationKey = getPermissionLocationKey(location);
     setPermissionUpdate((p) => {
       const up: typeof p = new Map();
       p.forEach((value, key) => {
         up.set(key, value);
       });
       if (newPower === currentPower) {
-        up.delete(location);
+        up.delete(locationKey);
       } else {
-        up.set(location, newPower);
+        up.set(locationKey, newPower);
       }
       return up;
     });
@@ -79,13 +80,21 @@ export function PermissionGroups({
             applyPermissionPower(draftPowerLevels, item.location, power);
           })
         );
-        permissionUpdate.forEach((power, location) =>
-          applyPermissionPower(draftPowerLevels, location, power)
+        permissionUpdate.forEach((power, locationKey) =>
+          applyPermissionPower(
+            draftPowerLevels,
+            JSON.parse(locationKey) as PermissionLocation | PermissionLocation[],
+            power
+          )
         );
 
         return draftPowerLevels;
       });
-      await mx.sendStateEvent(room.roomId, StateEvent.RoomPowerLevels as any, editedPowerLevels);
+      await mx.sendStateEvent(
+        room.roomId,
+        EventType.RoomPowerLevels as keyof StateEvents,
+        editedPowerLevels
+      );
     }, [mx, room, powerLevels, permissionUpdate, permissionGroups])
   );
 
@@ -106,7 +115,7 @@ export function PermissionGroups({
 
   const renderUserGroup = () => {
     const power = getPermissionPower(powerLevels, USER_DEFAULT_LOCATION);
-    const powerUpdate = permissionUpdate.get(USER_DEFAULT_LOCATION);
+    const powerUpdate = permissionUpdate.get(getPermissionLocationKey(USER_DEFAULT_LOCATION));
     const value = powerUpdate ?? power;
 
     const tag = getPowerLevelTag(powerLevelTags, value);
@@ -143,11 +152,7 @@ export function PermissionGroups({
                         <Badge size="200" variant="Success" fill="Solid" radii="Pill" />
                       )
                     }
-                    before={
-                      canEdit && (
-                        <Icon size="50" src={opened ? Icons.ChevronTop : Icons.ChevronBottom} />
-                      )
-                    }
+                    before={canEdit && chipIcon(opened ? CaretUp : CaretDown)}
                     onClick={handleOpen}
                   >
                     <Text size="B300" truncate>
@@ -166,12 +171,12 @@ export function PermissionGroups({
   return (
     <>
       {renderUserGroup()}
-      {permissionGroups.map((group, groupIndex) => (
-        <Box key={groupIndex} direction="Column" gap="100">
+      {permissionGroups.map((group) => (
+        <Box key={group.name} direction="Column" gap="100">
           <Text size="L400">{group.name}</Text>
-          {group.items.map((item, itemIndex) => {
+          {group.items.map((item) => {
             const power = getPermissionPower(powerLevels, item.location);
-            const powerUpdate = permissionUpdate.get(item.location);
+            const powerUpdate = permissionUpdate.get(getPermissionLocationKey(item.location));
             const value = powerUpdate ?? power;
 
             const tag = getPowerLevelTag(powerLevelTags, value);
@@ -179,7 +184,7 @@ export function PermissionGroups({
 
             return (
               <SequenceCard
-                key={itemIndex}
+                key={getPermissionLocationKey(item.location)}
                 variant="SurfaceVariant"
                 className={SequenceCardStyle}
                 direction="Column"
@@ -207,14 +212,7 @@ export function PermissionGroups({
                               <Badge size="200" variant="Success" fill="Solid" radii="Pill" />
                             )
                           }
-                          before={
-                            canEdit && (
-                              <Icon
-                                size="50"
-                                src={opened ? Icons.ChevronTop : Icons.ChevronBottom}
-                              />
-                            )
-                          }
+                          before={canEdit && chipIcon(opened ? CaretUp : CaretDown)}
                           onClick={handleOpen}
                         >
                           <Text size="B300" truncate>

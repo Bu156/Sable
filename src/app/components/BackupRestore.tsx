@@ -1,20 +1,19 @@
-import { MouseEventHandler, useCallback, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useCallback, useState } from 'react';
 import { useAtom } from 'jotai';
-import { CryptoApi, KeyBackupInfo } from '$types/matrix-sdk';
+import type { CryptoApi, KeyBackupInfo } from '$types/matrix-sdk';
+import type { RectCords } from 'folds';
 import {
   Badge,
   Box,
   Button,
   color,
   config,
-  Icon,
   IconButton,
-  Icons,
   Menu,
   percent,
   PopOut,
   ProgressBar,
-  RectCords,
   Spinner,
   Text,
 } from 'folds';
@@ -29,6 +28,12 @@ import {
 } from '$hooks/useKeyBackup';
 import { stopPropagation } from '$utils/keyboard';
 import { useRestoreBackupOnVerification } from '$hooks/useRestoreBackupOnVerification';
+import {
+  Download,
+  DotsThreeOutlineVerticalIcon,
+  sizedIcon,
+  menuIcon,
+} from '$components/icons/phosphor';
 import { InfoCard } from './info-card';
 
 type BackupStatusProps = {
@@ -183,7 +188,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
             radii="300"
             onClick={handleMenu}
           >
-            <Icon size="100" src={Icons.VerticalDots} />
+            {menuIcon(DotsThreeOutlineVerticalIcon, { weight: menuCords ? 'fill' : 'regular' })}
           </IconButton>
           <PopOut
             anchor={menuCords}
@@ -232,7 +237,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
                           ? undefined
                           : handleRestore
                       }
-                      before={<Icon size="100" src={Icons.Download} />}
+                      before={sizedIcon(Download, '100')}
                     >
                       <Text size="B300">Restore Backup</Text>
                     </Button>

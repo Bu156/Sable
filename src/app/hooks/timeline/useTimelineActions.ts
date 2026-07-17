@@ -1,18 +1,22 @@
-import { useCallback, MouseEventHandler } from 'react';
-import { MatrixClient, Room, MatrixEvent, EventStatus, IContent } from '$types/matrix-sdk';
-import { Editor } from 'slate';
+import type { MouseEventHandler } from 'react';
+import { useCallback } from 'react';
+import type { MatrixClient, Room, MatrixEvent } from '$types/matrix-sdk';
+import type { UserProfile } from '$hooks/useUserProfile';
+import { EventStatus } from '$types/matrix-sdk';
+import type { Editor } from 'slate';
 import { ReactEditor } from 'slate-react';
 
 import { getMxIdLocalPart, toggleReaction } from '$utils/matrix';
-import { getMemberDisplayName, getEditedEvent } from '$utils/room';
+import { extractReplyDraftBody, getMemberDisplayName, resolveReplyDraftTarget } from '$utils/room';
 import { createMentionElement, moveCursor } from '$components/editor';
+import * as prefix from '$unstable/prefixes';
 
 export interface UseTimelineActionsOptions {
   room: Room;
   mx: MatrixClient;
   editor: Editor;
   nicknames: Record<string, string>;
-  globalProfiles: Record<string, any>;
+  globalProfiles: Record<string, UserProfile>;
   spaceId?: string;
   openUserRoomProfile: (
     roomId: string,
@@ -20,10 +24,10 @@ export interface UseTimelineActionsOptions {
     userId: string,
     rect: DOMRect,
     undefinedArg?: undefined,
-    options?: any
+    options?: unknown
   ) => void;
   activeReplyId?: string;
-  setReplyDraft: (draft: any) => void;
+  setReplyDraft: (draft: unknown) => void;
   openThreadId?: string;
   setOpenThread: (threadId: string | undefined) => void;
   handleEdit: (editId?: string) => void;
@@ -65,18 +69,20 @@ export function useTimelineActions({
       const cleanExtended = cachedData?.extended ? { ...cachedData.extended } : undefined;
 
       if (cleanExtended) {
-        delete cleanExtended['io.fsky.nyx.pronouns'];
-        delete cleanExtended['moe.sable.app.bio'];
-        delete cleanExtended['chat.commet.profile_bio'];
-        delete cleanExtended['chat.commet.profile_status'];
-        delete cleanExtended['us.cloke.msc4175.tz'];
-        delete cleanExtended['m.tz'];
-        delete cleanExtended['chat.commet.profile_banner'];
-        delete cleanExtended['moe.sable.app.name_color'];
+        delete cleanExtended[prefix.MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_PROFILE_BIOGRAPHY_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_COMMET_UNSTABLE_PROFILE_BIO_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_COMMET_UNSTABLE_PROFILE_STATUS_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_UNSTABLE_PROFILE_TIMEZONE_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_STABLE_PROFILE_TIMEZONE_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_DARK_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_LIGHT_PROPERTY_NAME];
         delete cleanExtended.avatar_url;
         delete cleanExtended.displayname;
-        delete cleanExtended['kitty.meow.has_cats'];
-        delete cleanExtended['kitty.meow.is_cat'];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_ANIMAL_IDENTITY_HAS_CAT_PROPERTY_NAME];
+        delete cleanExtended[prefix.MATRIX_SABLE_UNSTABLE_ANIMAL_IDENTITY_IS_CAT_PROPERTY_NAME];
       }
 
       openUserRoomProfile(
@@ -120,39 +126,31 @@ export function useTimelineActions({
 
   const triggerReply = useCallback(
     (replyId: string, startThread = false) => {
-      if (activeReplyId === replyId) {
+      const resolved = resolveReplyDraftTarget(room, replyId);
+      if (!resolved) return;
+
+      const { eventId: draftEventId, replyEvt } = resolved;
+
+      if (activeReplyId === draftEventId) {
         setReplyDraft(undefined);
         return;
       }
 
-      const replyEvt = room.findEventById(replyId);
-      if (!replyEvt) return;
-
-      const editedReply = getEditedEvent(replyId, replyEvt, room.getUnfilteredTimelineSet());
-
-      const { getContent, getWireContent, getSender } = replyEvt;
-      let editedNewContent: any;
-
-      if (editedReply) {
-        const { getContent: getEditedContent } = editedReply;
-        editedNewContent = getEditedContent.call(editedReply)['m.new_content'];
-      }
-
-      const content: IContent = editedNewContent ?? getContent.call(replyEvt);
-      const { body, formatted_body: formattedBody } = content;
+      const timelineSet = room.getUnfilteredTimelineSet();
+      const { body, formattedBody } = extractReplyDraftBody(replyEvt, timelineSet);
 
       const { 'm.relates_to': relation } = startThread
-        ? { 'm.relates_to': { rel_type: 'm.thread', event_id: replyId } }
-        : getWireContent.call(replyEvt);
+        ? { 'm.relates_to': { rel_type: 'm.thread', event_id: draftEventId } }
+        : replyEvt.getWireContent();
 
-      const senderId = getSender.call(replyEvt);
+      const senderId = replyEvt.getSender();
 
       if (senderId) {
         setReplyDraft({
           userId: senderId,
-          eventId: replyId,
-          body: typeof body === 'string' ? body : '',
-          formattedBody: typeof formattedBody === 'string' ? formattedBody : '',
+          eventId: draftEventId,
+          body,
+          formattedBody,
           relation,
         });
       }
@@ -189,8 +187,7 @@ export function useTimelineActions({
 
   const handleResend = useCallback(
     (mEvent: MatrixEvent) => {
-      const { getAssociatedStatus } = mEvent;
-      if (getAssociatedStatus.call(mEvent) !== EventStatus.NOT_SENT) return;
+      if (mEvent.getAssociatedStatus() !== EventStatus.NOT_SENT) return;
       mx.resendEvent(mEvent, room).catch(() => undefined);
     },
     [mx, room]
@@ -198,8 +195,7 @@ export function useTimelineActions({
 
   const handleDeleteFailedSend = useCallback(
     (mEvent: MatrixEvent) => {
-      const { getAssociatedStatus } = mEvent;
-      if (getAssociatedStatus.call(mEvent) !== EventStatus.NOT_SENT) return;
+      if (mEvent.getAssociatedStatus() !== EventStatus.NOT_SENT) return;
       mx.cancelPendingEvent(mEvent);
     },
     [mx]

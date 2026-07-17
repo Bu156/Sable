@@ -1,151 +1,91 @@
-import { BasePoint, BaseRange, Editor, Element, Point, Range, Text, Transforms } from 'slate';
-import { BlockType, MarkType } from './types';
-import {
+import type { BasePoint, BaseRange } from 'slate';
+import { Editor, Element, Point, Range, Text, Transforms } from 'slate';
+import { ReactEditor } from 'slate-react';
+import type { Room } from '$types/matrix-sdk';
+import type { Nicknames } from '$state/nicknames';
+import { getMxIdLocalPart, isUserId } from '$utils/matrix';
+import { getMemberDisplayName } from '$utils/room';
+import { BlockType } from './types';
+import type {
   CommandElement,
   EmoticonElement,
   FormattedText,
-  HeadingLevel,
   LinkElement,
   MentionElement,
 } from './slate';
 
-const ALL_MARK_TYPE: MarkType[] = [
-  MarkType.Bold,
-  MarkType.Code,
-  MarkType.Italic,
-  MarkType.Spoiler,
-  MarkType.StrikeThrough,
-  MarkType.Underline,
-];
-
-export const isMarkActive = (editor: Editor, format: MarkType) => {
-  const marks = Editor.marks(editor);
-  return marks ? marks[format] === true : false;
+export type MentionResolveOptions = {
+  room?: Room;
+  nicknames?: Nicknames;
+  mxUserId?: string;
 };
 
-export const isAnyMarkActive = (editor: Editor) => {
-  const marks = Editor.marks(editor);
-  return marks && !!ALL_MARK_TYPE.find((type) => marks[type] === true);
+/** Same @-prefix rule as {@link UserMentionAutocomplete} and timeline mention insertion. */
+export const formatUserMentionDisplayName = (name: string): string =>
+  name.startsWith('@') ? name : `@${name}`;
+
+export const resolveUserMentionName = (userId: string, options?: MentionResolveOptions): string => {
+  const base =
+    (options?.room && getMemberDisplayName(options.room, userId, options.nicknames)) ??
+    getMxIdLocalPart(userId) ??
+    userId;
+  return formatUserMentionDisplayName(base);
 };
 
-export const toggleMark = (editor: Editor, format: MarkType) => {
-  const isActive = isMarkActive(editor, format);
-
-  if (isActive) {
-    Editor.removeMark(editor, format);
-  } else {
-    Editor.addMark(editor, format, true);
-  }
+/** {@link UserMentionAutocomplete} passes a display label, @room must stay literal, not resolved as a user. */
+export const mentionNameForUserAutocomplete = (
+  id: string,
+  displayName: string,
+  options?: MentionResolveOptions
+): string => {
+  if (displayName === '@room') return '@room';
+  return resolveUserMentionName(id, options);
 };
 
-export const removeAllMark = (editor: Editor) => {
-  ALL_MARK_TYPE.forEach((mark) => {
-    if (isMarkActive(editor, mark)) Editor.removeMark(editor, mark);
-  });
+/** Same #-prefix rule as {@link RoomMentionAutocomplete}. */
+export const formatRoomMentionDisplayName = (name: string): string => {
+  if (name === '@room') return '@room';
+  return name.startsWith('#') ? name : `#${name}`;
 };
 
-export const isBlockActive = (editor: Editor, format: BlockType) => {
-  const [match] = Editor.nodes(editor, {
-    match: (node) => Element.isElement(node) && node.type === format,
-  });
-
-  return !!match;
+export const resolveRoomMentionName = (
+  roomIdOrAlias: string,
+  label: string,
+  options?: MentionResolveOptions
+): string => {
+  const trimmed = label.trim();
+  if (trimmed === '@room') return '@room';
+  if (trimmed) return formatRoomMentionDisplayName(trimmed);
+  if (
+    options?.room &&
+    (options.room.roomId === roomIdOrAlias || options.room.getCanonicalAlias() === roomIdOrAlias)
+  ) {
+    return formatRoomMentionDisplayName(options.room.name || roomIdOrAlias);
+  }
+  return formatRoomMentionDisplayName(roomIdOrAlias);
 };
 
-export const headingLevel = (editor: Editor): HeadingLevel | undefined => {
-  const [nodeEntry] = Editor.nodes(editor, {
-    match: (node) => Element.isElement(node) && node.type === BlockType.Heading,
-  });
-  const [node] = nodeEntry ?? [];
-  if (!node) return undefined;
-  if ('level' in node) return node.level;
-  return undefined;
+export const resolveUserMentionHighlight = (
+  userId: string,
+  options?: MentionResolveOptions
+): boolean => options?.mxUserId === userId;
+
+export const resolveRoomMentionHighlight = (
+  roomIdOrAlias: string,
+  options?: MentionResolveOptions
+): boolean => {
+  if (!options?.room) return true;
+  const { roomId } = options.room;
+  const alias = options.room.getCanonicalAlias();
+  return roomId === roomIdOrAlias || alias === roomIdOrAlias;
 };
 
-type BlockOption = { level: HeadingLevel };
-const NESTED_BLOCK = [
-  BlockType.OrderedList,
-  BlockType.UnorderedList,
-  BlockType.BlockQuote,
-  BlockType.CodeBlock,
-];
-
-export const toggleBlock = (editor: Editor, format: BlockType, option?: BlockOption) => {
-  Transforms.collapse(editor, {
-    edge: 'end',
-  });
-  const isActive = isBlockActive(editor, format);
-
-  Transforms.unwrapNodes(editor, {
-    match: (node) => Element.isElement(node) && NESTED_BLOCK.includes(node.type),
-    split: true,
-  });
-
-  if (isActive) {
-    Transforms.setNodes(editor, {
-      type: BlockType.Paragraph,
-    });
-    return;
+export const formatMentionElementDisplayName = (element: MentionElement): string => {
+  if (isUserId(element.id)) {
+    return formatUserMentionDisplayName(element.name);
   }
-
-  if (format === BlockType.OrderedList || format === BlockType.UnorderedList) {
-    Transforms.setNodes(editor, {
-      type: BlockType.ListItem,
-    });
-    const block = {
-      type: format,
-      children: [],
-    };
-    Transforms.wrapNodes(editor, block);
-    return;
-  }
-  if (format === BlockType.CodeBlock) {
-    Transforms.setNodes(editor, {
-      type: BlockType.CodeLine,
-    });
-    const block = {
-      type: format,
-      children: [],
-    };
-    Transforms.wrapNodes(editor, block);
-    return;
-  }
-
-  if (format === BlockType.BlockQuote) {
-    Transforms.setNodes(editor, {
-      type: BlockType.QuoteLine,
-    });
-    const block = {
-      type: format,
-      children: [],
-    };
-    Transforms.wrapNodes(editor, block);
-    return;
-  }
-
-  if (format === BlockType.Heading) {
-    Transforms.setNodes(editor, {
-      type: format,
-      level: option?.level ?? 1,
-    });
-  }
-
-  if (format === BlockType.HorizontalRule) {
-    Transforms.insertNodes(editor, {
-      type: BlockType.HorizontalRule,
-      children: [{ text: '' }],
-    });
-    return;
-  }
-
-  if (format === BlockType.Small) {
-    Transforms.setNodes(editor, { type: BlockType.Small });
-    return;
-  }
-
-  Transforms.setNodes(editor, {
-    type: format,
-  });
+  if (element.name === '@room') return '@room';
+  return formatRoomMentionDisplayName(element.name);
 };
 
 export const resetEditor = (editor: Editor) => {
@@ -156,12 +96,10 @@ export const resetEditor = (editor: Editor) => {
     },
   });
 
-  toggleBlock(editor, BlockType.Paragraph);
-  removeAllMark(editor);
+  Transforms.setNodes(editor, { type: BlockType.Paragraph });
 };
 
 export const resetEditorHistory = (editor: Editor) => {
-  // eslint-disable-next-line no-param-reassign
   editor.history = {
     undos: [],
     redos: [],
@@ -220,6 +158,16 @@ export const moveCursor = (editor: Editor, withSpace?: boolean) => {
   Transforms.collapse(editor, { edge: 'end' });
 };
 
+export const focusEditor = (editor: Editor) => {
+  requestAnimationFrame(() => {
+    try {
+      ReactEditor.focus(editor);
+    } catch {
+      // Slate DOM may not reflect the latest selection yet.
+    }
+  });
+};
+
 interface PointUntilCharOptions {
   match: (char: string) => boolean;
   reverse?: boolean;
@@ -242,7 +190,6 @@ export const getPointUntilChar = (
     reverse: options.reverse,
   });
 
-  // eslint-disable-next-line no-restricted-syntax
   for (const point of pointItr) {
     if (!Point.equals(point, cursorPoint) && prevPoint) {
       char = Editor.string(editor, { anchor: point, focus: prevPoint });
@@ -287,3 +234,35 @@ export const getBeginCommand = (editor: Editor): string | undefined => {
     return secondInline.command;
   return undefined;
 };
+
+export const getMarkdownCodeSpanRanges = (text: string): [number, number][] => {
+  const ranges: [number, number][] = [];
+  let openRun: { start: number; length: number } | undefined;
+
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '`') {
+      let runEnd = index;
+      while (runEnd < text.length && text[runEnd] === '`') {
+        runEnd += 1;
+      }
+
+      const runLength = runEnd - index;
+      if (!openRun) {
+        openRun = { start: index, length: runLength };
+      } else if (openRun.length === runLength) {
+        ranges.push([openRun.start, runEnd]);
+        openRun = undefined;
+      }
+
+      index = runEnd - 1;
+    }
+  }
+
+  return ranges;
+};
+
+export const isInsideMarkdownCodeSpan = (
+  start: number,
+  end: number,
+  codeSpanRanges: [number, number][]
+): boolean => codeSpanRanges.some(([rangeStart, rangeEnd]) => start > rangeStart && end < rangeEnd);

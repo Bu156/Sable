@@ -1,18 +1,9 @@
-import {
-  ChangeEvent,
-  ChangeEventHandler,
-  FormEventHandler,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import type { ChangeEvent, ChangeEventHandler, FormEventHandler } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Text,
   IconButton,
-  Icon,
-  Icons,
   Scroll,
   Switch,
   Avatar,
@@ -27,13 +18,15 @@ import {
   Dialog,
   Header,
 } from 'folds';
+import { composerIcon, menuIcon, X } from '$components/icons/phosphor';
 import { Page, PageContent, PageHeader } from '$components/page';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
 import { useRoom } from '$hooks/useRoom';
 import { usePowerLevels } from '$hooks/usePowerLevels';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { StateEvent } from '$types/matrix/room';
+import { useStateEvent } from '$hooks/useStateEvent';
+
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { createLogger } from '$utils/debug';
@@ -41,14 +34,16 @@ import { SequenceCardStyle } from '$features/common-settings/styles.css';
 import { UserAvatar } from '$components/user-avatar';
 import { nameInitials } from '$utils/common';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { UserProfile, useUserProfile } from '$hooks/useUserProfile';
+import type { UserProfile } from '$hooks/useUserProfile';
+import { useUserProfile } from '$hooks/useUserProfile';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { Room, RoomMember } from '$types/matrix-sdk';
+import type { Room, RoomMember, StateEvents } from '$types/matrix-sdk';
 import { Command, useCommands } from '$hooks/useCommands';
 import { useCapabilities } from '$hooks/useCapabilities';
 import { useObjectURL } from '$hooks/useObjectURL';
-import { createUploadAtom, UploadSuccess } from '$state/upload';
+import type { UploadSuccess } from '$state/upload';
+import { createUploadAtom } from '$state/upload';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { CompactUploadCardRenderer } from '$components/upload-card';
 import FocusTrap from 'focus-trap-react';
@@ -57,7 +52,9 @@ import { stopPropagation } from '$utils/keyboard';
 import { ModalWide } from '$styles/Modal.css';
 import { NameColorEditor } from '$features/settings/account/NameColorEditor';
 import { PronounEditor } from '$features/settings/account/PronounEditor';
-import { PronounSet } from '$utils/pronouns';
+import type { PronounSet } from '$utils/pronouns';
+import { EventType } from '$types/matrix-sdk';
+import { CustomStateEvent } from '$types/matrix/room';
 
 const log = createLogger('Cosmetics');
 
@@ -73,8 +70,17 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
   const capabilities = useCapabilities();
   const [alertRemove, setAlertRemove] = useState(false);
   const disableSetAvatar = capabilities['m.set_avatar_url']?.enabled === false;
-
-  const avatarMxc = member.getMxcAvatarUrl();
+  const memberStateEvent = useStateEvent(room, EventType.RoomMember, userId);
+  const memberStateContent = memberStateEvent?.getContent<{ avatar_url?: string }>();
+  const globalAvatarMxc = mx.getUser(userId)?.avatarUrl ?? profile.avatarUrl;
+  const roomAvatarMxc = memberStateEvent
+    ? memberStateContent?.avatar_url
+    : member.getMxcAvatarUrl();
+  const avatarMxc = roomAvatarMxc ?? globalAvatarMxc;
+  const hasRoomAvatarOverride =
+    memberStateEvent !== undefined &&
+    memberStateContent?.avatar_url !== undefined &&
+    memberStateContent.avatar_url !== globalAvatarMxc;
   const avatarUrl =
     avatarMxc && (mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined);
 
@@ -95,15 +101,17 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
   const handleUploaded = useCallback(
     (upload: UploadSuccess) => {
       const { mxc } = upload;
-      myRoomAvatar.exe(mxc);
-      handleRemoveUpload();
+      myRoomAvatar.exe(mxc).finally(() => {
+        handleRemoveUpload();
+      });
     },
     [myRoomAvatar, handleRemoveUpload]
   );
 
   const handleRemoveAvatar = () => {
-    myRoomAvatar.exe('');
-    setAlertRemove(false);
+    myRoomAvatar.exe('').finally(() => {
+      setAlertRemove(false);
+    });
   };
 
   return (
@@ -142,20 +150,18 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
           >
             <Text size="B300">Upload</Text>
           </Button>
-          {avatarUrl &&
-            avatarUrl !==
-              mxcUrlToHttp(mx, profile.avatarUrl ?? '', useAuthentication, 96, 96, 'crop') && (
-              <Button
-                size="300"
-                variant="Critical"
-                fill="None"
-                radii="300"
-                disabled={disableSetAvatar}
-                onClick={() => setAlertRemove(true)}
-              >
-                <Text size="B300">Remove</Text>
-              </Button>
-            )}
+          {hasRoomAvatarOverride && (
+            <Button
+              size="300"
+              variant="Critical"
+              fill="None"
+              radii="300"
+              disabled={disableSetAvatar}
+              onClick={() => setAlertRemove(true)}
+            >
+              <Text size="B300">Remove</Text>
+            </Button>
+          )}
         </Box>
       )}
 
@@ -205,7 +211,7 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
                   <Text size="H4">Remove Room Avatar</Text>
                 </Box>
                 <IconButton size="300" onClick={() => setAlertRemove(false)} radii="300">
-                  <Icon src={Icons.Cross} />
+                  {composerIcon(X)}
                 </IconButton>
               </Header>
               <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
@@ -286,7 +292,7 @@ export function CosmeticsNickname({ profile, member, userId, room }: CosmeticsSe
                     radii="300"
                     variant="Secondary"
                   >
-                    <Icon src={Icons.Cross} size="100" />
+                    {menuIcon(X)}
                   </IconButton>
                 )
               }
@@ -323,7 +329,7 @@ export function CosmeticsFont({
 }) {
   const mx = useMatrixClient();
 
-  const initialFont = (/^"?(.*?)"?, var\(--font-secondary\)$/.exec(font ?? '') ?? [''])[1];
+  const initialFont = (/^"?(.*?)"?, var\(--font-secondary\)$/.exec(font ?? '') ?? [''])[1] ?? '';
   const [val, setVal] = useState(initialFont);
 
   useEffect(() => setVal(initialFont), [initialFont]);
@@ -375,15 +381,15 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
   const isSpace = room.isSpaceRoom();
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canEditPermissions = permissions.stateEvent(StateEvent.RoomPowerLevels, mx.getSafeUserId());
+  const canEditPermissions = permissions.stateEvent(EventType.RoomPowerLevels, mx.getSafeUserId());
 
   const commands = useCommands(mx, room);
 
-  const getLevel = (eventType: string) => (powerLevels as any).events?.[eventType] ?? 50;
+  const getLevel = (eventType: string) => (powerLevels.events ?? {})?.[eventType] ?? 50;
 
-  const canHaveRoomColor = getLevel(StateEvent.RoomCosmeticsColor) === 0;
-  const canHaveRoomPronouns = getLevel(StateEvent.RoomCosmeticsPronouns) === 0;
-  const canHaveRoomFont = getLevel(StateEvent.RoomCosmeticsFont) === 0;
+  const canHaveRoomColor = getLevel(CustomStateEvent.RoomCosmeticsColor) === 0;
+  const canHaveRoomPronouns = getLevel(CustomStateEvent.RoomCosmeticsPronouns) === 0;
+  const canHaveRoomFont = getLevel(CustomStateEvent.RoomCosmeticsFont) === 0;
 
   const handleToggle = useCallback(
     async (eventType: string, enabled: boolean) => {
@@ -391,13 +397,18 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
       const newContent = {
         ...powerLevels,
         events: {
-          ...((powerLevels as any).events || {}),
+          ...powerLevels.events,
           [eventType]: newLevel,
         },
       };
 
       try {
-        await mx.sendStateEvent(room.roomId, StateEvent.RoomPowerLevels as any, newContent, '');
+        await mx.sendStateEvent(
+          room.roomId,
+          EventType.RoomPowerLevels as keyof StateEvents,
+          newContent,
+          ''
+        );
       } catch (e) {
         log.error(`Failed to update permissions for ${eventType}:`, e);
       }
@@ -416,7 +427,7 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
           </Box>
           <Box shrink="No">
             <IconButton onClick={requestClose} variant="Surface">
-              <Icon src={Icons.Cross} />
+              {composerIcon(X)}
             </IconButton>
           </Box>
         </Box>
@@ -480,7 +491,7 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
                 >
                   <PronounEditor
                     title={isSpace ? 'Space Pronouns' : 'Room Pronouns'}
-                    current={roomProfile.resolvedPronouns as any}
+                    current={roomProfile.resolvedPronouns as PronounSet[]}
                     disabled={!(canHaveRoomPronouns || canEditPermissions)}
                     onSave={(p) =>
                       commands[isSpace ? Command.SPronoun : Command.Pronoun].exe(
@@ -522,7 +533,9 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
                       <Switch
                         variant="Primary"
                         value={canHaveRoomColor}
-                        onChange={(enabled) => handleToggle(StateEvent.RoomCosmeticsColor, enabled)}
+                        onChange={(enabled) =>
+                          handleToggle(CustomStateEvent.RoomCosmeticsColor, enabled)
+                        }
                         disabled={!canEditPermissions}
                       />
                     }
@@ -542,7 +555,7 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
                         variant="Primary"
                         value={canHaveRoomPronouns}
                         onChange={(enabled) =>
-                          handleToggle(StateEvent.RoomCosmeticsPronouns, enabled)
+                          handleToggle(CustomStateEvent.RoomCosmeticsPronouns, enabled)
                         }
                         disabled={!canEditPermissions}
                       />
@@ -562,7 +575,9 @@ export function Cosmetics({ requestClose }: CosmeticsProps) {
                       <Switch
                         variant="Primary"
                         value={canHaveRoomFont}
-                        onChange={(enabled) => handleToggle(StateEvent.RoomCosmeticsFont, enabled)}
+                        onChange={(enabled) =>
+                          handleToggle(CustomStateEvent.RoomCosmeticsFont, enabled)
+                        }
                         disabled={!canEditPermissions}
                       />
                     }

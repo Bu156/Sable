@@ -14,11 +14,8 @@
     "unifiedPushAppID": "moe.sable.up"
   },
 
-  "settingsLinkBaseUrl": "https://app.sable.moe",
-
-  "slidingSync": {
-    "enabled": true
-  },
+  "themeCatalogBaseUrl": "https://raw.githubusercontent.com/SableClient/themes/main/",
+  "themeCatalogApprovedHostPrefixes": ["https://raw.githubusercontent.com/SableClient/themes/"],
 
   "featuredCommunities": {
     "openAsDefault": false,
@@ -44,5 +41,10 @@
   "hashRouter": {
     "enabled": false,
     "basename": "/"
+  },
+
+  "gifs": {
+    "proxyUrl": "gifs.sable.moe",
+    "klipyApiKey": "IfeIBlDMvq0av2BcKPDuxwRqbnYRbS90yNqFHEkK2Ja207tkR5nssh3NIlJRCr76"
   }
 }

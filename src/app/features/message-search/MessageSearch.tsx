@@ -1,5 +1,7 @@
-import { RefObject, useEffect, useMemo, useRef } from 'react';
-import { Text, Box, Icon, Icons, config, Spinner, IconButton, Line, toRem } from 'folds';
+import type { RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { Text, Box, config, Spinner, IconButton, Line, toRem } from 'folds';
+import { CaretUp, ChatCircle, dropzoneIcon, sizedIcon, Info } from '$components/icons/phosphor';
 import { useAtomValue } from 'jotai';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -7,7 +9,7 @@ import { useSearchParams } from 'react-router-dom';
 import { SearchOrderBy } from '$types/matrix-sdk';
 import { PageHero, PageHeroEmpty, PageHeroSection } from '$components/page';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { SearchPathSearchParams } from '$pages/paths';
+import type { SearchPathSearchParams } from '$pages/paths';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { SequenceCard } from '$components/sequence-card';
@@ -19,7 +21,8 @@ import { useRooms } from '$state/hooks/roomList';
 import { allRoomsAtom } from '$state/room-list/roomList';
 import { mDirectAtom } from '$state/mDirectList';
 import { VirtualTile } from '$components/virtualizer';
-import { MessageSearchParams, useMessageSearch } from './useMessageSearch';
+import type { MessageSearchParams } from './useMessageSearch';
+import { useMessageSearch } from './useMessageSearch';
 import { SearchResultGroup } from './SearchResultGroup';
 import { SearchInput } from './SearchInput';
 import { SearchFilters } from './SearchFilters';
@@ -200,7 +203,7 @@ export function MessageSearch({
           size="300"
           aria-label="Scroll to Top"
         >
-          <Icon src={Icons.ChevronTop} size="300" />
+          {sizedIcon(CaretUp, '300')}
         </IconButton>
       </ScrollTopContainer>
       <Box ref={scrollTopAnchorRef} direction="Column" gap="300">
@@ -228,7 +231,7 @@ export function MessageSearch({
         <PageHeroEmpty>
           <PageHeroSection>
             <PageHero
-              icon={<Icon size="600" src={Icons.Message} />}
+              icon={dropzoneIcon(ChatCircle)}
               title="Search Messages"
               subTitle="Find helpful messages in your community by searching with related keywords."
             />
@@ -243,7 +246,7 @@ export function MessageSearch({
           alignItems="Center"
           gap="200"
         >
-          <Icon size="200" src={Icons.Info} />
+          {sizedIcon(Info, '200')}
           <Text>
             No results found for <b>{`"${msgSearchParams.term}"`}</b>
           </Text>
@@ -253,8 +256,12 @@ export function MessageSearch({
       {((msgSearchParams.term && status === 'pending') ||
         (groups.length > 0 && vItems.length === 0)) && (
         <Box direction="Column" gap="100">
-          {[...new Array(8).keys()].map((key) => (
-            <SequenceCard variant="SurfaceVariant" key={key} style={{ minHeight: toRem(80) }} />
+          {Array.from({ length: 8 }).map(() => (
+            <SequenceCard
+              variant="SurfaceVariant"
+              key={crypto.randomUUID()}
+              style={{ minHeight: toRem(80) }}
+            />
           ))}
         </Box>
       )}

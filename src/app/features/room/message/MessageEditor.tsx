@@ -1,51 +1,36 @@
-import {
-  KeyboardEventHandler,
-  MouseEventHandler,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import {
-  Box,
-  Chip,
-  Icon,
-  IconButton,
-  Icons,
-  Line,
-  PopOut,
-  RectCords,
-  Spinner,
-  Text,
-  as,
-  config,
-} from 'folds';
+import type { KeyboardEventHandler, MouseEventHandler } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAtomValue } from 'jotai';
+import type { RectCords } from 'folds';
+import { Box, Chip, IconButton, PopOut, Spinner, Text, as, config } from 'folds';
+import { composerIcon, Smiley } from '$components/icons/phosphor';
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';
-import {
+import type {
   IContent,
   IMentions,
   MatrixEvent,
   ReplacementEvent,
-  RelationType,
   Room,
+  RoomMessageEventContent,
   RoomMessageTextEventContent,
-  MsgType,
 } from '$types/matrix-sdk';
+import { RelationType, MsgType } from '$types/matrix-sdk';
 import { isKeyHotkey } from 'is-hotkey';
+import type { AutocompleteQuery } from '$components/editor';
 import {
   AutocompletePrefix,
-  AutocompleteQuery,
   CustomEditor,
   EmoticonAutocomplete,
+  MarkdownFormattingToolbarBottom,
+  MarkdownFormattingToolbarToggle,
   RoomMentionAutocomplete,
-  Toolbar,
   UserMentionAutocomplete,
   createEmoticonElement,
+  focusEditor,
   customHtmlEqualsPlainText,
   getAutocompleteQuery,
   getPrevWorldRange,
-  htmlToEditorInput,
   moveCursor,
   plainToEditorInput,
   toMatrixCustomHTML,
@@ -54,13 +39,17 @@ import {
   useEditor,
   getMentions,
   ANYWHERE_AUTOCOMPLETE_PREFIXES,
+  getLinks,
+  LINKINPUTREGEX,
 } from '$components/editor';
+import { htmlToMarkdown } from '$plugins/markdown';
 import { useSetting } from '$state/hooks/settings';
 import { CaptionPosition, settingsAtom } from '$state/settings';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { EmojiBoard } from '$components/emoji-board';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { nicknamesAtom } from '$state/nicknames';
 import { getEditedEvent, getMentionContent, trimReplyFromFormattedBody } from '$utils/room';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useComposingCheck } from '$hooks/useComposingCheck';
@@ -68,12 +57,18 @@ import { floatingEditor } from '$styles/overrides/Composer.css';
 import { RenderMessageContent } from '$components/RenderMessageContent';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
+import { testMatrixTo } from '$plugins/matrix-to';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
-import { HTMLReactParserOptions } from 'html-react-parser';
+import type { HTMLReactParserOptions } from 'html-react-parser';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { Opts as LinkifyOpts } from 'linkifyjs';
-import { GetContentCallback } from '$types/matrix/room';
+import type { Opts as LinkifyOpts } from 'linkifyjs';
+import type { GetContentCallback } from '$types/matrix/room';
 import { sanitizeText } from '$utils/sanitize';
+import type { BundleContent } from '$components/message';
+import {
+  readdAngleBracketsForHiddenPreviews,
+  stripMarkdownEscapesForHiddenPreviews,
+} from './hiddenLinkPreviews';
 
 type MessageEditorProps = {
   roomId: string;
@@ -85,11 +80,9 @@ type MessageEditorProps = {
 export const MessageEditor = as<'div', MessageEditorProps>(
   ({ room, roomId, mEvent, imagePackRooms, onCancel, ...props }, ref) => {
     const mx = useMatrixClient();
+    const nicknames = useAtomValue(nicknamesAtom);
     const editor = useEditor();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
-    const [globalToolbar] = useSetting(settingsAtom, 'editorToolbar');
-    const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
-    const [toolbar, setToolbar] = useState(globalToolbar);
     const isComposing = useComposingCheck();
 
     const [autocompleteQuery, setAutocompleteQuery] =
@@ -134,9 +127,62 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         );
       }
 
+      const bundleContent =
+        (content['com.beeper.linkpreviews'] as BundleContent[] | undefined) ?? [];
+      const markHiddenLinks = (original: string, isHTML?: boolean) => {
+        if (!isHTML) {
+          return readdAngleBracketsForHiddenPreviews(original, bundleContent);
+        }
+        /* Split according to the following fule:
+              - if its not HTML just break it by spaces, newLines, and parans
+              - if it is HTML 
+                - break it before before any potential opening tag
+                - break it whenever a <a> tag starts
+                - break it after a closing </a> tag
+                - then for every non <a> portion find regular links as though it is plaintext
+                  * this is not recursive but needs flattening              
+         */
+        const splitBody = original.split(/(?=^.+<)|(?=<a.+)|(?<=\/a>)|(?=<code.+)|(?<=\/code>)/gi);
+        let newBody = '';
+        splitBody
+          .map((item) => (item.startsWith('<a') ? [item] : item.split(/(?=[ \n()])/g)))
+          .reduce((acc, current) => acc.concat(current), [])
+          .map((s) => {
+            // the length is from the fact that a link is necessarily longer than 6
+            if (s.length < 6 || s.startsWith('<code') || s.endsWith('code>')) {
+              newBody += s;
+              return;
+            }
+            // since the way that the match works the key is at the start of the string,
+            // it needs to be separated such that it can be reintroduced before the < in case of regular text
+            // or after it in case that it is matching a <a> tag
+            const strippedS = s.substring(1);
+            const matrixToAnchorHref =
+              isHTML && s.toLowerCase().startsWith('<a')
+                ? s.match(/href\s*=\s*["']([^"']+)["']/i)?.[1]
+                : undefined;
+            const urlFromChunk = strippedS.match(/https?:\/\/[^\s)]+/)?.[0];
+            const isMatrixToPermalink = testMatrixTo(matrixToAnchorHref ?? urlFromChunk ?? '');
+            const isHidden =
+              !isMatrixToPermalink &&
+              (bundleContent?.length === 0 ||
+                bundleContent.filter((b) => s.includes(b.matched_url)).length === 0) &&
+              strippedS.match(LINKINPUTREGEX) !== null;
+
+            // Wrap whole <a>…</a> as &lt;…&gt; once; duplicating the leading "<" breaks htmlToMarkdown's [<][a][>] detection.
+            if (isHidden && isHTML && s.toLowerCase().startsWith('<a')) {
+              newBody += `&lt;${s}&gt;`;
+              return;
+            }
+
+            newBody += `${isHidden ? (isHTML && `${s[0]}&lt;`) || `${s[0]}<` : s[0]}${strippedS}${isHidden ? (isHTML && '&gt;') || '>' : ''}`;
+          });
+        return newBody;
+      };
+
       return [
-        typeof body === 'string' ? body : undefined,
-        typeof customHtml === 'string' ? customHtml : undefined,
+        typeof body === 'string' ? markHiddenLinks(body) : undefined,
+        typeof customHtml === 'string' ? markHiddenLinks(customHtml, true) : undefined,
         mMentions,
       ];
     }, [room, mEvent]);
@@ -144,12 +190,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const [saveState, save] = useAsyncCallback(
       useCallback(async () => {
         const oldContent = mEvent.getContent();
-        let plainText = toPlainText(editor.children, isMarkdown).trim();
+        const msgtype = mEvent.getContent().msgtype as RoomMessageTextEventContent['msgtype'];
+        let plainText = toPlainText(editor.children).trim();
         let customHtml = trimCustomHtml(
           toMatrixCustomHTML(editor.children, {
-            allowTextFormatting: true,
-            allowBlockMarkdown: isMarkdown,
-            allowInlineMarkdown: isMarkdown,
+            forEmote: msgtype === MsgType.Emote,
+            room,
           })
         );
 
@@ -171,8 +217,6 @@ export const MessageEditor = as<'div', MessageEditorProps>(
             return undefined;
           }
         }
-
-        const msgtype = mEvent.getContent().msgtype as RoomMessageTextEventContent['msgtype'];
 
         const newContent: IContent = {
           msgtype,
@@ -230,7 +274,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         newContent['m.mentions'] = mMentions;
         contentBody['m.mentions'] = mMentions;
 
-        if (!customHtmlEqualsPlainText(customHtml, plainText)) {
+        const links = getLinks(editor.children);
+
+        if (pmpDisplayname || !customHtmlEqualsPlainText(customHtml, plainText)) {
           newContent.format = 'org.matrix.custom.html';
           newContent.formatted_body = customHtml;
           contentBody.format = 'org.matrix.custom.html';
@@ -248,9 +294,10 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         content.format = contentBody.format;
         content.formatted_body = contentBody.formatted_body;
         content['m.new_content'] = newContent;
-        if (oldContent.info !== undefined && oldContent.filename?.length > 0) {
-          content.filename = oldContent.filename;
-          content['m.new_content'].filename = oldContent.filename;
+        if (oldContent.info !== undefined && oldContent.msgtype !== 'm.text') {
+          content.filename = 'filename' in oldContent ? oldContent.filename : oldContent.body;
+          content['m.new_content'].filename =
+            'filename' in oldContent ? oldContent.filename : oldContent.body;
           content.info = oldContent.info;
           content['m.new_content'].info = oldContent.info;
 
@@ -264,9 +311,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
               oldContent['page.codeberg.everypizza.msc4193.spoiler'];
           }
         }
+        content['com.beeper.linkpreviews'] = [];
+        links?.forEach((link) => content['com.beeper.linkpreviews'].push({ matched_url: link }));
+        content['m.new_content']['com.beeper.linkpreviews'] = content['com.beeper.linkpreviews'];
 
-        return mx.sendMessage(roomId, content as any);
-      }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody, room])
+        return mx.sendMessage(roomId, content as RoomMessageEventContent);
+      }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room])
     );
 
     const handleSave = useCallback(() => {
@@ -316,8 +366,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     );
 
     const handleCloseAutocomplete = useCallback(() => {
-      ReactEditor.focus(editor);
-      setAutocompleteQuery(undefined);
+      setAutocompleteQuery((prev) => {
+        if (prev !== undefined) {
+          focusEditor(editor);
+        }
+        return undefined;
+      });
     }, [editor]);
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
@@ -328,10 +382,19 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     useEffect(() => {
       const [body, customHtml] = getPrevBodyAndFormattedBody();
 
-      const initialValue =
-        typeof customHtml === 'string'
-          ? htmlToEditorInput(customHtml, isMarkdown)
-          : plainToEditorInput(typeof body === 'string' ? body : '', isMarkdown);
+      const mentionOptions = {
+        room,
+        nicknames,
+        mxUserId: mx.getUserId() ?? undefined,
+      };
+      const initialValue = plainToEditorInput(
+        customHtml
+          ? stripMarkdownEscapesForHiddenPreviews(htmlToMarkdown(customHtml))
+          : typeof body === 'string'
+            ? stripMarkdownEscapesForHiddenPreviews(body)
+            : '',
+        mentionOptions
+      );
 
       Transforms.select(editor, {
         anchor: Editor.start(editor, []),
@@ -340,7 +403,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
 
       editor.insertFragment(initialValue);
       if (!mobileOrTablet()) ReactEditor.focus(editor);
-    }, [editor, getPrevBodyAndFormattedBody, isMarkdown]);
+    }, [editor, getPrevBodyAndFormattedBody, room, nicknames, mx]);
 
     useEffect(() => {
       if (saveState.status === AsyncStatus.Success) {
@@ -352,6 +415,14 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
     const linkifyOpts = useMemo<LinkifyOpts>(() => ({ ...LINKIFY_OPTS }), []);
     const spoilerClickHandler = useSpoilerClickHandler();
+    const [incomingInlineImagesDefaultHeight] = useSetting(
+      settingsAtom,
+      'incomingInlineImagesDefaultHeight'
+    );
+    const [incomingInlineImagesMaxHeight] = useSetting(
+      settingsAtom,
+      'incomingInlineImagesMaxHeight'
+    );
     const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
       () =>
         getReactCustomHtmlParser(mx, mEvent.getRoomId(), {
@@ -359,8 +430,19 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           linkifyOpts,
           useAuthentication,
           handleSpoilerClick: spoilerClickHandler,
+          incomingInlineImagesDefaultHeight,
+          incomingInlineImagesMaxHeight,
         }),
-      [linkifyOpts, mEvent, mx, settingsLinkBaseUrl, spoilerClickHandler, useAuthentication]
+      [
+        linkifyOpts,
+        mEvent,
+        mx,
+        settingsLinkBaseUrl,
+        spoilerClickHandler,
+        useAuthentication,
+        incomingInlineImagesDefaultHeight,
+        incomingInlineImagesMaxHeight,
+      ]
     );
     const getContent = (() => mEvent.getContent()) as GetContentCallback;
     const msgType = mEvent.getContent().msgtype;
@@ -449,6 +531,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
               onKeyUp={handleKeyUp}
               bottom={
                 <>
+                  <MarkdownFormattingToolbarBottom />
                   <Box
                     style={{ padding: config.space.S200, paddingTop: 0 }}
                     alignItems="End"
@@ -475,14 +558,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                       </Chip>
                     </Box>
                     <Box gap="Inherit">
-                      <IconButton
-                        variant="SurfaceVariant"
-                        size="300"
-                        radii="300"
-                        onClick={() => setToolbar(!toolbar)}
-                      >
-                        <Icon size="400" src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
-                      </IconButton>
+                      <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
                       <UseStateProvider initial={undefined}>
                         {(anchor: RectCords | undefined, setAnchor) => (
                           <PopOut
@@ -520,19 +596,15 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                               size="300"
                               radii="300"
                             >
-                              <Icon size="400" src={Icons.Smile} filled={anchor !== undefined} />
+                              {composerIcon(Smiley, {
+                                weight: anchor !== undefined ? 'fill' : 'regular',
+                              })}
                             </IconButton>
                           </PopOut>
                         )}
                       </UseStateProvider>
                     </Box>
                   </Box>
-                  {toolbar && (
-                    <div>
-                      <Line variant="SurfaceVariant" size="300" />
-                      <Toolbar />
-                    </div>
-                  )}
                 </>
               }
             />

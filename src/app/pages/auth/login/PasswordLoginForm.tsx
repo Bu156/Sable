@@ -1,26 +1,26 @@
-import { FormEventHandler, MouseEventHandler, useCallback, useState } from 'react';
+import type { FormEventHandler, MouseEventHandler, ReactNode } from 'react';
+import { useCallback, useState } from 'react';
+import type { RectCords } from 'folds';
 import {
   Box,
   Button,
   Header,
-  Icon,
   IconButton,
-  Icons,
   Input,
   Menu,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   PopOut,
-  RectCords,
   Spinner,
   Text,
   config,
 } from 'folds';
+import { sizedIcon, Info } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
 import { Link } from 'react-router-dom';
-import { MatrixError } from '$types/matrix-sdk';
-import { getMxIdLocalPart, getMxIdServer, isUserId } from '$utils/matrix';
+import { getMxIdLocalPart, isUserId } from '$utils/matrix';
+import type { MatrixError } from '$types/matrix-sdk';
 import { EMAIL_REGEX } from '$utils/regex';
 import { useAutoDiscoveryInfo } from '$hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
@@ -31,13 +31,9 @@ import { getResetPasswordPath } from '$pages/pathUtils';
 import { stopPropagation } from '$utils/keyboard';
 import { FieldError } from '$pages/auth/FiledError';
 import { deviceDisplayName } from '$utils/user-agent';
-import {
-  CustomLoginResponse,
-  LoginError,
-  factoryGetBaseUrl,
-  login,
-  useLoginComplete,
-} from './loginUtil';
+import { getMxIdServer } from '$utils/mxIdHelper';
+import type { CustomLoginResponse } from './loginUtil';
+import { LoginError, factoryGetBaseUrl, login, useLoginComplete } from './loginUtil';
 
 function UsernameHint({ server }: { server: string }) {
   const [anchor, setAnchor] = useState<RectCords>();
@@ -101,7 +97,7 @@ function UsernameHint({ server }: { server: string }) {
         radii="300"
         aria-pressed={!!anchor}
       >
-        <Icon style={{ opacity: config.opacity.P300 }} size="100" src={Icons.Info} />
+        {sizedIcon(Info, '100', { style: { opacity: config.opacity.P300 } })}
       </IconButton>
     </PopOut>
   );
@@ -110,8 +106,15 @@ function UsernameHint({ server }: { server: string }) {
 type PasswordLoginFormProps = {
   defaultUsername?: string;
   defaultEmail?: string;
+  slidingSyncOptIn: boolean;
+  slidingSyncOption?: ReactNode;
 };
-export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLoginFormProps) {
+export function PasswordLoginForm({
+  defaultUsername,
+  defaultEmail,
+  slidingSyncOptIn,
+  slidingSyncOption,
+}: PasswordLoginFormProps) {
   const server = useAuthServer();
   const clientConfig = useClientConfig();
 
@@ -124,7 +127,10 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     Parameters<typeof login>
   >(useCallback(login, []));
 
-  useLoginComplete(loginState.status === AsyncStatus.Success ? loginState.data : undefined);
+  useLoginComplete(
+    loginState.status === AsyncStatus.Success ? loginState.data : undefined,
+    slidingSyncOptIn
+  );
 
   const handleUsernameLogin = (username: string, password: string) => {
     startLogin(baseUrl, {
@@ -269,6 +275,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           </Box>
         </Box>
       </Box>
+      {slidingSyncOption}
       <Button type="submit" variant="Primary" size="500">
         <Text as="span" size="B500">
           Login

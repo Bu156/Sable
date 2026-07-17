@@ -1,11 +1,10 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Badge,
   Box,
   Button,
   Chip,
-  Icon,
-  Icons,
   Menu,
   MenuItem,
   Modal,
@@ -17,13 +16,24 @@ import {
   Tooltip,
   TooltipProvider,
   as,
+  color,
   config,
+  toRem,
 } from 'folds';
+import {
+  Eye,
+  EyeSlash,
+  menuIcon,
+  sizedIcon,
+  Image,
+  Warning,
+  Star,
+} from '$components/icons/phosphor';
 import classNames from 'classnames';
 import { BlurhashCanvas } from 'react-blurhash';
 import FocusTrap from 'focus-trap-react';
-import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '$types/matrix/common';
+import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
+import type { IImageInfo } from '$types/matrix/common';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { bytesToSize } from '$utils/common';
@@ -31,15 +41,38 @@ import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { ModalWide } from '$styles/Modal.css';
 import { validBlurHash } from '$utils/blurHash';
 import * as css from './style.css';
+import {
+  MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS,
+  MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME,
+} from '../../../../unstable/prefixes';
+import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
+
+function thumbnailDimsForMaxEdge(
+  maxEdge: number,
+  w?: number,
+  h?: number
+): { tw: number; th: number } {
+  const safeEdge = Math.max(1, Math.round(maxEdge));
+  const iw = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : safeEdge;
+  const ih = typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : safeEdge;
+  const longest = Math.max(iw, ih);
+  if (longest <= safeEdge) return { tw: Math.round(iw), th: Math.round(ih) };
+  const scale = safeEdge / longest;
+  return {
+    tw: Math.max(1, Math.round(iw * scale)),
+    th: Math.max(1, Math.round(ih * scale)),
+  };
+}
 
 type RenderViewerProps = {
   src: string;
   alt: string;
+  filename?: string;
   requestClose: () => void;
+  info?: IImageInfo;
 };
 type RenderImageProps = {
   alt: string;
@@ -51,7 +84,8 @@ type RenderImageProps = {
   tabIndex: number;
 };
 export type ImageContentProps = {
-  body: string;
+  body?: string;
+  filename?: string;
   mimeType?: string;
   url: string;
   info?: IImageInfo;
@@ -61,6 +95,10 @@ export type ImageContentProps = {
   spoilerReason?: string;
   renderViewer: (props: RenderViewerProps) => ReactNode;
   renderImage: (props: RenderImageProps) => ReactNode;
+  matrixThumbnailMaxEdge?: number;
+  mediaLayout?: 'default' | 'contained';
+  containedStripMinPx?: number;
+  fillsPreviewSlot?: boolean;
 };
 export const ImageContent = as<'div', ImageContentProps>(
   (
@@ -68,6 +106,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       className,
       style,
       body,
+      filename,
       mimeType,
       url,
       info,
@@ -77,60 +116,93 @@ export const ImageContent = as<'div', ImageContentProps>(
       spoilerReason,
       renderViewer,
       renderImage,
+      matrixThumbnailMaxEdge,
+      mediaLayout = 'default',
+      containedStripMinPx,
+      fillsPreviewSlot,
       ...props
     },
     ref
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
-    const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
+    const blurHash = validBlurHash(info?.[MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]);
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
+    const [viewerFullSrc, setViewerFullSrc] = useState<string | null>(null);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [isHovered, setIsHovered] = useState(false);
 
-    const rawMediaUrl = useMemo(() => {
-      if (url.startsWith('http')) return url;
-      return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
-    }, [mx, url, useAuthentication]);
+    const favoritedContent = useFavoriteGifs();
+    const [favorited, setFavorited] = useState(
+      favoritedContent.gifs.find((v) => v.url == url) != undefined
+    );
 
-    const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
+    const isGif =
+      info?.mimetype === 'image/gif' ||
+      info?.mimetype === 'image/apng' ||
+      info?.mimetype === 'image/webp' ||
+      (body ?? '').toLowerCase().endsWith('.gif') ||
+      (body ?? '').toLowerCase().endsWith('.apng') ||
+      (body ?? '').toLowerCase().endsWith('.webp') ||
+      url.toLowerCase().endsWith('.gif') ||
+      url.toLowerCase().endsWith('.apng') ||
+      url.toLowerCase().endsWith('.webp');
 
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
+        if (url.startsWith('http')) return url;
+
+        if (typeof matrixThumbnailMaxEdge === 'number' && matrixThumbnailMaxEdge > 0 && !encInfo) {
+          const { tw, th } = thumbnailDimsForMaxEdge(matrixThumbnailMaxEdge, info?.w, info?.h);
+          const thumbUrl = mxcUrlToHttp(mx, url, useAuthentication, tw, th, 'scale', false);
+          if (thumbUrl) return thumbUrl;
+        }
+
+        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+        if (!mediaUrl) throw new Error('Invalid media URL');
         if (encInfo) {
-          if (!rawMediaUrl) throw new Error('Invalid media URL');
-          const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
+          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
             decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
           return URL.createObjectURL(fileContent);
         }
-        return resolvedMediaUrl ?? rawMediaUrl ?? url;
-      }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo])
+        return mediaUrl;
+      }, [mx, url, useAuthentication, mimeType, encInfo, matrixThumbnailMaxEdge, info?.w, info?.h])
     );
 
-    // When the source download succeeds, reset image-element error state so the
-    // Retry button doesn't flash before the <img> has had a chance to load.
     useEffect(() => {
-      if (srcState.status === AsyncStatus.Success) {
-        setError(false);
+      if (!viewer) {
+        setViewerFullSrc(null);
+        return undefined;
       }
-    }, [srcState.status]);
+      if (
+        typeof matrixThumbnailMaxEdge !== 'number' ||
+        matrixThumbnailMaxEdge <= 0 ||
+        encInfo ||
+        url.startsWith('http')
+      ) {
+        return undefined;
+      }
+      let cancelled = false;
+      void (async () => {
+        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+        if (!mediaUrl || cancelled) return;
+        setViewerFullSrc(mediaUrl);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [viewer, matrixThumbnailMaxEdge, encInfo, url, mx, useAuthentication]);
 
     const handleLoad = () => {
       setLoad(true);
-      setError(false);
     };
     const handleError = () => {
-      // Only show the error if the source download already succeeded — if
-      // it's still loading the image element may fire a transient error
-      // before the blob URL is ready.
-      if (srcState.status === AsyncStatus.Success) {
-        setLoad(false);
-        setError(true);
-      }
+      setLoad(false);
+      setError(true);
     };
 
     const handleRetry = () => {
@@ -142,13 +214,39 @@ export const ImageContent = as<'div', ImageContentProps>(
       if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
 
-    const hasDimensions = typeof info?.w === 'number' && typeof info?.h === 'number';
+    const imageW = info?.w;
+    const imageH = info?.h;
+    const hasDimensions = typeof imageW === 'number' && typeof imageH === 'number';
+    const isContained = mediaLayout === 'contained';
+    const fillsSlot = Boolean(fillsPreviewSlot && isContained);
+    const containedReserveStrip =
+      !fillsSlot &&
+      isContained &&
+      (srcState.status === AsyncStatus.Loading ||
+        srcState.status === AsyncStatus.Error ||
+        error ||
+        (srcState.status === AsyncStatus.Success && !load));
+
+    const rootClass = isContained ? css.ContainedMediaRoot : css.RelativeBase;
+    const stripMin = containedStripMinPx ?? 56;
+    const intrinsicSizingStyle = fillsSlot
+      ? {}
+      : isContained
+        ? { minHeight: containedReserveStrip ? toRem(stripMin) : undefined }
+        : hasDimensions
+          ? { aspectRatio: `${imageW} / ${imageH}` }
+          : { minHeight: '150px' };
+
+    const fillPreviewSlotStyle = fillsSlot
+      ? ({ width: '100%', height: '100%' } as const)
+      : undefined;
 
     return (
       <Box
-        className={classNames(css.RelativeBase, className)}
+        className={classNames(rootClass, className)}
         style={{
-          ...(hasDimensions ? { aspectRatio: `${info.w} / ${info.h}` } : { minHeight: '150px' }),
+          ...fillPreviewSlotStyle,
+          ...intrinsicSizingStyle,
           ...style,
         }}
         {...props}
@@ -170,12 +268,14 @@ export const ImageContent = as<'div', ImageContentProps>(
                 <Modal
                   className={ModalWide}
                   size="500"
-                  onContextMenu={(evt: any) => evt.stopPropagation()}
+                  onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
                 >
                   {renderViewer({
-                    src: srcState.data,
-                    alt: body,
+                    src: viewerFullSrc ?? srcState.data,
+                    alt: body ?? '',
+                    filename,
                     requestClose: () => setViewer(false),
+                    info: info,
                   })}
                 </Modal>
               </FocusTrap>
@@ -204,7 +304,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               radii="300"
               size="300"
               onClick={loadSrc}
-              before={<Icon size="Inherit" src={Icons.Photo} filled />}
+              before={sizedIcon(Image, 'Inherit', { filled: true })}
             >
               <Text size="B300">View</Text>
             </Button>
@@ -213,13 +313,14 @@ export const ImageContent = as<'div', ImageContentProps>(
         {srcState.status === AsyncStatus.Success && (
           <Box
             className={classNames(
-              hasDimensions ? css.AbsoluteContainer : undefined,
+              hasDimensions && !isContained ? css.AbsoluteContainer : undefined,
               blurred && css.Blur
             )}
+            style={{ width: '100%' }}
           >
             {renderImage({
-              alt: body,
-              title: body,
+              alt: body ?? '',
+              title: body ?? '',
               src: srcState.data,
               onLoad: handleLoad,
               onError: handleError,
@@ -265,13 +366,12 @@ export const ImageContent = as<'div', ImageContentProps>(
         )}
         {(srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
           !load &&
-          !error &&
           !blurred && (
             <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
               <Spinner variant="Secondary" />
             </Box>
           )}
-        {!load && (error || srcState.status === AsyncStatus.Error) && (
+        {(error || srcState.status === AsyncStatus.Error) && (
           <Box
             className={css.AbsoluteContainer}
             alignItems="Center"
@@ -296,7 +396,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   outlined
                   radii="300"
                   onClick={handleRetry}
-                  before={<Icon size="Inherit" src={Icons.Warning} filled />}
+                  before={sizedIcon(Warning, 'Inherit', { filled: true })}
                 >
                   <Text size="B300">Retry</Text>
                 </Button>
@@ -307,21 +407,68 @@ export const ImageContent = as<'div', ImageContentProps>(
         {isHovered && (
           <Box style={{ padding: config.space.S200, right: 0, position: 'absolute' }}>
             <Menu style={{ padding: config.space.S0 }}>
-              <MenuItem
-                size="300"
-                after={<Icon size="200" src={blurred ? Icons.Eye : Icons.EyeBlind} />}
-                radii="300"
-                fill="Soft"
-                variant="Secondary"
-                title={blurred ? 'Reveal Image' : 'Hide Image'}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (srcState.status === AsyncStatus.Idle) {
-                    loadSrc();
-                    setBlurred(false);
-                  } else setBlurred(!blurred);
-                }}
-              />
+              <Box>
+                <MenuItem
+                  size="300"
+                  radii="0"
+                  fill="Soft"
+                  variant="Secondary"
+                  title={blurred ? 'Reveal Image' : 'Hide Image'}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (srcState.status === AsyncStatus.Idle) {
+                      loadSrc();
+                      setBlurred(false);
+                    } else setBlurred(!blurred);
+                  }}
+                >
+                  {menuIcon(blurred ? Eye : EyeSlash)}
+                </MenuItem>
+                {isGif && (
+                  <MenuItem
+                    size="300"
+                    radii="0"
+                    fill="Soft"
+                    variant="Secondary"
+                    title={favorited ? 'Unfavorite gif' : 'Favorite gif'}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      if (srcState.status === AsyncStatus.Success) {
+                        if (!favorited) {
+                          setFavorited(true);
+                          await mx
+                            .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
+                              gifs: [
+                                ...favoritedContent.gifs,
+                                {
+                                  title: body ?? '',
+                                  url: url,
+                                  width: imageW,
+                                  height: imageH,
+                                  size: info?.size,
+                                  mimetype: info?.mimetype,
+                                },
+                              ],
+                            })
+                            .catch(() => setFavorited(false));
+                        } else {
+                          setFavorited(false);
+                          await mx
+                            .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
+                              gifs: favoritedContent.gifs.filter((v) => v.url != url),
+                            })
+                            .catch(() => setFavorited(true));
+                        }
+                      }
+                    }}
+                  >
+                    {menuIcon(Star, {
+                      weight: favorited ? 'fill' : 'regular',
+                      color: favorited ? color.Warning.MainHover : color.Surface.OnContainer,
+                    })}
+                  </MenuItem>
+                )}
+              </Box>
             </Menu>
           </Box>
         )}

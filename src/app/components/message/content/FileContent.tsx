@@ -1,9 +1,8 @@
-import { ReactNode, useCallback, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Box,
   Button,
-  Icon,
-  Icons,
   Modal,
   Overlay,
   OverlayBackdrop,
@@ -14,10 +13,11 @@ import {
   TooltipProvider,
   as,
 } from 'folds';
+import { ArrowRight, Download, sizedIcon, Warning } from '$components/icons/phosphor';
 import FileSaver from 'file-saver';
-import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
+import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import FocusTrap from 'focus-trap-react';
-import { IFileInfo } from '$types/matrix/common';
+import type { IFileInfo } from '$types/matrix/common';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { bytesToSize } from '$utils/common';
@@ -31,6 +31,7 @@ import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { ModalWide } from '$styles/Modal.css';
+import { getDownloadFilename } from '$utils/download';
 
 const renderErrorButton = (retry: () => void, text: string) => (
   <TooltipProvider
@@ -51,7 +52,7 @@ const renderErrorButton = (retry: () => void, text: string) => (
         outlined
         radii="300"
         onClick={retry}
-        before={<Icon size="100" src={Icons.Warning} filled />}
+        before={sizedIcon(Warning, '100', { filled: true })}
       >
         <Text size="B400" truncate>
           {text}
@@ -109,7 +110,7 @@ export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: Rea
               <Modal
                 className={ModalWide}
                 size="500"
-                onContextMenu={(evt: any) => evt.stopPropagation()}
+                onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
               >
                 {renderViewer({
                   name: body,
@@ -140,7 +141,7 @@ export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: Rea
             textState.status === AsyncStatus.Loading ? (
               <Spinner fill="Solid" size="100" variant="Secondary" />
             ) : (
-              <Icon size="100" src={Icons.ArrowRight} filled />
+              sizedIcon(ArrowRight, '100', { filled: true })
             )
           }
         >
@@ -198,7 +199,7 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
               <Modal
                 className={ModalWide}
                 size="500"
-                onContextMenu={(evt: any) => evt.stopPropagation()}
+                onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
               >
                 {renderViewer({
                   name: body,
@@ -224,7 +225,7 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
             pdfState.status === AsyncStatus.Loading ? (
               <Spinner fill="Solid" size="100" variant="Secondary" />
             ) : (
-              <Icon size="100" src={Icons.ArrowRight} filled />
+              sizedIcon(ArrowRight, '100', { filled: true })
             )
           }
         >
@@ -257,7 +258,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
         : await downloadMedia(mediaUrl);
 
       const fileURL = URL.createObjectURL(fileContent);
-      FileSaver.saveAs(fileURL, body);
+      FileSaver.saveAs(fileURL, getDownloadFilename(body));
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, body])
   );
@@ -272,7 +273,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
       size="400"
       onClick={() =>
         downloadState.status === AsyncStatus.Success
-          ? FileSaver.saveAs(downloadState.data, body)
+          ? FileSaver.saveAs(downloadState.data, getDownloadFilename(body))
           : download()
       }
       disabled={downloadState.status === AsyncStatus.Loading}
@@ -280,7 +281,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
         downloadState.status === AsyncStatus.Loading ? (
           <Spinner fill="Soft" size="100" variant="Secondary" />
         ) : (
-          <Icon size="100" src={Icons.Download} filled />
+          sizedIcon(Download, '100', { filled: true })
         )
       }
     >

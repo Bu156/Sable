@@ -1,19 +1,10 @@
-import { MouseEventHandler, ReactNode, useCallback, useState } from 'react';
-import {
-  Box,
-  Text,
-  Chip,
-  Icon,
-  Icons,
-  RectCords,
-  PopOut,
-  Menu,
-  config,
-  MenuItem,
-  color,
-} from 'folds';
+import type { MouseEventHandler, ReactNode } from 'react';
+import { useCallback, useState } from 'react';
+import type { RectCords } from 'folds';
+import { Box, Text, Chip, PopOut, Menu, config, MenuItem, color } from 'folds';
+import { CaretDown, sizedIcon } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
-import { SecretStorageKeyContent } from '$types/matrix/accountData';
+import type { SecretStorageKeyContent } from '$types/matrix/accountData';
 import { storePrivateKey } from '$client/secretStorageKeys';
 import { stopPropagation } from '$utils/keyboard';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -51,7 +42,7 @@ export function ManualVerificationMethodSwitcher({
         variant="Secondary"
         fill="Soft"
         radii="Pill"
-        before={<Icon size="100" src={Icons.ChevronBottom} />}
+        before={sizedIcon(CaretDown, '100')}
         onClick={handleMenu}
       >
         <Text as="span" size="B300">

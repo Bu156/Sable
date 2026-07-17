@@ -1,23 +1,13 @@
-import { MouseEventHandler, useCallback, useEffect, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
-import {
-  Box,
-  IconButton,
-  Icon,
-  Icons,
-  PopOut,
-  Menu,
-  MenuItem,
-  Text,
-  RectCords,
-  config,
-  Line,
-  Spinner,
-  toRem,
-} from 'folds';
-import { HierarchyItem } from '$hooks/useSpaceHierarchy';
+import type { RectCords } from 'folds';
+import { Box, IconButton, PopOut, Menu, MenuItem, Text, config, Line, Spinner, toRem } from 'folds';
+import type { HierarchyItem } from '$hooks/useSpaceHierarchy';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { MSpaceChildContent, StateEvent } from '$types/matrix/room';
+import type { MSpaceChildContent } from '$types/matrix/room';
+import type { StateEvents } from '$types/matrix-sdk';
+
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { LeaveSpacePrompt } from '$components/leave-space-prompt';
@@ -26,13 +16,20 @@ import { stopPropagation } from '$utils/keyboard';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
 import { useSpaceOptionally } from '$hooks/useSpace';
 import { useOpenSpaceSettings } from '$state/hooks/spaceSettings';
-import { IPowerLevels } from '$hooks/usePowerLevels';
+import type { IPowerLevels } from '$hooks/usePowerLevels';
 import { getRoomCreatorsForRoomId } from '$hooks/useRoomCreators';
 import { getRoomPermissionsAPI } from '$hooks/useRoomPermissions';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
 import { useNavigate } from 'react-router-dom';
 import { getSpaceLobbyPath } from '$pages/pathUtils';
+import { EventType } from '$types/matrix-sdk';
+import {
+  chipIcon,
+  DotsThreeOutlineVerticalIcon,
+  menuIcon,
+  SignOut,
+} from '$components/icons/phosphor';
 
 type HierarchyItemWithParent = HierarchyItem & {
   parentId: string;
@@ -51,7 +48,12 @@ function SuggestMenuItem({
   const [toggleState, handleToggleSuggested] = useAsyncCallback(
     useCallback(() => {
       const newContent: MSpaceChildContent = { ...content, suggested: !content.suggested };
-      return mx.sendStateEvent(parentId, StateEvent.SpaceChild as any, newContent, roomId);
+      return mx.sendStateEvent(
+        parentId,
+        EventType.SpaceChild as keyof StateEvents,
+        newContent,
+        roomId
+      );
     }, [mx, parentId, roomId, content])
   );
 
@@ -88,7 +90,7 @@ function RemoveMenuItem({
 
   const [removeState, handleRemove] = useAsyncCallback(
     useCallback(
-      () => mx.sendStateEvent(parentId, StateEvent.SpaceChild as any, {}, roomId),
+      () => mx.sendStateEvent(parentId, EventType.SpaceChild as keyof StateEvents, {}, roomId),
       [mx, parentId, roomId]
     )
   );
@@ -246,7 +248,7 @@ export function HierarchyItemMenu({
         radii="300"
         aria-pressed={!!menuAnchor}
       >
-        <Icon size="50" src={Icons.VerticalDots} />
+        {chipIcon(DotsThreeOutlineVerticalIcon, { weight: menuAnchor ? 'fill' : 'regular' })}
       </IconButton>
       {menuAnchor && (
         <PopOut
@@ -307,7 +309,7 @@ export function HierarchyItemMenu({
                             variant="Critical"
                             fill="None"
                             size="300"
-                            after={<Icon size="100" src={Icons.ArrowGoLeft} />}
+                            after={menuIcon(SignOut)}
                             radii="300"
                             aria-pressed={promptLeave}
                           >

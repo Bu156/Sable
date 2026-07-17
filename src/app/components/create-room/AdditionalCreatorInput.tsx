@@ -1,34 +1,30 @@
+import type { RectCords } from 'folds';
 import {
   Box,
   Button,
   Chip,
   config,
-  Icon,
-  Icons,
   Input,
   Line,
   Menu,
   MenuItem,
   PopOut,
-  RectCords,
   Scroll,
   Text,
   toRem,
 } from 'folds';
+import { Plus, X, sizedIcon } from '$components/icons/phosphor';
 import { isKeyHotkey } from 'is-hotkey';
 import FocusTrap from 'focus-trap-react';
-import {
-  ChangeEventHandler,
-  KeyboardEventHandler,
-  MouseEventHandler,
-  useMemo,
-  useState,
-} from 'react';
-import { getMxIdLocalPart, getMxIdServer, isUserId } from '$utils/matrix';
+import { getMxIdServer } from '$utils/mxIdHelper';
+import type { ChangeEventHandler, KeyboardEventHandler, MouseEventHandler } from 'react';
+import { useMemo, useState } from 'react';
+import { getMxIdLocalPart, isUserId } from '$utils/matrix';
 import { useDirectUsers } from '$hooks/useDirectUsers';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { stopPropagation } from '$utils/keyboard';
-import { useAsyncSearch, UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
+import type { UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
+import { useAsyncSearch } from '$hooks/useAsyncSearch';
 import { highlightText, makeHighlightRegex } from '$plugins/react-custom-html-parser';
 import { SettingTile } from '$components/setting-tile';
 
@@ -101,7 +97,7 @@ export function AdditionalCreatorInput({
 
   const suggestionUsers = result
     ? result.items
-    : filteredUsers.sort((a, b) => (a.toLocaleLowerCase() >= b.toLocaleLowerCase() ? 1 : -1));
+    : filteredUsers.toSorted((a, b) => (a.toLocaleLowerCase() >= b.toLocaleLowerCase() ? 1 : -1));
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     setMenuCords(evt.currentTarget.getBoundingClientRect());
@@ -164,7 +160,7 @@ export function AdditionalCreatorInput({
               key={creator}
               variant="Secondary"
               radii="Pill"
-              after={<Icon size="50" src={Icons.Cross} />}
+              after={sizedIcon(X, '50')}
               onClick={() => onRemove(creator)}
               disabled={disabled}
             >
@@ -224,7 +220,10 @@ export function AdditionalCreatorInput({
                             grow="Yes"
                             direction="Column"
                             gap="100"
-                            style={{ padding: config.space.S200, paddingRight: 0 }}
+                            style={{
+                              padding: config.space.S200,
+                              paddingRight: 0,
+                            }}
                           >
                             {suggestionUsers.map((userId) => (
                               <MenuItem
@@ -284,7 +283,7 @@ export function AdditionalCreatorInput({
               aria-pressed={!!menuCords}
               disabled={disabled}
             >
-              <Icon size="50" src={Icons.Plus} />
+              {sizedIcon(Plus, '50')}
             </Chip>
           </PopOut>
         </Box>

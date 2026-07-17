@@ -1,7 +1,10 @@
 import { createContext, useCallback, useContext, useMemo } from 'react';
-import { ConditionKind, IPushRules, MatrixClient, PushRuleKind } from '$types/matrix-sdk';
-import { Icons, IconSrc } from 'folds';
-import { AccountDataEvent } from '$types/matrix/accountData';
+import type { ReactNode } from 'react';
+import type { IPushRules, MatrixClient } from '$types/matrix-sdk';
+import { ConditionKind, PushRuleKind, EventType } from '$types/matrix-sdk';
+import type { IconProps } from '@phosphor-icons/react';
+import { Bell, BellRinging, BellSlash, chipIcon, menuIcon } from '$components/icons/phosphor';
+
 import { isRoomId } from '$utils/matrix';
 import { useAccountData } from './useAccountData';
 import {
@@ -34,7 +37,7 @@ export const useRoomsNotificationPreferencesContext = (): RoomsNotificationPrefe
 };
 
 export const useRoomsNotificationPreferences = (): RoomsNotificationPreferences => {
-  const pushRules = useAccountData(AccountDataEvent.PushRules)?.getContent<IPushRules>();
+  const pushRules = useAccountData(EventType.PushRules)?.getContent<IPushRules>();
 
   const preferences: RoomsNotificationPreferences = useMemo(() => {
     const global = pushRules?.global;
@@ -99,12 +102,23 @@ export const useRoomNotificationPreference = (
 ): RoomNotificationMode =>
   useMemo(() => getRoomNotificationMode(preferences, roomId), [preferences, roomId]);
 
-export const getRoomNotificationModeIcon = (mode?: RoomNotificationMode): IconSrc => {
-  if (mode === RoomNotificationMode.Mute) return Icons.BellMute;
-  if (mode === RoomNotificationMode.SpecialMessages) return Icons.BellPing;
-  if (mode === RoomNotificationMode.AllMessages) return Icons.BellRing;
+export const roomNotificationModeIcon = (
+  mode?: RoomNotificationMode,
+  props?: IconProps
+): ReactNode => {
+  if (mode === RoomNotificationMode.Mute) return menuIcon(BellSlash, props);
+  if (mode === RoomNotificationMode.SpecialMessages) return menuIcon(Bell, props);
+  if (mode === RoomNotificationMode.AllMessages) return menuIcon(BellRinging, props);
 
-  return Icons.Bell;
+  return menuIcon(Bell, props);
+};
+
+export const roomNotificationModeChipIcon = (mode?: RoomNotificationMode): ReactNode => {
+  if (mode === RoomNotificationMode.Mute) return chipIcon(BellSlash);
+  if (mode === RoomNotificationMode.SpecialMessages) return chipIcon(Bell);
+  if (mode === RoomNotificationMode.AllMessages) return chipIcon(BellRinging);
+
+  return chipIcon(Bell);
 };
 
 export const setRoomNotificationPreference = async (

@@ -1,16 +1,19 @@
 import to from 'await-to-js';
-import { createClient, LoginRequest, LoginResponse, MatrixError } from '$types/matrix-sdk';
-import { useEffect } from 'react';
+import type { LoginRequest, LoginResponse } from '$types/matrix-sdk';
+import { createClient, MatrixError } from '$types/matrix-sdk';
+import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
 import * as Sentry from '@sentry/react';
-import { clientAllowedServer, ClientConfig } from '$hooks/useClientConfig';
+import type { ClientConfig } from '$hooks/useClientConfig';
+import { clientAllowedServer } from '$hooks/useClientConfig';
 import {
   deleteAfterLoginRedirectPath,
   getAfterLoginRedirectPath,
 } from '$pages/afterLoginRedirectPath';
+import { clearPendingSlidingSyncLogin } from './slidingSyncLogin';
 import { getHomePath } from '$pages/pathUtils';
-import { activeSessionIdAtom, sessionsAtom } from '$state/sessions';
+import { activeSessionIdAtom, sessionsAtom, type Session } from '$state/sessions';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import { fetch } from '$utils/fetch';
@@ -72,7 +75,7 @@ export const login = async (
   if (urlError) {
     throw new MatrixError({
       errcode:
-        urlError.message === GetBaseUrlError.NotAllow
+        urlError.message === (GetBaseUrlError.NotAllow as string)
           ? LoginError.ServerNotAllowed
           : LoginError.InvalidServer,
     });
@@ -92,7 +95,9 @@ export const login = async (
           attributes: { errcode: err.errcode ?? 'unknown' },
         });
         if (err.httpStatus === 400) {
-          debugLog.error('general', 'Login failed - invalid request', { httpStatus: 400 });
+          debugLog.error('general', 'Login failed - invalid request', {
+            httpStatus: 400,
+          });
           throw new MatrixError({
             errcode: LoginError.InvalidRequest,
           });
@@ -103,8 +108,10 @@ export const login = async (
             errcode: LoginError.RateLimited,
           });
         }
-        if (err.errcode === ErrorCode.M_USER_DEACTIVATED) {
-          debugLog.error('general', 'Login failed - user deactivated', { errcode: err.errcode });
+        if (err.errcode === (ErrorCode.M_USER_DEACTIVATED as string)) {
+          debugLog.error('general', 'Login failed - user deactivated', {
+            errcode: err.errcode,
+          });
           throw new MatrixError({
             errcode: LoginError.UserDeactivated,
           });
@@ -140,10 +147,34 @@ export const login = async (
   );
 };
 
-export const useLoginComplete = (data?: CustomLoginResponse) => {
+/**
+ * Commits a session to the store, makes it active, and navigates into the app. Shared by the
+ * password/token login path and the OIDC callback.
+ */
+export const useCommitLoginSession = () => {
   const navigate = useNavigate();
   const setSessions = useSetAtom(sessionsAtom);
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
+
+  return useCallback(
+    (session: Session, slidingSyncOptIn?: boolean) => {
+      const committedSession =
+        slidingSyncOptIn === undefined ? session : { ...session, slidingSyncOptIn };
+      setSessions({ type: 'PUT', session: committedSession });
+      setActiveSessionId(committedSession.userId);
+      clearPendingSlidingSyncLogin();
+      const afterLoginRedirectUrl = getAfterLoginRedirectPath();
+      deleteAfterLoginRedirectPath();
+      const destination = afterLoginRedirectUrl ?? getHomePath();
+      log.log('commitLoginSession: navigating to', destination);
+      navigate(destination, { replace: true });
+    },
+    [navigate, setSessions, setActiveSessionId]
+  );
+};
+
+export const useLoginComplete = (data?: CustomLoginResponse, slidingSyncOptIn?: boolean) => {
+  const commitSession = useCommitLoginSession();
 
   useEffect(() => {
     if (data) {
@@ -152,19 +183,13 @@ export const useLoginComplete = (data?: CustomLoginResponse) => {
         userId: loginRes.user_id,
         baseUrl: loginBaseUrl,
       });
-      const newSession = {
+      const newSession: Session = {
         baseUrl: loginBaseUrl,
         userId: loginRes.user_id,
         deviceId: loginRes.device_id,
         accessToken: loginRes.access_token,
       };
-      setSessions({ type: 'PUT', session: newSession });
-      setActiveSessionId(loginRes.user_id);
-      const afterLoginRedirectUrl = getAfterLoginRedirectPath();
-      deleteAfterLoginRedirectPath();
-      const destination = afterLoginRedirectUrl ?? getHomePath();
-      log.log('useLoginComplete: navigating to', destination);
-      navigate(destination, { replace: true });
+      commitSession(newSession, slidingSyncOptIn);
     }
-  }, [data, navigate, setSessions, setActiveSessionId]);
+  }, [data, slidingSyncOptIn, commitSession]);
 };

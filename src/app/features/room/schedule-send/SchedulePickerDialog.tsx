@@ -1,5 +1,9 @@
-import { MouseEventHandler, useState } from 'react';
+import type { MouseEventHandler } from 'react';
+import { useState } from 'react';
+import { useAtomValue } from 'jotai';
+import { CaretDown, chipIcon, composerIcon, X } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
+import type { RectCords } from 'folds';
 import {
   Dialog,
   Overlay,
@@ -10,19 +14,17 @@ import {
   Box,
   Text,
   IconButton,
-  Icon,
-  Icons,
   color,
   Button,
   Chip,
   PopOut,
-  RectCords,
 } from 'folds';
 import { stopPropagation } from '$utils/keyboard';
 import { timeDayMonthYear, timeHourMinute, hoursToMs, daysToMs } from '$utils/time';
 import { DatePicker, TimePicker } from '$components/time-date';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { serverMaxDelayMsAtom } from '$state/scheduledMessages';
 
 type SchedulePickerDialogProps = {
   initialTime?: number;
@@ -38,7 +40,9 @@ export function SchedulePickerDialog({
   onSubmit,
 }: SchedulePickerDialogProps) {
   const now = Date.now();
-  const maxDelay = daysToMs(30);
+  const serverMaxDelayMs = useAtomValue(serverMaxDelayMsAtom);
+  const maxDelay = serverMaxDelayMs ?? daysToMs(30);
+  const maxDays = Math.round(maxDelay / daysToMs(1));
   const defaultTs = initialTime ?? now + hoursToMs(1);
   const [ts, setTs] = useState(() => Math.max(defaultTs, now + 60000));
   const [error, setError] = useState<string>();
@@ -66,7 +70,7 @@ export function SchedulePickerDialog({
       return;
     }
     if (delay > maxDelay) {
-      setError('Cannot schedule more than 30 days in advance');
+      setError(`Cannot schedule more than ${maxDays} day${maxDays !== 1 ? 's' : ''} in advance`);
       return;
     }
     setError(undefined);
@@ -105,7 +109,7 @@ export function SchedulePickerDialog({
                 title="Cancel scheduling"
                 aria-label="Cancel scheduling"
               >
-                <Icon src={Icons.Cross} />
+                {composerIcon(X)}
               </IconButton>
             </Header>
             <Box direction="Column" gap="500" style={{ padding: config.space.S400 }}>
@@ -122,7 +126,7 @@ export function SchedulePickerDialog({
                       outlined
                       radii="300"
                       aria-pressed={!!timePickerCords}
-                      after={<Icon size="50" src={Icons.ChevronBottom} />}
+                      after={chipIcon(CaretDown)}
                       onClick={handleTimePicker}
                     >
                       <Text size="B300">{timeHourMinute(ts, hour24Clock)}</Text>
@@ -163,7 +167,7 @@ export function SchedulePickerDialog({
                       outlined
                       radii="300"
                       aria-pressed={!!datePickerCords}
-                      after={<Icon size="50" src={Icons.ChevronBottom} />}
+                      after={chipIcon(CaretDown)}
                       onClick={handleDatePicker}
                     >
                       <Text size="B300">{timeDayMonthYear(ts)}</Text>

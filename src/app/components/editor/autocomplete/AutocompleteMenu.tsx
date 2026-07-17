@@ -1,12 +1,13 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { Header, Menu, Scroll, config } from 'folds';
 
 import { preventScrollWithArrowKey, stopPropagation } from '$utils/keyboard';
 import { useAlive } from '$hooks/useAlive';
-import { Editor } from 'slate';
-import { ReactEditor } from 'slate-react';
+import type { Editor } from 'slate';
+import { focusEditor } from '$components/editor/utils';
 import * as css from './AutocompleteMenu.css';
 import { BaseAutocompleteMenu } from './BaseAutocompleteMenu';
 
@@ -32,8 +33,8 @@ export function AutocompleteMenu({
     }
   };
   const [isActive, setIsActive] = useState(true);
-  useEffect(() => ReactEditor.focus(editor), [editor, isActive]);
-  function handleInput(evt: any) {
+  useEffect(() => focusEditor(editor), [editor, isActive]);
+  function handleInput(evt: KeyboardEvent) {
     if (!evt) return;
     if (
       isKeyHotkey('arrowdown', evt) ||
@@ -61,7 +62,10 @@ export function AutocompleteMenu({
           escapeDeactivates: stopPropagation,
         }}
       >
-        <Menu className={css.AutocompleteMenu} onKeyDown={(evt) => handleInput(evt)}>
+        <Menu
+          className={css.AutocompleteMenu}
+          onKeyDown={(evt) => handleInput(evt as unknown as KeyboardEvent)}
+        >
           <Header className={css.AutocompleteMenuHeader} size="400">
             {headerContent}
           </Header>

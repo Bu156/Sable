@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Box } from 'folds';
 import { matchPath, useLocation } from 'react-router-dom';
 import { useScreenSizeContext } from '$hooks/useScreenSize';
@@ -17,7 +17,7 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
     !isShallowSettingsRoute(location.pathname, location.state, screenSize);
 
   return (
-    <Box grow="Yes">
+    <Box grow="Yes" direction="Row">
       {!fullPageSettings && <Box shrink="No">{nav}</Box>}
       <Box grow="Yes">{children}</Box>
     </Box>

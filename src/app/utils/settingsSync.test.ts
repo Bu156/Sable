@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getSettings } from '$state/settings';
+import { getSettings, resetRuntimeSettingsDefaults } from '$state/settings';
 import {
   NON_SYNCABLE_KEYS,
   SETTINGS_SYNC_VERSION,
@@ -15,6 +15,7 @@ let base: ReturnType<typeof getSettings>;
 
 beforeEach(() => {
   localStorage.clear();
+  resetRuntimeSettingsDefaults();
   base = getSettings();
 });
 
@@ -32,7 +33,12 @@ describe('NON_SYNCABLE_KEYS', () => {
       'isPeopleDrawer',
       'isWidgetDrawer',
       'memberSortFilterIndex',
-      'settingsLinkBaseUrlOverride',
+      'incomingCallSoundEnabled',
+      'outgoingRingbackEnabled',
+      'callRingtoneVolume',
+      'callRingtoneId',
+      'callRingbackTone',
+      'callSoundOverrideGlobalNotifications',
       'developerTools',
       'settingsSyncEnabled',
     ] as const;
@@ -44,7 +50,6 @@ describe('NON_SYNCABLE_KEYS', () => {
 
   it('does not include ordinary syncable keys', () => {
     const syncable = [
-      'isMarkdown',
       'twitterEmoji',
       'messageLayout',
       'urlPreview',
@@ -68,9 +73,8 @@ describe('serializeForSync', () => {
   });
 
   it('includes syncable settings fields', () => {
-    const settings = { ...base, isMarkdown: false, twitterEmoji: false };
+    const settings = { ...base, twitterEmoji: false };
     const { settings: s } = serializeForSync(settings);
-    expect(s.isMarkdown).toBe(false);
     expect(s.twitterEmoji).toBe(false);
   });
 
@@ -127,10 +131,12 @@ describe('deserializeFromSync', () => {
   });
 
   it('merges remote settings over local', () => {
-    const remote = { v: SETTINGS_SYNC_VERSION, settings: { isMarkdown: false, urlPreview: false } };
-    const result = deserializeFromSync(remote, { ...base, isMarkdown: true, urlPreview: true });
+    const remote = {
+      v: SETTINGS_SYNC_VERSION,
+      settings: { urlPreview: false },
+    };
+    const result = deserializeFromSync(remote, { ...base, urlPreview: true });
     expect(result).not.toBeNull();
-    expect(result!.isMarkdown).toBe(false);
     expect(result!.urlPreview).toBe(false);
   });
 
@@ -142,6 +148,7 @@ describe('deserializeFromSync', () => {
         backgroundPushEnabled: false,
         backgroundPushProvider: 'native',
         isPeopleDrawer: false,
+        callRingtoneVolume: 20,
         settingsSyncEnabled: true,
         developerTools: true,
       },
@@ -152,6 +159,7 @@ describe('deserializeFromSync', () => {
       backgroundPushEnabled: true,
       backgroundPushProvider: 'unifiedpush' as const,
       isPeopleDrawer: true,
+      callRingtoneVolume: 80,
       settingsSyncEnabled: false,
     };
     const result = deserializeFromSync(remote, local);
@@ -160,16 +168,16 @@ describe('deserializeFromSync', () => {
     expect(result!.backgroundPushEnabled).toBe(true);
     expect(result!.backgroundPushProvider).toBe('unifiedpush');
     expect(result!.isPeopleDrawer).toBe(true);
+    expect(result!.callRingtoneVolume).toBe(80);
     expect(result!.settingsSyncEnabled).toBe(false);
     expect(result!.developerTools).toBe(false);
   });
 
   it('round-trips through serialize then deserialize correctly', () => {
-    const tweaked = { ...base, isMarkdown: false, hour24Clock: true };
+    const tweaked = { ...base, hour24Clock: true };
     const payload = serializeForSync(tweaked);
     const result = deserializeFromSync(payload, base);
     expect(result).not.toBeNull();
-    expect(result!.isMarkdown).toBe(false);
     expect(result!.hour24Clock).toBe(true);
     // non-syncable comes from base, not tweaked (pageZoom etc. same anyway)
     expect(result!.settingsSyncEnabled).toBe(base.settingsSyncEnabled);
@@ -178,11 +186,11 @@ describe('deserializeFromSync', () => {
   it('ignores extra unknown keys in the remote payload', () => {
     const remote = {
       v: SETTINGS_SYNC_VERSION,
-      settings: { isMarkdown: false, __unknown: 'surprise' },
+      settings: { twitterEmoji: false, __unknown: 'surprise' },
     };
     const result = deserializeFromSync(remote, base);
     expect(result).not.toBeNull();
-    expect(result!.isMarkdown).toBe(false);
+    expect(result!.twitterEmoji).toBe(false);
   });
 });
 
@@ -194,10 +202,10 @@ describe('exportSettingsAsJson', () => {
 
   beforeEach(() => {
     fakeUrl = 'blob:fake-url';
-    anchorClick = vi.fn();
+    anchorClick = vi.fn<() => void>();
     vi.stubGlobal('URL', {
-      createObjectURL: vi.fn().mockReturnValue(fakeUrl),
-      revokeObjectURL: vi.fn(),
+      createObjectURL: vi.fn<() => string>().mockReturnValue(fakeUrl),
+      revokeObjectURL: vi.fn<() => void>(),
     });
 
     // Intercept anchor element creation to capture click calls.
@@ -219,15 +227,17 @@ describe('exportSettingsAsJson', () => {
   it('calls URL.createObjectURL with a JSON Blob', () => {
     exportSettingsAsJson(base);
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
-    const blob: Blob = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const blob: Blob | undefined = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
     expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe('application/json');
+    expect(blob!.type).toBe('application/json');
   });
 
   it('Blob content is valid JSON with the correct schema version and all settings', async () => {
     exportSettingsAsJson(base);
-    const blob: Blob = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const text = await blob.text();
+    const blob: Blob | undefined = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
+    const text = await blob!.text();
     const parsed = JSON.parse(text);
     expect(parsed.v).toBe(SETTINGS_SYNC_VERSION);
     expect(typeof parsed.settings).toBe('object');
@@ -249,21 +259,29 @@ describe('exportSettingsAsJson', () => {
 // importSettingsFromJson
 
 describe('importSettingsFromJson', () => {
+  let changeListener: ((ev: Event) => void) | null;
   let mockInput: {
     type: string;
     accept: string;
     files: FileList | null;
-    onchange: ((ev: Event) => void) | null;
-    click: ReturnType<typeof vi.fn>;
+    addEventListener: (type: string, listener: (ev: Event) => void) => void;
+    click: () => void;
   };
 
   beforeEach(() => {
+    changeListener = null;
     mockInput = {
       type: '',
       accept: '',
       files: null,
-      onchange: null,
-      click: vi.fn(),
+      addEventListener: vi.fn<(type: string, listener: (ev: Event) => void) => void>(
+        (type: string, listener: (ev: Event) => void) => {
+          if (type === 'change') {
+            changeListener = listener;
+          }
+        }
+      ),
+      click: vi.fn<() => void>(),
     };
 
     const realCreate = document.createElement.bind(document);
@@ -280,50 +298,69 @@ describe('importSettingsFromJson', () => {
   it('resolves null when no file is selected (empty files list)', async () => {
     // Start the promise, then immediately trigger onchange with no file.
     const promise = importSettingsFromJson(base);
-    mockInput.onchange?.(new Event('change'));
+    changeListener?.(new Event('change'));
     await expect(promise).resolves.toBeNull();
   });
 
   it('resolves merged settings when a valid JSON file is provided', async () => {
-    const payload = { v: SETTINGS_SYNC_VERSION, settings: { isMarkdown: false } };
+    const payload = {
+      v: SETTINGS_SYNC_VERSION,
+      settings: { twitterEmoji: false },
+    };
     const fileContent = JSON.stringify(payload);
-    const file = new File([fileContent], 'settings.json', { type: 'application/json' });
+    const file = new File([fileContent], 'settings.json', {
+      type: 'application/json',
+    });
 
     // Build a minimal FileList-like object.
-    const fakeFileList = { 0: file, length: 1, item: () => file } as unknown as FileList;
+    const fakeFileList = {
+      0: file,
+      length: 1,
+      item: () => file,
+    } as unknown as FileList;
     mockInput.files = fakeFileList;
 
-    const promise = importSettingsFromJson({ ...base, isMarkdown: true });
+    const promise = importSettingsFromJson({ ...base, twitterEmoji: true });
 
     // Trigger the change event; the file reader will asynchronously call onload.
-    mockInput.onchange?.(new Event('change'));
+    changeListener?.(new Event('change'));
 
     const result = await promise;
     expect(result).not.toBeNull();
-    expect(result!.isMarkdown).toBe(false);
+    expect(result!.twitterEmoji).toBe(false);
   });
 
   it('resolves null when the file contains invalid JSON', async () => {
-    const file = new File(['not json {{'], 'bad.json', { type: 'application/json' });
-    const fakeFileList = { 0: file, length: 1, item: () => file } as unknown as FileList;
+    const file = new File(['not json {{'], 'bad.json', {
+      type: 'application/json',
+    });
+    const fakeFileList = {
+      0: file,
+      length: 1,
+      item: () => file,
+    } as unknown as FileList;
     mockInput.files = fakeFileList;
 
     const promise = importSettingsFromJson(base);
-    mockInput.onchange?.(new Event('change'));
+    changeListener?.(new Event('change'));
 
     await expect(promise).resolves.toBeNull();
   });
 
   it('resolves null when the JSON has an incompatible schema version', async () => {
-    const payload = { v: 99, settings: { isMarkdown: false } };
+    const payload = { v: 99, settings: { twitterEmoji: false } };
     const file = new File([JSON.stringify(payload)], 'settings.json', {
       type: 'application/json',
     });
-    const fakeFileList = { 0: file, length: 1, item: () => file } as unknown as FileList;
+    const fakeFileList = {
+      0: file,
+      length: 1,
+      item: () => file,
+    } as unknown as FileList;
     mockInput.files = fakeFileList;
 
     const promise = importSettingsFromJson(base);
-    mockInput.onchange?.(new Event('change'));
+    changeListener?.(new Event('change'));
 
     await expect(promise).resolves.toBeNull();
   });

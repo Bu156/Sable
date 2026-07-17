@@ -1,4 +1,5 @@
-import { FormEventHandler, useCallback, useMemo, useState } from 'react';
+import type { FormEventHandler } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Box,
   Text,
@@ -6,12 +7,11 @@ import {
   AvatarImage,
   AvatarFallback,
   Button,
-  Icon,
-  Icons,
   Input,
   TextArea,
   Chip,
 } from 'folds';
+import { sizedIcon, PencilSimple } from '$components/icons/phosphor';
 import Linkify from 'linkify-react';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -21,7 +21,8 @@ import { LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { useObjectURL } from '$hooks/useObjectURL';
-import { createUploadAtom, UploadSuccess } from '$state/upload';
+import type { UploadSuccess } from '$state/upload';
+import { createUploadAtom } from '$state/upload';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { PackMetaReader } from '$plugins/custom-emoji';
@@ -77,7 +78,7 @@ export function ImagePackProfile({ meta, canEdit, onEdit }: ImagePackProfileProp
               variant="Secondary"
               fill="Soft"
               radii="300"
-              before={<Icon size="50" src={Icons.Pencil} />}
+              before={sizedIcon(PencilSimple, '50')}
               onClick={onEdit}
               outlined
             >

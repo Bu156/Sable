@@ -1,5 +1,6 @@
 import { AvatarFallback, AvatarImage, color } from 'folds';
-import { ReactEventHandler, ReactNode, useEffect, useState } from 'react';
+import type { ReactEventHandler, ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import colorMXID from '$utils/colorMXID';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
@@ -12,6 +13,11 @@ type UserAvatarProps = {
   alt?: string;
   renderFallback: () => ReactNode;
 };
+
+const handleImageLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
+  evt.currentTarget.setAttribute('data-image-loaded', 'true');
+};
+
 export function UserAvatar({ className, userId, src, alt, renderFallback }: UserAvatarProps) {
   const [error, setError] = useState(false);
   const resolvedSrc = useRenderableMediaUrl(src);
@@ -19,10 +25,6 @@ export function UserAvatar({ className, userId, src, alt, renderFallback }: User
   useEffect(() => {
     setError(false);
   }, [src]);
-
-  const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
-    evt.currentTarget.setAttribute('data-image-loaded', 'true');
-  };
 
   if (!src || error) {
     return (
@@ -41,7 +43,7 @@ export function UserAvatar({ className, userId, src, alt, renderFallback }: User
       src={resolvedSrc ?? src}
       alt={alt}
       onError={() => setError(true)}
-      onLoad={handleLoad}
+      onLoad={handleImageLoad}
       draggable={false}
     />
   );

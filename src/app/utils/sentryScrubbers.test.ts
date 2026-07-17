@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { scrubMatrixIds, scrubDataObject, scrubMatrixUrl } from './sentryScrubbers';
+import {
+  omitSentryIdentifierFields,
+  scrubMatrixIds,
+  scrubDataObject,
+  sanitizeSentryPayload,
+  scrubMatrixUrl,
+} from './sentryScrubbers';
 
 // ─── scrubMatrixIds ───────────────────────────────────────────────────────────
 
@@ -233,6 +239,26 @@ describe('scrubMatrixUrl – preview_url', () => {
   });
 });
 
+describe('scrubMatrixUrl – auth callback credentials', () => {
+  it('redacts OAuth code and state query params', () => {
+    expect(scrubMatrixUrl('https://app.example/login/hs?code=abc123&state=xyz789')).toBe(
+      'https://app.example/login/hs?code=[REDACTED]&state=[REDACTED]'
+    );
+  });
+
+  it('redacts params inside a hash-router fragment', () => {
+    expect(scrubMatrixUrl('https://app.example/#/login/hs?code=abc123')).toBe(
+      'https://app.example/#/login/hs?code=[REDACTED]'
+    );
+  });
+
+  it('redacts the legacy SSO loginToken', () => {
+    expect(scrubMatrixUrl('/login/hs?loginToken=syt_secret')).toBe(
+      '/login/hs?loginToken=[REDACTED]'
+    );
+  });
+});
+
 describe('scrubMatrixUrl – safe inputs', () => {
   it('passes through a plain path with no Matrix IDs', () => {
     const safe = '/home/timeline';
@@ -241,5 +267,34 @@ describe('scrubMatrixUrl – safe inputs', () => {
 
   it('passes through an empty string', () => {
     expect(scrubMatrixUrl('')).toBe('');
+  });
+});
+
+describe('omitSentryIdentifierFields', () => {
+  it('removes identifier keys from call telemetry payloads', () => {
+    expect(
+      omitSentryIdentifierFields({
+        roomId: '!room:example.org',
+        notificationEventId: '$notif',
+        notificationType: 'ring',
+        dm: true,
+      })
+    ).toEqual({
+      notificationType: 'ring',
+      dm: true,
+    });
+  });
+});
+
+describe('sanitizeSentryPayload', () => {
+  it('drops identifier keys and redacts remaining Matrix IDs', () => {
+    expect(
+      sanitizeSentryPayload({
+        roomId: '!room:example.org',
+        message: 'from @alice:example.org',
+      })
+    ).toEqual({
+      message: 'from @[USER_ID]',
+    });
   });
 });

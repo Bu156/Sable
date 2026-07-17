@@ -1,27 +1,32 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import * as Sentry from '@sentry/react';
-import { ReactNode, useCallback, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { RoomEventHandlerMap } from '$types/matrix-sdk';
+import { getPresenceSyncManager } from '$client/initMatrix';
 import {
   MatrixEvent,
   MatrixEventEvent,
   PushProcessor,
   RoomEvent,
-  RoomEventHandlerMap,
   SetPresence,
+  SyncState,
+  EventType,
 } from '$types/matrix-sdk';
 import parse from 'html-react-parser';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
 import { sanitizeCustomHtml } from '$utils/sanitize';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
-import LogoSVG from '$public/res/svg/cinny-logo.svg';
-import LogoUnreadSVG from '$public/res/svg/cinny-unread.svg';
-import LogoHighlightSVG from '$public/res/svg/cinny-highlight.svg';
+import LogoSVG from '$public/res/svg/logo.svg';
+import LogoUnreadSVG from '$public/res/svg/unread.svg';
+import LogoHighlightSVG from '$public/res/svg/highlight.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { IconSizesProvider } from '$components/icons/phosphor';
 import { nicknamesAtom } from '$state/nicknames';
 import { mDirectAtom } from '$state/mDirectList';
 import { allInvitesAtom } from '$state/room-list/inviteList';
@@ -34,7 +39,7 @@ import {
   isDMRoom,
   isNotificationEvent,
 } from '$utils/room';
-import { NotificationType, StateEvent } from '$types/matrix/room';
+import { NotificationType, type RoomToUnread } from '$types/matrix/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '$hooks/router/useInbox';
@@ -49,29 +54,21 @@ import {
 import { mobileOrTablet } from '$utils/user-agent';
 import { createDebugLogger } from '$utils/debugLogger';
 import { useSlidingSyncActiveRoom } from '$hooks/useSlidingSyncActiveRoom';
-import { getSlidingSyncManager } from '$client/initMatrix';
 import { NotificationBanner } from '$components/notification-banner';
+import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
-import { useCallSignaling } from '$hooks/useCallSignaling';
-import { isTauri } from '@tauri-apps/api/core';
-import { type as osType } from '@tauri-apps/plugin-os';
-import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
+import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
+import { getBlobCacheStats } from '$hooks/useBlobCache';
 import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
+import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
+import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
+import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
-import {
-  NotificationTransportRuntime,
-  type NotificationTransportRuntimeContext,
-} from '../../features/settings/notifications/NotificationTransportRuntime';
-import {
-  normalizeNotificationTransportMode,
-  resolvePreferredNotificationTransportProvider,
-  type NotificationTransportPlatform,
-} from '../../features/settings/notifications/NotificationTransport';
+import { UnverifiedNoticeBanner } from '$components/unverified-notice';
 
 const pushRelayLog = createDebugLogger('push-relay');
-const transportLog = createDebugLogger('push-transport');
 
 function clearMediaSessionQuickly(): void {
   if (!('mediaSession' in navigator)) return;
@@ -110,6 +107,40 @@ function PageZoomFeature() {
   return null;
 }
 
+// Sum only leaf rooms (from === null); space entries aggregate their children
+// and would double-count.
+function getUnreadTotals(roomToUnread: RoomToUnread) {
+  let total = 0;
+  let highlightTotal = 0;
+  let notification = false;
+  let highlight = false;
+  roomToUnread.forEach((unread) => {
+    if (unread.from === null) {
+      total += unread.total;
+      highlightTotal += unread.highlight;
+    }
+    if (unread.total > 0) {
+      notification = true;
+    }
+    if (unread.highlight > 0) {
+      highlight = true;
+    }
+  });
+  return { total, highlightTotal, notification, highlight };
+}
+
+// Show the mention count in the tab title.
+function PageTitleUpdater() {
+  const roomToUnread = useAtomValue(roomToUnreadAtom);
+
+  useEffect(() => {
+    const { highlightTotal } = getUnreadTotals(roomToUnread);
+    document.title = highlightTotal > 0 ? `(${highlightTotal}) Sable Client` : 'Sable Client';
+  }, [roomToUnread]);
+
+  return null;
+}
+
 function FaviconUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
@@ -117,22 +148,7 @@ function FaviconUpdater() {
   const registration = useAtomValue(registrationAtom);
 
   useEffect(() => {
-    let notification = false;
-    let highlight = false;
-    let total = 0;
-    let highlightTotal = 0;
-    roomToUnread.forEach((unread) => {
-      if (unread.from === null) {
-        total += unread.total;
-        highlightTotal += unread.highlight;
-      }
-      if (unread.total > 0) {
-        notification = true;
-      }
-      if (unread.highlight > 0) {
-        highlight = true;
-      }
-    });
+    const { total, highlightTotal, notification, highlight } = getUnreadTotals(roomToUnread);
 
     if (highlight) {
       setFavicon(LogoHighlightSVG);
@@ -185,6 +201,7 @@ function InviteNotifications() {
   const [showSystemNotifications] = useSetting(settingsAtom, 'useSystemNotifications');
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
   const [notificationSound] = useSetting(settingsAtom, 'isNotificationSounds');
+  const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
 
   const notify = useCallback(
     (count: number) => {
@@ -195,22 +212,22 @@ function InviteNotifications() {
         silent: true,
       });
 
-      noti.onclick = () => {
+      noti.addEventListener('click', () => {
         if (!window.closed) navigate(getInboxInvitesPath());
         noti.close();
-      };
+      });
     },
     [navigate]
   );
 
   const playSound = useCallback(() => {
     const audioElement = audioRef.current;
-    audioElement?.play();
+    audioElement?.play()?.catch(() => {});
     clearMediaSessionQuickly();
   }, []);
 
   useEffect(() => {
-    if (invites.length <= perviousInviteLen || mx.getSyncState() !== 'SYNCING') return;
+    if (invites.length <= perviousInviteLen || mx.getSyncState() !== SyncState.Syncing) return;
 
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
@@ -223,8 +240,8 @@ function InviteNotifications() {
         // window.Notification may be unavailable in sandboxed environments.
       }
     }
-    // Audio API requires a visible document; skip when hidden.
-    if (document.visibilityState === 'visible' && notificationSound) {
+    const tabVisible = document.visibilityState === 'visible';
+    if (notificationSound && (tabVisible || backgroundNotificationSounds)) {
       playSound();
     }
   }, [
@@ -234,12 +251,13 @@ function InviteNotifications() {
     showSystemNotifications,
     usePushNotifications,
     notificationSound,
+    backgroundNotificationSounds,
     notify,
     playSound,
   ]);
 
   return (
-    // eslint-disable-next-line jsx-a11y/media-has-caption
+    // oxlint-disable-next-line jsx-a11y/media-has-caption
     <audio ref={audioRef} style={{ display: 'none' }}>
       <source src={InviteSound} type="audio/ogg" />
     </audio>
@@ -248,7 +266,7 @@ function InviteNotifications() {
 
 function MessageNotifications() {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const notifiedEventsRef = useRef<Set<string>>(new Set());
+  const notifiedEventsRef = useRef(new Set());
   // Record mount time so we can distinguish live events from historical backfill
   // on sliding sync proxies that don't set num_live (which causes liveEvent=false
   // for all events, including actually-new messages).
@@ -260,6 +278,7 @@ function MessageNotifications() {
   const [showSystemNotifications] = useSetting(settingsAtom, 'useSystemNotifications');
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
   const [notificationSound] = useSetting(settingsAtom, 'isNotificationSounds');
+  const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
   const [showMessageContent] = useSetting(settingsAtom, 'showMessageContentInNotifications');
   const [showEncryptedMessageContent] = useSetting(
     settingsAtom,
@@ -279,7 +298,7 @@ function MessageNotifications() {
 
   const playSound = useCallback(() => {
     const audioElement = audioRef.current;
-    audioElement?.play();
+    audioElement?.play()?.catch(() => {});
     clearMediaSessionQuickly();
   }, []);
 
@@ -295,11 +314,11 @@ function MessageNotifications() {
     const handleTimelineEvent: RoomEventHandlerMap[RoomEvent.Timeline] = (
       mEvent,
       room,
-      toStartOfTimeline,
-      removed,
+      _toStartOfTimeline,
+      _removed,
       data
     ) => {
-      if (mx.getSyncState() !== 'SYNCING') return;
+      if (mx.getSyncState() !== SyncState.Syncing) return;
 
       const eventId = mEvent.getId();
       // Record event arrival time once per eventId (re-entry via handleDecrypted must not reset it)
@@ -338,7 +357,7 @@ function MessageNotifications() {
 
         const handleDecrypted = () => {
           // After decryption, run the notification logic with the decrypted event
-          handleTimelineEvent(mEvent, room, undefined, removed, data);
+          handleTimelineEvent(mEvent, room, undefined, true, data);
           // Clean up the skip-focus marker
           if (eventId) {
             skipFocusCheckEvents.delete(eventId);
@@ -373,7 +392,12 @@ function MessageNotifications() {
         Sentry.metrics.distribution(
           'sable.notification.delivery_ms',
           performance.now() - arrivalMs,
-          { attributes: { encrypted: String(mEvent.isEncrypted()), dm: String(isDM) } }
+          {
+            attributes: {
+              encrypted: String(mEvent.isEncrypted()),
+              dm: String(isDM),
+            },
+          }
         );
         notifyTimerMap.delete(eventId);
       }
@@ -417,7 +441,7 @@ function MessageNotifications() {
       // is reached, causing in-app notifications to silently vanish too.
       if (!mobileOrTablet() && showSystemNotifications && notificationPermission('granted')) {
         try {
-          const isEncryptedRoom = !!getStateEvent(room, StateEvent.RoomEncryption);
+          const isEncryptedRoom = !!getStateEvent(room, EventType.RoomEncryption);
           const avatarMxc =
             room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
           const osPayload = buildRoomMessageNotification({
@@ -441,18 +465,27 @@ function MessageNotifications() {
           });
           const noti = new window.Notification(osPayload.title, osPayload.options);
           const { roomId } = room;
-          noti.onclick = () => {
+          noti.addEventListener('click', () => {
             window.focus();
-            setPending({ roomId, eventId, targetSessionId: mx.getUserId() ?? undefined });
+            setPending({
+              roomId,
+              eventId,
+              targetSessionId: mx.getUserId() ?? undefined,
+            });
             noti.close();
-          };
+          });
         } catch {
           // window.Notification unavailable or blocked (sandboxed context, DnD, etc.)
         }
       }
 
-      // Everything below requires the page to be visible (in-app UI + audio).
-      if (document.visibilityState !== 'visible') return;
+      const tabVisible = document.visibilityState === 'visible';
+      if (notificationSound && isLoud && (tabVisible || backgroundNotificationSounds)) {
+        playSound();
+      }
+
+      // In-app banner requires a visible tab.
+      if (!tabVisible) return;
 
       // Page is visible — show the themed in-app notification banner.
       // For non-DM rooms, only show banner for highlighted messages (mentions/keywords).
@@ -520,14 +553,13 @@ function MessageNotifications() {
           icon: roomAvatar,
           onClick: () => {
             window.focus();
-            setPending({ roomId, eventId: capturedEventId, targetSessionId: capturedUserId });
+            setPending({
+              roomId,
+              eventId: capturedEventId,
+              targetSessionId: capturedUserId,
+            });
           },
         });
-      }
-
-      // In-app audio: play when notification sounds are enabled AND this notification is loud.
-      if (notificationSound && isLoud) {
-        playSound();
       }
     };
     mx.on(RoomEvent.Timeline, handleTimelineEvent);
@@ -537,6 +569,7 @@ function MessageNotifications() {
   }, [
     mx,
     notificationSound,
+    backgroundNotificationSounds,
     notificationSelected,
     showNotifications,
     showSystemNotifications,
@@ -552,7 +585,7 @@ function MessageNotifications() {
   ]);
 
   return (
-    // eslint-disable-next-line jsx-a11y/media-has-caption
+    // oxlint-disable-next-line jsx-a11y/media-has-caption
     <audio ref={audioRef} style={{ display: 'none' }}>
       <source src={NotificationSound} type="audio/ogg" />
     </audio>
@@ -574,11 +607,11 @@ function PrivacyBlurFeature() {
 }
 
 // Periodically emits memory-health gauges so Sentry dashboards can surface
-// unbounded growth (e.g. renderable media cache never evicted, stale inflight requests).
+// unbounded growth (e.g. blob cache never evicted, stale inflight requests).
 function HealthMonitor() {
   useEffect(() => {
     const id = window.setInterval(() => {
-      const { cacheSize, inflightCount } = getRenderableMediaUrlStats();
+      const { cacheSize, inflightCount } = getBlobCacheStats();
       Sentry.metrics.gauge('sable.media.blob_cache_size', cacheSize);
       if (inflightCount > 0) {
         Sentry.metrics.gauge('sable.media.inflight_requests', inflightCount);
@@ -604,10 +637,17 @@ type ClientNonUIFeaturesProps = {
 export function HandleNotificationClick() {
   const setPending = useSetAtom(pendingNotificationAtom);
   const setActiveSessionId = useSetAtom(activeSessionIdAtom);
+  const setIncomingCall = useSetAtom(incomingCallAtom);
+  const mutedRoomId = useAtomValue(mutedCallRoomIdAtom);
+  const [incomingVoiceRoomCallSoundEnabled] = useSetting(
+    settingsAtom,
+    'incomingVoiceRoomCallSoundEnabled'
+  );
+  const mDirects = useAtomValue(mDirectAtom);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || isTauri()) return undefined;
+    if (!('serviceWorker' in navigator)) return undefined;
 
     const handleMessage = (ev: MessageEvent) => {
       const { data } = ev;
@@ -629,11 +669,30 @@ export function HandleNotificationClick() {
 
       if (!roomId) return;
       setPending({ roomId, eventId, targetSessionId: userId });
+
+      const incomingCall = resolveIncomingCallFromNotificationData(
+        data as Record<string, unknown>,
+        mDirects.has(roomId)
+      );
+      if (
+        incomingCall &&
+        !isIncomingCallSuppressed(incomingCall, mutedRoomId, incomingVoiceRoomCallSoundEnabled)
+      ) {
+        setIncomingCall(incomingCall);
+      }
     };
 
     navigator.serviceWorker.addEventListener('message', handleMessage);
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
-  }, [setPending, setActiveSessionId, navigate]);
+  }, [
+    mDirects,
+    mutedRoomId,
+    navigate,
+    setActiveSessionId,
+    setIncomingCall,
+    setPending,
+    incomingVoiceRoomCallSoundEnabled,
+  ]);
 
   return null;
 }
@@ -663,7 +722,7 @@ function SyncNotificationSettingsWithServiceWorker() {
   }, []);
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || isTauri()) return;
+    if (!('serviceWorker' in navigator)) return;
     // notificationSoundEnabled is intentionally excluded: push notification sound
     // is governed by the push rule's tweakSound alone (OS/Sygnal handles it).
     // The in-app sound setting only controls the in-page <audio> playback above.
@@ -739,9 +798,8 @@ function SentryTagsFeature() {
   useEffect(() => {
     // Core rendering tags — indexed in Sentry for filtering/search
     Sentry.setTag('message_layout', String(settings.messageLayout));
-    Sentry.setTag('message_spacing', String(settings.messageSpacing));
+    Sentry.setTag('message_spacing', settings.messageSpacing);
     Sentry.setTag('twitter_emoji', String(settings.twitterEmoji));
-    Sentry.setTag('is_markdown', String(settings.isMarkdown));
     Sentry.setTag('page_zoom', String(settings.pageZoom));
     if (settings.themeId) Sentry.setTag('theme_id', settings.themeId);
     // Additional high-value tags for bug reproduction
@@ -753,9 +811,9 @@ function SentryTagsFeature() {
     Sentry.setTag('url_preview', String(settings.urlPreview));
     Sentry.setTag('use_system_theme', String(settings.useSystemTheme));
     Sentry.setTag('uniform_icons', String(settings.uniformIcons));
-    Sentry.setTag('jumbo_emoji_size', String(settings.jumboEmojiSize));
-    Sentry.setTag('caption_position', String(settings.captionPosition));
-    Sentry.setTag('right_swipe_action', String(settings.rightSwipeAction));
+    Sentry.setTag('jumbo_emoji_size', settings.jumboEmojiSize);
+    Sentry.setTag('caption_position', settings.captionPosition);
+    Sentry.setTag('right_swipe_action', settings.rightSwipeAction);
     // Full settings snapshot as structured Additional Data on every event
     Sentry.setContext('settings', { ...settings });
   }, [settings]);
@@ -785,7 +843,7 @@ function HandleDecryptPushEvent() {
       const decryptStart = performance.now();
 
       try {
-        const mxEvent = new MatrixEvent(rawEvent as any);
+        const mxEvent = new MatrixEvent(rawEvent as ConstructorParameters<typeof MatrixEvent>[0]);
         await mx.decryptEventIfNeeded(mxEvent);
 
         const room = mx.getRoom(roomId);
@@ -842,89 +900,14 @@ function PresenceFeature() {
   const [sendPresence] = useSetting(settingsAtom, 'sendPresence');
 
   useEffect(() => {
-    // Classic sync: set_presence query param on every /sync poll.
+    // Classic sync / MSC4186 presence: set_presence query param on every /sync poll.
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
-    mx.setSyncPresence(sendPresence ? undefined : SetPresence.Offline);
-    // Sliding sync: enable/disable the presence extension on the next poll.
-    getSlidingSyncManager(mx)?.setPresenceEnabled(sendPresence);
+    const syncPresence = sendPresence ? undefined : SetPresence.Offline;
+    mx.setSyncPresence(syncPresence);
+    const presenceManager = getPresenceSyncManager(mx);
+    presenceManager?.setPresence(syncPresence);
+    presenceManager?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
-
-  return null;
-}
-
-function getNotificationTransportRuntimePlatform(): NotificationTransportPlatform {
-  if (!isTauri()) return 'web';
-
-  const platform = osType();
-  if (platform === 'android') return 'android';
-  if (platform === 'ios') return 'ios';
-  return 'desktop';
-}
-
-function NotificationTransportRuntimeFeature() {
-  const mx = useMatrixClient();
-  const [backgroundPushEnabled] = useSetting(settingsAtom, 'backgroundPushEnabled');
-  const [backgroundPushProvider] = useSetting(settingsAtom, 'backgroundPushProvider');
-  const [pushTransportMode] = useSetting(settingsAtom, 'pushTransportMode');
-  const [isNotificationSounds] = useSetting(settingsAtom, 'isNotificationSounds');
-  const [showMessageContent] = useSetting(settingsAtom, 'showMessageContentInNotifications');
-  const [showEncryptedMessageContent] = useSetting(
-    settingsAtom,
-    'showMessageContentInEncryptedNotifications'
-  );
-  const [useInAppNotifications] = useSetting(settingsAtom, 'useInAppNotifications');
-
-  const runtimeRef = useRef<NotificationTransportRuntime | null>(null);
-  const contextRef = useRef<NotificationTransportRuntimeContext>({
-    mx,
-    showMessageContent,
-    showEncryptedMessageContent,
-    notificationSoundEnabled: isNotificationSounds,
-    useInAppNotifications,
-  });
-  contextRef.current = {
-    mx,
-    showMessageContent,
-    showEncryptedMessageContent,
-    notificationSoundEnabled: isNotificationSounds,
-    useInAppNotifications,
-  };
-
-  if (!runtimeRef.current) {
-    runtimeRef.current = new NotificationTransportRuntime();
-  }
-
-  useEffect(() => {
-    if (!isTauri()) return undefined;
-
-    const runtimePlatform = getNotificationTransportRuntimePlatform();
-    const normalizedMode = normalizeNotificationTransportMode(pushTransportMode, runtimePlatform);
-    const provider = backgroundPushEnabled
-      ? (backgroundPushProvider ??
-        resolvePreferredNotificationTransportProvider(normalizedMode, runtimePlatform))
-      : null;
-    const runtime = runtimeRef.current;
-    if (!runtime) return undefined;
-
-    const syncPromise = runtime.sync(provider, () => contextRef.current);
-    syncPromise.catch((error) => {
-      transportLog.error(
-        'notification',
-        'Notification transport runtime failed',
-        error instanceof Error ? error : new Error(String(error))
-      );
-    });
-    return () => {
-      const cleanupPromise = runtime.dispose();
-      cleanupPromise.catch((error) => {
-        transportLog.error(
-          'notification',
-          'Notification transport runtime cleanup failed',
-          error instanceof Error ? error : new Error(String(error))
-        );
-      });
-    };
-  }, [backgroundPushEnabled, backgroundPushProvider, pushTransportMode]);
 
   return null;
 }
@@ -935,7 +918,7 @@ function SettingsSyncFeature() {
 }
 
 export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
-  useCallSignaling();
+  useIncomingCallSignaling();
   return (
     <>
       <SettingsSyncFeature />
@@ -943,20 +926,22 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PrivacyBlurFeature />
       <FaviconUpdater />
+      <PageTitleUpdater />
       <InviteNotifications />
       <MessageNotifications />
       <BackgroundNotifications />
       <SyncNotificationSettingsWithServiceWorker />
-      <NotificationTransportRuntimeFeature />
       <HandleDecryptPushEvent />
       <NotificationBanner />
       <TelemetryConsentBanner />
+      <UnverifiedNoticeBanner />
+      <ThemeMigrationBanner />
       <SlidingSyncActiveRoomSubscriber />
       <PresenceFeature />
       <SentryRoomContextFeature />
       <SentryTagsFeature />
       <HealthMonitor />
-      {children}
+      <IconSizesProvider>{children}</IconSizesProvider>
     </>
   );
 }

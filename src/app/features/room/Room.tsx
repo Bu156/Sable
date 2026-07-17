@@ -12,6 +12,7 @@ import { useKeyDown } from '$hooks/useKeyDown';
 import { markAsRead } from '$utils/notifications';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useRoomMembers } from '$hooks/useRoomMembers';
+import { Page } from '$components/page';
 import { CallView } from '$features/call/CallView';
 import { WidgetsDrawer } from '$features/widgets/WidgetsDrawer';
 import { callChatAtom } from '$state/callEmbed';
@@ -48,7 +49,10 @@ export function Room() {
 
   // Log drawer state changes
   useEffect(() => {
-    debugLog.debug('ui', 'Members drawer state changed', { roomId: room.roomId, isOpen: isDrawer });
+    debugLog.debug('ui', 'Members drawer state changed', {
+      roomId: room.roomId,
+      isOpen: isDrawer,
+    });
   }, [isDrawer, room.roomId]);
 
   useEffect(() => {
@@ -58,7 +62,7 @@ export function Room() {
     });
   }, [isWidgetDrawerOpen, room.roomId]);
   const powerLevels = usePowerLevels(room);
-  const members = useRoomMembers(mx, room.roomId);
+  const members = useRoomMembers(mx, room.roomId, screenSize === ScreenSize.Desktop && isDrawer);
   const chat = useAtomValue(callChatAtom);
   const [openThreadId, setOpenThread] = useAtom(roomIdToOpenThreadAtomFamily(room.roomId));
   const [threadBrowserOpen, setThreadBrowserOpen] = useAtom(
@@ -110,12 +114,12 @@ export function Room() {
       <RoomAbbreviationsContext.Provider value={abbreviations}>
         <Box grow="Yes" style={{ position: 'relative' }}>
           {callView && (screenSize === ScreenSize.Desktop || !chat) && (
-            <Box grow="Yes" direction="Column">
+            <Page>
               <RoomViewHeader callView />
               <Box grow="Yes">
                 <CallView />
               </Box>
-            </Box>
+            </Page>
           )}
           {!callView && (
             <Box grow="Yes" direction="Column">

@@ -1,4 +1,5 @@
-import { FormEventHandler, useState } from 'react';
+import type { FormEventHandler } from 'react';
+import { useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Dialog,
@@ -10,12 +11,11 @@ import {
   Box,
   Text,
   IconButton,
-  Icon,
-  Icons,
   Button,
   Input,
   color,
 } from 'folds';
+import { composerIcon, X } from '$components/icons/phosphor';
 import { stopPropagation } from '$utils/keyboard';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 import { parseMatrixToRoom, parseMatrixToRoomEvent, testMatrixTo } from '$plugins/matrix-to';
@@ -83,7 +83,7 @@ export function JoinAddressPrompt({ onOpen, onCancel }: JoinAddressProps) {
                 <Text size="H4">Join with Address</Text>
               </Box>
               <IconButton size="300" onClick={onCancel} radii="300">
-                <Icon src={Icons.Cross} />
+                {composerIcon(X)}
               </IconButton>
             </Header>
             <Box

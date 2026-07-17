@@ -1,53 +1,42 @@
-import {
-  forwardRef,
-  KeyboardEventHandler,
-  MouseEvent,
-  RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-} from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import type { KeyboardEventHandler, MouseEvent, RefObject } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+
 import { isKeyHotkey } from 'is-hotkey';
-import {
-  EventType,
+import type {
   IContent,
   MatrixEvent,
-  MsgType,
-  RelationType,
   Room,
   IEventRelation,
+  RoomMessageEventContent,
   StickerEventContent,
 } from '$types/matrix-sdk';
+import { MatrixError } from '$types/matrix-sdk';
+import { EventType, MsgType, RelationType } from '$types/matrix-sdk';
 import { ReactEditor } from 'slate-react';
 import { Editor, Point, Range, Transforms } from 'slate';
+import type { RectCords } from 'folds';
 import {
   Box,
   color,
   config,
   Dialog,
-  Icon,
   IconButton,
-  Icons,
-  Line,
   Menu,
   MenuItem,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
   PopOut,
-  RectCords,
   Scroll,
   Text,
   toRem,
 } from 'folds';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import type { AutocompleteQuery } from '$components/editor';
 import {
   AutocompletePrefix,
-  AutocompleteQuery,
   createEmoticonElement,
   CustomEditor,
   customHtmlEqualsPlainText,
@@ -56,7 +45,6 @@ import {
   resetEditor,
   RoomMentionAutocomplete,
   toMatrixCustomHTML,
-  Toolbar,
   toPlainText,
   trimCustomHtml,
   UserMentionAutocomplete,
@@ -69,43 +57,41 @@ import {
   getMentions,
   ANYWHERE_AUTOCOMPLETE_PREFIXES,
   BEGINNING_AUTOCOMPLETE_PREFIXES,
+  getLinks,
+  MarkdownFormattingToolbarBottom,
+  MarkdownFormattingToolbarToggle,
+  focusEditor,
+  replaceWithElement,
+  BlockType,
 } from '$components/editor';
+import { plainToEditorInput } from '$components/editor/input';
+import type { GifData } from '$components/emoji-board';
 import { EmojiBoard, EmojiBoardTab } from '$components/emoji-board';
 import { UseStateProvider } from '$components/UseStateProvider';
-import {
-  TUploadContent,
-  encryptFile,
-  getImageInfo,
-  mxcUrlToHttp,
-  toggleReaction,
-} from '$utils/matrix';
+import type { TUploadContent } from '$utils/matrix';
+import { encryptFile, getImageInfo, mxcUrlToHttp, toggleReaction } from '$utils/matrix';
 import { useTypingStatusUpdater } from '$hooks/useTypingStatusUpdater';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { useFilePasteHandler } from '$hooks/useFilePasteHandler';
 import { useFileDropZone } from '$hooks/useFileDrop';
+import type { TUploadItem, TUploadMetadata, IReplyDraft } from '$state/room/roomInputDrafts';
 import {
   roomIdToMsgDraftAtomFamily,
   roomIdToReplyDraftAtomFamily,
   roomIdToUploadItemsAtomFamily,
   roomUploadAtomFamily,
-  TUploadItem,
-  TUploadMetadata,
-  IReplyDraft,
 } from '$state/room/roomInputDrafts';
 import { UploadCardRenderer } from '$components/upload-card';
-import {
-  UploadBoard,
-  UploadBoardContent,
-  UploadBoardHeader,
-  UploadBoardImperativeHandlers,
-} from '$components/upload-board';
-import { Upload, UploadStatus, UploadSuccess, createUploadFamilyObserverAtom } from '$state/upload';
-import { loadImageElementFromMediaUrl } from '$utils/dom';
+import type { UploadBoardImperativeHandlers } from '$components/upload-board';
+import { UploadBoard, UploadBoardContent, UploadBoardHeader } from '$components/upload-board';
+import type { Upload, UploadSuccess } from '$state/upload';
+import { UploadStatus, createUploadFamilyObserverAtom } from '$state/upload';
+import { getImageUrlBlob, loadImageElement } from '$utils/dom';
 import { safeFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
-import { getMentionContent, reactionOrEditEvent } from '$utils/room';
+import { getMentionContent, isThreadRelationEvent, reactionOrEditEvent } from '$utils/room';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useElementSizeObserver } from '$hooks/useElementSizeObserver';
@@ -124,6 +110,7 @@ import {
   delayedEventsSupportedAtom,
   roomIdToScheduledTimeAtomFamily,
   roomIdToEditingScheduledDelayIdAtomFamily,
+  serverMaxDelayMsAtom,
 } from '$state/scheduledMessages';
 import {
   sendDelayedMessage,
@@ -131,9 +118,9 @@ import {
   computeDelayMs,
   cancelDelayedEvent,
 } from '$utils/delayedEvents';
-import { timeHourMinute, timeDayMonthYear } from '$utils/time';
+import { timeHourMinute, timeDayMonthYear, daysToMs } from '$utils/time';
 import { stopPropagation } from '$utils/keyboard';
-import { MessageEvent } from '$types/matrix/room';
+
 import { usePowerLevelsContext } from '$hooks/usePowerLevels';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
@@ -142,11 +129,40 @@ import {
   convertPerMessageProfileToBeeperFormat,
   getCurrentlyUsedPerMessageProfileForRoom,
 } from '$hooks/usePerMessageProfile';
-import { Microphone, Stop } from '@phosphor-icons/react';
+import {
+  Bell,
+  BellSlash,
+  CaretDown,
+  chipIcon,
+  Clock,
+  composerIcon,
+  dropzoneIcon,
+  File as FileIcon,
+  ListBullets,
+  MapPinPlusIcon,
+  menuIcon,
+  Microphone,
+  PaperPlaneTilt,
+  getPhosphorIconSize,
+  PlusCircle,
+  Smiley,
+  Sticker,
+  Stop,
+  X,
+} from '$components/icons/phosphor';
 import { getSupportedAudioExtension } from '$plugins/voice-recorder-kit/supportedCodec';
+import { ErrorCode } from '../../cs-errorcode';
 import { sanitizeText } from '$utils/sanitize';
 import { PKitCommandMessageHandler } from '$plugins/pluralkit-handler/PKitCommandMessageHandler';
 import { PKitProxyMessageHandler } from '$plugins/pluralkit-handler/PKitProxyMessageHandler';
+import type { IGenericMSC4459, MSC4459ImagePackReference } from '$types/matrix/common';
+import {
+  getImagePackReferencesForMxc,
+  getImagePackReferencesForMxcWrappedInMap,
+} from '$utils/msc4459helper';
+import { ImageUsage } from '$plugins/custom-emoji';
+import { SerializableMap } from '$types/wrapper/SerializableMap';
+import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { SchedulePickerDialog } from './schedule-send';
 import * as css from './schedule-send/SchedulePickerDialog.css';
 import {
@@ -154,24 +170,37 @@ import {
   getFileMsgContent,
   getImageMsgContent,
   getVideoMsgContent,
+  getGifMsgContent,
+  buildGalleryContent,
+  getGalleryItemContent,
 } from './msgContent';
+import { outgoingMessageTransforms } from './outgoingMessageTransforms';
+import { getKlipyMxcUrl } from '$utils/klipy';
 import { CommandAutocomplete } from './CommandAutocomplete';
-import {
-  AudioMessageRecorder,
+import type {
   AudioMessageRecorderHandle,
   AudioRecordingCompletePayload,
 } from './AudioMessageRecorder';
+import { AudioMessageRecorder } from './AudioMessageRecorder';
+import * as prefix from '$unstable/prefixes';
+import { PollDialog } from './poll-modals';
+import { LocationDialog } from './location-modal';
+import { useClientConfig } from '$hooks/useClientConfig';
+import { GifIcon } from '@phosphor-icons/react';
 
 // Returns the event ID of the most recent non-reaction/non-edit event in a thread,
 // falling back to the thread root if no replies exist yet.
-const getLatestThreadEventId = (room: Room, threadRootId: string): string => {
+export const getLatestThreadEventId = (room: Room, threadRootId: string): string => {
   const thread = room.getThread(threadRootId);
   const threadEvents: MatrixEvent[] = thread?.events ?? [];
   const filtered = threadEvents.filter(
-    (ev) => ev.getId() !== threadRootId && !reactionOrEditEvent(ev)
+    (ev) =>
+      ev.getId() !== threadRootId &&
+      !reactionOrEditEvent(ev) &&
+      isThreadRelationEvent(ev, threadRootId)
   );
   if (filtered.length > 0) {
-    return filtered[filtered.length - 1].getId() ?? threadRootId;
+    return filtered[filtered.length - 1]!.getId() ?? threadRootId;
   }
   // Fall back to the live timeline if the Thread object hasn't been registered yet
   const liveEvents = room
@@ -180,15 +209,20 @@ const getLatestThreadEventId = (room: Room, threadRootId: string): string => {
     .getEvents()
     .filter(
       (ev) =>
-        ev.threadRootId === threadRootId && ev.getId() !== threadRootId && !reactionOrEditEvent(ev)
+        ev.getId() !== threadRootId &&
+        !reactionOrEditEvent(ev) &&
+        isThreadRelationEvent(ev, threadRootId)
     );
   if (liveEvents.length > 0) {
-    return liveEvents[liveEvents.length - 1].getId() ?? threadRootId;
+    return liveEvents.at(-1)!.getId() ?? threadRootId;
   }
   return threadRootId;
 };
 
-const getReplyContent = (replyDraft: IReplyDraft | undefined, room?: Room): IEventRelation => {
+export const getReplyContent = (
+  replyDraft: IReplyDraft | undefined,
+  room?: Room
+): IEventRelation => {
   if (!replyDraft) return {};
 
   const relatesTo: IEventRelation = {};
@@ -198,10 +232,11 @@ const getReplyContent = (replyDraft: IReplyDraft | undefined, room?: Room): IEve
     relatesTo.event_id = replyDraft.relation.event_id;
     relatesTo.rel_type = RelationType.Thread;
 
-    // Check if this is a reply to a specific message in the thread
+    // If the user explicitly clicked "reply" on a message (including the thread root),
+    // we must set is_falling_back=false and target that message directly.
     // (replyDraft.body being empty means it's just a seeded thread draft)
-    if (replyDraft.body && replyDraft.eventId !== replyDraft.relation.event_id) {
-      // Explicit reply to a specific message — per spec, is_falling_back must be false
+    if (replyDraft.body) {
+      // Explicit reply — per spec, is_falling_back must be false
       relatesTo['m.in_reply_to'] = {
         event_id: replyDraft.eventId,
       };
@@ -232,6 +267,9 @@ interface ReplyEventContent {
   'm.relates_to'?: IEventRelation;
 }
 
+const createUploadItemKey = () =>
+  globalThis.crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 interface RoomInputProps {
   editor: Editor;
   fileDropContainerRef: RefObject<HTMLElement>;
@@ -240,18 +278,24 @@ interface RoomInputProps {
   threadRootId?: string;
   onEditLastMessage?: () => void;
 }
+
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room, threadRootId, onEditLastMessage }, ref) => {
     // When in thread mode, isolate drafts by thread root ID so thread replies
     // don't clobber the main room draft (and vice versa).
     const draftKey = threadRootId ?? roomId;
     const mx = useMatrixClient();
+    const clientConfig = useClientConfig();
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
-    const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
+    const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
+    const [showGifPicker] = useSetting(settingsAtom, 'enableGifPicker');
+
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
     const [mentionInReplies] = useSetting(settingsAtom, 'mentionInReplies');
+    const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
     const commands = useCommands(mx, room);
+    const imagePacksUsedRef = useRef(new SerializableMap<string, MSC4459ImagePackReference>());
     /**
      * handle pluralkit-style messages
      */
@@ -268,6 +312,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpProxyingEnable] = useSetting(settingsAtom, 'pmpProxying');
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
     const micBtnRef = useRef<HTMLButtonElement>(null);
+    // Preserve stable list keys across metadata/description replacements without
+    // storing UI-only IDs in the upload draft state.
+    const uploadItemKeysRef = useRef(new WeakMap<TUploadContent, string>());
     const roomToParents = useAtomValue(roomToParentsAtom);
     /**
      * Nickname someone set for another user
@@ -278,7 +325,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const powerLevels = usePowerLevelsContext();
     const creators = useRoomCreators(room);
     const permissions = useRoomPermissions(creators, powerLevels);
-    const canSendReaction = permissions.event(MessageEvent.Reaction, mx.getSafeUserId());
+    const canSendReaction = permissions.event(EventType.Reaction, mx.getSafeUserId());
 
     const [msgDraft, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(draftKey));
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(draftKey));
@@ -295,18 +342,38 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
 
-    const [toolbar, setToolbar] = useSetting(settingsAtom, 'editorToolbar');
     const [showAudioRecorder, setShowAudioRecorder] = useState(false);
     const audioRecorderRef = useRef<AudioMessageRecorderHandle>(null);
-    const micHoldStartRef = useRef<number>(0);
+    const micHoldStartRef = useRef(0);
     const HOLD_THRESHOLD_MS = 400;
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [isQuickTextReact, setQuickTextReact] = useState(false);
 
-    const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
+    const replyDraftBase = useMemo(
+      () =>
+        threadRootId
+          ? {
+              userId: mx.getUserId() ?? '',
+              eventId: threadRootId,
+              body: '',
+              relation: { rel_type: RelationType.Thread, event_id: threadRootId },
+            }
+          : undefined,
+      [mx, threadRootId]
+    );
+
+    const sendTypingStatus = useTypingStatusUpdater(mx, roomId, { disabled: !!threadRootId });
 
     const [inputKey, setInputKey] = useState(0);
+    const getUploadItemKey = useCallback((fileItem: TUploadItem): string => {
+      const existingKey = uploadItemKeysRef.current.get(fileItem.originalFile);
+      if (existingKey) return existingKey;
+
+      const nextKey = createUploadItemKey();
+      uploadItemKeysRef.current.set(fileItem.originalFile, nextKey);
+      return nextKey;
+    }, []);
 
     const handleFiles = useCallback(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
@@ -362,11 +429,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [editingScheduledDelayId, setEditingScheduledDelayId] = useAtom(
       roomIdToEditingScheduledDelayIdAtomFamily(roomId)
     );
+    const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
+    const [showPollPicker, setShowPollPicker] = useState(false);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [scheduleMenuAnchor, setScheduleMenuAnchor] = useState<RectCords>();
     const [showSchedulePicker, setShowSchedulePicker] = useState(false);
     const [silentReply, setSilentReply] = useState(!mentionInReplies);
     const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
+    const setServerMaxDelayMs = useSetAtom(serverMaxDelayMsAtom);
+    const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
+    const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
+    const [enableMediaGalleries] = useSetting(settingsAtom, 'enableMediaGalleries');
+    const [sendIndividualAttachmentAsCaption] = useSetting(
+      settingsAtom,
+      'sendIndividualAttachmentAsCaption'
+    );
 
     useElementSizeObserver(
       useCallback(() => fileDropContainerRef.current, [fileDropContainerRef]),
@@ -507,26 +585,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       handleRemoveUpload(uploads.map((upload) => upload.file));
     };
 
-    const handleSendUpload = async (uploads: UploadSuccess[]) => {
-      const plainText = toPlainText(editor.children, isMarkdown).trim();
-
-      const contentsPromises = uploads.map(async (upload) => {
-        const fileItem = selectedFiles.find((f) => f.file === upload.file);
-        if (!fileItem) throw new Error('Broken upload');
-
-        if (fileItem.file.type.startsWith('image')) {
-          return getImageMsgContent(mx, fileItem, upload.mxc);
-        }
-        if (fileItem.file.type.startsWith('video')) {
-          return getVideoMsgContent(mx, fileItem, upload.mxc);
-        }
-        if (fileItem.file.type.startsWith('audio')) {
-          return getAudioMsgContent(fileItem, upload.mxc);
-        }
-        return getFileMsgContent(fileItem, upload.mxc);
-      });
-      handleCancelUpload(uploads);
-      const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
+    const handleSendContents = async (contents: IContent[]) => {
+      const plainText = toPlainText(editor.children).trim();
 
       /**
        * the currently with the room associated per-message profile, if any, so that it can be included in the message content when sending.
@@ -540,27 +600,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           // We intentionally mutate the objects here to avoid unnecessary copying
           // mutating should be unproblematic here, since contents isn't a react component,
           // or used for rendering
-          // eslint-disable-next-line no-param-reassign
-          c['com.beeper.per_message_profile'] = convertPerMessageProfileToBeeperFormat(
-            perMessageProfile,
-            false
-          );
+          c[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
+            convertPerMessageProfileToBeeperFormat(perMessageProfile, false);
         });
       }
 
       if (contents.length > 0) {
         const replyContent =
           plainText?.length === 0 ? getReplyContent(replyDraft, room) : undefined;
-        if (replyContent) contents[0]['m.relates_to'] = replyContent;
-        if (threadRootId) {
-          setReplyDraft({
-            userId: mx.getUserId() ?? '',
-            eventId: threadRootId,
-            body: '',
-            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
-          });
-        } else {
-          setReplyDraft(undefined);
+        if (replyContent) {
+          contents[0]!['m.relates_to'] = replyContent;
+          if (!silentReply && replyDraft)
+            contents[0]!['m.mentions'] = { ['user_ids']: [replyDraft.userId] };
+          setReplyDraft(replyDraftBase);
         }
       }
 
@@ -587,11 +639,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           setEditingScheduledDelayId(null);
           setScheduledTime(null);
         } catch (error) {
-          debugLog.error('message', 'Failed to schedule uploaded file message', {
+          debugLog.error('message', 'Failed to schedule message', {
             roomId,
             error: error instanceof Error ? error.message : String(error),
           });
-          log.error('failed to schedule uploaded message', { roomId }, error);
+          log.error('failed to schedule message', { roomId }, error);
           throw error;
         }
       } else {
@@ -601,20 +653,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             invalidate();
             setEditingScheduledDelayId(null);
           } catch {
-            debugLog.error(
-              'message',
-              'Failed to cancel scheduled event before immediate file send',
-              { roomId }
-            );
+            debugLog.error('message', 'Failed to cancel scheduled event before immediate send', {
+              roomId,
+            });
           }
         }
 
         await Promise.all(
           contents.map((content) =>
             mx
-              .sendMessage(roomId, threadRootId ?? null, content as any)
+              .sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
               .then((res: { event_id: string }) => {
-                debugLog.info('message', 'Uploaded file message sent', {
+                debugLog.info('message', 'Message sent', {
                   roomId,
                   eventId: res.event_id,
                   msgtype: content.msgtype,
@@ -622,11 +672,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 return res;
               })
               .catch((error: unknown) => {
-                debugLog.error('message', 'Failed to send uploaded file message', {
+                debugLog.error('message', 'Failed to send message', {
                   roomId,
                   error: error instanceof Error ? error.message : String(error),
                 });
-                log.error('failed to send uploaded message', { roomId }, error);
+                log.error('failed to send message', { roomId }, error);
                 throw error;
               })
           )
@@ -634,9 +684,81 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
     };
 
+    const uploadToContent = async (upload: UploadSuccess) => {
+      const fileItem = selectedFiles.find((f) => f.file === upload.file);
+      if (!fileItem) throw new Error('Broken upload');
+
+      if (fileItem.file.type.startsWith('image')) {
+        return getImageMsgContent(mx, fileItem, upload.mxc);
+      }
+      if (fileItem.file.type.startsWith('video')) {
+        return getVideoMsgContent(mx, fileItem, upload.mxc);
+      }
+      if (fileItem.file.type.startsWith('audio')) {
+        return getAudioMsgContent(fileItem, upload.mxc);
+      }
+      return getFileMsgContent(fileItem, upload.mxc);
+    };
+
+    const handleSendUpload = async (uploads: UploadSuccess[]) => {
+      const plainText = toPlainText(editor.children).trim();
+      const caption = plainText.length > 0 ? plainText : undefined;
+      let customHtml = trimCustomHtml(
+        toMatrixCustomHTML(editor.children, {
+          stripNickname: true,
+          room,
+        })
+      );
+      const formattedCaption =
+        caption && !customHtmlEqualsPlainText(customHtml, plainText) ? customHtml : undefined;
+
+      if (uploads.length == 1 && sendIndividualAttachmentAsCaption) {
+        const upload = uploads[0];
+        if (!upload) throw new Error('Broken upload');
+        let content = await uploadToContent(upload);
+        handleCancelUpload(uploads);
+
+        content.body = caption ?? '';
+        content.formatted_body = undefined;
+
+        if (formattedCaption) {
+          content.format = 'org.matrix.custom.html';
+          content.formatted_body = formattedCaption;
+        }
+
+        await handleSendContents([content]);
+        return;
+      }
+      if (uploads.length >= 2 && enableMediaGalleries) {
+        const itemsPromises = uploads.map(async (upload) => {
+          const fileItem = selectedFiles.find((f) => f.file === upload.file);
+          if (!fileItem) throw new Error('Broken upload');
+          return getGalleryItemContent(mx, fileItem, upload.mxc);
+        });
+        handleCancelUpload(uploads);
+        const items = fulfilledPromiseSettledResult(await Promise.allSettled(itemsPromises));
+
+        if (items.length === 0) return;
+
+        const galleryContent = buildGalleryContent(items, caption, formattedCaption);
+
+        await handleSendContents([galleryContent]);
+        return;
+      }
+      const contentsPromises = uploads.map(uploadToContent);
+      handleCancelUpload(uploads);
+      const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
+
+      await handleSendContents(contents);
+    };
+
     const handleCloseAutocomplete = useCallback(() => {
-      setAutocompleteQuery(undefined);
-      ReactEditor.focus(editor);
+      setAutocompleteQuery((prev) => {
+        if (prev !== undefined) {
+          focusEditor(editor);
+        }
+        return undefined;
+      });
     }, [editor]);
 
     const handleQuickReact = useCallback(
@@ -648,9 +770,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             .findLast((event) =>
               (
                 [
-                  MessageEvent.RoomMessage,
-                  MessageEvent.RoomMessageEncrypted,
-                  MessageEvent.Sticker,
+                  EventType.RoomMessage,
+                  EventType.RoomMessageEncrypted,
+                  EventType.Sticker,
                 ] as string[]
               ).includes(event.getType())
             );
@@ -671,6 +793,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const submit = useCallback(async () => {
       uploadBoardHandlers.current?.handleSend();
+      if (
+        (selectedFiles.length >= 2 && enableMediaGalleries) ||
+        (selectedFiles.length == 1 && sendIndividualAttachmentAsCaption)
+      ) {
+        resetEditor(editor);
+        resetEditorHistory(editor);
+        sendTypingStatus(false);
+        return;
+      }
 
       const commandName = getBeginCommand(editor);
       /**
@@ -721,19 +852,49 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       /**
        * the plain text we will send
        */
-      let plainText = toPlainText(editor.children, isMarkdown, true, nicknameReplacement).trim();
+      let serializedChildren = editor.children;
+      if (commandName) {
+        // Strip the empty text node and command node from the beginning of the first paragraph
+        const firstPara = serializedChildren[0];
+        if (
+          firstPara &&
+          'type' in firstPara &&
+          firstPara.type === BlockType.Paragraph &&
+          firstPara.children.length >= 2
+        ) {
+          serializedChildren = [
+            {
+              ...firstPara,
+              children: firstPara.children.slice(2),
+            },
+            ...serializedChildren.slice(1),
+          ];
+        }
+      }
+      const outgoingTransformContext = {
+        isMarkdown: true,
+        settingsLinkBaseUrl,
+      };
+
+      outgoingMessageTransforms.forEach((transform) => {
+        if (!transform.shouldApply(serializedChildren, outgoingTransformContext)) return;
+        serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
+      });
+
+      let plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+
       /**
        * the html we will send
        */
       let customHtml = trimCustomHtml(
-        toMatrixCustomHTML(editor.children, {
-          allowTextFormatting: true,
-          allowBlockMarkdown: isMarkdown,
-          allowInlineMarkdown: isMarkdown,
+        toMatrixCustomHTML(serializedChildren, {
           stripNickname: true,
           nickNameReplacement: nicknameReplacement,
+          forEmote: commandName === Command.Me,
+          room,
         })
       );
+
       let msgType = MsgType.Text;
 
       // quick text react
@@ -744,7 +905,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       // check if its a pk command
       if (pkCompatEnable && PKitCommandMessageHandler.isPKCommand(plainText)) {
-        pluralkitCmdMessageHandler.handleMessage(plainText);
+        await pluralkitCmdMessageHandler.handleMessage(plainText);
         resetEditor(editor); // clear the editor
         return; // don't do anything besides handling the command
       }
@@ -767,9 +928,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         plainText = `${UNFLIP} ${plainText}`;
         customHtml = `${UNFLIP} ${customHtml}`;
       } else if (commandName) {
-        const commandContent = commands[commandName as Command];
-        if (commandContent) {
-          commandContent.exe(plainText, customHtml);
+        if ((commandName as Command) === Command.Poll) setShowPollPicker(true);
+        else if ((commandName as Command) === Command.Location && plainText.trim().length === 0)
+          setShowLocationPicker(true);
+        else {
+          const commandContent = commands[commandName as Command];
+          if (commandContent) {
+            commandContent.exe(plainText, customHtml);
+          }
         }
         resetEditor(editor);
         resetEditorHistory(editor);
@@ -780,11 +946,44 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       if (plainText === '') return;
 
+      // PluralKit-style proxy wrappers (per-message profile proxies) must be stripped
+      // *before* building `content`, otherwise we end up sending the wrapper verbatim.
+      let proxiedPerMessageProfile:
+        | Awaited<ReturnType<(typeof pluralkitProxyMessageHandler)['getPmpBasedOnMessage']>>
+        | undefined;
+      if (pmpProxyingEnable) {
+        proxiedPerMessageProfile =
+          await pluralkitProxyMessageHandler.getPmpBasedOnMessage(plainText);
+        if (proxiedPerMessageProfile) {
+          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(plainText);
+          if (stripped !== undefined) {
+            // Re-run the normal outgoing pipeline on the stripped content so the message
+            // goes through the same transforms/parsers as any other message.
+            serializedChildren = plainToEditorInput(stripped);
+
+            outgoingMessageTransforms.forEach((transform) => {
+              if (!transform.shouldApply(serializedChildren, outgoingTransformContext)) return;
+              serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
+            });
+
+            plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+            customHtml = trimCustomHtml(
+              toMatrixCustomHTML(serializedChildren, {
+                stripNickname: true,
+                nickNameReplacement: nicknameReplacement,
+                forEmote: commandName === Command.Me,
+                room,
+              })
+            );
+          }
+        }
+      }
+
       const body = plainText;
       const formattedBody = customHtml;
       const mentionData = getMentions(mx, roomId, editor);
 
-      const content: IContent = {
+      const content: IContent & Pick<RoomMessageEventContent, 'msgtype' | 'body'> = {
         msgtype: msgType,
         body,
       };
@@ -794,6 +993,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
 
       content['m.mentions'] = getMentionContent(Array.from(mentionData.users), mentionData.room);
+      content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
+        imagePacksUsedRef.current.toJSON();
+
+      const links = getLinks(serializedChildren);
+      content[prefix.MATRIX_UNSTABLE_EMBEDDED_LINK_PREVIEW_PROPERTY_NAME] = [];
+      links?.forEach((link) =>
+        content[prefix.MATRIX_UNSTABLE_EMBEDDED_LINK_PREVIEW_PROPERTY_NAME].push({
+          matched_url: link,
+        })
+      );
 
       if (replyDraft || !customHtmlEqualsPlainText(formattedBody, body)) {
         content.format = 'org.matrix.custom.html';
@@ -805,26 +1014,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      const perMessageProfile =
-        pmpProxyingEnable && pluralkitProxyMessageHandler.isAProxiedMessage(plainText)
-          ? await pluralkitProxyMessageHandler.getPmpBasedOnMessage(plainText)
-          : await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
-
-      if (pmpProxyingEnable && pluralkitProxyMessageHandler.isAProxiedMessage(plainText))
-        plainText = pluralkitProxyMessageHandler.stripProxyFromMessage(plainText) ?? plainText;
+      let perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      if (pmpProxyingEnable) {
+        if (proxiedPerMessageProfile) perMessageProfile = proxiedPerMessageProfile;
+      }
       if (perMessageProfile) {
-        content['com.beeper.per_message_profile'] = convertPerMessageProfileToBeeperFormat(
-          perMessageProfile,
-          perMessageProfile.name.trim() !== ''
-        );
+        content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
+          convertPerMessageProfileToBeeperFormat(
+            perMessageProfile,
+            perMessageProfile.name.trim() !== ''
+          );
 
         if (perMessageProfile.name.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
-          const prefix = `${perMessageProfile.name}: `;
+          const pmpPrefix = `${perMessageProfile.name}: `;
 
-          if (!content.body.startsWith(prefix)) {
+          if (!content.body.startsWith(pmpPrefix)) {
             // to prevent double-prefixing when the fallback is already present
-            content.body = prefix + content.body;
+            content.body = pmpPrefix + content.body;
           }
 
           /**
@@ -839,7 +1046,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           } else {
             // we don't have a formatted body, but we need one
             content.format = 'org.matrix.custom.html';
-            content.formatted_body = `${htmlPrefix}${plainText}`;
+            const escapedBody = sanitizeText(plainText).replaceAll('\n', '<br/>');
+            content.formatted_body = `${htmlPrefix}${escapedBody}`;
           }
         }
       }
@@ -854,17 +1062,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         resetEditor(editor);
         resetEditorHistory(editor);
         setInputKey((prev) => prev + 1);
-        if (threadRootId) {
-          // Re-seed the thread reply draft so the next message also goes to the thread.
-          setReplyDraft({
-            userId: mx.getUserId() ?? '',
-            eventId: threadRootId,
-            body: '',
-            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
-          });
-        } else {
-          setReplyDraft(undefined);
-        }
+        imagePacksUsedRef.current.clear();
+        setReplyDraft(replyDraftBase);
         sendTypingStatus(false);
       };
       if (scheduledTime) {
@@ -876,14 +1075,30 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           if (isEncrypted) {
             await sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
           } else {
-            await sendDelayedMessage(mx, roomId, content, delayMs);
+            await sendDelayedMessage(mx, roomId, content as RoomMessageEventContent, delayMs);
           }
+          setSendError(undefined);
           invalidate();
           setEditingScheduledDelayId(null);
           setScheduledTime(null);
           resetInput();
-        } catch {
-          // Network/server error — leave editor and scheduled state intact for retry
+        } catch (e: unknown) {
+          if (
+            e instanceof MatrixError &&
+            (e.errcode === ErrorCode.M_MAX_DELAY_EXCEEDED ||
+              e.data?.['org.matrix.msc4140.errcode'] === 'M_MAX_DELAY_EXCEEDED')
+          ) {
+            const maxDelay =
+              (e.data as { max_delay?: number })?.max_delay ??
+              e.data?.['org.matrix.msc4140.max_delay'];
+            if (typeof maxDelay === 'number') setServerMaxDelayMs(maxDelay);
+            const maxDelayDays = maxDelay / daysToMs(1);
+            setSendError(
+              `Scheduled time exceeds the maximum delay allowed by this server. Please choose an earlier time. The Maximum Delay is of ${maxDelayDays} day${maxDelayDays > 1 ? 's' : ''}.`
+            );
+          } else {
+            setSendError('Failed to schedule message. Please try again.');
+          }
         }
       } else if (editingScheduledDelayId) {
         try {
@@ -892,8 +1107,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             roomId,
             scheduledDelayId: editingScheduledDelayId,
           });
-          const res = await mx.sendMessage(roomId, threadRootId ?? null, content as any);
-          debugLog.info('message', 'Message sent successfully', { roomId, eventId: res.event_id });
+          const res = await mx.sendMessage(
+            roomId,
+            threadRootId ?? null,
+            content as RoomMessageEventContent
+          );
+          debugLog.info('message', 'Message sent successfully', {
+            roomId,
+            eventId: res.event_id,
+          });
           invalidate();
           setEditingScheduledDelayId(null);
           resetInput();
@@ -907,14 +1129,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       } else {
         const msgSendStart = performance.now();
         resetInput();
-        debugLog.info('message', 'Sending message', { roomId, msgtype: (content as any).msgtype });
+        debugLog.info('message', 'Sending message', {
+          roomId,
+          msgtype: content.msgtype,
+        });
         Sentry.startSpan(
           {
             name: 'message.send',
             op: 'matrix.message',
             attributes: { encrypted: String(isEncrypted) },
           },
-          () => mx.sendMessage(roomId, threadRootId ?? null, content as any)
+          () => mx.sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
         )
           .then((res: { event_id: string }) => {
             debugLog.info('message', 'Message sent successfully', {
@@ -943,7 +1168,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       replyEvent,
       mx,
       roomId,
-      isMarkdown,
       canSendReaction,
       pkCompatEnable,
       replyDraft,
@@ -961,9 +1185,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       queryClient,
       threadRootId,
       setReplyDraft,
+      settingsLinkBaseUrl,
       isEncrypted,
       setEditingScheduledDelayId,
       setScheduledTime,
+      setServerMaxDelayMs,
+      replyDraftBase,
+      selectedFiles,
+      enableMediaGalleries,
+      sendIndividualAttachmentAsCaption,
     ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
@@ -1031,6 +1261,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           setReplyDraft(undefined);
         }
+
+        if (isKeyHotkey('control+e', evt)) {
+          evt.preventDefault();
+          setEmojiBoardTab(EmojiBoardTab.Sticker);
+        }
       },
       [
         submit,
@@ -1042,6 +1277,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         showAudioRecorder,
         editor,
         onEditLastMessage,
+        setEmojiBoardTab,
       ]
     );
 
@@ -1091,22 +1327,38 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode));
+      const emoticonEl = createEmoticonElement(key, shortcode);
+      if (autocompleteQuery) {
+        replaceWithElement(editor, autocompleteQuery.range, emoticonEl);
+      } else {
+        editor.insertNode(emoticonEl);
+      }
+      if (!imagePacksUsedRef.current.has(key)) {
+        const imgPkRef = getImagePackReferencesForMxc(key, mx, ImageUsage.Emoticon, room);
+        if (imgPkRef?.room_id && imgPkRef?.shortcode) imagePacksUsedRef.current.set(key, imgPkRef);
+      }
       moveCursor(editor);
+      handleCloseAutocomplete();
     };
 
     const handleStickerSelect = async (mxc: string, shortcode: string, label: string) => {
       const stickerUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
       if (!stickerUrl) return;
 
-      const { blob, image } = await loadImageElementFromMediaUrl(stickerUrl);
-      const info = getImageInfo(image, blob);
+      const info = getImageInfo(
+        await loadImageElement(stickerUrl),
+        await getImageUrlBlob(stickerUrl)
+      );
 
-      const content: StickerEventContent & ReplyEventContent & IContent = {
+      const content: StickerEventContent & ReplyEventContent & IContent & IGenericMSC4459 = {
         body: label,
         url: mxc,
         info,
       };
+
+      // add the image pack reference
+      content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
+        getImagePackReferencesForMxcWrappedInMap(mxc, mx, ImageUsage.Sticker, room);
 
       /**
        * the currently with the room associated per-message profile, if any, so that it can be included in the message content when sending.
@@ -1116,65 +1368,31 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
 
       if (perMessageProfile) {
-        content['com.beeper.per_message_profile'] = convertPerMessageProfileToBeeperFormat(
-          perMessageProfile,
-          false
-        );
+        content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
+          convertPerMessageProfileToBeeperFormat(perMessageProfile, false);
       }
+      content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
+        getImagePackReferencesForMxcWrappedInMap(mxc, mx, ImageUsage.Sticker, room);
 
       if (replyDraft) {
         content['m.relates_to'] = getReplyContent(replyDraft, room);
-        if (threadRootId) {
-          setReplyDraft({
-            userId: mx.getUserId() ?? '',
-            eventId: threadRootId,
-            body: '',
-            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
-          });
-        } else {
-          setReplyDraft(undefined);
-        }
+        if (!silentReply && replyDraft)
+          content['m.mentions'] = { ['user_ids']: [replyDraft.userId] };
+        setReplyDraft(replyDraftBase);
       }
       mx.sendEvent(roomId, EventType.Sticker, content);
     };
 
+    const handleGifSelect = async (gif: GifData, spoiler?: boolean) => {
+      const url = getKlipyMxcUrl(gif.url, clientConfig.gifs?.proxyUrl);
+
+      const content = await getGifMsgContent(mx, gif, url, spoiler);
+
+      await handleSendContents([content]);
+    };
+
     return (
       <div ref={ref}>
-        {selectedFiles.length > 0 && (
-          <UploadBoard
-            header={
-              <UploadBoardHeader
-                open={uploadBoard}
-                onToggle={() => setUploadBoard(!uploadBoard)}
-                uploadFamilyObserverAtom={uploadFamilyObserverAtom}
-                onSend={handleSendUpload}
-                imperativeHandlerRef={uploadBoardHandlers}
-                onCancel={handleCancelUpload}
-              />
-            }
-          >
-            {uploadBoard && (
-              <Scroll size="300" hideTrack visibility="Hover">
-                <UploadBoardContent>
-                  {Array.from(selectedFiles)
-                    .reverse()
-                    .map((fileItem, index) => (
-                      <UploadCardRenderer
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={index}
-                        isEncrypted={!!fileItem.encInfo}
-                        fileItem={fileItem}
-                        setMetadata={handleFileMetadata}
-                        onRemove={handleRemoveUpload}
-                        setDesc={setDesc}
-                        roomId={roomId}
-                      />
-                    ))}
-                </UploadBoardContent>
-              </Scroll>
-            )}
-          </UploadBoard>
-        )}
         <Overlay
           open={dropZoneVisible}
           backdrop={<OverlayBackdrop />}
@@ -1189,7 +1407,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 gap="500"
                 style={{ padding: toRem(60) }}
               >
-                <Icon size="600" src={Icons.File} />
+                {dropzoneIcon(FileIcon)}
                 <Text size="H4" align="Center">
                   {`Drop Files in "${room?.name || 'Room'}"`}
                 </Text>
@@ -1220,6 +1438,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
+            onEmoticonSelected={handleEmoticonSelect}
           />
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.Reaction &&
@@ -1265,27 +1484,67 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           forceMultilineLayout={showAudioRecorder}
           top={
             <>
+              {selectedFiles.length > 0 && (
+                <UploadBoard
+                  header={
+                    <UploadBoardHeader
+                      open={uploadBoard}
+                      onToggle={() => setUploadBoard(!uploadBoard)}
+                      uploadFamilyObserverAtom={uploadFamilyObserverAtom}
+                      onSend={handleSendUpload}
+                      imperativeHandlerRef={uploadBoardHandlers}
+                      onCancel={handleCancelUpload}
+                    />
+                  }
+                >
+                  {uploadBoard && (
+                    <Scroll direction="Horizontal" size="300" hideTrack visibility="Hover">
+                      <UploadBoardContent>
+                        {Array.from(selectedFiles)
+                          .toReversed()
+                          .map((fileItem) => (
+                            <UploadCardRenderer
+                              key={getUploadItemKey(fileItem)}
+                              isEncrypted={!!fileItem.encInfo}
+                              fileItem={fileItem}
+                              setMetadata={handleFileMetadata}
+                              onRemove={handleRemoveUpload}
+                              setDesc={setDesc}
+                              roomId={roomId}
+                              hideCaption={
+                                selectedFiles.length == 1 && sendIndividualAttachmentAsCaption
+                              }
+                            />
+                          ))}
+                      </UploadBoardContent>
+                    </Scroll>
+                  )}
+                </UploadBoard>
+              )}
               {scheduledTime && (
                 <div>
                   <Box
                     alignItems="Center"
                     gap="300"
-                    style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
+                    style={{
+                      padding: `${config.space.S200} ${config.space.S300} 0`,
+                    }}
                   >
                     <IconButton
                       onClick={() => {
                         setScheduledTime(null);
                         setEditingScheduledDelayId(null);
+                        setSendError(undefined);
                       }}
                       variant="SurfaceVariant"
                       size="300"
                       radii="300"
                       title="schedule message send"
                     >
-                      <Icon src={Icons.Cross} size="50" />
+                      {chipIcon(X)}
                     </IconButton>
                     <Box direction="Row" gap="200" alignItems="Center">
-                      <Icon size="100" src={Icons.Clock} />
+                      {menuIcon(Clock)}
                       <Text size="T300">
                         Scheduled for {timeDayMonthYear(scheduledTime.getTime())} at{' '}
                         {timeHourMinute(scheduledTime.getTime(), hour24Clock)}
@@ -1294,12 +1553,27 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </Box>
                 </div>
               )}
-              {replyDraft && (!threadRootId || replyDraft.body) && (
+              {sendError && (
                 <div>
                   <Box
                     alignItems="Center"
                     gap="300"
                     style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
+                  >
+                    <Text style={{ color: color.Critical.Main }} size="T300">
+                      {sendError}
+                    </Text>
+                  </Box>
+                </div>
+              )}
+              {replyDraft && (!threadRootId || replyDraft.body) && (
+                <div>
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{
+                      padding: `${config.space.S200} ${config.space.S300} 0`,
+                    }}
                   >
                     <IconButton
                       onClick={() => {
@@ -1308,19 +1582,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             userId: mx.getUserId() ?? '',
                             eventId: threadRootId,
                             body: '',
-                            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
+                            relation: {
+                              rel_type: RelationType.Thread,
+                              event_id: threadRootId,
+                            },
                           });
                         } else {
                           setReplyDraft(undefined);
                         }
                       }}
                       variant="SurfaceVariant"
+                      style={{ background: 'transparent' }}
                       size="300"
                       radii="300"
                       aria-label="Cancel reply"
                       title="Cancel reply"
                     >
-                      <Icon src={Icons.Cross} size="50" />
+                      {chipIcon(X)}
                     </IconButton>
                     <Box
                       direction="Row"
@@ -1345,6 +1623,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
+                        style={{ background: 'transparent' }}
                         title={
                           silentReply ? 'Unmute reply notifications' : 'Mute reply notifications'
                         }
@@ -1354,8 +1633,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         }
                         onClick={() => setSilentReply(!silentReply)}
                       >
-                        {!silentReply && <Icon src={Icons.BellPing} />}
-                        {silentReply && <Icon src={Icons.BellMute} />}
+                        {!silentReply && composerIcon(Bell)}
+                        {silentReply && composerIcon(BellSlash)}
                       </IconButton>
                     </Box>
                   </Box>
@@ -1364,16 +1643,77 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             </>
           }
           before={
-            <IconButton
-              onClick={() => pickFile('*')}
-              variant="SurfaceVariant"
-              size="300"
-              radii="300"
-              title="Upload File"
-              aria-label="Upload and attach a File"
-            >
-              <Icon src={Icons.PlusCircle} />
-            </IconButton>
+            <>
+              <PopOut
+                anchor={AddMenuAnchor}
+                position="Top"
+                align="Start"
+                offset={5}
+                content={
+                  <FocusTrap
+                    focusTrapOptions={{
+                      initialFocus: false,
+                      onDeactivate: () => setAddMenuAnchor(undefined),
+                      clickOutsideDeactivates: true,
+                      escapeDeactivates: stopPropagation,
+                    }}
+                  >
+                    <Menu>
+                      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          onClick={() => {
+                            setAddMenuAnchor(undefined);
+                            setShowPollPicker(true);
+                          }}
+                          before={menuIcon(ListBullets)}
+                        >
+                          <Text size="B300">Create Poll</Text>
+                        </MenuItem>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          onClick={() => {
+                            setAddMenuAnchor(undefined);
+                            setShowLocationPicker(true);
+                          }}
+                          before={menuIcon(MapPinPlusIcon)}
+                        >
+                          <Text size="B300">Add Location</Text>
+                        </MenuItem>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          onClick={() => {
+                            pickFile('*');
+                            setAddMenuAnchor(undefined);
+                          }}
+                          before={menuIcon(PlusCircle)}
+                        >
+                          <Text size="B300">Add File</Text>
+                        </MenuItem>
+                      </Box>
+                    </Menu>
+                  </FocusTrap>
+                }
+              />
+              <IconButton
+                onClick={(evt) =>
+                  editorOldAddFile
+                    ? pickFile('*')
+                    : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
+                }
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                style={{ backgroundColor: 'transparent' }}
+                title={editorOldAddFile ? 'Upload File' : 'Add'}
+                aria-label={editorOldAddFile ? 'Upload and attach a File' : 'Add new Item'}
+              >
+                {composerIcon(PlusCircle)}
+              </IconButton>
+            </>
           }
           after={
             <>
@@ -1385,6 +1725,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 radii="300"
                 title={showAudioRecorder ? 'Stop recording' : 'Record audio message'}
                 aria-label={showAudioRecorder ? 'Stop recording' : 'Record audio message'}
+                style={{ backgroundColor: 'transparent' }}
                 aria-pressed={showAudioRecorder}
                 onClick={() => {
                   if (mobileOrTablet() && !showAudioRecorder) return;
@@ -1400,8 +1741,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
 
-                  let cleanup: () => void;
-                  const onUp = () => {
+                  function onUp() {
                     cleanup();
                     const held = Date.now() - micHoldStartRef.current;
                     if (held >= HOLD_THRESHOLD_MS) {
@@ -1413,35 +1753,30 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         audioRecorderRef.current?.cancel();
                       }, 50);
                     }
-                  };
-                  cleanup = () => {
+                  }
+                  function cleanup() {
                     window.removeEventListener('pointerup', onUp);
                     window.removeEventListener('pointercancel', cleanup);
-                  };
+                  }
                   window.addEventListener('pointerup', onUp);
                   window.addEventListener('pointercancel', cleanup);
                 }}
               >
                 {showAudioRecorder ? (
-                  <Stop size={20} weight="fill" style={{ color: color.Critical.Main }} />
+                  <Stop
+                    size={getPhosphorIconSize('toolbar')}
+                    weight="fill"
+                    style={{ color: color.Critical.Main }}
+                  />
                 ) : (
-                  <Microphone size={20} />
+                  composerIcon(Microphone)
                 )}
               </IconButton>
 
-              <IconButton
-                variant="SurfaceVariant"
-                size="300"
-                radii="300"
-                title={toolbar ? 'Hide Toolbar' : 'Show Toolbar'}
-                aria-pressed={toolbar}
-                aria-label={toolbar ? 'Hide Toolbar' : 'Show Toolbar'}
-                onClick={() => setToolbar(!toolbar)}
-              >
-                <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
-              </IconButton>
+              <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
+
               <UseStateProvider initial={undefined}>
-                {(emojiBoardTab: EmojiBoardTab | undefined, setEmojiBoardTab) => (
+                {() => (
                   <PopOut
                     offset={16}
                     alignOffset={-44}
@@ -1461,6 +1796,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         onEmojiSelect={handleEmoticonSelect}
                         onCustomEmojiSelect={handleEmoticonSelect}
                         onStickerSelect={handleStickerSelect}
+                        onGifSelect={handleGifSelect}
                         requestClose={() => {
                           setEmojiBoardTab((t) => {
                             if (t) {
@@ -1473,6 +1809,20 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       />
                     }
                   >
+                    {showGifPicker && (
+                      <IconButton
+                        aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                        variant="SurfaceVariant"
+                        size="300"
+                        radii="300"
+                        style={{ backgroundColor: 'transparent' }}
+                      >
+                        {composerIcon(GifIcon, {
+                          weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                        })}
+                      </IconButton>
+                    )}
                     {!hideStickerBtn && (
                       <IconButton
                         aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
@@ -1480,33 +1830,40 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
+                        style={{ backgroundColor: 'transparent' }}
                         title="open sticker picker"
                         aria-label="Open sticker picker"
                       >
-                        <Icon
-                          src={Icons.Sticker}
-                          filled={emojiBoardTab === EmojiBoardTab.Sticker}
-                        />
+                        {composerIcon(Sticker, {
+                          weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
+                        })}
                       </IconButton>
                     )}
                     <IconButton
                       ref={emojiBtnRef}
                       aria-pressed={
-                        hideStickerBtn ? !!emojiBoardTab : emojiBoardTab === EmojiBoardTab.Emoji
+                        hideStickerBtn
+                          ? emojiBoardTab === EmojiBoardTab.Emoji ||
+                            emojiBoardTab === EmojiBoardTab.Gif
+                          : emojiBoardTab === EmojiBoardTab.Emoji
                       }
                       onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
                       variant="SurfaceVariant"
                       size="300"
                       radii="300"
+                      style={{ backgroundColor: 'transparent' }}
                       title="open emoji picker"
                       aria-label="Open emoji picker"
                     >
-                      <Icon
-                        src={Icons.Smile}
-                        filled={
-                          hideStickerBtn ? !!emojiBoardTab : emojiBoardTab === EmojiBoardTab.Emoji
-                        }
-                      />
+                      {composerIcon(Smiley, {
+                        weight: hideStickerBtn
+                          ? emojiBoardTab
+                            ? 'fill'
+                            : 'regular'
+                          : emojiBoardTab === EmojiBoardTab.Emoji
+                            ? 'fill'
+                            : 'regular',
+                      })}
                     </IconButton>
                   </PopOut>
                 )}
@@ -1534,7 +1891,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             setScheduleMenuAnchor(undefined);
                             submit();
                           }}
-                          before={<Icon size="100" src={Icons.Send} />}
+                          before={menuIcon(PaperPlaneTilt)}
                         >
                           <Text size="B300">Send Now</Text>
                         </MenuItem>
@@ -1545,7 +1902,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             setScheduleMenuAnchor(undefined);
                             setShowSchedulePicker(true);
                           }}
-                          before={<Icon size="100" src={Icons.Clock} />}
+                          before={menuIcon(Clock)}
                         >
                           <Text size="B300">Schedule Send</Text>
                         </MenuItem>
@@ -1558,6 +1915,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 <IconButton
                   title="Send Message"
                   aria-label="Send your composed Message"
+                  style={{ backgroundColor: 'transparent' }}
                   onClick={() => {
                     if (isLongPress.current) {
                       isLongPress.current = false;
@@ -1592,7 +1950,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   radii="0"
                   className={delayedEventsSupported ? css.SplitSendButton : undefined}
                 >
-                  <Icon src={scheduledTime ? Icons.Clock : Icons.Send} />
+                  {scheduledTime ? composerIcon(Clock) : composerIcon(PaperPlaneTilt)}
                 </IconButton>
                 {delayedEventsSupported && !mobileOrTablet() && (
                   <IconButton
@@ -1602,24 +1960,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     title="Schedule Message"
                     aria-label="Schedule message send"
                     variant={scheduledTime ? 'Primary' : 'SurfaceVariant'}
+                    style={{ backgroundColor: 'transparent' }}
                     size="300"
                     radii="0"
                     className={css.SplitChevronButton}
                   >
-                    <Icon size="50" src={Icons.ChevronBottom} />
+                    {chipIcon(CaretDown)}
                   </IconButton>
                 )}
               </Box>
             </>
           }
-          bottom={
-            toolbar && (
-              <div>
-                <Line variant="SurfaceVariant" size="300" />
-                <Toolbar />
-              </div>
-            )
-          }
+          bottom={<MarkdownFormattingToolbarBottom />}
         />
         {showSchedulePicker && (
           <SchedulePickerDialog
@@ -1629,7 +1981,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             onSubmit={(date) => {
               setScheduledTime(date);
               setShowSchedulePicker(false);
+              setSendError(undefined);
             }}
+          />
+        )}
+        {showPollPicker && (
+          <PollDialog
+            onCancel={() => setShowPollPicker(false)}
+            mx={mx}
+            room={room}
+            replyDraft={replyDraft}
+            clearReplyDraft={() => setReplyDraft(replyDraftBase)}
+          />
+        )}
+        {showLocationPicker && (
+          <LocationDialog
+            onCancel={() => setShowLocationPicker(false)}
+            mx={mx}
+            room={room}
+            replyDraft={replyDraft}
+            clearReplyDraft={() => setReplyDraft(replyDraftBase)}
           />
         )}
       </div>
