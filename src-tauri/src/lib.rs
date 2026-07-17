@@ -29,7 +29,8 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     log::info!("Main window not found, creating a new one.");
 
     let builder =
-        tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default());
+        tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default())
+            .disable_drag_drop_handler();
 
     #[cfg(desktop)]
     let builder = builder
