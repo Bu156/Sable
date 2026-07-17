@@ -11,9 +11,7 @@ describe('getKlipyMxcUrl', () => {
   });
 
   it('allows an existing MXC favorite without a proxy', () => {
-    expect(getSendableKlipyMxcUrl('mxc://example.org/existing')).toBe(
-      'mxc://example.org/existing'
-    );
+    expect(getSendableKlipyMxcUrl('mxc://example.org/existing')).toBe('mxc://example.org/existing');
   });
 
   it('creates an MXC URL when a proxy is configured', () => {

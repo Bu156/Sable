@@ -15,7 +15,9 @@ describe('incoming image renderer', () => {
 
     render(
       <MImage
-        content={{ body: 'remote image', url: 'https://attacker.example/image.png' } as IImageContent}
+        content={
+          { body: 'remote image', url: 'https://attacker.example/image.png' } as IImageContent
+        }
         renderImageContent={renderImageContent}
       />
     );
