@@ -6,7 +6,5 @@
     <string>Sable needs camera access for video calls.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Sable needs microphone access for voice and video calls.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Sable needs your location to share it in a chat.</string>
 </dict>
 </plist>
