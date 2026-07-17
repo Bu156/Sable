@@ -65,6 +65,7 @@ import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
 import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
+import { NotificationTransportRuntimeFeature } from '$features/settings/notifications/NotificationTransportRuntimeFeature';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
 import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
@@ -930,6 +931,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <InviteNotifications />
       <MessageNotifications />
       <BackgroundNotifications />
+      <NotificationTransportRuntimeFeature />
       <SyncNotificationSettingsWithServiceWorker />
       <HandleDecryptPushEvent />
       <NotificationBanner />
