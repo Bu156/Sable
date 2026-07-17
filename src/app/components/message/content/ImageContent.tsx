@@ -40,6 +40,8 @@ import { bytesToSize } from '$utils/common';
 import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '$utils/matrix';
+import { fetchMediaBlob } from '$utils/mediaTransport';
+import { hasControllingServiceWorker } from '$utils/platform';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { ModalWide } from '$styles/Modal.css';
 import { validBlurHash } from '$utils/blurHash';
@@ -100,6 +102,15 @@ export type ImageContentProps = {
   containedStripMinPx?: number;
   fillsPreviewSlot?: boolean;
 };
+// On web the service worker injects the media access token for <img src> URLs.
+// Under Tauri there is no controlling service worker, so fetch the blob with the
+// token (via mediaTransport) and render it as an object URL instead.
+const toRenderableMediaUrl = async (rawUrl: string): Promise<string> => {
+  if (hasControllingServiceWorker()) return rawUrl;
+  const blob = await fetchMediaBlob(rawUrl);
+  return URL.createObjectURL(blob);
+};
+
 export const ImageContent = as<'div', ImageContentProps>(
   (
     {
@@ -158,7 +169,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         if (typeof matrixThumbnailMaxEdge === 'number' && matrixThumbnailMaxEdge > 0 && !encInfo) {
           const { tw, th } = thumbnailDimsForMaxEdge(matrixThumbnailMaxEdge, info?.w, info?.h);
           const thumbUrl = mxcUrlToHttp(mx, url, useAuthentication, tw, th, 'scale', false);
-          if (thumbUrl) return thumbUrl;
+          if (thumbUrl) return toRenderableMediaUrl(thumbUrl);
         }
 
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
@@ -169,7 +180,7 @@ export const ImageContent = as<'div', ImageContentProps>(
           );
           return URL.createObjectURL(fileContent);
         }
-        return mediaUrl;
+        return toRenderableMediaUrl(mediaUrl);
       }, [mx, url, useAuthentication, mimeType, encInfo, matrixThumbnailMaxEdge, info?.w, info?.h])
     );
 
@@ -190,7 +201,8 @@ export const ImageContent = as<'div', ImageContentProps>(
       void (async () => {
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl || cancelled) return;
-        setViewerFullSrc(mediaUrl);
+        const renderable = await toRenderableMediaUrl(mediaUrl);
+        if (!cancelled) setViewerFullSrc(renderable);
       })();
       return () => {
         cancelled = true;
