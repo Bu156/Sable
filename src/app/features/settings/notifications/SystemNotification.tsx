@@ -62,6 +62,7 @@ import {
   tryEnableUnifiedPush,
   type UnifiedPushTransportConfigInput,
 } from './UnifiedPushNotifications';
+import { normalizeErrorMessage } from './UnifiedPushTransport';
 import {
   ensureUnifiedPushDistributorSelection,
   loadUnifiedPushDistributorState,
@@ -564,7 +565,7 @@ function BackgroundPushNotificationSetting() {
       })
       .catch((caughtError) => {
         if (!active) return;
-        setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+        setError(normalizeErrorMessage(caughtError));
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -770,7 +771,7 @@ function BackgroundPushNotificationSetting() {
       }
       setBackgroundPushEnabled(wantsPush);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+      setError(normalizeErrorMessage(caughtError));
     } finally {
       setIsLoading(false);
     }
@@ -795,7 +796,7 @@ function BackgroundPushNotificationSetting() {
       }
       setPushTransportMode(nextMode);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+      setError(normalizeErrorMessage(caughtError));
     } finally {
       setIsLoading(false);
     }
@@ -827,7 +828,7 @@ function BackgroundPushNotificationSetting() {
       setSelectedDistributor(distributor);
       updatePushTransportOverride({ unifiedPushDistributor: distributor });
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+      setError(normalizeErrorMessage(caughtError));
     } finally {
       setIsLoading(false);
     }

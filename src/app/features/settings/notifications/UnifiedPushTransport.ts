@@ -48,7 +48,7 @@ export type UnifiedPushRegistrationResult =
 
 const DISTRIBUTUTOR_STORAGE_KEY = 'unifiedpush_distributor';
 
-function normalizeErrorMessage(error: unknown): string {
+export function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   if (error && typeof error === 'object') {
@@ -125,11 +125,18 @@ export async function saveUnifiedPushDistributor(distributor: string): Promise<v
 }
 
 export async function loadUnifiedPushDistributorState(): Promise<UnifiedPushDistributorState> {
-  const [distributorResult, distributors] = await Promise.all([
+  const [distributorResult, distributorsResult] = await Promise.allSettled([
     getUnifiedPushDistributor(),
     getUnifiedPushDistributors(),
   ]);
-  const savedDistributor = distributorResult.distributor;
+
+  const savedDistributor =
+    distributorsResult.status === 'fulfilled'
+      ? distributorResult.status === 'fulfilled'
+        ? distributorResult.value.distributor
+        : ''
+      : '';
+  const distributors = distributorsResult.status === 'fulfilled' ? distributorsResult.value : [];
 
   if (savedDistributor && distributors.includes(savedDistributor)) {
     return { distributors, selectedDistributor: savedDistributor };

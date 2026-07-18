@@ -186,11 +186,13 @@ describe('UnifiedPush distributor state helpers', () => {
     );
   });
 
-  it('surfaces backend errors while loading distributor state', async () => {
+  it('returns empty distributors when the backend is unavailable', async () => {
     localStorage.removeItem('unifiedpush_distributor');
     unifiedPushApi.listDistributors.mockRejectedValue(new Error('backend unavailable'));
 
-    await expect(loadUnifiedPushDistributorState()).rejects.toThrow('backend unavailable');
+    const result = await loadUnifiedPushDistributorState();
+    expect(result.distributors).toEqual([]);
+    expect(result.selectedDistributor).toBe('');
   });
 
   it('restores the previous distributor when a switch registration fails', async () => {
