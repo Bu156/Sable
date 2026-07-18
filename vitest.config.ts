@@ -22,6 +22,10 @@ export default defineConfig({
       $public: path.resolve(__dirname, 'public'),
       $client: path.resolve(__dirname, 'src/client'),
       $unstable: path.resolve(__dirname, 'src/unstable'),
+      '@choochmeque/tauri-plugin-notifications-api': path.resolve(
+        __dirname,
+        'src/test/choochmeque-notifications-stub.ts'
+      ),
     },
   },
   define: {

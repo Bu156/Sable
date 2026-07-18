@@ -11,11 +11,11 @@ import {
 const unifiedPushApi = vi.hoisted(() => ({
   isPermissionGranted: vi.fn<() => Promise<boolean>>(),
   requestPermission: vi.fn<() => Promise<string>>(),
-  registerForUnifiedPush: vi.fn<() => Promise<{ endpoint: string; instance: string }>>(),
-  unregisterFromUnifiedPush: vi.fn<() => void>(),
-  getUnifiedPushDistributors: vi.fn<() => Promise<{ distributors: string[] }>>(),
-  getUnifiedPushDistributor: vi.fn<() => Promise<{ distributor: string }>>(),
-  saveUnifiedPushDistributor: vi.fn<() => Promise<void>>(),
+  registerForPushNotifications: vi.fn<() => Promise<string>>(),
+  unregisterForPushNotifications: vi.fn<() => Promise<void>>(),
+  listDistributors: vi.fn<() => Promise<string[]>>(),
+  setDistributor: vi.fn<(name: string) => Promise<void>>(),
+  setToken: vi.fn<(token: string) => Promise<void>>(),
 }));
 
 vi.mock('./UnifiedPushTransportApiClient', () => ({
@@ -24,6 +24,7 @@ vi.mock('./UnifiedPushTransportApiClient', () => ({
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe('classifyUnifiedPushFailure', () => {
@@ -44,25 +45,21 @@ describe('registerUnifiedPushTransport', () => {
   it('requests permission before registering and saves the only available distributor', async () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(false);
     unifiedPushApi.requestPermission.mockResolvedValue('granted');
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: '' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.unifiedpush.distributor.ntfy'],
-    });
-    unifiedPushApi.registerForUnifiedPush.mockResolvedValue({
-      endpoint: 'https://up.example/endpoint',
-      instance: 'instance-1',
-    });
+    localStorage.removeItem('unifiedpush_distributor');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.unifiedpush.distributor.ntfy']);
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue(
+      'https://up.example/endpoint'
+    );
 
     await expect(registerUnifiedPushTransport()).resolves.toEqual({
       status: 'registered',
       permissionState: 'granted',
       endpoint: 'https://up.example/endpoint',
-      instance: 'instance-1',
       distributor: 'org.unifiedpush.distributor.ntfy',
     });
     expect(unifiedPushApi.requestPermission).toHaveBeenCalledOnce();
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledOnce();
-    expect(unifiedPushApi.registerForUnifiedPush).toHaveBeenCalledOnce();
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledOnce();
+    expect(unifiedPushApi.registerForPushNotifications).toHaveBeenCalledOnce();
   });
 
   it('returns denied without registering when permission is denied', async () => {
@@ -74,13 +71,13 @@ describe('registerUnifiedPushTransport', () => {
       permissionState: 'denied',
       error: 'UnifiedPush permission denied',
     });
-    expect(unifiedPushApi.registerForUnifiedPush).not.toHaveBeenCalled();
+    expect(unifiedPushApi.registerForPushNotifications).not.toHaveBeenCalled();
   });
 
   it('returns missing-distributor without registering when none are available', async () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: '' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({ distributors: [] });
+    localStorage.removeItem('unifiedpush_distributor');
+    unifiedPushApi.listDistributors.mockResolvedValue([]);
 
     await expect(registerUnifiedPushTransport()).resolves.toEqual({
       status: 'missing-distributor',
@@ -88,16 +85,14 @@ describe('registerUnifiedPushTransport', () => {
       distributors: [],
       error: 'No UnifiedPush distributor installed',
     });
-    expect(unifiedPushApi.registerForUnifiedPush).not.toHaveBeenCalled();
+    expect(unifiedPushApi.registerForPushNotifications).not.toHaveBeenCalled();
   });
 
   it('classifies temporary-unavailable registration failures distinctly', async () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: 'org.example.up' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.example.up'],
-    });
-    unifiedPushApi.registerForUnifiedPush.mockRejectedValue(
+    localStorage.setItem('unifiedpush_distributor', 'org.example.up');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.example.up']);
+    unifiedPushApi.registerForPushNotifications.mockRejectedValue(
       new Error('UnifiedPush registration temporarily unavailable')
     );
 
@@ -111,14 +106,9 @@ describe('registerUnifiedPushTransport', () => {
 
   it('treats missing endpoint data as a hard failure', async () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: 'org.example.up' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.example.up'],
-    });
-    unifiedPushApi.registerForUnifiedPush.mockResolvedValue({
-      endpoint: '',
-      instance: 'instance-1',
-    });
+    localStorage.setItem('unifiedpush_distributor', 'org.example.up');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.example.up']);
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue('');
 
     await expect(registerUnifiedPushTransport()).resolves.toMatchObject({
       status: 'hard-failure',
@@ -127,20 +117,15 @@ describe('registerUnifiedPushTransport', () => {
     });
   });
 
-  it('treats missing instance data as a hard failure', async () => {
+  it('treats a blank-only endpoint as a hard failure', async () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: 'org.example.up' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.example.up'],
-    });
-    unifiedPushApi.registerForUnifiedPush.mockResolvedValue({
-      endpoint: 'https://up.example/endpoint',
-      instance: '',
-    });
+    localStorage.setItem('unifiedpush_distributor', 'org.example.up');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.example.up']);
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue('   ');
 
     await expect(registerUnifiedPushTransport()).resolves.toMatchObject({
       status: 'hard-failure',
-      error: 'UnifiedPush registration returned an invalid instance',
+      error: 'UnifiedPush registration returned an invalid endpoint',
       distributor: 'org.example.up',
     });
   });
@@ -148,75 +133,72 @@ describe('registerUnifiedPushTransport', () => {
 
 describe('UnifiedPush distributor state helpers', () => {
   it('loads distributor state and auto-saves the sole available distributor', async () => {
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({ distributor: '' });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.unifiedpush.distributor.ntfy'],
-    });
+    localStorage.removeItem('unifiedpush_distributor');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.unifiedpush.distributor.ntfy']);
 
     await expect(loadUnifiedPushDistributorState()).resolves.toEqual({
       distributors: ['org.unifiedpush.distributor.ntfy'],
       selectedDistributor: 'org.unifiedpush.distributor.ntfy',
     });
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledOnce();
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledOnce();
   });
 
   it('drops a stale saved distributor that is no longer installed', async () => {
-    unifiedPushApi.getUnifiedPushDistributor.mockResolvedValue({
-      distributor: 'org.unifiedpush.distributor.removed',
-    });
-    unifiedPushApi.getUnifiedPushDistributors.mockResolvedValue({
-      distributors: ['org.unifiedpush.distributor.ntfy'],
-    });
+    localStorage.setItem('unifiedpush_distributor', 'org.unifiedpush.distributor.removed');
+    unifiedPushApi.listDistributors.mockResolvedValue(['org.unifiedpush.distributor.ntfy']);
 
     await expect(loadUnifiedPushDistributorState()).resolves.toEqual({
       distributors: ['org.unifiedpush.distributor.ntfy'],
       selectedDistributor: 'org.unifiedpush.distributor.ntfy',
     });
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledWith(
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith(
       'org.unifiedpush.distributor.ntfy'
     );
   });
 
   it('ensures a distributor selection by auto-saving the first available distributor', async () => {
+    unifiedPushApi.setDistributor.mockResolvedValue(undefined);
     await expect(
       ensureUnifiedPushDistributorSelection(
         ['org.unifiedpush.distributor.ntfy', 'org.unifiedpush.distributor.nextpush'],
         ''
       )
     ).resolves.toBe('org.unifiedpush.distributor.ntfy');
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledOnce();
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledOnce();
   });
 
   it('replaces a stale selected distributor with the first available one', async () => {
+    unifiedPushApi.setDistributor.mockResolvedValue(undefined);
     await expect(
       ensureUnifiedPushDistributorSelection(
         ['org.unifiedpush.distributor.ntfy', 'org.unifiedpush.distributor.nextpush'],
         'org.unifiedpush.distributor.removed'
       )
     ).resolves.toBe('org.unifiedpush.distributor.ntfy');
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledWith(
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith(
       'org.unifiedpush.distributor.ntfy'
     );
   });
 
   it('persists a selected distributor through the transport helper', async () => {
+    unifiedPushApi.setDistributor.mockResolvedValue(undefined);
     await expect(
       setUnifiedPushDistributorSelection('org.unifiedpush.distributor.nextpush')
     ).resolves.toBeUndefined();
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenCalledWith(
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith(
       'org.unifiedpush.distributor.nextpush'
     );
   });
 
   it('surfaces backend errors while loading distributor state', async () => {
-    unifiedPushApi.getUnifiedPushDistributor.mockRejectedValue(new Error('backend unavailable'));
-    unifiedPushApi.getUnifiedPushDistributors.mockRejectedValue(new Error('backend unavailable'));
+    localStorage.removeItem('unifiedpush_distributor');
+    unifiedPushApi.listDistributors.mockRejectedValue(new Error('backend unavailable'));
 
     await expect(loadUnifiedPushDistributorState()).rejects.toThrow('backend unavailable');
   });
 
   it('restores the previous distributor when a switch registration fails', async () => {
-    unifiedPushApi.saveUnifiedPushDistributor.mockResolvedValue(undefined);
+    unifiedPushApi.setDistributor.mockResolvedValue(undefined);
     const register = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('registration failed'));
 
     await expect(
@@ -227,11 +209,11 @@ describe('UnifiedPush distributor state helpers', () => {
       )
     ).rejects.toThrow('registration failed');
 
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenNthCalledWith(
+    expect(unifiedPushApi.setDistributor).toHaveBeenNthCalledWith(
       1,
       'org.unifiedpush.distributor.ntfy'
     );
-    expect(unifiedPushApi.saveUnifiedPushDistributor).toHaveBeenNthCalledWith(
+    expect(unifiedPushApi.setDistributor).toHaveBeenNthCalledWith(
       2,
       'org.unifiedpush.distributor.nextpush'
     );

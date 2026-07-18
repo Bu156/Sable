@@ -4,23 +4,24 @@ export type NotificationPluginListener = {
 
 export type TauriNotificationsApi = {
   Importance: {
-    readonly Default: string;
+    readonly None: 0;
+    readonly Min: 1;
+    readonly Low: 2;
+    readonly Default: 3;
+    readonly High: 4;
   };
   createChannel: (channel: {
     id: string;
     name: string;
     description?: string;
-    importance?: string;
+    importance?: number;
     vibration?: boolean;
   }) => Promise<void>;
   sendNotification: (payload: Record<string, unknown>) => Promise<void>;
   removeActive: (payload: Array<{ id: number; tag?: string }>) => Promise<void>;
-  onUnifiedPushMessage: (
-    listener: (payload: Record<string, unknown>) => void
-  ) => Promise<NotificationPluginListener> | NotificationPluginListener;
-  onUnifiedPushEndpoint: (
-    listener: (payload: { endpoint: string; instance: string }) => void
-  ) => Promise<NotificationPluginListener> | NotificationPluginListener;
+  onNotificationReceived: (
+    listener: (notification: Record<string, unknown>) => void
+  ) => Promise<NotificationPluginListener>;
 };
 
 let notificationsApiPromise: Promise<TauriNotificationsApi> | null = null;
@@ -28,7 +29,7 @@ let notificationsApiPromise: Promise<TauriNotificationsApi> | null = null;
 export async function getTauriNotificationsApi(): Promise<TauriNotificationsApi> {
   if (!notificationsApiPromise) {
     notificationsApiPromise =
-      import('@sableclient/tauri-plugin-notifications-api') as Promise<TauriNotificationsApi>;
+      import('@choochmeque/tauri-plugin-notifications-api') as unknown as Promise<TauriNotificationsApi>;
   }
 
   return notificationsApiPromise;

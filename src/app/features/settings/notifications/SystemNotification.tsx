@@ -593,23 +593,17 @@ function BackgroundPushNotificationSetting() {
   const buildRegisteredUnifiedPushState = (
     registration: {
       endpoint: string;
-      instance: string;
+      gatewayUrl?: string;
       distributor?: string;
-      pubKeySet?: {
-        pubKey: string;
-        auth: string;
-      };
     },
     distributorOverride?: string
   ): UnifiedPushState => ({
     endpoint: registration.endpoint,
-    instance: registration.instance,
     appId: effectivePushTransport.unifiedPushAppID?.trim() ?? DEFAULT_UNIFIED_PUSH_APP_ID,
-    gatewayUrl: effectivePushTransport.unifiedPushGatewayUrl?.trim() ?? undefined,
+    gatewayUrl: registration.gatewayUrl ?? effectivePushTransport.unifiedPushGatewayUrl?.trim() ?? undefined,
     status: 'registered',
     distributor: distributorOverride ?? registration.distributor,
     permissionState: 'granted',
-    pubKeySet: registration.pubKeySet,
   });
 
   const setUnifiedPushEndpointState = (endpoint: UnifiedPushState) => {

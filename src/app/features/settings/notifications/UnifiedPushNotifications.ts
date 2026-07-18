@@ -1,14 +1,9 @@
 import type { IPusherRequest, MatrixClient } from '$types/matrix-sdk';
-import type {
-  MessagingStyleMessage,
-  MessagingStylePerson,
-} from '@sableclient/tauri-plugin-notifications-api';
 import { EventType } from 'matrix-js-sdk/lib/@types/event';
 import { resolveNotificationPreviewText } from '$utils/notificationStyle';
 import { getMxIdLocalPart } from '$utils/matrix';
 import { getStateEvent, getMemberAvatarMxc } from '$utils/room';
 import { createDebugLogger } from '$utils/debugLogger';
-import { fetch } from '$utils/fetch';
 import {
   getUnifiedPushDistributor,
   getUnifiedPushDistributors,
@@ -46,56 +41,6 @@ type UnifiedPushPayload = {
   [key: string]: unknown;
 };
 
-/**
- * Probes the UP endpoint for a Matrix-compatible push gateway.
- * Falls back to the configured or public UP gateway.
- * Note: pushNotifyUrl (Sygnal) is NOT suitable — only a proper UP gateway works.
- */
-async function discoverGateway(
-  upEndpoint: string,
-  unifiedPushGateway?: string,
-  upInstance?: string
-): Promise<string> {
-  const probeCandidates = [upInstance, upEndpoint].filter(
-    (candidate): candidate is string => !!candidate?.trim()
-  );
-
-  const probeCandidate = async (candidate: string): Promise<string | undefined> => {
-    try {
-      const probeUrl = new URL(candidate);
-      probeUrl.pathname = '/_matrix/push/v1/notify';
-      probeUrl.search = '';
-      const res = await fetch(probeUrl.toString());
-      if (!res.ok) return undefined;
-
-      const body = await res.json();
-      if (
-        body?.gateway === 'matrix' ||
-        (body?.unifiedpush && body.unifiedpush.gateway === 'matrix')
-      ) {
-        return probeUrl.toString();
-      }
-    } catch {
-      // Probe failed (network error, invalid URL, etc)
-    }
-    return undefined;
-  };
-
-  const probeAtIndex = async (index: number): Promise<string | undefined> => {
-    if (index >= probeCandidates.length) return undefined;
-
-    const candidate = probeCandidates[index];
-    if (candidate === undefined) return undefined;
-    const result = await probeCandidate(candidate);
-    if (result) return result;
-
-    return probeAtIndex(index + 1);
-  };
-
-  const discoveredGateway = await probeAtIndex(0);
-  return discoveredGateway ?? unifiedPushGateway ?? UP_PUBLIC_GATEWAY;
-}
-
 const UP_REGISTER_TIMEOUT_MS = 30_000;
 
 export type UnifiedPushTransportConfigInput = Pick<
@@ -126,13 +71,8 @@ export type EnableUnifiedPushResult =
   | {
       status: 'registered';
       endpoint: string;
-      instance: string;
       gatewayUrl: string;
       distributor: string;
-      pubKeySet?: {
-        pubKey: string;
-        auth: string;
-      };
     }
   | Exclude<UnifiedPushRegistrationResult, { status: 'registered' }>;
 
@@ -173,19 +113,13 @@ export async function tryEnableUnifiedPush(
     return registration;
   }
 
-  const { endpoint, instance, pubKeySet } = registration;
+  const { endpoint } = registration;
   const resolvedConfig = resolveUnifiedPushPusherConfig(config);
-  const gatewayUrl = await discoverGateway(endpoint, resolvedConfig.gatewayUrl, instance);
+  const gatewayUrl = resolvedConfig.gatewayUrl ?? UP_PUBLIC_GATEWAY;
 
   const pusherData: Record<string, string> = {
     url: gatewayUrl,
   };
-
-  // VAPID-capable distributors (e.g. NextPush) provide keys for RFC 8291 encryption.
-  if (pubKeySet) {
-    pusherData.p256dh = pubKeySet.pubKey;
-    pusherData.auth = pubKeySet.auth;
-  }
 
   await mx.setPusher({
     kind: 'http',
@@ -202,17 +136,15 @@ export async function tryEnableUnifiedPush(
   return {
     status: 'registered',
     endpoint,
-    instance,
     gatewayUrl,
     distributor: registration.distributor,
-    pubKeySet,
   };
 }
 
 export async function enableUnifiedPush(
   mx: MatrixClient,
   config?: UnifiedPushTransportConfigInput
-): Promise<{ endpoint: string; instance: string; gatewayUrl: string }> {
+): Promise<{ endpoint: string; gatewayUrl: string }> {
   const result = await tryEnableUnifiedPush(mx, config);
   if (result.status !== 'registered') {
     throw new Error(result.error ?? 'UnifiedPush registration failed');
@@ -220,7 +152,6 @@ export async function enableUnifiedPush(
 
   return {
     endpoint: result.endpoint,
-    instance: result.instance,
     gatewayUrl: result.gatewayUrl,
   };
 }
@@ -307,10 +238,20 @@ type NotificationSettings = {
   useInAppNotifications: boolean;
 };
 
-// One MessagingStyle notification per room, accumulated into a single Android group.
-
 const NOTIF_GROUP_KEY = 'matrix_messages';
 const MAX_MESSAGES = 10;
+
+type NotifPerson = {
+  name: string;
+  key?: string;
+  iconUrl?: string;
+};
+
+type NotifMessage = {
+  text: string;
+  timestamp: number;
+  sender?: NotifPerson;
+};
 
 function hashCode(str: string): number {
   let hash = 0;
@@ -324,10 +265,9 @@ function hashCode(str: string): number {
 const roomNotifId = (roomId: string) => hashCode(roomId);
 const SUMMARY_NOTIF_ID = hashCode('sable-group-summary');
 
-/** Accumulated messages per room, cleared when unread drops to 0. */
 type RoomNotifCache = {
   roomName: string;
-  messages: MessagingStyleMessage[];
+  messages: NotifMessage[];
   seenEventIds: Set<string>;
   isGroupConversation: boolean;
   latestEventId?: string;
@@ -335,13 +275,6 @@ type RoomNotifCache = {
 
 const roomNotifCaches = new Map<string, RoomNotifCache>();
 
-/**
- * Resolves a user avatar to an HTTP URL for notification display.
- *
- * Returns an authenticated media URL (/_matrix/client/v1/media/).
- * The plugin's Kotlin layer downloads the image using the `authToken`
- * supplied in `MessagingStyleConfig`, so authenticated endpoints work.
- */
 function resolveAvatarUrl(mx: MatrixClient, roomId: string, userId: string): string | undefined {
   const room = mx.getRoom(roomId);
   if (!room) return undefined;
@@ -379,19 +312,20 @@ export async function clearRoomNotification(roomId: string) {
   }
 }
 
-/** Posts (or updates) the per-room MessagingStyle notification and the group summary. */
 async function postRoomNotification(
   roomId: string,
   cache: RoomNotifCache,
-  selfUser: MessagingStylePerson,
   isSilent: boolean,
-  extra: Record<string, unknown>,
-  authToken?: string | null
+  extra: Record<string, unknown>
 ) {
   const notificationsApi = await getTauriNotificationsApi();
-  const { messages, roomName, isGroupConversation } = cache;
+  const { messages, roomName } = cache;
   const latestMsg = messages[messages.length - 1];
   const latestBody = latestMsg ? `${latestMsg.sender?.name ?? 'You'}: ${latestMsg.text}` : '';
+
+  const inboxLines = messages
+    .slice(-5)
+    .map((m) => `${m.sender?.name ?? 'You'}: ${m.text}`);
 
   await notificationsApi.sendNotification({
     id: roomNotifId(roomId),
@@ -403,19 +337,9 @@ async function postRoomNotification(
     silent: isSilent,
     autoCancel: true,
     extra,
-    messagingStyle: {
-      user: selfUser,
-      conversationTitle: isGroupConversation ? roomName : undefined,
-      isGroupConversation,
-      messages,
-      authToken: authToken ?? undefined,
-    },
+    inboxLines: inboxLines.length > 1 ? inboxLines : undefined,
   });
 
-  // App-wide group summary — Android uses this when 4+ child notifications
-  // exist. With only one room there's nothing to summarise, and posting a
-  // summary can cause the OS to show the summary *instead of* the child
-  // MessagingStyle notification on some devices.
   const roomCount = roomNotifCaches.size;
   if (roomCount > 1) {
     const totalMessages = Array.from(roomNotifCaches.values()).reduce(
@@ -423,11 +347,11 @@ async function postRoomNotification(
       0
     );
     const summaryText = `${totalMessages} messages in ${roomCount} chats`;
-    const inboxLines: string[] = [];
+    const summaryLines: string[] = [];
     Array.from(roomNotifCaches.values()).forEach((c) => {
       const latest = c.messages[c.messages.length - 1];
       if (latest) {
-        inboxLines.push(`${c.roomName}: ${latest.sender?.name ?? 'You'}: ${latest.text}`);
+        summaryLines.push(`${c.roomName}: ${latest.sender?.name ?? 'You'}: ${latest.text}`);
       }
     });
     await notificationsApi.sendNotification({
@@ -435,7 +359,7 @@ async function postRoomNotification(
       title: summaryText,
       body: '',
       summary: summaryText,
-      inboxLines: inboxLines.slice(-5),
+      inboxLines: summaryLines.slice(-5),
       channelId: 'messages',
       group: NOTIF_GROUP_KEY,
       groupSummary: true,
@@ -473,14 +397,6 @@ async function handleRichPushPayload(
       const senderId: string | undefined = pushData?.sender;
       const isSilent = !settings.notificationSoundEnabled;
 
-      const selfUserId = settings.mx.getUserId() ?? undefined;
-      const selfUser: MessagingStylePerson = {
-        name: 'You',
-        key: selfUserId,
-        iconUrl:
-          selfUserId && roomId ? resolveAvatarUrl(settings.mx, roomId, selfUserId) : undefined,
-      };
-
       if (!roomId) {
         const notificationsApi = await getTauriNotificationsApi();
         await notificationsApi.sendNotification({
@@ -494,7 +410,7 @@ async function handleRichPushPayload(
         break;
       }
 
-      const sender: MessagingStylePerson | undefined = senderName
+      const sender: NotifPerson | undefined = senderName
         ? {
             name: senderName,
             key: senderId,
@@ -502,7 +418,7 @@ async function handleRichPushPayload(
           }
         : undefined;
 
-      const message: MessagingStyleMessage = {
+      const message: NotifMessage = {
         text: previewText,
         timestamp: Date.now(),
         sender,
@@ -525,18 +441,11 @@ async function handleRichPushPayload(
         cache.isGroupConversation = (room.getJoinedMemberCount() ?? 0) > 2;
       }
 
-      await postRoomNotification(
-        roomId,
-        cache,
-        selfUser,
-        isSilent,
-        {
-          room_id: roomId,
-          event_id: pushData?.event_id,
-          user_id: pushData?.user_id,
-        },
-        settings.mx.getAccessToken()
-      );
+      await postRoomNotification(roomId, cache, isSilent, {
+        room_id: roomId,
+        event_id: pushData?.event_id,
+        user_id: pushData?.user_id,
+      });
       break;
     }
     case EventType.RoomMember: {
@@ -622,14 +531,7 @@ async function handleMinimalPushPayload(
     previewText = isEncryptedRoom ? 'Encrypted message' : 'New message';
   }
 
-  const selfUserId = settings.mx.getUserId() ?? undefined;
-  const selfUser: MessagingStylePerson = {
-    name: 'You',
-    key: selfUserId,
-    iconUrl: selfUserId && roomId ? resolveAvatarUrl(settings.mx, roomId, selfUserId) : undefined,
-  };
-
-  const sender: MessagingStylePerson | undefined = senderName
+  const sender: NotifPerson | undefined = senderName
     ? {
         name: senderName,
         key: senderId,
@@ -637,7 +539,7 @@ async function handleMinimalPushPayload(
       }
     : undefined;
 
-  const message: MessagingStyleMessage = {
+  const message: NotifMessage = {
     text: previewText,
     timestamp: Date.now(),
     sender,
@@ -658,17 +560,10 @@ async function handleMinimalPushPayload(
     cache.isGroupConversation = (room.getJoinedMemberCount() ?? 0) > 2;
   }
 
-  await postRoomNotification(
-    roomId,
-    cache,
-    selfUser,
-    !settings.notificationSoundEnabled,
-    {
-      room_id: roomId,
-      event_id: eventId,
-    },
-    settings.mx.getAccessToken()
-  );
+  await postRoomNotification(roomId, cache, !settings.notificationSoundEnabled, {
+    room_id: roomId,
+    event_id: eventId,
+  });
 }
 
 async function handleUnifiedPushPayload(
@@ -682,8 +577,7 @@ async function handleUnifiedPushPayload(
     return;
   }
 
-  // The UP gateway wraps the Matrix push in a `notification` field.
-  const pushData = (raw.notification ?? raw) as UnifiedPushPayload;
+  const pushData = (raw.extra ?? raw) as UnifiedPushPayload;
   const eventType = pushData?.type as EventType | undefined;
 
   if (eventType) {
@@ -695,9 +589,9 @@ async function handleUnifiedPushPayload(
 
 export function listenForUnifiedPushMessages(getSettings: () => NotificationSettings) {
   return getTauriNotificationsApi().then((notificationsApi) =>
-    notificationsApi.onUnifiedPushMessage(
+    notificationsApi.onNotificationReceived(
       createUnifiedPushMessageListener(
-        (data) => handleUnifiedPushPayload(data, getSettings),
+        (notification) => handleUnifiedPushPayload(notification, getSettings),
         (error) => {
           unifiedPushLog.error(
             'notification',
@@ -707,15 +601,5 @@ export function listenForUnifiedPushMessages(getSettings: () => NotificationSett
         }
       )
     )
-  );
-}
-
-export function listenForUnifiedPushEndpointChanges(
-  onEndpointChanged: (endpoint: string, instance: string) => void
-) {
-  return getTauriNotificationsApi().then((notificationsApi) =>
-    notificationsApi.onUnifiedPushEndpoint(({ endpoint, instance }) => {
-      onEndpointChanged(endpoint, instance);
-    })
   );
 }

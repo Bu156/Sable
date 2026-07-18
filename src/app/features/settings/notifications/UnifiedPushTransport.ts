@@ -19,26 +19,19 @@ export type UnifiedPushRegistrationResult =
       status: 'registered';
       permissionState: 'granted';
       endpoint: string;
-      instance: string;
       distributor: string;
-      pubKeySet?: {
-        pubKey: string;
-        auth: string;
-      };
     }
   | {
       status: 'temp-unavailable';
       permissionState: UnifiedPushPermissionState;
       distributor?: string;
       error: string;
-      instance?: string;
     }
   | {
       status: 'hard-failure';
       permissionState: UnifiedPushPermissionState;
       distributor?: string;
       error: string;
-      instance?: string;
     }
   | {
       status: 'missing-distributor';
@@ -53,31 +46,7 @@ export type UnifiedPushRegistrationResult =
       error: string;
     };
 
-type UnifiedPushEndpointResponse = {
-  endpoint: string;
-  instance: string;
-  pubKeySet?: {
-    pubKey: string;
-    auth: string;
-  };
-};
-
-type UnifiedPushDistributorsResponse = {
-  distributors: string[];
-};
-
-type UnifiedPushDistributorResponse = {
-  distributor: string;
-};
-
-type UnifiedPushSwitchRegistration = {
-  endpoint: string;
-  instance: string;
-  pubKeySet?: {
-    pubKey: string;
-    auth: string;
-  };
-};
+const DISTRIBUTUTOR_STORAGE_KEY = 'unifiedpush_distributor';
 
 function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -139,26 +108,28 @@ async function getUnifiedPushPermissionState(): Promise<UnifiedPushPermissionSta
   return permission === 'granted' ? 'granted' : permission;
 }
 
-export async function getUnifiedPushDistributors(): Promise<UnifiedPushDistributorsResponse> {
+export async function getUnifiedPushDistributors(): Promise<string[]> {
   const api = await getUnifiedPushTransportApi();
-  return api.getUnifiedPushDistributors();
+  return api.listDistributors();
 }
 
-export async function getUnifiedPushDistributor(): Promise<UnifiedPushDistributorResponse> {
-  const api = await getUnifiedPushTransportApi();
-  return api.getUnifiedPushDistributor();
+export async function getUnifiedPushDistributor(): Promise<{ distributor: string }> {
+  const distributor = localStorage.getItem(DISTRIBUTUTOR_STORAGE_KEY) ?? '';
+  return { distributor };
 }
 
 export async function saveUnifiedPushDistributor(distributor: string): Promise<void> {
+  localStorage.setItem(DISTRIBUTUTOR_STORAGE_KEY, distributor);
   const api = await getUnifiedPushTransportApi();
-  await api.saveUnifiedPushDistributor(distributor);
+  await api.setDistributor(distributor);
 }
 
 export async function loadUnifiedPushDistributorState(): Promise<UnifiedPushDistributorState> {
-  const [{ distributor: savedDistributor }, { distributors }] = await Promise.all([
+  const [distributorResult, distributors] = await Promise.all([
     getUnifiedPushDistributor(),
     getUnifiedPushDistributors(),
   ]);
+  const savedDistributor = distributorResult.distributor;
 
   if (savedDistributor && distributors.includes(savedDistributor)) {
     return { distributors, selectedDistributor: savedDistributor };
@@ -192,31 +163,6 @@ export async function ensureUnifiedPushDistributorSelection(
 
 export async function setUnifiedPushDistributorSelection(distributor: string): Promise<void> {
   await saveUnifiedPushDistributor(distributor);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function validateUnifiedPushRegistrationResponse(
-  response: Partial<UnifiedPushSwitchRegistration>
-): { ok: true; value: UnifiedPushSwitchRegistration } | { ok: false; error: string } {
-  if (!isNonEmptyString(response.endpoint)) {
-    return { ok: false, error: 'UnifiedPush registration returned an invalid endpoint' };
-  }
-
-  if (!isNonEmptyString(response.instance)) {
-    return { ok: false, error: 'UnifiedPush registration returned an invalid instance' };
-  }
-
-  return {
-    ok: true,
-    value: {
-      endpoint: response.endpoint,
-      instance: response.instance,
-      pubKeySet: response.pubKeySet,
-    },
-  };
 }
 
 export async function switchUnifiedPushDistributorSelection<T>(
@@ -271,13 +217,12 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
     }
 
     const api = await getUnifiedPushTransportApi();
-    const response = (await api.registerForUnifiedPush()) as Partial<UnifiedPushEndpointResponse>;
-    const validated = validateUnifiedPushRegistrationResponse(response);
-    if (!validated.ok) {
+    const endpoint = await api.registerForPushNotifications();
+    if (!endpoint || !endpoint.trim()) {
       return {
         status: 'hard-failure',
         permissionState: 'granted',
-        error: validated.error,
+        error: 'UnifiedPush registration returned an invalid endpoint',
         ...(selectedDistributor ? { distributor: selectedDistributor } : {}),
       };
     }
@@ -285,10 +230,8 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
     return {
       status: 'registered',
       permissionState: 'granted',
-      endpoint: validated.value.endpoint,
-      instance: validated.value.instance,
+      endpoint,
       distributor,
-      pubKeySet: validated.value.pubKeySet,
     };
   } catch (error) {
     const failureStatus = classifyUnifiedPushFailure(error);
@@ -297,16 +240,11 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
       permissionState,
       error: normalizeErrorMessage(error),
       ...(selectedDistributor ? { distributor: selectedDistributor } : {}),
-      ...(error && typeof error === 'object' && 'instance' in error
-        ? {
-            instance: (error as { instance?: string }).instance ?? '',
-          }
-        : {}),
     } as UnifiedPushRegistrationResult;
   }
 }
 
 export async function unregisterUnifiedPushTransport(): Promise<void> {
   const api = await getUnifiedPushTransportApi();
-  await api.unregisterFromUnifiedPush();
+  await api.unregisterForPushNotifications();
 }

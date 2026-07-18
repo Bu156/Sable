@@ -1,29 +1,22 @@
 export type UnifiedPushTransportApi = {
   isPermissionGranted: () => Promise<boolean>;
   requestPermission: () => Promise<NotificationPermission>;
-  registerForUnifiedPush: () => Promise<{
-    endpoint: string;
-    instance: string;
-    pubKeySet?: {
-      pubKey: string;
-      auth: string;
-    };
-  }>;
-  unregisterFromUnifiedPush: () => Promise<void>;
-  getUnifiedPushDistributors: () => Promise<{ distributors: string[] }>;
-  getUnifiedPushDistributor: () => Promise<{ distributor: string }>;
-  saveUnifiedPushDistributor: (distributor: string) => Promise<void>;
+  registerForPushNotifications: () => Promise<string>;
+  unregisterForPushNotifications: () => Promise<void>;
+  listDistributors: () => Promise<string[]>;
+  setDistributor: (name: string) => Promise<void>;
+  setToken: (token: string) => Promise<void>;
 };
 
 export async function getUnifiedPushTransportApi(): Promise<UnifiedPushTransportApi> {
-  const api = await import('@sableclient/tauri-plugin-notifications-api');
+  const api = await import('@choochmeque/tauri-plugin-notifications-api');
   return {
     isPermissionGranted: api.isPermissionGranted,
     requestPermission: api.requestPermission,
-    registerForUnifiedPush: api.registerForUnifiedPush,
-    unregisterFromUnifiedPush: api.unregisterFromUnifiedPush,
-    getUnifiedPushDistributors: api.getUnifiedPushDistributors,
-    getUnifiedPushDistributor: api.getUnifiedPushDistributor,
-    saveUnifiedPushDistributor: api.saveUnifiedPushDistributor,
+    registerForPushNotifications: api.registerForPushNotifications,
+    unregisterForPushNotifications: api.unregisterForPushNotifications,
+    listDistributors: api.listDistributors,
+    setDistributor: api.setDistributor,
+    setToken: api.setToken,
   };
 }

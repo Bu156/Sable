@@ -5,7 +5,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
-import { enableUnifiedPush, listenForUnifiedPushEndpointChanges } from './UnifiedPushNotifications';
+import { enableUnifiedPush } from './UnifiedPushNotifications';
 import {
   NotificationTransportRuntime,
   type NotificationTransportRuntimeContext,
@@ -101,21 +101,7 @@ export function NotificationTransportRuntimeFeature() {
 
     establish();
 
-    let cancelled = false;
-    let listener: { unregister: () => Promise<void> | void } | undefined;
-    void listenForUnifiedPushEndpointChanges((endpoint) => {
-      if (endpoint === lastEndpointRef.current) return;
-      lastEndpointRef.current = endpoint;
-      establish();
-    }).then((handle) => {
-      if (cancelled) void handle.unregister();
-      else listener = handle;
-    });
-
-    return () => {
-      cancelled = true;
-      void listener?.unregister();
-    };
+    return () => {};
   }, [provider, mx]);
 
   useEffect(

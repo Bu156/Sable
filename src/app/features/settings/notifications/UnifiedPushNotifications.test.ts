@@ -6,13 +6,16 @@ import {
 } from './UnifiedPushNotifications';
 
 const notificationsApi = vi.hoisted(() => ({
-  onUnifiedPushMessage: vi.fn<() => void>(),
-  onUnifiedPushEndpoint: vi.fn<() => void>(),
+  onNotificationReceived: vi.fn<
+    (cb: (notification: Record<string, unknown>) => void) => Promise<{
+      unregister: () => Promise<void> | void;
+    }>
+  >(),
   sendNotification: vi.fn<() => void>(),
   removeActive: vi.fn<() => void>(),
   createChannel: vi.fn<() => void>(),
   Importance: {
-    Default: 'default',
+    Default: 3,
   },
 }));
 
@@ -53,7 +56,6 @@ describe('UnifiedPushNotifications', () => {
       status: 'registered',
       permissionState: 'granted',
       endpoint: 'https://up.example/device',
-      instance: 'instance-1',
       distributor: 'org.unifiedpush.distributor.ntfy',
     });
     unifiedPushTransport.unregisterUnifiedPushTransport.mockResolvedValue(undefined);
@@ -76,7 +78,6 @@ describe('UnifiedPushNotifications', () => {
     ).resolves.toMatchObject({
       status: 'registered',
       endpoint: 'https://up.example/device',
-      instance: 'instance-1',
     });
 
     expect(matrixClient.setPusher).toHaveBeenCalledWith(
