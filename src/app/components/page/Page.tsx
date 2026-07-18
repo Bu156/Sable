@@ -84,6 +84,7 @@ export function PageNavContent({
         size="300"
         hideTrack
         visibility="Hover"
+        style={{ touchAction: 'pan-y' }}
       >
         <div className={css.PageNavContent}>{children}</div>
       </Scroll>

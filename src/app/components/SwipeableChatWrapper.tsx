@@ -62,7 +62,7 @@ export function SwipeableChatWrapper({
       bounds: { left: -200, right: 200 },
       rubberband: true,
       filterTaps: true,
-      pointer: { touch: true, capture: false },
+      pointer: { capture: false },
       from: () => [x.get(), 0],
     }
   );

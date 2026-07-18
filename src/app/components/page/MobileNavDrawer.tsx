@@ -168,12 +168,11 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
         if (wantRoom) goToRoom();
       }
     },
-    // pointer.touch: use touch events so a WebView pointercancel on the pan-y surface
-    // doesn't abort the drag mid-gesture. capture:false avoids fighting the nested wrapper.
+    // axis:'x' + touch-action:pan-y lets the browser keep native vertical scroll.
     {
       axis: 'x',
       filterTaps: true,
-      pointer: { touch: true, capture: false },
+      pointer: { capture: false },
       from: () => [x.get(), 0],
     }
   );
@@ -200,7 +199,6 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
             height: '100%',
             flexShrink: 0,
             display: 'flex',
-            flexDirection: 'column',
             overflow: 'hidden',
           }}
         >
@@ -213,7 +211,6 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
             height: '100%',
             flexShrink: 0,
             display: 'flex',
-            flexDirection: 'column',
             overflow: 'hidden',
           }}
         >
