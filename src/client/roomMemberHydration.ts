@@ -1,4 +1,4 @@
-import type { MatrixClient, Room } from '$types/matrix-sdk';
+import type { MatrixClient } from '$types/matrix-sdk';
 import { EventType, MatrixEvent } from '$types/matrix-sdk';
 
 const inFlight = new WeakMap<MatrixClient, Map<string, Promise<void>>>();
@@ -62,6 +62,3 @@ export const hydrateRoomMembers = (
       .filter((userId) => userId.startsWith('@'))
       .map((userId) => hydrateRoomMember(mx, roomId, userId))
   );
-
-export const getRoomMemberAvatarMxc = (room: Room, userId: string): string | undefined =>
-  room.getMember(userId)?.getMxcAvatarUrl();
