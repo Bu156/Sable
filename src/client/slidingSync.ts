@@ -240,6 +240,8 @@ export class SlidingSyncManager {
 
   private readonly imagePackRoomSubscriptions = new Set<string>();
 
+  private deferredImagePackSubscriptions: Set<string> | null = null;
+
   private roomSubscriptionSyncQueued = false;
 
   private readonly roomTimelineLimit: number;
@@ -998,6 +1000,10 @@ export class SlidingSyncManager {
     const spaces = this.deferredSpaceSubscriptions;
     this.deferredSpaceSubscriptions = new Set();
     this.setSpaceSubscriptions(spaces);
+
+    const imagePacks = this.deferredImagePackSubscriptions;
+    this.deferredImagePackSubscriptions = null;
+    if (imagePacks) this.setImagePackSubscriptions(imagePacks);
   }
 
   private queueRoomSubscriptionSync(): void {
@@ -1053,6 +1059,10 @@ export class SlidingSyncManager {
   public setImagePackSubscriptions(roomIds: Iterable<string>): void {
     if (this.disposed) return;
     const next = new Set(roomIds);
+    if (!this.listsFullyLoaded) {
+      this.deferredImagePackSubscriptions = next;
+      return;
+    }
     const unchanged =
       next.size === this.imagePackRoomSubscriptions.size &&
       [...next].every((roomId) => this.imagePackRoomSubscriptions.has(roomId));
