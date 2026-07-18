@@ -1,6 +1,7 @@
 import { type ChangeEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTimeoutToggle } from '$hooks/useTimeoutToggle';
 import { copyToClipboard, downloadTextFile } from '$utils/dom';
+import { fetch } from '$utils/fetch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box,

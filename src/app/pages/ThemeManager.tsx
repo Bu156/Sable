@@ -16,6 +16,7 @@ import { useOptionalClientConfig } from '$hooks/useClientConfig';
 import { getCachedThemeCss, putCachedThemeCss, subscribeThemeCacheUpdates } from '../theme/cache';
 import { isLocalImportBundledUrl } from '../theme/localImportUrls';
 import { themeCatalogListingBaseUrl } from '../theme/catalogDefaults';
+import { fetch } from '$utils/fetch';
 import {
   THEME_CATALOG_AUTO_UPDATE_INTERVAL_MS,
   updateInstalledCatalogPackages,

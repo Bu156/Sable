@@ -28,6 +28,7 @@ import { SableChatPreviewPlaceholder } from './SableChatPreviewPlaceholder';
 import { ThemeThirdPartyBanner } from './ThemeThirdPartyBanner';
 import { CssViewerButton } from '../theme/CssViewerButton';
 import { pruneThemeTweakFavorites, themeUrlHostLabel } from '../../theme/themeLibrary';
+import { fetch } from '$utils/fetch';
 
 function basenameFromFullSableUrl(url: string): string {
   const tail = url.split('/').pop() ?? url;
