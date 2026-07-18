@@ -30,11 +30,27 @@ class MainActivity : TauriActivity() {
       activity.runOnUiThread {
         val window = activity.window
         window.statusBarColor = color
-        val luminance =
-          (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
-          luminance > 0.5
+          isLight(color)
       }
+    }
+
+    // Called from Rust (JNI) to tint the navigation bar and adapt icon contrast.
+    @JvmStatic
+    fun setNavigationBarColorNative(color: Int) {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        val window = activity.window
+        window.navigationBarColor = color
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
+          isLight(color)
+      }
+    }
+
+    private fun isLight(color: Int): Boolean {
+      val luminance =
+        (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
+      return luminance > 0.5
     }
   }
 }

@@ -31,8 +31,12 @@ function rgbToArgb(color: string): number | undefined {
   return ((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0;
 }
 
-// Color of whatever surface is rendered just below the top strip.
-function useTopBarColor(probeRef: RefObject<HTMLDivElement>, android: boolean): string | undefined {
+// Color of the surface adjacent to a strip; on Android also tints the native system bar.
+function useBarColor(
+  probeRef: RefObject<HTMLDivElement>,
+  edge: 'top' | 'bottom',
+  android: boolean
+): string | undefined {
   const [color, setColor] = useState<string>();
   const lastRef = useRef<string>();
 
@@ -42,15 +46,19 @@ function useTopBarColor(probeRef: RefObject<HTMLDivElement>, android: boolean): 
       frame = 0;
       const rect = probeRef.current?.getBoundingClientRect();
       const x = Math.round(rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
-      const y = Math.round((rect?.bottom ?? 0) + 1);
+      const y =
+        edge === 'top'
+          ? Math.round((rect?.bottom ?? 0) + 1)
+          : Math.round((rect?.top ?? window.innerHeight) - 1);
       const next = readSurfaceColor(x, y);
       if (next && next !== lastRef.current) {
         lastRef.current = next;
         setColor(next);
-        updateThemeColorMeta(next);
+        if (edge === 'top') updateThemeColorMeta(next);
         if (android) {
           const argb = rgbToArgb(next);
-          if (argb !== undefined) invoke('set_status_bar_color', { color: argb }).catch(() => {});
+          const command = edge === 'top' ? 'set_status_bar_color' : 'set_navigation_bar_color';
+          if (argb !== undefined) invoke(command, { color: argb }).catch(() => {});
         }
       }
     };
@@ -77,28 +85,19 @@ function useTopBarColor(probeRef: RefObject<HTMLDivElement>, android: boolean): 
       observer.disconnect();
       window.removeEventListener('resize', schedule);
     };
-  }, [probeRef, android]);
+  }, [probeRef, edge, android]);
 
   return color;
 }
 
 type SystemBarStripProps = {
-  position: 'top' | 'bottom';
   size: string;
   background: string;
   stripRef?: RefObject<HTMLDivElement>;
   transition?: string;
-  border?: boolean;
 };
 
-function SystemBarStrip({
-  position,
-  size,
-  background,
-  stripRef,
-  transition,
-  border = true,
-}: SystemBarStripProps) {
+function SystemBarStrip({ size, background, stripRef, transition }: SystemBarStripProps) {
   return (
     <div
       ref={stripRef}
@@ -114,10 +113,6 @@ function SystemBarStrip({
           width: '100%',
           height: '100%',
           background,
-          ...(border &&
-            (position === 'top'
-              ? { borderBottom: '1px solid var(--sable-bg-container-line)' }
-              : { borderTop: '1px solid var(--sable-surface-container-line)' })),
         }}
       />
     </div>
@@ -134,13 +129,14 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
   const enabled = tauriOs === 'android' || tauriOs === 'ios';
 
   const topStripRef = useRef<HTMLDivElement>(null);
-  const topColor = useTopBarColor(topStripRef, tauriOs === 'android');
+  const bottomStripRef = useRef<HTMLDivElement>(null);
+  const topColor = useBarColor(topStripRef, 'top', tauriOs === 'android');
+  const bottomColor = useBarColor(bottomStripRef, 'bottom', tauriOs === 'android');
 
   return (
     <>
       {enabled && (
         <SystemBarStrip
-          position="top"
           size={safeAreaTop}
           background={topColor ?? 'var(--sable-bg-container)'}
           stripRef={topStripRef}
@@ -176,11 +172,10 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
 
       {enabled && (
         <SystemBarStrip
-          position="bottom"
           size={tauriOs === 'ios' ? iosBottomInset : safeAreaBottom}
-          background="var(--sable-surface-container)"
+          background={bottomColor ?? 'var(--sable-surface-container)'}
+          stripRef={bottomStripRef}
           transition={tauriOs === 'ios' ? 'height 0.25s ease-out' : undefined}
-          border={false}
         />
       )}
     </>

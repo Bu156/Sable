@@ -25,12 +25,22 @@ pub extern "system" fn Java_moe_sable_client_MainActivity_nativeInitStatusBar(
 /// `color` is a packed ARGB int (as produced by Android's `Color`).
 #[tauri::command]
 pub fn set_status_bar_color(color: u32) -> Result<(), String> {
+    call_bar_color("setStatusBarColorNative", color)
+}
+
+/// `color` is a packed ARGB int (as produced by Android's `Color`).
+#[tauri::command]
+pub fn set_navigation_bar_color(color: u32) -> Result<(), String> {
+    call_bar_color("setNavigationBarColorNative", color)
+}
+
+fn call_bar_color(method: &str, color: u32) -> Result<(), String> {
     let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
     let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
 
     let result = env.call_static_method(
         "moe/sable/client/MainActivity",
-        "setStatusBarColorNative",
+        method,
         "(I)V",
         &[JValue::Int(color as i32)],
     );
