@@ -91,7 +91,8 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
 
     let builder =
         tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default())
-            .disable_drag_drop_handler();
+            .disable_drag_drop_handler()
+            .use_https_scheme(true);
 
     #[cfg(desktop)]
     let builder = builder
