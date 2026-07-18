@@ -1,4 +1,4 @@
-import { Box, IconButton, Text, as } from 'folds';
+import { Box, IconButton, Text, as, toRem } from 'folds';
 import { chipIcon, X } from '$components/icons/phosphor';
 import type { Room } from '$types/matrix-sdk';
 import classNames from 'classnames';
@@ -114,7 +114,13 @@ export const RoomViewTyping = as<'div', RoomViewTypingProps>(
             </>
           )}
         </Text>
-        <IconButton title="Drop Typing Status" size="300" radii="Pill" onClick={handleDropAll}>
+        <IconButton
+          title="Drop Typing Status"
+          size="300"
+          radii="Pill"
+          onClick={handleDropAll}
+          style={{ padding: toRem(2) }}
+        >
           {chipIcon(X)}
         </IconButton>
       </Box>

@@ -157,7 +157,9 @@ export function RoomView({ eventId }: { eventId?: string }) {
                 onEditorReset={handleResetEditor}
                 onEditLastMessageRef={editLastMessageRef}
               />
-              <RoomViewTyping room={room} />
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <RoomViewTyping room={room} />
+              </div>
               <GlobalModalManager />
             </Box>
             <Box shrink="No" direction="Column">
