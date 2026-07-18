@@ -22,6 +22,7 @@ import { useSetAtom } from 'jotai';
 import {
   AvatarBase,
   BubbleLayout,
+  checkIfGif,
   CompactLayout,
   MessageBase,
   ModernLayout,
@@ -47,6 +48,7 @@ import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { SwipeableMessageWrapper } from '$components/SwipeableMessageWrapper';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useUserProfile } from '$hooks/useUserProfile';
+import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { useSetting } from '$state/hooks/settings';
 import { filterPronounsByLanguage, getParsedPronouns } from '$utils/pronouns';
 import type { PronounSet } from '$utils/pronouns';
@@ -381,6 +383,12 @@ function MessageInternal(
   const setModal = useSetAtom(modalAtom);
   const [contentVersion, setContentVersion] = useState(0);
 
+  const isGif = useMemo(() => {
+    const content = mEvent.getContent();
+    if (content.msgtype !== 'm.image') return false;
+    return checkIfGif(content?.info?.url ?? '', content?.info?.mimetype, content?.body);
+  }, [mEvent]);
+
   useEffect(() => {
     const triggerTimelineRegroup = () => {
       // A Local Echo update seems to trigger a visual refresh without
@@ -459,6 +467,7 @@ function MessageInternal(
   // Avatars
   // Prefer the room-scoped member avatar (m.room.member) over the global profile
   // avatar so per-room avatar overrides are respected in the timeline.
+  useRoomMemberHydration(room, senderId);
   const memberAvatarMxc = getMemberAvatarMxc(room, senderId);
   const avatarUrl = useMemo(() => {
     const mxc = pmp?.avatar_url || memberAvatarMxc || profile.avatarUrl;
@@ -848,6 +857,7 @@ function MessageInternal(
           </div>
         ),
         canSendReaction: canSendReaction,
+        isGif: isGif,
       },
     });
   };
@@ -944,6 +954,7 @@ function MessageInternal(
             imagePackRooms={imagePackRooms}
             setIsEmoji={setIsEmoji}
             canSendReaction={canSendReaction}
+            isGif={isGif}
           />
         </div>
       )}

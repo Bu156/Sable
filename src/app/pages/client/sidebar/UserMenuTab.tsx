@@ -276,7 +276,7 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
             position: 'relative',
             background: isOpen
               ? (isMobile ? color.Surface.Container
-                : color.Secondary.Container)
+                : color.Surface.ContainerHover)
                 : color.Background.Container,
           }}
           onClick={() => isMobile && setIsOpen(!isOpen)}
@@ -499,7 +499,7 @@ export function PresenceMenuOption({
           position: 'relative',
           background: isOpen
               ? (isMobile ? color.Surface.Container
-                : color.Secondary.Container)
+                : color.Surface.ContainerHover)
                 : color.Background.Container,
         }}
         onClick={() => isMobile && setIsOpen(!isOpen)}

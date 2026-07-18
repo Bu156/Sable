@@ -68,7 +68,7 @@ import {
 } from '$components/sidebar';
 import { RoomUnreadProvider, RoomsUnreadProvider } from '$components/RoomUnreadProvider';
 import { useSelectedSpace } from '$hooks/router/useSelectedSpace';
-import { getCanonicalAliasOrRoomId, isRoomAlias } from '$utils/matrix';
+import { getCanonicalAliasOrRoomId, isRoomAlias, mxcUrlToHttp } from '$utils/matrix';
 import { RoomAvatar } from '$components/room-avatar';
 import { nameInitials, randomStr } from '$utils/common';
 import type { ISidebarFolder, SidebarItems, TSidebarItem } from '$hooks/useSidebarItems';
@@ -91,8 +91,8 @@ import { copyToClipboard } from '$utils/dom';
 import { stopPropagation } from '$utils/keyboard';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
-import { getRoomAvatarUrl } from '$utils/room';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import { useRoomAvatar } from '$hooks/useRoomMeta';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { useOpenSpaceSettings } from '$state/hooks/spaceSettings';
@@ -491,6 +491,29 @@ const useDnDMonitor = (
   }, [scrollRef, onDragging, onReorder]);
 };
 
+type SpaceAvatarProps = {
+  space: Room;
+  renderFallback: () => ReactNode;
+};
+function SpaceAvatar({ space, renderFallback }: Readonly<SpaceAvatarProps>) {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const avatarMxc = useRoomAvatar(space);
+  const avatarUrl = avatarMxc
+    ? (mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined)
+    : undefined;
+
+  return (
+    <RoomAvatar
+      roomId={space.roomId}
+      uniformIcons
+      src={avatarUrl}
+      alt={space.name}
+      renderFallback={renderFallback}
+    />
+  );
+}
+
 type SpaceTabProps = {
   space: Room;
   selected: boolean;
@@ -509,8 +532,6 @@ function SpaceTab({
   disabled,
   onUnpin,
 }: Readonly<SpaceTabProps>) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const targetRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: SidebarDraggable = useMemo(
@@ -561,11 +582,8 @@ function SpaceTab({
                 onClick={onClick}
                 onContextMenu={handleContextMenu}
               >
-                <RoomAvatar
-                  roomId={space.roomId}
-                  uniformIcons
-                  src={getRoomAvatarUrl(mx, space, 96, useAuthentication) ?? undefined}
-                  alt={space.name}
+                <SpaceAvatar
+                  space={space}
                   renderFallback={() => (
                     <Text size={folder ? 'H6' : 'H4'}>{nameInitials(space.name, 2)}</Text>
                   )}
@@ -666,7 +684,6 @@ function ClosedSpaceFolder({
   onFolderContextMenu,
 }: Readonly<ClosedSpaceFolderProps>) {
   const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const handlerRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: FolderDraggable = useMemo(() => ({ folder }), [folder]);
@@ -702,11 +719,8 @@ function ClosedSpaceFolder({
 
                   return (
                     <SidebarAvatar key={sId} size="200" radii="300">
-                      <RoomAvatar
-                        roomId={space.roomId}
-                        uniformIcons
-                        src={getRoomAvatarUrl(mx, space, 96, useAuthentication) ?? undefined}
-                        alt={space.name}
+                      <SpaceAvatar
+                        space={space}
                         renderFallback={() => (
                           <Text size="Inherit">
                             <b>{nameInitials(space.name, 2)}</b>
