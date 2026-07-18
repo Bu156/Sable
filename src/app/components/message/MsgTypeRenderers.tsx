@@ -505,16 +505,13 @@ type MVideoProps = {
 };
 export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: MVideoProps) {
   const videoInfo = content?.info;
-  const rawUrl = content.file?.url ?? content.url;
-  const mxcUrl = getIncomingMediaMxcUrl(rawUrl);
+  const mxcUrl = getIncomingMediaMxcUrl(content.file?.url ?? content.url);
   const safeMimeType = getBlobSafeMimeType(videoInfo?.mimetype ?? '');
 
-  if (!videoInfo || !safeMimeType.startsWith('video') || !mxcUrl) {
-    if (mxcUrl || typeof rawUrl === 'string') {
-      return renderAsFile();
-    }
+  if (!mxcUrl) {
     return <BrokenContent body={content.body ?? content.filename} />;
   }
+  if (!videoInfo || !safeMimeType.startsWith('video')) return renderAsFile();
 
   const displayWidth = Math.min(videoInfo.w || 400, 400);
   const height = Math.min(scaleYDimension(videoInfo.w || 400, 400, videoInfo.h || 400), 400);
@@ -609,16 +606,13 @@ export function MAudio({
   fitParent,
 }: MAudioProps) {
   const audioInfo = content?.info;
-  const rawUrl = content.file?.url ?? content.url;
-  const mxcUrl = getIncomingMediaMxcUrl(rawUrl);
+  const mxcUrl = getIncomingMediaMxcUrl(content.file?.url ?? content.url);
   const safeMimeType = getBlobSafeMimeType(audioInfo?.mimetype ?? '');
 
-  if (!audioInfo || !safeMimeType.startsWith('audio') || !mxcUrl) {
-    if (mxcUrl || typeof rawUrl === 'string') {
-      return renderAsFile();
-    }
+  if (!mxcUrl) {
     return <BrokenContent body={content.body ?? content.filename} />;
   }
+  if (!audioInfo || !safeMimeType.startsWith('audio')) return renderAsFile();
 
   const filename = getAttachmentFilename(content.filename, content.body, 'Audio');
   const durationMs = getAudioDurationMs(content, audioInfo);

@@ -37,6 +37,7 @@ export const messageList = style({
   overflowY: 'scroll',
   touchAction: 'pan-y',
   scrollbarGutter: 'stable',
+  overflowAnchor: 'none',
 
   '@supports': {
     'not selector(::-webkit-scrollbar)': {

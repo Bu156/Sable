@@ -40,6 +40,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
 import { settingsAtom } from '$state/settings';
 import { useHiddenEventSettings, useSetting } from '$state/hooks/settings';
 import { useRoomAbbreviationsContext } from '$hooks/useRoomAbbreviations';
@@ -130,6 +131,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
   const autoFillInProgressRef = useRef(false);
   const { editId, handleEdit } = useMessageEdit(editor);
   const nicknames = useAtomValue(nicknamesAtom);
+  const globalProfiles = useAtomValue(profilesCacheAtom);
   const pushProcessor = useMemo(() => new PushProcessor(mx), [mx]);
   const useAuthentication = useMediaAuthentication();
   const mentionClickHandler = useMentionClickHandler(room.roomId);
@@ -745,6 +747,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
     mx,
     pushProcessor,
     nicknames,
+    profiles: globalProfiles,
     imagePackRooms,
     settings: {
       messageLayout,

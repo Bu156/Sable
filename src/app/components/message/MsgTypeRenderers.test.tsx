@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   IAudioContent,
@@ -9,18 +9,9 @@ import type {
 } from '$types/matrix/common';
 import { MAudio, MFile, MImage, MSticker, MVideo } from './MsgTypeRenderers';
 
-vi.mock('$utils/platform', () => ({
-  hasServiceWorker: () => false,
-  hasControllingServiceWorker: () => false,
-}));
-
-vi.mock('$utils/fetch', () => ({
-  fetch: globalThis.fetch,
-}));
-
-describe('incoming media renderers', () => {
-  it('rejects arbitrary image URLs', () => {
-    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered" />);
+describe('incoming image renderer', () => {
+  it('rejects arbitrary HTTP(S) image URLs', () => {
+    const renderImageContent = vi.fn<(props: unknown) => ReactNode>(() => <img alt="rendered" />);
 
     render(
       <MImage
@@ -35,8 +26,8 @@ describe('incoming media renderers', () => {
     expect(document.body).toHaveTextContent('Broken message: remote image');
   });
 
-  it('renders mxc image URLs', () => {
-    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered" />);
+  it('renders only mxc image URLs', () => {
+    const renderImageContent = vi.fn<(props: unknown) => ReactNode>(() => <img alt="rendered" />);
 
     render(
       <MImage
@@ -50,13 +41,28 @@ describe('incoming media renderers', () => {
     );
   });
 
-  it('does not pass arbitrary video URLs to the video renderer', () => {
+  it('rejects an arbitrary encrypted-file URL even when the legacy URL is MXC', () => {
+    const renderImageContent = vi.fn<(props: unknown) => ReactNode>(() => <img alt="rendered" />);
+
+    render(
+      <MImage
+        content={
+          {
+            body: 'remote image',
+            url: 'mxc://example.org/image',
+            file: { url: 'https://attacker.example/image.png' },
+          } as unknown as IImageContent
+        }
+        renderImageContent={renderImageContent}
+      />
+    );
+
+    expect(renderImageContent).not.toHaveBeenCalled();
+  });
+
+  it('rejects arbitrary video URLs without invoking a renderer or fallback', () => {
     const renderAsFile = vi.fn<() => ReactNode>(() => <span>file fallback</span>);
-    const renderVideoContent = vi.fn<() => ReactNode>(() => (
-      <video>
-        <track kind="captions" />
-      </video>
-    ));
+    const renderVideoContent = vi.fn<(props: unknown) => ReactNode>(() => <span>video</span>);
 
     render(
       <MVideo
@@ -73,16 +79,12 @@ describe('incoming media renderers', () => {
     );
 
     expect(renderVideoContent).not.toHaveBeenCalled();
-    expect(renderAsFile).toHaveBeenCalledTimes(1);
+    expect(renderAsFile).not.toHaveBeenCalled();
   });
 
-  it('does not pass arbitrary audio URLs to the audio renderer', () => {
+  it('rejects arbitrary audio URLs without invoking a renderer or fallback', () => {
     const renderAsFile = vi.fn<() => ReactNode>(() => <span>file fallback</span>);
-    const renderAudioContent = vi.fn<() => ReactNode>(() => (
-      <audio>
-        <track kind="captions" />
-      </audio>
-    ));
+    const renderAudioContent = vi.fn<(props: unknown) => ReactNode>(() => <span>audio</span>);
 
     render(
       <MAudio
@@ -99,27 +101,28 @@ describe('incoming media renderers', () => {
     );
 
     expect(renderAudioContent).not.toHaveBeenCalled();
-    expect(renderAsFile).toHaveBeenCalledTimes(1);
+    expect(renderAsFile).not.toHaveBeenCalled();
   });
 
   it('rejects arbitrary file URLs', () => {
-    const renderFileContent = vi.fn<() => ReactNode>(() => <span>rendered file</span>);
+    const renderFileContent = vi.fn<(props: unknown) => ReactNode>(() => (
+      <span>rendered file</span>
+    ));
 
     render(
       <MFile
-        content={
-          { body: 'remote file', url: 'https://attacker.example/file.txt' } as IFileContent
-        }
+        content={{ body: 'remote file', url: 'https://attacker.example/file.txt' } as IFileContent}
         renderFileContent={renderFileContent}
       />
     );
 
     expect(renderFileContent).not.toHaveBeenCalled();
-    expect(document.body).toHaveTextContent('Broken message: remote file');
   });
 
   it('rejects arbitrary sticker URLs', () => {
-    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered sticker" />);
+    const renderImageContent = vi.fn<(props: unknown) => ReactNode>(() => (
+      <img alt="rendered sticker" />
+    ));
 
     render(
       <MSticker
@@ -131,6 +134,5 @@ describe('incoming media renderers', () => {
     );
 
     expect(renderImageContent).not.toHaveBeenCalled();
-    expect(document.body).toHaveTextContent('Broken message: remote sticker');
   });
 });

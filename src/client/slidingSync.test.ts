@@ -112,6 +112,7 @@ describe('SlidingSyncManager initial request', () => {
     const updates = lists.get('updates');
     const defaultSubscription = mocks.slidingSyncConstructorArgs?.[2] as {
       timeline_limit: number;
+      required_state: string[][];
     };
 
     expect(joined?.ranges).toEqual([[0, 29]]);
@@ -126,6 +127,8 @@ describe('SlidingSyncManager initial request', () => {
       filters: { is_invite: false },
     });
     expect(defaultSubscription.timeline_limit).toBe(30);
+    expect(defaultSubscription.required_state).toContainEqual([EventType.RoomMember, '$LAZY']);
+    expect(defaultSubscription.required_state).not.toContainEqual([EventType.RoomMember, '*']);
     expect(mocks.slidingSyncConstructorArgs?.[4]).toBe(45000);
   });
 
