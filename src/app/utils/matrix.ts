@@ -12,11 +12,18 @@ import type {
   UploadProgress,
   UploadResponse,
 } from '$types/matrix-sdk';
-import { EventTimeline, MatrixError, EventType, KnownMembership } from '$types/matrix-sdk';
+import {
+  EventTimeline,
+  MatrixError,
+  EventType,
+  KnownMembership,
+  MediaPrefix,
+} from '$types/matrix-sdk';
 import to from 'await-to-js';
 import type { IImageInfo, IThumbnailContent, IVideoInfo } from '$types/matrix/common';
 
 import * as Sentry from '@sentry/react';
+import { fetch } from '$utils/fetch';
 import { getEventReactions, getStateEvent } from './room';
 import { getReactionContent } from './messageReaction';
 import { matchMxId, validMxId } from './mxIdHelper';
@@ -143,6 +150,92 @@ export const decryptFile = async (
 
 export type TUploadContent = File;
 
+export type UploadContentOpts = {
+  name?: string;
+  type?: string;
+  includeFilename?: boolean;
+  progressHandler?: (progress: UploadProgress) => void;
+  abortController?: AbortController;
+};
+
+/**
+ * matrix-js-sdk's `MatrixClient.uploadContent` uploads via `XMLHttpRequest` (to
+ * expose progress events), which bypasses the client's configured `fetchFn`. In
+ * the Tauri webview that XHR is subject to CORS / Private Network Access checks
+ * and gets blocked, so uploads to the homeserver fail. Route the upload through
+ * our Tauri-aware `fetch` instead, keeping the SDK path (with progress) on web.
+ */
+const tauriUploadAbortControllers = new WeakMap<Promise<UploadResponse>, AbortController>();
+
+type UploadFileType = TUploadContent | Blob | XMLHttpRequestBodyInit;
+
+export const uploadContentToServer = (
+  mx: MatrixClient,
+  file: UploadFileType,
+  opts: UploadContentOpts = {}
+): Promise<UploadResponse> => {
+  if (!isTauri()) {
+    return mx.uploadContent(file, opts);
+  }
+
+  const abortController = opts.abortController ?? new AbortController();
+  const includeFilename = opts.includeFilename ?? true;
+  const isFile = file instanceof File;
+  const contentType =
+    opts.type || (file instanceof Blob ? file.type : '') || 'application/octet-stream';
+  const fileName = opts.name ?? (isFile ? file.name : undefined);
+
+  const url = new URL(`${mx.baseUrl}${MediaPrefix.V3}/upload`);
+  if (includeFilename && fileName) {
+    url.searchParams.set('filename', fileName);
+  }
+
+  const headers: Record<string, string> = { 'Content-Type': contentType };
+  const accessToken = mx.getAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const promise = (async (): Promise<UploadResponse> => {
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body: file,
+      signal: abortController.signal,
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      let parsed: { errcode?: string; error?: string } = {};
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        // Non-JSON error body; fall back to the status text.
+      }
+      throw new MatrixError({
+        errcode: parsed.errcode,
+        error: parsed.error ?? `Upload failed with status ${response.status}`,
+      });
+    }
+    return (await response.json()) as UploadResponse;
+  })();
+
+  tauriUploadAbortControllers.set(promise, abortController);
+  void promise.finally(() => tauriUploadAbortControllers.delete(promise));
+  return promise;
+};
+
+export const cancelUploadContent = (
+  mx: MatrixClient,
+  promise: Promise<UploadResponse>
+): boolean => {
+  const abortController = tauriUploadAbortControllers.get(promise);
+  if (abortController) {
+    abortController.abort();
+    return true;
+  }
+  return mx.cancelUpload(promise);
+};
+
 export type ContentUploadOptions = {
   name?: string;
   fileType?: string;
@@ -161,7 +254,7 @@ export const uploadContent = async (
   const { name, fileType, hideFilename, onProgress, onPromise, onSuccess, onError } = options;
 
   const uploadStart = performance.now();
-  const uploadPromise = mx.uploadContent(file, {
+  const uploadPromise = uploadContentToServer(mx, file, {
     name,
     type: fileType,
     includeFilename: !hideFilename,

@@ -9,6 +9,7 @@ import {
 import { isTauri } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { createLogger } from '$utils/debug';
+import { fetch } from '$utils/fetch';
 import type { Session } from '$state/sessions';
 import {
   TAURI_OIDC_CLIENT_URI,
@@ -103,7 +104,11 @@ export const completeOidcLogin = async (code: string, state: string): Promise<Oi
 
   const { tokenResponse, homeserverUrl, oidcClientSettings, idTokenClaims } = grant;
 
-  const mx = createClient({ baseUrl: homeserverUrl, accessToken: tokenResponse.access_token });
+  const mx = createClient({
+    baseUrl: homeserverUrl,
+    fetchFn: fetch,
+    accessToken: tokenResponse.access_token,
+  });
   const [whoamiErr, whoami] = await to(mx.whoami());
   if (whoamiErr || !whoami?.user_id) {
     log.error('OIDC whoami failed', whoamiErr);

@@ -12,6 +12,7 @@ import {
 } from '$types/matrix-sdk';
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { fetch } from '$utils/fetch';
 import type { Session } from '$state/sessions';
 import {
   sessionsAtom,
@@ -87,6 +88,7 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
 
   const mx = createClient({
     baseUrl: session.baseUrl,
+    fetchFn: fetch,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     userId: session.userId,

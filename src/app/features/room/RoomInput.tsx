@@ -69,7 +69,13 @@ import type { GifData } from '$components/emoji-board';
 import { EmojiBoard, EmojiBoardTab } from '$components/emoji-board';
 import { UseStateProvider } from '$components/UseStateProvider';
 import type { TUploadContent } from '$utils/matrix';
-import { encryptFile, getImageInfo, mxcUrlToHttp, toggleReaction } from '$utils/matrix';
+import {
+  cancelUploadContent,
+  encryptFile,
+  getImageInfo,
+  mxcUrlToHttp,
+  toggleReaction,
+} from '$utils/matrix';
 import { useTypingStatusUpdater } from '$hooks/useTypingStatusUpdater';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { useFilePasteHandler } from '$hooks/useFilePasteHandler';
@@ -579,7 +585,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleCancelUpload = (uploads: Upload[]) => {
       uploads.forEach((upload) => {
         if (upload.status === UploadStatus.Loading) {
-          mx.cancelUpload(upload.promise);
+          cancelUploadContent(mx, upload.promise);
         }
       });
       handleRemoveUpload(uploads.map((upload) => upload.file));

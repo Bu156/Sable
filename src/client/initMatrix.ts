@@ -240,6 +240,7 @@ const buildClient = (session: Session): BuiltClient => {
 
   const mx = createClient({
     baseUrl: session.baseUrl,
+    fetchFn: fetch,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     userId: session.userId,
