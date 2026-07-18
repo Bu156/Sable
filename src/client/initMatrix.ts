@@ -26,6 +26,7 @@ import type { SlidingSyncDiagnostics } from './slidingSync';
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
+import { hydrateRoomMember } from './roomMemberHydration';
 
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
@@ -171,7 +172,12 @@ function installStartupFetchRoomEventPatch(
 
   mxWritable.fetchRoomEvent = (roomId: string, eventId: string) => {
     if (slidingSyncManager.isRoomActive(roomId)) {
-      return origFetchRoomEvent(roomId, eventId);
+      return origFetchRoomEvent(roomId, eventId).then((event) => {
+        if (typeof event.sender === 'string') {
+          void hydrateRoomMember(mx, roomId, event.sender);
+        }
+        return event;
+      });
     }
     const cachedEvent = mx.getRoom(roomId)?.findEventById(eventId);
     const payload: FetchRoomEventResult = cachedEvent?.event ?? {

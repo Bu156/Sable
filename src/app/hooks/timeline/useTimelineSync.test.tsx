@@ -25,6 +25,10 @@ vi.mock('$utils/timeline', async (importOriginal) => {
   };
 });
 
+vi.mock('$utils/notifications', () => ({
+  markAsRead: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+}));
+
 type FakeTimeline = {
   getEvents: () => unknown[];
   getNeighbouringTimeline: () => undefined;
