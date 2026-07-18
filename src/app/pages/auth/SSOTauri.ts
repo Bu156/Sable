@@ -40,8 +40,7 @@ const TAURI_OIDC_PROTOCOL = 'moe.sable.app:';
 const TAURI_OIDC_PATH = '/login';
 const TAURI_OIDC_SERVER_KEY = 'sable:tauri-oidc:server';
 
-export const buildTauriOidcRedirectUrl = (): string =>
-  `${TAURI_OIDC_PROTOCOL}${TAURI_OIDC_PATH}`;
+export const buildTauriOidcRedirectUrl = (): string => `${TAURI_OIDC_PROTOCOL}${TAURI_OIDC_PATH}`;
 
 export const rememberTauriOidcServer = (server?: string): void => {
   try {

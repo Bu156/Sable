@@ -10,9 +10,7 @@ let nativePushNotificationsApiPromise: Promise<NativePushNotificationsApi> | nul
 export async function getNativePushNotificationsApi(): Promise<NativePushNotificationsApi> {
   if (!nativePushNotificationsApiPromise) {
     nativePushNotificationsApiPromise =
-      import(
-        '@choochmeque/tauri-plugin-notifications-api'
-      ) as unknown as Promise<NativePushNotificationsApi>;
+      import('@choochmeque/tauri-plugin-notifications-api') as unknown as Promise<NativePushNotificationsApi>;
   }
 
   return nativePushNotificationsApiPromise;

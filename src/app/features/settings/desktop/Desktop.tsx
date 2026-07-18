@@ -29,7 +29,7 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
 
   if (!isTauri() || !ready) return null;
 
-  let type = osType()
+  let type = osType();
   if (type === 'android' || type === 'ios') return null;
 
   const trayFallback = showSystemTrayIcon && !runtimeState.trayAvailable && !syncing;

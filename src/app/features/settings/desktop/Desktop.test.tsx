@@ -12,9 +12,7 @@ const {
   mockUseDesktopSettingsSyncing,
 } = vi.hoisted(() => ({
   mockUseDesktopSetting: vi.fn<
-    (
-      key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon'
-    ) => readonly [boolean, () => void]
+    (key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon') => readonly [boolean, () => void]
   >((key) => {
     if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
     return [true, vi.fn<() => void>()] as const;

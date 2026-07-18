@@ -18,9 +18,13 @@ const { mockClose, mockEntries, mockGetDesktopRuntimeState, mockSet, mockSyncDes
   vi.hoisted(() => ({
     mockClose: vi.fn<() => Promise<unknown>>(),
     mockEntries: vi.fn<() => Promise<Array<[string, unknown]>>>(),
-    mockGetDesktopRuntimeState: vi.fn<() => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
+    mockGetDesktopRuntimeState: vi
+      .fn<() => Promise<DesktopRuntimeState>>()
+      .mockResolvedValue({ trayAvailable: true }),
     mockSet: vi.fn<(key: string, value: unknown) => Promise<unknown>>(),
-    mockSyncDesktopSettings: vi.fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: false }),
+    mockSyncDesktopSettings: vi
+      .fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>()
+      .mockResolvedValue({ trayAvailable: false }),
   }));
 
 vi.mock('@tauri-apps/plugin-store', () => ({

@@ -135,7 +135,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       url.toLowerCase().endsWith('.apng') ||
       url.toLowerCase().endsWith('.webp');
 
-const rawMediaUrl = useMemo(() => {
+    const rawMediaUrl = useMemo(() => {
       if (url.startsWith('http')) return url;
       return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
     }, [mx, url, useAuthentication]);

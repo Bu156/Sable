@@ -8,15 +8,21 @@ const mediaCache = vi.hoisted(() => {
   const cache = new Map<string, Blob>();
   return {
     cache,
-    getFromMediaCache: vi.fn<(url: string) => Promise<Blob | undefined>>(async (url: string) => cache.get(url)),
-    putInMediaCache: vi.fn<(url: string, blob: Blob) => Promise<void>>(async (url: string, blob: Blob) => {
-      cache.set(url, blob);
-    }),
+    getFromMediaCache: vi.fn<(url: string) => Promise<Blob | undefined>>(async (url: string) =>
+      cache.get(url)
+    ),
+    putInMediaCache: vi.fn<(url: string, blob: Blob) => Promise<void>>(
+      async (url: string, blob: Blob) => {
+        cache.set(url, blob);
+      }
+    ),
   };
 });
 
 const appFetch = vi.hoisted(() => ({
-  fetch: vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)),
+  fetch: vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+    (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)
+  ),
 }));
 
 vi.mock('$utils/platform', () => platform);

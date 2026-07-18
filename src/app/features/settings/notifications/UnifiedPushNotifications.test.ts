@@ -34,8 +34,12 @@ const getTauriNotificationsApi = vi.hoisted(() =>
 const matrixClient = vi.hoisted(() => ({
   setPusher: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   getDeviceId: vi.fn<() => string>(() => 'DEVICE'),
-  getDevice: vi.fn<() => Promise<{ display_name: string }>>().mockResolvedValue({ display_name: 'Pixel' }),
-  getPushers: vi.fn<() => Promise<{ pushers: Array<unknown> }>>().mockResolvedValue({ pushers: [] }),
+  getDevice: vi
+    .fn<() => Promise<{ display_name: string }>>()
+    .mockResolvedValue({ display_name: 'Pixel' }),
+  getPushers: vi
+    .fn<() => Promise<{ pushers: Array<unknown> }>>()
+    .mockResolvedValue({ pushers: [] }),
 }));
 
 vi.mock('./UnifiedPushTransport', () => unifiedPushTransport);
@@ -61,7 +65,10 @@ describe('UnifiedPushNotifications', () => {
     unifiedPushTransport.unregisterUnifiedPushTransport.mockResolvedValue(undefined);
     matrixClient.setPusher.mockClear();
     matrixClient.getPushers.mockResolvedValue({ pushers: [] });
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('gateway probe failed')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockRejectedValue(new Error('gateway probe failed'))
+    );
   });
 
   afterEach(() => {

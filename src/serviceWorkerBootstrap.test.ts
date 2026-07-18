@@ -11,11 +11,25 @@ const {
 } = vi.hoisted(() => ({
   mockHasServiceWorker: vi.fn<() => boolean>(),
   mockRegister: vi.fn<() => Promise<Partial<ServiceWorkerRegistration>>>().mockResolvedValue({
-    addEventListener: vi.fn<(type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => void>(),
+    addEventListener:
+      vi.fn<
+        (
+          type: string,
+          listener: EventListenerOrEventListenerObject,
+          options?: AddEventListenerOptions | boolean
+        ) => void
+      >(),
     installing: null,
     waiting: null,
   }),
-  mockAddEventListener: vi.fn<(type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => void>(),
+  mockAddEventListener:
+    vi.fn<
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean
+      ) => void
+    >(),
   mockReady: Promise.resolve(undefined),
   mockPushSessionToSW: vi.fn<(baseUrl?: string, accessToken?: string, userId?: string) => void>(),
   mockWarn: vi.fn<(...args: unknown[]) => void>(),
@@ -36,7 +50,9 @@ vi.mock('./app/state/sessions', () => ({
 }));
 
 vi.mock('./app/state/utils/atomWithLocalStorage', () => ({
-  getLocalStorageItem: vi.fn<(key: string, fallback: unknown) => unknown>((_: string, fallback: unknown) => fallback),
+  getLocalStorageItem: vi.fn<(key: string, fallback: unknown) => unknown>(
+    (_: string, fallback: unknown) => fallback
+  ),
 }));
 
 vi.mock('./app/utils/debug', () => ({
@@ -99,7 +115,9 @@ describe('registerAppServiceWorker', () => {
         serviceWorker: {
           register: mockRegister,
           ready: mockReady,
-          controller: { postMessage: vi.fn<(message: unknown, transfer?: Transferable[]) => void>() },
+          controller: {
+            postMessage: vi.fn<(message: unknown, transfer?: Transferable[]) => void>(),
+          },
           addEventListener: mockAddEventListener,
         },
       },

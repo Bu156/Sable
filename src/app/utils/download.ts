@@ -66,9 +66,8 @@ export async function saveFileToDevice(
   if (isTauri() && osType() === 'android') {
     const blob = await resolveBlob(input);
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    const { AndroidFs, AndroidPublicGeneralPurposeDir } = await import(
-      'tauri-plugin-android-fs-api'
-    );
+    const { AndroidFs, AndroidPublicGeneralPurposeDir } =
+      await import('tauri-plugin-android-fs-api');
     const uri = await AndroidFs.createNewPublicFile(
       AndroidPublicGeneralPurposeDir.Download,
       filename,

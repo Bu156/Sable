@@ -41,7 +41,7 @@ declare module '@choochmeque/tauri-plugin-notifications-api' {
     lights?: boolean;
     lightColor?: string;
     vibration?: boolean;
-    importance?: typeof Importance[keyof typeof Importance];
+    importance?: (typeof Importance)[keyof typeof Importance];
     visibility?: number;
   };
 

@@ -30,7 +30,9 @@ export async function isWindowTrackingActive(): Promise<boolean> {
   return invoke('is_window_tracking_active');
 }
 
-export async function loopbackFetch(params: types.LoopbackFetchParams): Promise<types.LoopbackFetchResponse> {
+export async function loopbackFetch(
+  params: types.LoopbackFetchParams
+): Promise<types.LoopbackFetchResponse> {
   return invoke('loopback_fetch', params);
 }
 
@@ -46,7 +48,9 @@ export async function showSnapOverlay(): Promise<void> {
   return invoke('show_snap_overlay');
 }
 
-export async function startWindowTrackingWithTarget(params: types.StartWindowTrackingWithTargetParams): Promise<void> {
+export async function startWindowTrackingWithTarget(
+  params: types.StartWindowTrackingWithTargetParams
+): Promise<void> {
   return invoke('start_window_tracking_with_target', params);
 }
 
@@ -54,6 +58,8 @@ export async function stopWindowTracking(): Promise<void> {
   return invoke('stop_window_tracking');
 }
 
-export async function syncDesktopSettings(params: types.SyncDesktopSettingsParams): Promise<types.DesktopRuntimeState> {
+export async function syncDesktopSettings(
+  params: types.SyncDesktopSettingsParams
+): Promise<types.DesktopRuntimeState> {
   return invoke('sync_desktop_settings', params);
 }

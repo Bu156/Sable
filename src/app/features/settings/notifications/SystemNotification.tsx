@@ -1,8 +1,7 @@
-import type { MouseEventHandler} from 'react';
+import type { MouseEventHandler } from 'react';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
-import type {
-  RectCords} from 'folds';
+import type { RectCords } from 'folds';
 import {
   Box,
   Button,
@@ -600,7 +599,8 @@ function BackgroundPushNotificationSetting() {
   ): UnifiedPushState => ({
     endpoint: registration.endpoint,
     appId: effectivePushTransport.unifiedPushAppID?.trim() ?? DEFAULT_UNIFIED_PUSH_APP_ID,
-    gatewayUrl: registration.gatewayUrl ?? effectivePushTransport.unifiedPushGatewayUrl?.trim() ?? undefined,
+    gatewayUrl:
+      registration.gatewayUrl ?? effectivePushTransport.unifiedPushGatewayUrl?.trim() ?? undefined,
     status: 'registered',
     distributor: distributorOverride ?? registration.distributor,
     permissionState: 'granted',

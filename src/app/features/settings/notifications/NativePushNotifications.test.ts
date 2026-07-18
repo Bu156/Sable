@@ -22,8 +22,12 @@ const getNativePushNotificationsApi = vi.hoisted(() =>
 const matrixClient = vi.hoisted(() => ({
   setPusher: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   getDeviceId: vi.fn<() => string>(() => 'DEVICE'),
-  getDevice: vi.fn<() => Promise<{ display_name: string }>>().mockResolvedValue({ display_name: 'Pixel' }),
-  getPushers: vi.fn<() => Promise<{ pushers: Array<unknown> }>>().mockResolvedValue({ pushers: [] }),
+  getDevice: vi
+    .fn<() => Promise<{ display_name: string }>>()
+    .mockResolvedValue({ display_name: 'Pixel' }),
+  getPushers: vi
+    .fn<() => Promise<{ pushers: Array<unknown> }>>()
+    .mockResolvedValue({ pushers: [] }),
 }));
 
 const nativePushClientConfig = {

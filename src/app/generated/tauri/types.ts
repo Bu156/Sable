@@ -67,4 +67,3 @@ export interface SyncDesktopSettingsParams {
   settings: DesktopSettings;
   [key: string]: unknown;
 }
-

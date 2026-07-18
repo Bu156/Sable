@@ -15,7 +15,9 @@ const mediaTransport = vi.hoisted(() => ({
 
 const tauriApi = vi.hoisted(() => ({
   isTauri: vi.fn<() => boolean>(),
-  convertFileSrc: vi.fn<(url: string, protocol: string) => string>((url: string, protocol: string) => `${protocol}://${url}`),
+  convertFileSrc: vi.fn<(url: string, protocol: string) => string>(
+    (url: string, protocol: string) => `${protocol}://${url}`
+  ),
 }));
 
 vi.mock('$utils/platform', () => platform);
@@ -32,7 +34,9 @@ describe('useRenderableMediaUrl', () => {
     mediaTransport.getCurrentMediaSessionScope.mockReturnValue('anonymous');
     tauriApi.isTauri.mockReset();
     tauriApi.convertFileSrc.mockReset();
-    tauriApi.convertFileSrc.mockImplementation((url: string, protocol: string) => `${protocol}://${url}`);
+    tauriApi.convertFileSrc.mockImplementation(
+      (url: string, protocol: string) => `${protocol}://${url}`
+    );
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:rendered-media');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     Object.defineProperty(navigator, 'serviceWorker', {
@@ -205,7 +209,8 @@ describe('useRenderableMediaUrl', () => {
     tauriApi.isTauri.mockReturnValue(true);
     const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
 
-    const rawAuthUrl = 'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96&height=96';
+    const rawAuthUrl =
+      'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96&height=96';
     const { result } = renderHook(() => useRenderableMediaUrl(rawAuthUrl));
 
     expect(result.current).toBe(`sable-media://${rawAuthUrl}`);
@@ -216,7 +221,8 @@ describe('useRenderableMediaUrl', () => {
     tauriApi.isTauri.mockReturnValue(true);
     const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
 
-    const rewrittenUrl = 'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
+    const rewrittenUrl =
+      'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
     const { result } = renderHook(() => useRenderableMediaUrl(rewrittenUrl));
 
     expect(result.current).toBe(rewrittenUrl);

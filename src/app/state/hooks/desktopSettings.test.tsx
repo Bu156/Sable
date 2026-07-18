@@ -9,9 +9,13 @@ import { useDesktopSetting } from './desktopSettings';
 const { mockEntries, mockGetDesktopRuntimeState, mockSet, mockSyncDesktopSettings } = vi.hoisted(
   () => ({
     mockEntries: vi.fn<() => Promise<Array<[string, unknown]>>>(),
-    mockGetDesktopRuntimeState: vi.fn<() => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
+    mockGetDesktopRuntimeState: vi
+      .fn<() => Promise<DesktopRuntimeState>>()
+      .mockResolvedValue({ trayAvailable: true }),
     mockSet: vi.fn<(key: string, value: unknown) => Promise<unknown>>(),
-    mockSyncDesktopSettings: vi.fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
+    mockSyncDesktopSettings: vi
+      .fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>()
+      .mockResolvedValue({ trayAvailable: true }),
   })
 );
 

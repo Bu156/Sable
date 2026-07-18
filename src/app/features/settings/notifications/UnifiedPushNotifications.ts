@@ -323,9 +323,7 @@ async function postRoomNotification(
   const latestMsg = messages[messages.length - 1];
   const latestBody = latestMsg ? `${latestMsg.sender?.name ?? 'You'}: ${latestMsg.text}` : '';
 
-  const inboxLines = messages
-    .slice(-5)
-    .map((m) => `${m.sender?.name ?? 'You'}: ${m.text}`);
+  const inboxLines = messages.slice(-5).map((m) => `${m.sender?.name ?? 'You'}: ${m.text}`);
 
   await notificationsApi.sendNotification({
     id: roomNotifId(roomId),
@@ -371,10 +369,7 @@ async function postRoomNotification(
 }
 
 /** Handles a rich push payload containing full event details (type, room_name, content, etc.). */
-async function handleRichPushPayload(
-  pushData: UnifiedPushPayload,
-  settings: NotificationSettings
-) {
+async function handleRichPushPayload(pushData: UnifiedPushPayload, settings: NotificationSettings) {
   const eventType = pushData.type as EventType;
 
   switch (eventType) {

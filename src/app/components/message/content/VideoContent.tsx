@@ -75,7 +75,7 @@ export const VideoContent = as<'div', VideoContentProps>(
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [isHovered, setIsHovered] = useState(false);
 
-const [srcState, loadSrc] = useAsyncCallback(
+    const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
         if (url.startsWith('http')) return url;
 

@@ -19,7 +19,9 @@ const unifiedPushApi = vi.hoisted(() => ({
 }));
 
 vi.mock('./UnifiedPushTransportApiClient', () => ({
-  getUnifiedPushTransportApi: vi.fn<() => Promise<typeof unifiedPushApi>>().mockResolvedValue(unifiedPushApi),
+  getUnifiedPushTransportApi: vi
+    .fn<() => Promise<typeof unifiedPushApi>>()
+    .mockResolvedValue(unifiedPushApi),
 }));
 
 afterEach(() => {
@@ -47,9 +49,7 @@ describe('registerUnifiedPushTransport', () => {
     unifiedPushApi.requestPermission.mockResolvedValue('granted');
     localStorage.removeItem('unifiedpush_distributor');
     unifiedPushApi.listDistributors.mockResolvedValue(['org.unifiedpush.distributor.ntfy']);
-    unifiedPushApi.registerForPushNotifications.mockResolvedValue(
-      'https://up.example/endpoint'
-    );
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue('https://up.example/endpoint');
 
     await expect(registerUnifiedPushTransport()).resolves.toEqual({
       status: 'registered',
@@ -151,9 +151,7 @@ describe('UnifiedPush distributor state helpers', () => {
       distributors: ['org.unifiedpush.distributor.ntfy'],
       selectedDistributor: 'org.unifiedpush.distributor.ntfy',
     });
-    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith(
-      'org.unifiedpush.distributor.ntfy'
-    );
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith('org.unifiedpush.distributor.ntfy');
   });
 
   it('ensures a distributor selection by auto-saving the first available distributor', async () => {
@@ -175,9 +173,7 @@ describe('UnifiedPush distributor state helpers', () => {
         'org.unifiedpush.distributor.removed'
       )
     ).resolves.toBe('org.unifiedpush.distributor.ntfy');
-    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith(
-      'org.unifiedpush.distributor.ntfy'
-    );
+    expect(unifiedPushApi.setDistributor).toHaveBeenCalledWith('org.unifiedpush.distributor.ntfy');
   });
 
   it('persists a selected distributor through the transport helper', async () => {
@@ -199,7 +195,9 @@ describe('UnifiedPush distributor state helpers', () => {
 
   it('restores the previous distributor when a switch registration fails', async () => {
     unifiedPushApi.setDistributor.mockResolvedValue(undefined);
-    const register = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('registration failed'));
+    const register = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error('registration failed'));
 
     await expect(
       switchUnifiedPushDistributorSelection(
