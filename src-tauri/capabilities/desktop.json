@@ -12,6 +12,9 @@
   "permissions": [
     "window-state:default",
     "store:default",
-    "notifications:default"
+    "notifications:default",
+    "updater:default",
+    "process:default",
+    "dialog:default"
   ]
 }

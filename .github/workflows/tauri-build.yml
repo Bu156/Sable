@@ -41,6 +41,8 @@ jobs:
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       NODE_OPTIONS: --max-old-space-size=8192
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -223,14 +225,47 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
             ./appimagetool "$APPDIR" "Sable_${VERSION}_amd64.AppImage"
 
+      - name: Sign the AppImage for the updater
+        if: ${{ matrix.cef && env.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        shell: bash
+        run: |
+          for f in Sable_*_amd64.AppImage; do
+            [ -e "$f" ] || continue
+            pnpm tauri signer sign "$f"
+          done
+
       - name: Attach native packages to release
         if: matrix.cef
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for f in sable_*.deb sable-*.rpm Sable_*_amd64.AppImage; do
+          for f in sable_*.deb sable-*.rpm Sable_*_amd64.AppImage Sable_*_amd64.AppImage.sig; do
             [ -e "$f" ] || continue
             echo "Uploading $f"
             gh release upload "$TAG" "$f" --clobber
           done
+
+  updater-manifest:
+    name: Publish updater manifest
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Build and upload latest.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/scripts/build-updater-manifest.mjs
+          gh release upload "$TAG" latest.json --clobber

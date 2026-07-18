@@ -1,0 +1,64 @@
+// Composes the Tauri updater manifest (latest.json) from the per-platform .sig
+// assets already attached to the release.
+// Required env: TAG, REPO, GH_TOKEN.
+
+import { execSync } from 'node:child_process';
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const TAG = process.env.TAG;
+const REPO = process.env.REPO;
+if (!TAG || !REPO) {
+  console.error('TAG and REPO env vars are required');
+  process.exit(1);
+}
+const version = TAG.replace(/^v/, '');
+
+const dir = mkdtempSync(join(tmpdir(), 'sable-sigs-'));
+execSync(`gh release download "${TAG}" --repo "${REPO}" --pattern '*.sig' --dir "${dir}"`, {
+  stdio: 'inherit',
+});
+
+const urlFor = (name) =>
+  `https://github.com/${REPO}/releases/download/${TAG}/${encodeURIComponent(name)}`;
+
+const platforms = {};
+let windowsIsNsis = false;
+
+for (const sig of readdirSync(dir).filter((f) => f.endsWith('.sig'))) {
+  const artifact = sig.replace(/\.sig$/, '');
+  const entry = { signature: readFileSync(join(dir, sig), 'utf8').trim(), url: urlFor(artifact) };
+  const name = artifact.toLowerCase();
+
+  if (name.endsWith('.app.tar.gz')) {
+    platforms['darwin-aarch64'] = entry;
+    platforms['darwin-x86_64'] = entry;
+  } else if (name.endsWith('.appimage')) {
+    platforms['linux-x86_64'] = entry;
+  } else if (name.endsWith('-setup.exe') || name.endsWith('.nsis.zip')) {
+    platforms['windows-x86_64'] = entry;
+    windowsIsNsis = true;
+  } else if (name.endsWith('.msi') && !windowsIsNsis) {
+    platforms['windows-x86_64'] = entry;
+  }
+}
+
+if (Object.keys(platforms).length === 0) {
+  console.error('No .sig assets found on the release; nothing to publish.');
+  process.exit(1);
+}
+
+let notes = `Sable ${version}`;
+try {
+  notes =
+    execSync(`gh release view "${TAG}" --repo "${REPO}" --json body -q .body`, {
+      encoding: 'utf8',
+    }).trim() || notes;
+} catch {
+  // keep the default note
+}
+
+const manifest = { version, notes, pub_date: new Date().toISOString(), platforms };
+writeFileSync('latest.json', JSON.stringify(manifest, null, 2));
+console.log(JSON.stringify(manifest, null, 2));
