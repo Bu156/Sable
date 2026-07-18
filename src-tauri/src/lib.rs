@@ -320,11 +320,6 @@ pub fn run() {
     };
 
     app.run(|app, event| {
-        if matches!(event, tauri::RunEvent::Resumed) {
-            use tauri::Emitter;
-            let _ = app.emit("app-resumed", ());
-        }
-
         #[cfg(desktop)]
         desktop::tray::handle_run_event(app, event);
 

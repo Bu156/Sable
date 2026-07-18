@@ -1,11 +1,12 @@
 import type { MatrixClient } from '$types/matrix-sdk';
 import { SyncState } from '$types/matrix-sdk';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, config, Line, Text } from 'folds';
 import * as Sentry from '@sentry/react';
 import { useSyncState } from '$hooks/useSyncState';
-import { useResumeSyncRetry } from '$hooks/useResumeSyncRetry';
 import { ContainerColor } from '$styles/ContainerColor.css';
+
+const DISCONNECTED_GRACE_MS = 2000;
 
 type StateData = {
   current: SyncState | null;
@@ -34,7 +35,19 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     previous: undefined,
     showConnecting: false,
   });
-  useResumeSyncRetry(mx);
+  const [showDisconnected, setShowDisconnected] = useState(false);
+
+  const isDisconnected =
+    stateData.current === SyncState.Reconnecting || stateData.current === SyncState.Error;
+
+  useEffect(() => {
+    if (!isDisconnected) {
+      setShowDisconnected(false);
+      return undefined;
+    }
+    const timeoutId = setTimeout(() => setShowDisconnected(true), DISCONNECTED_GRACE_MS);
+    return () => clearTimeout(timeoutId);
+  }, [isDisconnected]);
 
   useSyncState(
     mx,
@@ -83,7 +96,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     );
   }
 
-  if (stateData.current === SyncState.Reconnecting) {
+  if (showDisconnected && stateData.current === SyncState.Reconnecting) {
     return (
       <Box direction="Column" shrink="No">
         <Box
@@ -99,7 +112,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     );
   }
 
-  if (stateData.current === SyncState.Error) {
+  if (showDisconnected && stateData.current === SyncState.Error) {
     return (
       <Box direction="Column" shrink="No">
         <Box
