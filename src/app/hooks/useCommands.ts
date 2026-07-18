@@ -32,6 +32,7 @@ import {
   removeRoomIdFromMDirect,
 } from '$utils/matrix';
 import { getStateEvent } from '$utils/room';
+import { setOwnRoomMemberProfile } from '$utils/roomMemberProfile';
 import { splitWithSpace } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
@@ -507,12 +508,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
           } else {
             withDisplay.displayname = nick;
           }
-          await mx.sendStateEvent(
-            room.roomId,
-            EventType.RoomMember,
-            updatedContent,
-            mx.getSafeUserId()
-          );
+          await setOwnRoomMemberProfile(mx, room, updatedContent);
         },
       },
       [Command.AddPerMessageProfileToAccount]: {
@@ -676,12 +672,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
             (updatedContent as RoomMemberEventContent & { avatar_url?: string }).avatar_url =
               trimmed;
           }
-          await mx.sendStateEvent(
-            room.roomId,
-            EventType.RoomMember,
-            updatedContent,
-            mx.getSafeUserId()
-          );
+          await setOwnRoomMemberProfile(mx, room, updatedContent);
         },
       },
       [Command.ConvertToDm]: {
