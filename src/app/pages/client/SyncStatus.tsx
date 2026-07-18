@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Box, config, Line, Text } from 'folds';
 import * as Sentry from '@sentry/react';
 import { useSyncState } from '$hooks/useSyncState';
+import { useResumeSyncRetry } from '$hooks/useResumeSyncRetry';
 import { ContainerColor } from '$styles/ContainerColor.css';
 
 type StateData = {
@@ -33,6 +34,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     previous: undefined,
     showConnecting: false,
   });
+  useResumeSyncRetry(mx);
 
   useSyncState(
     mx,
