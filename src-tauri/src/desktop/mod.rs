@@ -1,3 +1,4 @@
+pub mod download;
 pub mod runtime_state;
 pub mod settings;
 pub mod tray;

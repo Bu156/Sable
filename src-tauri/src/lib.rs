@@ -293,6 +293,8 @@ pub fn run() {
             #[cfg(target_os = "android")]
             mobile::set_navigation_bar_color,
             #[cfg(desktop)]
+            desktop::download::save_download,
+            #[cfg(desktop)]
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]
             desktop::tray::sync_desktop_settings,

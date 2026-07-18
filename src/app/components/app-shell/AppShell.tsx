@@ -7,6 +7,7 @@ import { type as osType } from '@tauri-apps/plugin-os';
 
 import { TauriFrontendReady } from '$components/tauri/TauriFrontendReady';
 import { WindowsTitleBar } from '$components/tauri/WindowsTitleBar';
+import { Toast } from '$components/toast/Toast';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider } from '$hooks/useScreenSize';
 import { isReactQueryDevtoolsEnabled } from '$pages/reactQueryDevtoolsGate';
@@ -64,6 +65,7 @@ export function AppShell({ children, queryClient, screenSize }: AppShellProps) {
                     <SystemBarShell onPortalContainerChange={setPortalContainer}>
                       {children}
                     </SystemBarShell>
+                    <Toast container={portalContainer} />
                   </div>
                 </div>
               </JotaiProvider>

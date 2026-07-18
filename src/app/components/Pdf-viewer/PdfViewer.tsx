@@ -28,8 +28,7 @@ import {
   sizedIcon,
 } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
-import FileSaver from 'file-saver';
-import { getDownloadFilename } from '$utils/download';
+import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 import { AsyncStatus } from '$hooks/useAsyncCallback';
 import { useImageGestures } from '$hooks/useImageGestures';
 import { createPage, usePdfDocumentLoader, usePdfJSLoader } from '$plugins/pdfjs-dist';
@@ -103,7 +102,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
     }, [docState, pageNo, zoom]);
 
     const handleDownload = () => {
-      FileSaver.saveAs(src, getDownloadFilename(name, undefined, 'document.pdf'));
+      void saveFileToDevice(src, getDownloadFilename(name, undefined, 'document.pdf'));
     };
 
     const handleJumpSubmit: FormEventHandler<HTMLFormElement> = (evt) => {

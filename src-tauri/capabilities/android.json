@@ -3,5 +3,10 @@
   "identifier": "android-capability",
   "platforms": ["android"],
   "windows": ["main"],
-  "permissions": ["android-fs:default", "unifiedpush:default"]
+  "permissions": [
+    "android-fs:allow-create-new-public-file",
+    "android-fs:allow-write-file",
+    "android-fs:allow-set-public-file-pending",
+    "unifiedpush:default"
+  ]
 }
