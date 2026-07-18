@@ -27,6 +27,9 @@ export type TauriNotificationsApi = {
   onNotificationReceived: (
     listener: (notification: Record<string, unknown>) => void
   ) => Promise<NotificationPluginListener>;
+  onNotificationClicked: (
+    listener: (data: { id: number; data?: Record<string, string> }) => void
+  ) => Promise<NotificationPluginListener>;
 };
 
 let notificationsApiPromise: Promise<TauriNotificationsApi> | null = null;
@@ -66,31 +69,38 @@ export async function ensureTauriNotificationPermission(): Promise<boolean> {
 // Linux CEF runtime never grants it), so desktop routes through the native plugin.
 const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
 export const isDesktopTauri = (): boolean => isTauri() && DESKTOP_TAURI_OS.has(osType());
+export const isIosTauri = (): boolean => isTauri() && osType() === 'ios';
+// Platforms where OS notifications go through the native plugin instead of web APIs.
+export const isNativeNotificationTauri = (): boolean => isDesktopTauri() || isIosTauri();
 
-let desktopNotificationSeq = 1;
-const nextDesktopNotificationId = (): number => {
-  const id = desktopNotificationSeq;
-  desktopNotificationSeq = desktopNotificationSeq >= 2_000_000_000 ? 1 : desktopNotificationSeq + 1;
+let nativeNotificationSeq = 1;
+const nextNativeNotificationId = (): number => {
+  const id = nativeNotificationSeq;
+  nativeNotificationSeq = nativeNotificationSeq >= 2_000_000_000 ? 1 : nativeNotificationSeq + 1;
   return id;
 };
 
-export type DesktopTauriNotification = {
+export type NativeTauriNotification = {
   title: string;
   body?: string;
   silent?: boolean;
+  /** Attached to the notification and handed back by onNotificationClicked. */
+  extra?: Record<string, string>;
 };
 
-export async function sendDesktopTauriNotification({
+export async function sendNativeTauriNotification({
   title,
   body,
   silent,
-}: DesktopTauriNotification): Promise<void> {
+  extra,
+}: NativeTauriNotification): Promise<void> {
   if (!(await ensureTauriNotificationPermission())) return;
   const api = await getTauriNotificationsApi();
   await api.sendNotification({
-    id: nextDesktopNotificationId(),
+    id: nextNativeNotificationId(),
     title,
     body,
     silent: silent ?? false,
+    extra,
   });
 }

@@ -25,8 +25,11 @@ import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
 import {
+  getTauriNotificationsApi,
   isDesktopTauri,
-  sendDesktopTauriNotification,
+  isIosTauri,
+  isNativeNotificationTauri,
+  sendNativeTauriNotification,
 } from '$features/settings/notifications/TauriNotificationsApiClient';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
@@ -168,7 +171,7 @@ function FaviconUpdater() {
     try {
       // Only badge with highlight (mention) counts — total unread is too noisy
       // for an OS-level app badge.
-      if (isDesktopTauri()) {
+      if (isNativeNotificationTauri()) {
         import('@tauri-apps/api/window')
           .then(({ getCurrentWindow }) =>
             getCurrentWindow().setBadgeCount(highlightTotal > 0 ? highlightTotal : undefined)
@@ -220,8 +223,13 @@ function InviteNotifications() {
   const notify = useCallback(
     (count: number) => {
       const body = `You have ${count} new invitation request.`;
-      if (isDesktopTauri()) {
-        sendDesktopTauriNotification({ title: 'Invitation', body, silent: true }).catch(() => {});
+      if (isNativeNotificationTauri()) {
+        sendNativeTauriNotification({
+          title: 'Invitation',
+          body,
+          silent: true,
+          extra: { type: 'invite' },
+        }).catch(() => {});
         return;
       }
       const noti = new window.Notification('Invitation', {
@@ -251,11 +259,11 @@ function InviteNotifications() {
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
 
-    // OS notification for invites — desktop only.
+    // OS notification for invites — desktop, plus iOS while foregrounded (testing).
     if (
-      !mobileOrTablet() &&
+      (!mobileOrTablet() || isIosTauri()) &&
       showSystemNotifications &&
-      (isDesktopTauri() || notificationPermission('granted'))
+      (isNativeNotificationTauri() || notificationPermission('granted'))
     ) {
       try {
         notify(invites.length - perviousInviteLen);
@@ -463,9 +471,9 @@ function MessageNotifications() {
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
       if (
-        !mobileOrTablet() &&
+        (!mobileOrTablet() || isIosTauri()) &&
         showSystemNotifications &&
-        (isDesktopTauri() || notificationPermission('granted'))
+        (isNativeNotificationTauri() || notificationPermission('granted'))
       ) {
         try {
           const isEncryptedRoom = !!getStateEvent(room, EventType.RoomEncryption);
@@ -490,11 +498,16 @@ function MessageNotifications() {
             silent: !notificationSound || !isLoud,
             eventId,
           });
-          if (isDesktopTauri()) {
-            sendDesktopTauriNotification({
+          if (isNativeNotificationTauri()) {
+            const extra: Record<string, string> = { type: mEvent.getType(), room_id: room.roomId };
+            if (eventId) extra.event_id = eventId;
+            const userId = mx.getUserId();
+            if (userId) extra.user_id = userId;
+            sendNativeTauriNotification({
               title: osPayload.title,
               body: osPayload.options.body,
               silent: osPayload.options.silent ?? false,
+              extra,
             }).catch(() => {});
           } else {
             const noti = new window.Notification(osPayload.title, osPayload.options);
@@ -950,6 +963,54 @@ function SettingsSyncFeature() {
   return null;
 }
 
+// Routes taps on native plugin notifications (desktop + iOS) using the `extra`
+// payload attached in sendNativeTauriNotification.
+function NativeNotificationClickRouting() {
+  const setPending = useSetAtom(pendingNotificationAtom);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isNativeNotificationTauri()) return undefined;
+
+    let unregister: (() => Promise<void> | void) | undefined;
+    let disposed = false;
+    getTauriNotificationsApi()
+      .then((api) =>
+        api.onNotificationClicked(({ data }) => {
+          if (isDesktopTauri()) {
+            import('@tauri-apps/api/window')
+              .then(({ getCurrentWindow }) => getCurrentWindow().setFocus())
+              .catch(() => {});
+          }
+          if (!data) return;
+          if (data.type === 'invite') {
+            navigate(getInboxInvitesPath());
+            return;
+          }
+          if (data.room_id) {
+            setPending({
+              roomId: data.room_id,
+              eventId: data.event_id,
+              targetSessionId: data.user_id,
+            });
+          }
+        })
+      )
+      .then((listener) => {
+        if (disposed) listener.unregister();
+        else unregister = listener.unregister;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      unregister?.();
+    };
+  }, [setPending, navigate]);
+
+  return null;
+}
+
 export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
   useIncomingCallSignaling();
   return (
@@ -962,6 +1023,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageTitleUpdater />
       <InviteNotifications />
       <MessageNotifications />
+      <NativeNotificationClickRouting />
       <BackgroundNotifications />
       <DesktopUpdater />
       <NotificationTransportRuntimeFeature />

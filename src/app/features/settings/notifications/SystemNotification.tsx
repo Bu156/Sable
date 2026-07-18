@@ -33,6 +33,7 @@ import { SequenceCardStyle } from '$features/settings/styles.css';
 import { pushSubscriptionAtom } from '$state/pushSubscription';
 import { unifiedPushEndpointAtom, type UnifiedPushState } from '$state/unifiedPushEndpoint';
 import { mobileOrTablet } from '$utils/user-agent';
+import { isIosTauri } from '$features/settings/notifications/TauriNotificationsApiClient';
 import { stopPropagation } from '$utils/keyboard';
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
@@ -1054,7 +1055,7 @@ export function SystemNotification() {
           after={<Switch value={showInAppNotifs} onChange={setShowInAppNotifs} />}
         />
       </SequenceCard>
-      {!mobileOrTablet() && (
+      {(!mobileOrTablet() || isIosTauri()) && (
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
