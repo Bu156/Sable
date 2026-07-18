@@ -265,6 +265,7 @@ export enum Command {
   Pronoun = 'pronoun',
   SPronoun = 'spronoun',
   Rainbow = 'rainbow',
+  RainbowMe = 'rainbowme',
   RawMsg = 'rawmsg',
   Raw = 'raw',
   RawAcc = 'rawacc',
@@ -1156,6 +1157,21 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
           const rainbowHtml = rainbowify(inputHtml);
           await mx.sendMessage(room.roomId, {
             msgtype: MsgType.Text,
+            body: payload,
+            format: 'org.matrix.custom.html',
+            formatted_body: rainbowHtml,
+          });
+        },
+      },
+      [Command.RainbowMe]: {
+        name: Command.RainbowMe,
+        description: 'Send a rainbow action message.',
+        exe: async (payload, html) => {
+          if (!payload || payload.trim().length === 0) return;
+          const inputHtml = html || payload;
+          const rainbowHtml = rainbowify(inputHtml);
+          await mx.sendMessage(room.roomId, {
+            msgtype: MsgType.Emote,
             body: payload,
             format: 'org.matrix.custom.html',
             formatted_body: rainbowHtml,
