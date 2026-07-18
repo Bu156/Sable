@@ -445,12 +445,18 @@ export function RoomTimeline({
   const processedEventsRef = useRef<ProcessedEvent[]>([]);
   const timelineSyncRef = useRef<typeof timelineSync>(null as unknown as typeof timelineSync);
 
-  const scrollToBottom = useCallback(() => {
-    if (!vListRef.current) return;
-    const lastIndex = processedEventsRef.current.length - 1;
-    if (lastIndex < 0) return;
-    vListRef.current.scrollTo(vListRef.current.scrollSize);
-  }, []);
+  const scrollToBottom = useCallback(
+    (behavior: 'instant' | 'smooth' = 'instant') => {
+      if (!vListRef.current) return;
+      const lastIndex = processedEventsRef.current.length - 1;
+      if (lastIndex < 0) return;
+      vListRef.current.scrollToIndex(lastIndex, {
+        align: 'end',
+        smooth: behavior === 'smooth' && !reducedMotion,
+      });
+    },
+    [reducedMotion]
+  );
 
   const timelineSync = useTimelineSync({
     room,
@@ -665,7 +671,10 @@ export function RoomTimeline({
       const shrank = newHeight < prev;
 
       if (shrank && atBottom) {
-        vListRef.current?.scrollTo(vListRef.current.scrollSize);
+        const lastIndex = processedEventsRef.current.length - 1;
+        if (lastIndex >= 0) {
+          vListRef.current?.scrollToIndex(lastIndex, { align: 'end' });
+        }
       }
       prevViewportHeightRef.current = newHeight;
     });
