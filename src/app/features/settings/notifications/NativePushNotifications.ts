@@ -162,7 +162,7 @@ export async function enableNativePush(
     pushkey: registration.token,
     app_display_name: 'Sable (Native Push)',
     device_display_name:
-      (await mx.getDevice(mx.getDeviceId() ?? '')).display_name ?? 'Mobile Device',
+      (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Mobile Device',
     lang: navigator.language || 'en',
     data: {
       url: pushGatewayUrl,

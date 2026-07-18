@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
+import { createLogger } from '$utils/debug';
 import { type as osType } from '@tauri-apps/plugin-os';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useClientConfig } from '$hooks/useClientConfig';
@@ -15,6 +16,8 @@ import {
   normalizeNotificationTransportMode,
   resolvePreferredNotificationTransportProvider,
 } from './NotificationTransport';
+
+const log = createLogger('NotificationTransportRuntimeFeature');
 
 function currentPlatform(): NotificationTransportPlatform {
   if (!isTauri()) return 'web';
@@ -96,7 +99,9 @@ export function NotificationTransportRuntimeFeature() {
         .then((result) => {
           lastEndpointRef.current = result.endpoint;
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          log.warn('UnifiedPush pusher registration failed at startup', error);
+        });
     };
 
     establish();

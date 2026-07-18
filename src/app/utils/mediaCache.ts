@@ -1,6 +1,15 @@
 const CACHE_NAME = 'sable-media-v1';
 const MAX_ENTRIES = 500;
 
+export async function clearMediaCache(): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  try {
+    await caches.delete(CACHE_NAME);
+  } catch {
+    // ignore
+  }
+}
+
 async function openCache(): Promise<Cache | undefined> {
   if (typeof caches === 'undefined') return undefined;
   try {

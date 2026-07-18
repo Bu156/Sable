@@ -6,14 +6,20 @@ import {
   parseTauriOidcCallback,
   parseTauriSsoCallback,
   takeTauriOidcServer,
+  takeTauriSsoNonce,
 } from '$pages/auth/SSOTauri';
 import { getLoginPath, withSearchParam } from './pathUtils';
 
 const log = createLogger('TauriDeepLinkBridge');
 
-const mapDeepLinkToLoginPath = (rawUrl: string): string | undefined => {
+export const mapDeepLinkToLoginPath = (rawUrl: string): string | undefined => {
   const ssoCallback = parseTauriSsoCallback(rawUrl);
   if (ssoCallback) {
+    const expectedNonce = takeTauriSsoNonce();
+    if (!expectedNonce || ssoCallback.nonce !== expectedNonce) {
+      log.warn('Rejected SSO deep-link callback: missing or mismatched nonce');
+      return undefined;
+    }
     return withSearchParam(getLoginPath(ssoCallback.server), {
       loginToken: ssoCallback.loginToken,
     });

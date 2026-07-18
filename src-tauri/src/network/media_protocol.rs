@@ -165,6 +165,11 @@ fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
         .header(header::CONTENT_TYPE, content_type)
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "sandbox; default-src 'none'; script-src 'none'; object-src 'none'",
+        )
         .body(body)
         .expect("failed to build media response")
 }

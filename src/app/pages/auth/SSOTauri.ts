@@ -22,6 +22,27 @@ const getAppBaseUrl = (): string => {
 type TauriSsoCallback = {
   loginToken: string;
   server?: string;
+  nonce?: string;
+};
+
+const TAURI_SSO_NONCE_KEY = 'sable:tauri-sso:nonce';
+
+export const rememberTauriSsoNonce = (nonce: string): void => {
+  try {
+    localStorage.setItem(TAURI_SSO_NONCE_KEY, nonce);
+  } catch {
+    // ignore storage failures
+  }
+};
+
+export const takeTauriSsoNonce = (): string | undefined => {
+  try {
+    const nonce = localStorage.getItem(TAURI_SSO_NONCE_KEY) ?? undefined;
+    localStorage.removeItem(TAURI_SSO_NONCE_KEY);
+    return nonce;
+  } catch {
+    return undefined;
+  }
 };
 
 export const buildTauriSsoRedirectUrl = (server?: string): string => {
@@ -30,6 +51,10 @@ export const buildTauriSsoRedirectUrl = (server?: string): string => {
   if (server) {
     redirectUrl.searchParams.set('server', server);
   }
+
+  const nonce = crypto.randomUUID();
+  rememberTauriSsoNonce(nonce);
+  redirectUrl.searchParams.set('sso_nonce', nonce);
 
   return redirectUrl.toString();
 };
@@ -91,6 +116,7 @@ export const parseTauriSsoCallback = (rawUrl: string): TauriSsoCallback | undefi
     return {
       loginToken,
       server: callbackUrl.searchParams.get('server') ?? undefined,
+      nonce: callbackUrl.searchParams.get('sso_nonce') ?? undefined,
     };
   } catch {
     return undefined;

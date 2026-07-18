@@ -9,7 +9,6 @@ export default {
     'dist',
     'node_modules',
     'src/app/generated',
-    'src-tauri/plugins/tauri-plugin-unifiedpush/permissions',
     'package.json',
     'pnpm-lock.yaml',
     'LICENSE',

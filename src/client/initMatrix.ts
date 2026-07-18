@@ -13,6 +13,7 @@ import {
   SyncState,
 } from '$types/matrix-sdk';
 import { fetch } from '$utils/fetch';
+import { clearMediaCache } from '$utils/mediaCache';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, SessionStoreName } from '$state/sessions';
@@ -604,6 +605,8 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
     await mx.clearStores();
     window.localStorage.clear();
   }
+
+  await clearMediaCache();
 };
 
 export const clearLoginData = async () => {
@@ -614,5 +617,6 @@ export const clearLoginData = async () => {
     if (name) window.indexedDB.deleteDatabase(name);
   });
   window.localStorage.clear();
+  await clearMediaCache();
   window.location.reload();
 };

@@ -104,8 +104,8 @@ pub async fn loopback_fetch(
     request: LoopbackFetchRequest,
 ) -> Result<LoopbackFetchResponse, String> {
     let request_id = request.request_id.clone();
-    let mut abort_receiver = register_abort_sender(&request_id);
     let url = validate_loopback_url(&request.url)?;
+    let mut abort_receiver = register_abort_sender(&request_id);
 
     let result = async {
         let method = Method::from_bytes(request.method.as_bytes()).map_err(|err| err.to_string())?;

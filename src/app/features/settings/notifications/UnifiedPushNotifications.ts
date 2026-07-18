@@ -131,7 +131,7 @@ export async function tryEnableUnifiedPush(
     pushkey: endpoint,
     app_display_name: 'Sable (UnifiedPush)',
     device_display_name:
-      (await mx.getDevice(mx.getDeviceId() ?? '')).display_name ?? 'Android Device',
+      (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Android Device',
     lang: navigator.language || 'en',
     data: pusherData,
     append: false,
