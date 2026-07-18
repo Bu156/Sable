@@ -1,5 +1,12 @@
 import { render } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type {
+  IAudioContent,
+  IFileContent,
+  IImageContent,
+  IVideoContent,
+} from '$types/matrix/common';
 import { MAudio, MFile, MImage, MSticker, MVideo } from './MsgTypeRenderers';
 
 vi.mock('$utils/platform', () => ({
@@ -13,11 +20,13 @@ vi.mock('$utils/fetch', () => ({
 
 describe('incoming media renderers', () => {
   it('rejects arbitrary image URLs', () => {
-    const renderImageContent = vi.fn(() => <img alt="rendered" />);
+    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered" />);
 
     render(
       <MImage
-        content={{ body: 'remote image', url: 'https://attacker.example/image.png' } as any}
+        content={
+          { body: 'remote image', url: 'https://attacker.example/image.png' } as IImageContent
+        }
         renderImageContent={renderImageContent}
       />
     );
@@ -27,11 +36,11 @@ describe('incoming media renderers', () => {
   });
 
   it('renders mxc image URLs', () => {
-    const renderImageContent = vi.fn(() => <img alt="rendered" />);
+    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered" />);
 
     render(
       <MImage
-        content={{ body: 'matrix image', url: 'mxc://example.org/image' } as any}
+        content={{ body: 'matrix image', url: 'mxc://example.org/image' } as IImageContent}
         renderImageContent={renderImageContent}
       />
     );
@@ -42,8 +51,12 @@ describe('incoming media renderers', () => {
   });
 
   it('does not pass arbitrary video URLs to the video renderer', () => {
-    const renderAsFile = vi.fn(() => <span>file fallback</span>);
-    const renderVideoContent = vi.fn(() => <video />);
+    const renderAsFile = vi.fn<() => ReactNode>(() => <span>file fallback</span>);
+    const renderVideoContent = vi.fn<() => ReactNode>(() => (
+      <video>
+        <track kind="captions" />
+      </video>
+    ));
 
     render(
       <MVideo
@@ -52,7 +65,7 @@ describe('incoming media renderers', () => {
             body: 'remote video',
             url: 'https://attacker.example/video.mp4',
             info: { mimetype: 'video/mp4' },
-          } as any
+          } as IVideoContent
         }
         renderAsFile={renderAsFile}
         renderVideoContent={renderVideoContent}
@@ -64,8 +77,12 @@ describe('incoming media renderers', () => {
   });
 
   it('does not pass arbitrary audio URLs to the audio renderer', () => {
-    const renderAsFile = vi.fn(() => <span>file fallback</span>);
-    const renderAudioContent = vi.fn(() => <audio />);
+    const renderAsFile = vi.fn<() => ReactNode>(() => <span>file fallback</span>);
+    const renderAudioContent = vi.fn<() => ReactNode>(() => (
+      <audio>
+        <track kind="captions" />
+      </audio>
+    ));
 
     render(
       <MAudio
@@ -74,7 +91,7 @@ describe('incoming media renderers', () => {
             body: 'remote audio',
             url: 'https://attacker.example/audio.mp3',
             info: { mimetype: 'audio/mpeg' },
-          } as any
+          } as IAudioContent
         }
         renderAsFile={renderAsFile}
         renderAudioContent={renderAudioContent}
@@ -86,11 +103,13 @@ describe('incoming media renderers', () => {
   });
 
   it('rejects arbitrary file URLs', () => {
-    const renderFileContent = vi.fn(() => <span>rendered file</span>);
+    const renderFileContent = vi.fn<() => ReactNode>(() => <span>rendered file</span>);
 
     render(
       <MFile
-        content={{ body: 'remote file', url: 'https://attacker.example/file.txt' } as any}
+        content={
+          { body: 'remote file', url: 'https://attacker.example/file.txt' } as IFileContent
+        }
         renderFileContent={renderFileContent}
       />
     );
@@ -100,11 +119,13 @@ describe('incoming media renderers', () => {
   });
 
   it('rejects arbitrary sticker URLs', () => {
-    const renderImageContent = vi.fn(() => <img alt="rendered sticker" />);
+    const renderImageContent = vi.fn<() => ReactNode>(() => <img alt="rendered sticker" />);
 
     render(
       <MSticker
-        content={{ body: 'remote sticker', url: 'https://attacker.example/sticker.png' } as any}
+        content={
+          { body: 'remote sticker', url: 'https://attacker.example/sticker.png' } as IImageContent
+        }
         renderImageContent={renderImageContent}
       />
     );

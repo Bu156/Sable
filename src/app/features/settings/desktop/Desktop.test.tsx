@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type * as Folds from 'folds';
 import { SequenceCardStyle } from '$features/settings/styles.css';
 import { ScreenSize, ScreenSizeProvider } from '$hooks/useScreenSize';
 import { Desktop } from './Desktop';
@@ -10,19 +11,27 @@ const {
   mockUseDesktopRuntimeState,
   mockUseDesktopSettingsSyncing,
 } = vi.hoisted(() => ({
-  mockUseDesktopSetting: vi.fn((key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon') => {
-    if (key === 'closeToBackgroundOnClose') return [true, vi.fn()] as const;
-    return [true, vi.fn()] as const;
+  mockUseDesktopSetting: vi.fn<
+    (
+      key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon'
+    ) => readonly [boolean, () => void]
+  >((key) => {
+    if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
+    return [true, vi.fn<() => void>()] as const;
   }),
-  mockUseDesktopSettingsReady: vi.fn(() => true),
-  mockUseDesktopSettingsSyncing: vi.fn(() => false),
-  mockUseDesktopRuntimeState: vi.fn(() => ({
+  mockUseDesktopSettingsReady: vi.fn<() => boolean>(() => true),
+  mockUseDesktopSettingsSyncing: vi.fn<() => boolean>(() => false),
+  mockUseDesktopRuntimeState: vi.fn<() => { trayAvailable: boolean }>(() => ({
     trayAvailable: false,
   })),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true,
+}));
+
+vi.mock('@tauri-apps/plugin-os', () => ({
+  type: vi.fn<() => string>(() => 'linux'),
 }));
 
 vi.mock('$state/hooks/desktopSettings', () => ({
@@ -33,7 +42,7 @@ vi.mock('$state/hooks/desktopSettings', () => ({
 }));
 
 vi.mock('folds', async () => {
-  const actual = await vi.importActual<typeof import('folds')>('folds');
+  const actual = await vi.importActual<typeof Folds>('folds');
   return {
     ...actual,
     Switch: ({
@@ -63,7 +72,7 @@ describe('Desktop', () => {
   const renderDesktop = () =>
     render(
       <ScreenSizeProvider value={ScreenSize.Desktop}>
-        <Desktop requestClose={vi.fn()} />
+        <Desktop requestClose={vi.fn<() => void>()} />
       </ScreenSizeProvider>
     );
 

@@ -6,31 +6,33 @@ import {
 } from './UnifiedPushNotifications';
 
 const notificationsApi = vi.hoisted(() => ({
-  onUnifiedPushMessage: vi.fn(),
-  onUnifiedPushEndpoint: vi.fn(),
-  sendNotification: vi.fn(),
-  removeActive: vi.fn(),
-  createChannel: vi.fn(),
+  onUnifiedPushMessage: vi.fn<() => void>(),
+  onUnifiedPushEndpoint: vi.fn<() => void>(),
+  sendNotification: vi.fn<() => void>(),
+  removeActive: vi.fn<() => void>(),
+  createChannel: vi.fn<() => void>(),
   Importance: {
     Default: 'default',
   },
 }));
 
 const unifiedPushTransport = vi.hoisted(() => ({
-  getUnifiedPushDistributor: vi.fn(),
-  getUnifiedPushDistributors: vi.fn(),
-  registerUnifiedPushTransport: vi.fn(),
-  saveUnifiedPushDistributor: vi.fn(),
-  unregisterUnifiedPushTransport: vi.fn(),
+  getUnifiedPushDistributor: vi.fn<() => void>(),
+  getUnifiedPushDistributors: vi.fn<() => void>(),
+  registerUnifiedPushTransport: vi.fn<() => Promise<unknown>>(),
+  saveUnifiedPushDistributor: vi.fn<() => void>(),
+  unregisterUnifiedPushTransport: vi.fn<() => Promise<void>>(),
 }));
 
-const getTauriNotificationsApi = vi.hoisted(() => vi.fn().mockResolvedValue(notificationsApi));
+const getTauriNotificationsApi = vi.hoisted(() =>
+  vi.fn<() => Promise<typeof notificationsApi>>().mockResolvedValue(notificationsApi)
+);
 
 const matrixClient = vi.hoisted(() => ({
-  setPusher: vi.fn().mockResolvedValue(undefined),
-  getDeviceId: vi.fn(() => 'DEVICE'),
-  getDevice: vi.fn().mockResolvedValue({ display_name: 'Pixel' }),
-  getPushers: vi.fn().mockResolvedValue({ pushers: [] }),
+  setPusher: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  getDeviceId: vi.fn<() => string>(() => 'DEVICE'),
+  getDevice: vi.fn<() => Promise<{ display_name: string }>>().mockResolvedValue({ display_name: 'Pixel' }),
+  getPushers: vi.fn<() => Promise<{ pushers: Array<unknown> }>>().mockResolvedValue({ pushers: [] }),
 }));
 
 vi.mock('./UnifiedPushTransport', () => unifiedPushTransport);
@@ -57,7 +59,7 @@ describe('UnifiedPushNotifications', () => {
     unifiedPushTransport.unregisterUnifiedPushTransport.mockResolvedValue(undefined);
     matrixClient.setPusher.mockClear();
     matrixClient.getPushers.mockResolvedValue({ pushers: [] });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('gateway probe failed')));
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('gateway probe failed')));
   });
 
   afterEach(() => {

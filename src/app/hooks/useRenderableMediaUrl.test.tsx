@@ -4,18 +4,18 @@ import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const platform = vi.hoisted(() => ({
-  hasServiceWorker: vi.fn(),
-  hasControllingServiceWorker: vi.fn(),
+  hasServiceWorker: vi.fn<() => boolean>(),
+  hasControllingServiceWorker: vi.fn<() => boolean>(),
 }));
 
 const mediaTransport = vi.hoisted(() => ({
-  fetchMediaBlob: vi.fn(),
-  getCurrentMediaSessionScope: vi.fn(() => 'anonymous'),
+  fetchMediaBlob: vi.fn<(url: string) => Promise<Blob>>(),
+  getCurrentMediaSessionScope: vi.fn<() => string>(() => 'anonymous'),
 }));
 
 const tauriApi = vi.hoisted(() => ({
-  isTauri: vi.fn(),
-  convertFileSrc: vi.fn((url: string, protocol: string) => `${protocol}://${url}`),
+  isTauri: vi.fn<() => boolean>(),
+  convertFileSrc: vi.fn<(url: string, protocol: string) => string>((url: string, protocol: string) => `${protocol}://${url}`),
 }));
 
 vi.mock('$utils/platform', () => platform);
@@ -40,8 +40,8 @@ describe('useRenderableMediaUrl', () => {
       value: {
         controller: null,
         ready: Promise.resolve({}),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
+        addEventListener: vi.fn<(...args: unknown[]) => void>(),
+        removeEventListener: vi.fn<(...args: unknown[]) => void>(),
       },
     });
   });

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SessionsAction } from '$state/sessions';
 import { createSessionRefreshHandler } from './sessionRefresh';
 
 describe('createSessionRefreshHandler', () => {
   it('updates the session that created the client, not whichever account is active later', () => {
-    const setSessions = vi.fn();
-    const pushSession = vi.fn();
+    const setSessions = vi.fn<(action: SessionsAction) => void>();
+    const pushSession = vi.fn<(baseUrl?: string, accessToken?: string, userId?: string) => void>();
 
     const handler = createSessionRefreshHandler(
       '@alice:example.org',
@@ -39,8 +40,8 @@ describe('createSessionRefreshHandler', () => {
   });
 
   it('merges refreshed tokens into the latest stored session fields', () => {
-    const setSessions = vi.fn();
-    const pushSession = vi.fn();
+    const setSessions = vi.fn<(action: SessionsAction) => void>();
+    const pushSession = vi.fn<(baseUrl?: string, accessToken?: string, userId?: string) => void>();
 
     const handler = createSessionRefreshHandler(
       '@alice:example.org',

@@ -1,22 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const platform = vi.hoisted(() => ({
-  hasControllingServiceWorker: vi.fn(),
+  hasControllingServiceWorker: vi.fn<() => boolean>(),
 }));
 
 const mediaCache = vi.hoisted(() => {
   const cache = new Map<string, Blob>();
   return {
     cache,
-    getFromMediaCache: vi.fn(async (url: string) => cache.get(url)),
-    putInMediaCache: vi.fn(async (url: string, blob: Blob) => {
+    getFromMediaCache: vi.fn<(url: string) => Promise<Blob | undefined>>(async (url: string) => cache.get(url)),
+    putInMediaCache: vi.fn<(url: string, blob: Blob) => Promise<void>>(async (url: string, blob: Blob) => {
       cache.set(url, blob);
     }),
   };
 });
 
 const appFetch = vi.hoisted(() => ({
-  fetch: vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)),
+  fetch: vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)),
 }));
 
 vi.mock('$utils/platform', () => platform);
@@ -35,7 +35,7 @@ describe('fetchMediaBlob', () => {
     mediaCache.getFromMediaCache.mockClear();
     mediaCache.putInMediaCache.mockClear();
     localStorage.clear();
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>());
   });
 
   it(
@@ -110,7 +110,7 @@ describe('fetchMediaBlob', () => {
       const { fetchMediaBlob } = await import('./mediaTransport');
       const url = 'https://example.org/media.png';
       const freshBlob = new Blob(['fresh'], { type: 'image/png' });
-      const getAccessToken = vi.fn(() => 'widget-token');
+      const getAccessToken = vi.fn<() => string>(() => 'widget-token');
       const headersSeen: Array<string | null> = [];
 
       vi.mocked(fetch).mockImplementation(async (_input, init) => {
@@ -141,7 +141,7 @@ describe('fetchMediaBlob', () => {
       const { fetchMediaBlob } = await import('./mediaTransport');
       const url = 'https://example.org/media.png';
       const freshBlob = new Blob(['fresh'], { type: 'image/png' });
-      const getAccessToken = vi.fn(() => undefined);
+      const getAccessToken = vi.fn<() => string | undefined>(() => undefined);
       const headersSeen: Array<string | null> = [];
 
       localStorage.setItem(
@@ -361,7 +361,7 @@ describe('fetchMediaBlob', () => {
     platform.hasControllingServiceWorker.mockReturnValue(true);
     const { fetchMediaBlob } = await import('./mediaTransport');
     const url = 'https://example.org/auth-media.png';
-    const getAccessToken = vi.fn(() => 'widget-token');
+    const getAccessToken = vi.fn<() => string>(() => 'widget-token');
     const headersSeen: Array<string | null> = [];
 
     vi.mocked(fetch).mockImplementation(async (_input, init) => {

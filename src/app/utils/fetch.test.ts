@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const nativeFetch = vi.fn();
-const tauriFetch = vi.fn();
-const invoke = vi.fn();
-const isTauri = vi.fn();
+const nativeFetch = vi.fn<typeof globalThis.fetch>();
+const tauriFetch = vi.fn<typeof globalThis.fetch>();
+const invoke = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>();
+const isTauri = vi.fn<() => boolean>();
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke,
@@ -250,7 +250,9 @@ describe('app fetch wrapper', () => {
           }),
         })
       );
-      const loopbackRequestId = invoke.mock.calls[0]?.[1]?.request?.requestId;
+      const loopbackRequestId = (
+        invoke.mock.calls[0]?.[1] as { request?: { requestId?: string } } | undefined
+      )?.request?.requestId;
       expect(invoke).toHaveBeenNthCalledWith(2, 'abort_loopback_fetch', {
         requestId: loopbackRequestId,
       });

@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TauriFrontendReady } from './TauriFrontendReady';
 
 const { mockIsTauri, mockOsType, mockShow, mockGetCurrentWindow } = vi.hoisted(() => ({
-  mockIsTauri: vi.fn(),
-  mockOsType: vi.fn(),
-  mockShow: vi.fn().mockResolvedValue(undefined),
-  mockGetCurrentWindow: vi.fn(),
+  mockIsTauri: vi.fn<() => boolean>(),
+  mockOsType: vi.fn<() => string>(),
+  mockShow: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  mockGetCurrentWindow: vi.fn<() => { show: () => Promise<void> }>(),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -23,8 +23,8 @@ vi.mock('@tauri-apps/api/window', () => ({
 
 vi.mock('$utils/debug', () => ({
   createLogger: () => ({
-    log: vi.fn(),
-    warn: vi.fn(),
+    log: vi.fn<(...args: unknown[]) => void>(),
+    warn: vi.fn<(...args: unknown[]) => void>(),
   }),
 }));
 

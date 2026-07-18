@@ -1,5 +1,6 @@
 import { createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DesktopRuntimeState, SyncDesktopSettingsParams } from '$generated/tauri/types';
 import {
   DEFAULT_DESKTOP_SETTINGS,
   desktopRuntimeStateAtom,
@@ -15,11 +16,11 @@ import {
 
 const { mockClose, mockEntries, mockGetDesktopRuntimeState, mockSet, mockSyncDesktopSettings } =
   vi.hoisted(() => ({
-    mockClose: vi.fn(),
-    mockEntries: vi.fn(),
-    mockGetDesktopRuntimeState: vi.fn().mockResolvedValue({ trayAvailable: true }),
-    mockSet: vi.fn(),
-    mockSyncDesktopSettings: vi.fn().mockResolvedValue({ trayAvailable: false }),
+    mockClose: vi.fn<() => Promise<unknown>>(),
+    mockEntries: vi.fn<() => Promise<Array<[string, unknown]>>>(),
+    mockGetDesktopRuntimeState: vi.fn<() => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
+    mockSet: vi.fn<(key: string, value: unknown) => Promise<unknown>>(),
+    mockSyncDesktopSettings: vi.fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: false }),
   }));
 
 vi.mock('@tauri-apps/plugin-store', () => ({

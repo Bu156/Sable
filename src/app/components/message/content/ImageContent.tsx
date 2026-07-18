@@ -51,23 +51,6 @@ import {
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
-function thumbnailDimsForMaxEdge(
-  maxEdge: number,
-  w?: number,
-  h?: number
-): { tw: number; th: number } {
-  const safeEdge = Math.max(1, Math.round(maxEdge));
-  const iw = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : safeEdge;
-  const ih = typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : safeEdge;
-  const longest = Math.max(iw, ih);
-  if (longest <= safeEdge) return { tw: Math.round(iw), th: Math.round(ih) };
-  const scale = safeEdge / longest;
-  return {
-    tw: Math.max(1, Math.round(iw * scale)),
-    th: Math.max(1, Math.round(ih * scale)),
-  };
-}
-
 type RenderViewerProps = {
   src: string;
   alt: string;

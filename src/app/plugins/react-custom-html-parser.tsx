@@ -880,6 +880,12 @@ export const getReactCustomHtmlParser = (
             );
           }
 
+          // Unresolved non-mxc src (e.g. javascript: URLs that bypassed the
+          // sanitiser) must never render as an <img>; fall back to the label.
+          if (!src.startsWith('mxc://')) {
+            return <span title={fallbackLabel}>{fallbackLabel}</span>;
+          }
+
           if ('data-mx-emoticon' in props) {
             // When the mxc URL can't be resolved (e.g. federation unavailable),
             // fall back to rendering the shortcode text so the message stays readable.

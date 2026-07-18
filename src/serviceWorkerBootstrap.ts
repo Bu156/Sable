@@ -1,9 +1,10 @@
 import { trimTrailingSlash } from './app/utils/common';
 import { createLogger } from './app/utils/debug';
+import type {
+  Sessions} from './app/state/sessions';
 import {
   getFallbackSession,
   MATRIX_SESSIONS_KEY,
-  Sessions,
   ACTIVE_SESSION_KEY,
 } from './app/state/sessions';
 import { getLocalStorageItem } from './app/state/utils/atomWithLocalStorage';

@@ -9,16 +9,16 @@ const {
   mockPushSessionToSW,
   mockWarn,
 } = vi.hoisted(() => ({
-  mockHasServiceWorker: vi.fn(),
-  mockRegister: vi.fn().mockResolvedValue({
-    addEventListener: vi.fn(),
+  mockHasServiceWorker: vi.fn<() => boolean>(),
+  mockRegister: vi.fn<() => Promise<Partial<ServiceWorkerRegistration>>>().mockResolvedValue({
+    addEventListener: vi.fn<(type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => void>(),
     installing: null,
     waiting: null,
   }),
-  mockAddEventListener: vi.fn(),
+  mockAddEventListener: vi.fn<(type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean) => void>(),
   mockReady: Promise.resolve(undefined),
-  mockPushSessionToSW: vi.fn(),
-  mockWarn: vi.fn(),
+  mockPushSessionToSW: vi.fn<(baseUrl?: string, accessToken?: string, userId?: string) => void>(),
+  mockWarn: vi.fn<(...args: unknown[]) => void>(),
 }));
 
 vi.mock('./app/utils/platform', () => ({
@@ -30,13 +30,13 @@ vi.mock('./sw-session', () => ({
 }));
 
 vi.mock('./app/state/sessions', () => ({
-  getFallbackSession: vi.fn(() => undefined),
+  getFallbackSession: vi.fn<() => undefined>(() => undefined),
   MATRIX_SESSIONS_KEY: 'matrix-sessions',
   ACTIVE_SESSION_KEY: 'active-session',
 }));
 
 vi.mock('./app/state/utils/atomWithLocalStorage', () => ({
-  getLocalStorageItem: vi.fn((_: string, fallback: unknown) => fallback),
+  getLocalStorageItem: vi.fn<(key: string, fallback: unknown) => unknown>((_: string, fallback: unknown) => fallback),
 }));
 
 vi.mock('./app/utils/debug', () => ({
@@ -51,7 +51,7 @@ describe('registerAppServiceWorker', () => {
     mockHasServiceWorker.mockReturnValue(false);
     Object.defineProperty(window, 'confirm', {
       configurable: true,
-      value: vi.fn(() => false),
+      value: vi.fn<(message?: string) => boolean>(() => false),
     });
 
     Object.defineProperty(window, 'navigator', {
@@ -99,7 +99,7 @@ describe('registerAppServiceWorker', () => {
         serviceWorker: {
           register: mockRegister,
           ready: mockReady,
-          controller: { postMessage: vi.fn() },
+          controller: { postMessage: vi.fn<(message: unknown, transfer?: Transferable[]) => void>() },
           addEventListener: mockAddEventListener,
         },
       },

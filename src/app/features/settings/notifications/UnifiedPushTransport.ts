@@ -299,7 +299,7 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
       ...(selectedDistributor ? { distributor: selectedDistributor } : {}),
       ...(error && typeof error === 'object' && 'instance' in error
         ? {
-            instance: String((error as { instance?: unknown }).instance ?? ''),
+            instance: (error as { instance?: string }).instance ?? '',
           }
         : {}),
     } as UnifiedPushRegistrationResult;

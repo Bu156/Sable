@@ -9,17 +9,17 @@ import {
 } from './UnifiedPushTransport';
 
 const unifiedPushApi = vi.hoisted(() => ({
-  isPermissionGranted: vi.fn(),
-  requestPermission: vi.fn(),
-  registerForUnifiedPush: vi.fn(),
-  unregisterFromUnifiedPush: vi.fn(),
-  getUnifiedPushDistributors: vi.fn(),
-  getUnifiedPushDistributor: vi.fn(),
-  saveUnifiedPushDistributor: vi.fn(),
+  isPermissionGranted: vi.fn<() => Promise<boolean>>(),
+  requestPermission: vi.fn<() => Promise<string>>(),
+  registerForUnifiedPush: vi.fn<() => Promise<{ endpoint: string; instance: string }>>(),
+  unregisterFromUnifiedPush: vi.fn<() => void>(),
+  getUnifiedPushDistributors: vi.fn<() => Promise<{ distributors: string[] }>>(),
+  getUnifiedPushDistributor: vi.fn<() => Promise<{ distributor: string }>>(),
+  saveUnifiedPushDistributor: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock('./UnifiedPushTransportApiClient', () => ({
-  getUnifiedPushTransportApi: vi.fn().mockResolvedValue(unifiedPushApi),
+  getUnifiedPushTransportApi: vi.fn<() => Promise<typeof unifiedPushApi>>().mockResolvedValue(unifiedPushApi),
 }));
 
 afterEach(() => {
@@ -217,7 +217,7 @@ describe('UnifiedPush distributor state helpers', () => {
 
   it('restores the previous distributor when a switch registration fails', async () => {
     unifiedPushApi.saveUnifiedPushDistributor.mockResolvedValue(undefined);
-    const register = vi.fn().mockRejectedValue(new Error('registration failed'));
+    const register = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('registration failed'));
 
     await expect(
       switchUnifiedPushDistributorSelection(

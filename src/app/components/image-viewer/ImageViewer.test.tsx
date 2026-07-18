@@ -1,29 +1,36 @@
+import type { PointerEvent, SyntheticEvent, WheelEvent } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FileSaver from 'file-saver';
 import { ImageViewer } from './ImageViewer';
 
-const downloadMedia = vi.fn();
+const downloadMedia = vi.fn<(src: string) => Promise<Blob>>();
 
 vi.mock('$hooks/useImageGestures', () => ({
   useImageGestures: () => ({
     transforms: { zoom: 1, pan: { x: 0, y: 0 } },
     cursor: 'grab',
-    handleWheel: vi.fn(),
-    onPointerDown: vi.fn(),
-    resetTransforms: vi.fn(),
-    zoomIn: vi.fn(),
-    zoomOut: vi.fn(),
+    fitRatio: 1,
+    imageRef: { current: null },
+    containerRef: { current: null },
+    handleWheel: vi.fn<(event: WheelEvent) => void>(),
+    onPointerDown: vi.fn<(event: PointerEvent) => void>(),
+    handleImageLoad: vi.fn<(event: SyntheticEvent<HTMLImageElement>) => void>(),
+    setZoom: vi.fn<(next: number) => void>(),
+    resetTransforms: vi.fn<() => void>(),
+    zoomIn: vi.fn<() => void>(),
+    zoomOut: vi.fn<() => void>(),
+    enableResizeWithWindow: vi.fn<() => void>(),
   }),
 }));
 
 vi.mock('$utils/matrix', () => ({
-  downloadMedia: (...args: unknown[]) => downloadMedia(...args),
+  downloadMedia: (...args: [string]) => downloadMedia(...args),
 }));
 
 vi.mock('file-saver', () => ({
   default: {
-    saveAs: vi.fn(),
+    saveAs: vi.fn<(data: Blob | string, filename?: string) => void>(),
   },
 }));
 
@@ -32,7 +39,11 @@ describe('ImageViewer', () => {
     downloadMedia.mockResolvedValue(new Blob(['image']));
 
     render(
-      <ImageViewer alt="kitten.png" src="https://example.org/kitten.png" requestClose={vi.fn()} />
+      <ImageViewer
+        alt="kitten.png"
+        src="https://example.org/kitten.png"
+        requestClose={vi.fn<() => void>()}
+      />
     );
 
     fireEvent.click(screen.getByText('Download'));

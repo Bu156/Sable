@@ -3,7 +3,7 @@ import { createUnifiedPushMessageListener } from './UnifiedPushMessageListener';
 
 describe('createUnifiedPushMessageListener', () => {
   it('catches rejected payload handlers instead of leaking unhandled rejections', async () => {
-    const onError = vi.fn();
+    const onError = vi.fn<(error: unknown) => void>();
     const listener = createUnifiedPushMessageListener(async () => {
       throw new Error('boom');
     }, onError);

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const tauriApi = vi.hoisted(() => ({
-  isTauri: vi.fn(),
-  convertFileSrc: vi.fn((url: string, protocol: string) => `${protocol}://${url}`),
+  isTauri: vi.fn<() => boolean>(),
+  convertFileSrc: vi.fn<(url: string, protocol: string) => string>((url: string, protocol: string) => `${protocol}://${url}`),
 }));
 
 vi.mock('@tauri-apps/api/core', () => tauriApi);

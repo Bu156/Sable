@@ -1,4 +1,4 @@
-import { IPusherRequest, MatrixClient } from '$types/matrix-sdk';
+import type { IPusherRequest, MatrixClient } from '$types/matrix-sdk';
 import type {
   MessagingStyleMessage,
   MessagingStylePerson,
@@ -26,6 +26,25 @@ export { getUnifiedPushDistributors, getUnifiedPushDistributor, saveUnifiedPushD
 const UP_PUBLIC_GATEWAY = 'https://matrix.gateway.unifiedpush.org/_matrix/push/v1/notify';
 export const DEFAULT_UNIFIED_PUSH_APP_ID = 'moe.sable.up';
 const unifiedPushLog = createDebugLogger('unifiedpush');
+
+/**
+ * Shape of a UnifiedPush payload delivered to the message listener.
+ * Fields are optional because both rich (full event) and minimal
+ * (event_id + counts) payloads arrive through the same entry point.
+ */
+type UnifiedPushPayload = {
+  type?: string;
+  content?: Record<string, unknown>;
+  room_id?: string;
+  room_name?: string;
+  sender_display_name?: string;
+  sender?: string;
+  event_id?: string;
+  user_id?: string;
+  counts?: { unread?: number };
+  notification?: unknown;
+  [key: string]: unknown;
+};
 
 /**
  * Probes the UP endpoint for a Matrix-compatible push gateway.
@@ -178,7 +197,7 @@ export async function tryEnableUnifiedPush(
     lang: navigator.language || 'en',
     data: pusherData,
     append: false,
-  } as any);
+  } as unknown as IPusherRequest);
 
   return {
     status: 'registered',
@@ -429,7 +448,7 @@ async function postRoomNotification(
 
 /** Handles a rich push payload containing full event details (type, room_name, content, etc.). */
 async function handleRichPushPayload(
-  pushData: Record<string, any>,
+  pushData: UnifiedPushPayload,
   settings: NotificationSettings
 ) {
   const eventType = pushData.type as EventType;
@@ -555,7 +574,7 @@ async function handleRichPushPayload(
  * the public UnifiedPush gateway, looking up context from local SDK state.
  */
 async function handleMinimalPushPayload(
-  pushData: Record<string, any>,
+  pushData: UnifiedPushPayload,
   settings: NotificationSettings
 ) {
   const roomId: string | undefined = pushData?.room_id;
@@ -664,7 +683,7 @@ async function handleUnifiedPushPayload(
   }
 
   // The UP gateway wraps the Matrix push in a `notification` field.
-  const pushData = (raw.notification ?? raw) as Record<string, any>;
+  const pushData = (raw.notification ?? raw) as UnifiedPushPayload;
   const eventType = pushData?.type as EventType | undefined;
 
   if (eventType) {

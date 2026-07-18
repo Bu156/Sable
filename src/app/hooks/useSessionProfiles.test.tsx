@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '$state/sessions';
 
 const mediaTransport = vi.hoisted(() => ({
-  fetchMediaBlob: vi.fn(),
+  fetchMediaBlob: vi.fn<(url: string) => Promise<Blob>>(),
 }));
 
 vi.mock('$utils/mediaTransport', () => mediaTransport);
@@ -15,7 +15,8 @@ describe('useSessionProfiles', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 
         if (url.endsWith('/_matrix/client/v3/profile/%40alice%3Aexample.org')) {
           return new Response(

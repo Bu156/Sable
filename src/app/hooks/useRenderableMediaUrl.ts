@@ -135,7 +135,7 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
     return () => {
       serviceWorker.removeEventListener('controllerchange', updateControlState);
     };
-  }, []);
+  }, [tauri]);
 
   useEffect(() => {
     if (tauri) return undefined;
@@ -181,7 +181,7 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
       cancelled = true;
       releaseObjectUrlEntry(objectUrlCacheKey);
     };
-  }, [needsBlob, objectUrlCacheKey, renderableUrl, usesExistingObjectUrl]);
+  }, [needsBlob, objectUrlCacheKey, renderableUrl, tauri, usesExistingObjectUrl]);
 
   if (tauri) {
     return rewriteAuthenticatedMediaUrl(url ?? null) ?? undefined;

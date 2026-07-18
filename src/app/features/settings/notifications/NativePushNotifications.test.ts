@@ -9,19 +9,21 @@ import {
 import * as NativePushNotifications from './NativePushNotifications';
 
 const nativePushApi = vi.hoisted(() => ({
-  isPermissionGranted: vi.fn(),
-  requestPermission: vi.fn(),
-  registerForPushNotifications: vi.fn(),
-  unregisterForPushNotifications: vi.fn(),
+  isPermissionGranted: vi.fn<() => Promise<boolean>>(),
+  requestPermission: vi.fn<() => Promise<string>>(),
+  registerForPushNotifications: vi.fn<() => Promise<string>>(),
+  unregisterForPushNotifications: vi.fn<() => Promise<void>>(),
 }));
 
-const getNativePushNotificationsApi = vi.hoisted(() => vi.fn().mockResolvedValue(nativePushApi));
+const getNativePushNotificationsApi = vi.hoisted(() =>
+  vi.fn<() => Promise<typeof nativePushApi>>().mockResolvedValue(nativePushApi)
+);
 
 const matrixClient = vi.hoisted(() => ({
-  setPusher: vi.fn().mockResolvedValue(undefined),
-  getDeviceId: vi.fn(() => 'DEVICE'),
-  getDevice: vi.fn().mockResolvedValue({ display_name: 'Pixel' }),
-  getPushers: vi.fn().mockResolvedValue({ pushers: [] }),
+  setPusher: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  getDeviceId: vi.fn<() => string>(() => 'DEVICE'),
+  getDevice: vi.fn<() => Promise<{ display_name: string }>>().mockResolvedValue({ display_name: 'Pixel' }),
+  getPushers: vi.fn<() => Promise<{ pushers: Array<unknown> }>>().mockResolvedValue({ pushers: [] }),
 }));
 
 const nativePushClientConfig = {

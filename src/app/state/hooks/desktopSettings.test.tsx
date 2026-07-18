@@ -2,15 +2,16 @@ import { renderHook, act } from '@testing-library/react';
 import { createStore, Provider } from 'jotai';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DesktopRuntimeState, SyncDesktopSettingsParams } from '$generated/tauri/types';
 import { desktopSettingsReadyAtom } from '../desktopSettings';
 import { useDesktopSetting } from './desktopSettings';
 
 const { mockEntries, mockGetDesktopRuntimeState, mockSet, mockSyncDesktopSettings } = vi.hoisted(
   () => ({
-    mockEntries: vi.fn(),
-    mockGetDesktopRuntimeState: vi.fn().mockResolvedValue({ trayAvailable: true }),
-    mockSet: vi.fn(),
-    mockSyncDesktopSettings: vi.fn().mockResolvedValue({ trayAvailable: true }),
+    mockEntries: vi.fn<() => Promise<Array<[string, unknown]>>>(),
+    mockGetDesktopRuntimeState: vi.fn<() => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
+    mockSet: vi.fn<(key: string, value: unknown) => Promise<unknown>>(),
+    mockSyncDesktopSettings: vi.fn<(params: SyncDesktopSettingsParams) => Promise<DesktopRuntimeState>>().mockResolvedValue({ trayAvailable: true }),
   })
 );
 

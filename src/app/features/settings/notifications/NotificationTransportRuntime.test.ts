@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { NotificationTransportRuntimeContext } from './NotificationTransportRuntime';
+import type {
+  NotificationTransportListenerHandle,
+  NotificationTransportRuntimeContext,
+} from './NotificationTransportRuntime';
 import { NotificationTransportRuntime } from './NotificationTransportRuntime';
 
-const unifiedPushListener = vi.hoisted(() => vi.fn());
-const unifiedPushUnregister = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const unifiedPushListener = vi.hoisted(() =>
+  vi.fn<() => Promise<NotificationTransportListenerHandle>>()
+);
+const unifiedPushUnregister = vi.hoisted(() =>
+  vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+);
 
 vi.mock('./UnifiedPushNotifications', () => ({
   listenForUnifiedPushMessages: unifiedPushListener,
@@ -76,11 +83,13 @@ describe('NotificationTransportRuntime', () => {
 
   it('disposes a stale listener registration when the provider changes mid-startup', async () => {
     let resolveListener: (() => void) | undefined;
-    const lateUnregister = vi.fn().mockResolvedValue(undefined);
+    const lateUnregister = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     const lateListener = new Promise<{ unregister: typeof lateUnregister }>((resolve) => {
       resolveListener = () => resolve({ unregister: lateUnregister });
     });
-    const slowListener = vi.fn().mockReturnValueOnce(lateListener);
+    const slowListener = vi
+      .fn<() => Promise<NotificationTransportListenerHandle>>()
+      .mockReturnValueOnce(lateListener);
 
     const runtime = new NotificationTransportRuntime({
       unifiedpush: slowListener,
@@ -111,9 +120,11 @@ describe('NotificationTransportRuntime', () => {
   });
 
   it('does not treat providers without listener factories as active', async () => {
-    const nativeListener = vi.fn().mockResolvedValue({
-      unregister: vi.fn().mockResolvedValue(undefined),
-    });
+    const nativeListener = vi
+      .fn<() => Promise<NotificationTransportListenerHandle>>()
+      .mockResolvedValue({
+        unregister: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      });
     const listenerFactories: Record<string, typeof nativeListener> = {};
     const runtime = new NotificationTransportRuntime(listenerFactories);
 
