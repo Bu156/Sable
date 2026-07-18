@@ -64,6 +64,11 @@ tauri-plugin-window-state = "2.4.1"
 webkit2gtk = "2.0"
 gtk = "0.18"
 
+# CEF (Chromium) runtime — Linux only; other platforms use wry.
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-runtime-cef = { git = "https://github.com/byeongsu-hong/tauri-runtime-cef", rev = "c215d6e52dd507956d9b8cc868906d690dc477c2", optional = true }
+cef = { version = "=148.0.0", optional = true }
+
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-notifications = { git = "https://github.com/Choochmeque/tauri-plugin-notifications.git", rev = "2ff1373d218ff02a93f71f589c56e4e8b588ea7d", features = [
   "push-notifications",
@@ -82,7 +87,8 @@ jni = "0.21"
 default = ["wry"]
 custom-protocol = ["tauri/custom-protocol"]
 wry = ["tauri/wry"]
-cef = []
+# Linux uses the CEF runtime; wry stays available for the other platforms.
+cef = ["dep:tauri-runtime-cef", "dep:cef", "tauri/wry"]
 [patch.crates-io]
 tauri-typegen = { git = "https://github.com/SableClient/tauri-typegen", branch = "fix/nondeterministic-generation-cache" }
 

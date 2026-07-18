@@ -2,6 +2,60 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // CEF (Chromium) runtime, Linux only. Must run before anything else — CEF
+    // re-execs this binary for its subprocesses.
+    #[cfg(all(feature = "cef", target_os = "linux"))]
+    {
+        tauri_runtime_cef::configure(tauri_runtime_cef::CefConfig {
+            identifier: "moe.sable.client".into(),
+            custom_schemes: vec![
+                "tauri".into(),
+                "ipc".into(),
+                "asset".into(),
+                "sable-media".into(),
+            ],
+            deep_link_schemes: vec!["moe.sable.app".into(), "sable".into()],
+            ..Default::default()
+        });
+
+        // Subprocess — hand off to CEF and exit.
+        if std::env::args().any(|arg| arg.starts_with("--type=")) {
+            tauri_runtime_cef::run_cef_helper_process();
+            return;
+        }
+
+        // Deep-link relaunch: forward to the running primary and exit before
+        // CEF init (a second instance can't hold the CEF cache lock).
+        if let app_lib::deep_link_ipc::ForwardResult::Forwarded =
+            app_lib::deep_link_ipc::try_forward_deep_links()
+        {
+            return;
+        }
+
+        // Allow call media capture (mic, camera, screen-share) for our webview.
+        tauri_runtime_cef::set_permission_policy(|request, responder| {
+            use tauri_runtime_cef::{DenyReason, PermissionKind, Verdict};
+            if request.webview_label == "main" {
+                let verdicts = request
+                    .kinds
+                    .iter()
+                    .map(|kind| match kind {
+                        PermissionKind::Microphone
+                        | PermissionKind::Camera
+                        | PermissionKind::CameraPanTiltZoom
+                        | PermissionKind::ScreenCapture
+                        | PermissionKind::CapturedSurfaceControl => Verdict::Allow,
+                        _ => Verdict::Deny,
+                    })
+                    .collect();
+                return responder.decide(verdicts);
+            }
+            responder.deny(DenyReason::NoPolicy)
+        });
+    }
+
+    // Force X11/XWayland: WebKitGTK needs it, and the CEF runtime's Wayland
+    // window path is unstable (crate verified on X11 only).
     #[cfg(target_os = "linux")]
     unsafe {
         use std::path::{Path, PathBuf};
@@ -67,7 +121,8 @@ fn main() {
             ];
 
             if let Some(path_env) = std::env::var_os("PATH") {
-                scanner_candidates.extend(std::env::split_paths(&path_env).map(|p| p.join("gst-plugin-scanner")));
+                scanner_candidates
+                    .extend(std::env::split_paths(&path_env).map(|p| p.join("gst-plugin-scanner")));
             }
 
             if let Some(scanner) = scanner_candidates.iter().find(|path| path.exists()) {
@@ -75,6 +130,16 @@ fn main() {
             }
         }
     }
+
+    // CEF doesn't init GTK, but the Linux tray menu needs it.
+    #[cfg(all(feature = "cef", target_os = "linux"))]
+    {
+        let _ = gtk::init();
+    }
+
+    // Deep-link primary: hold the forwarding socket for the process lifetime.
+    #[cfg(all(feature = "cef", target_os = "linux"))]
+    let _deep_link_guard = app_lib::deep_link_ipc::bind_and_listen();
 
     app_lib::run();
 }

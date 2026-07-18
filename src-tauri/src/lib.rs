@@ -1,3 +1,5 @@
+#[cfg(all(feature = "cef", target_os = "linux"))]
+pub mod deep_link_ipc;
 #[cfg(desktop)]
 mod desktop;
 #[cfg(target_os = "ios")]
@@ -10,20 +12,26 @@ use tauri::{AppHandle, Manager};
 #[cfg(desktop)]
 use tauri_plugin_window_state::StateFlags;
 
-// Runtime selection: CEF or Wry
-#[cfg(feature = "cef")]
-type BrowserEngine = tauri::Wry;
-#[cfg(all(not(feature = "cef"), feature = "wry"))]
+// CEF (Chromium) on Linux; wry everywhere else.
+#[cfg(all(feature = "cef", target_os = "linux"))]
+type BrowserEngine = tauri_runtime_cef::CefRuntime<tauri::EventLoopMessage>;
+#[cfg(any(
+    all(not(feature = "cef"), feature = "wry"),
+    all(feature = "cef", not(target_os = "linux"))
+))]
 use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "dragonfly",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd"
+#[cfg(all(
+    not(feature = "cef"),
+    any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    )
 ))]
 fn prompt_webview_permission(message: &str) -> bool {
     use gtk::prelude::*;
@@ -44,12 +52,15 @@ fn prompt_webview_permission(message: &str) -> bool {
 
 // Return the remembered decision for a webview permission, or prompt the user
 // once and persist their choice for next time.
-#[cfg(any(
-    target_os = "linux",
-    target_os = "dragonfly",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd"
+#[cfg(all(
+    not(feature = "cef"),
+    any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    )
 ))]
 fn resolve_webview_permission(
     app: &AppHandle<crate::BrowserEngine>,
@@ -109,12 +120,16 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
 
     let _webview_window = builder.build()?;
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd"
+    // WebKitGTK only (wry). Under CEF, permissions go through set_permission_policy.
+    #[cfg(all(
+        not(feature = "cef"),
+        any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )
     ))]
     {
         use tauri::Manager;
@@ -145,7 +160,10 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
                         .downcast_ref::<NotificationPermissionRequest>()
                         .is_some()
                     {
-                        Some(("notifications", "Allow Sable to show desktop notifications?"))
+                        Some((
+                            "notifications",
+                            "Allow Sable to show desktop notifications?",
+                        ))
                     } else if request
                         .downcast_ref::<GeolocationPermissionRequest>()
                         .is_some()
@@ -233,6 +251,9 @@ pub fn run() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
+
+            #[cfg(all(feature = "cef", target_os = "linux"))]
+            deep_link_ipc::drain_pending_urls(app.handle());
 
             show_or_create_main_window(app.handle())?;
 
