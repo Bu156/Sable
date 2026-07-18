@@ -14,6 +14,7 @@ import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { useOptionalClientConfig } from '$hooks/useClientConfig';
 import { getCachedThemeCss, putCachedThemeCss, subscribeThemeCacheUpdates } from '../theme/cache';
+import { applyCspNonce } from '$utils/cspNonce';
 import { isLocalImportBundledUrl } from '../theme/localImportUrls';
 import { themeCatalogListingBaseUrl } from '../theme/catalogDefaults';
 import { fetch } from '$utils/fetch';
@@ -180,6 +181,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
         if (!node) {
           node = document.createElement('style');
           node.id = REMOTE_STYLE_ID;
+          applyCspNonce(node);
           document.head.appendChild(node);
         }
         node.textContent = text;
@@ -218,6 +220,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
       if (!node) {
         node = document.createElement('style');
         node.id = REMOTE_TWEAKS_STYLE_ID;
+        applyCspNonce(node);
         document.head.appendChild(node);
       }
       node.textContent = chunks.join('\n\n');
