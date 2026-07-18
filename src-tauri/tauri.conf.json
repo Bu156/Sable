@@ -54,9 +54,7 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": [
-        "https://github.com/SableClient/Sable/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/SableClient/Sable/releases/latest/download/latest.json"],
       "pubkey": "REPLACE_WITH_SABLECLIENT_UPDATER_PUBLIC_KEY"
     },
     "typegen": {
@@ -67,17 +65,11 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": [
-          "sable",
-          "moe.sable.app"
-        ]
+        "schemes": ["sable", "moe.sable.app"]
       },
       "mobile": [
         {
-          "scheme": [
-            "sable",
-            "moe.sable.app"
-          ],
+          "scheme": ["sable", "moe.sable.app"],
           "appLink": false
         }
       ]
