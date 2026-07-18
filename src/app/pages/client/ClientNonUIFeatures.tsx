@@ -58,7 +58,7 @@ import { NotificationBanner } from '$components/notification-banner';
 import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
 import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
-import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
+import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
 import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
 import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
@@ -756,7 +756,7 @@ function SlidingSyncActiveRoomSubscriber() {
 function SentryRoomContextFeature() {
   const mx = useMatrixClient();
   const mDirect = useAtomValue(mDirectAtom);
-  const roomId = useAtomValue(lastVisitedRoomIdAtom);
+  const roomId = useAtomValue(lastVisitedRoomAtom)?.roomId;
 
   useEffect(() => {
     if (!roomId) {
