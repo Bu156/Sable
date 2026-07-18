@@ -12,6 +12,7 @@ import {
   KnownMembership,
   SyncState,
 } from '$types/matrix-sdk';
+import { fetch } from '$utils/fetch';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, SessionStoreName } from '$state/sessions';

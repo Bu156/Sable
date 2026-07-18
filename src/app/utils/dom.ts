@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { fetchMediaBlob, type MediaTransportOptions } from './mediaTransport';
+import { fetch } from './fetch';
 
 export const targetFromEvent = (evt: Event, selector: string): Element | undefined => {
   const targets = evt.composedPath() as Element[];
