@@ -24,6 +24,10 @@ import LogoHighlightSVG from '$public/res/svg/highlight.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
+import {
+  isDesktopTauri,
+  sendDesktopTauriNotification,
+} from '$features/settings/notifications/TauriNotificationsApiClient';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { IconSizesProvider } from '$components/icons/phosphor';
@@ -164,7 +168,13 @@ function FaviconUpdater() {
     try {
       // Only badge with highlight (mention) counts — total unread is too noisy
       // for an OS-level app badge.
-      if (highlightTotal > 0) {
+      if (isDesktopTauri()) {
+        import('@tauri-apps/api/window')
+          .then(({ getCurrentWindow }) =>
+            getCurrentWindow().setBadgeCount(highlightTotal > 0 ? highlightTotal : undefined)
+          )
+          .catch(() => {});
+      } else if (highlightTotal > 0) {
         navigator.setAppBadge(highlightTotal);
       } else {
         navigator.clearAppBadge();
@@ -209,10 +219,15 @@ function InviteNotifications() {
 
   const notify = useCallback(
     (count: number) => {
+      const body = `You have ${count} new invitation request.`;
+      if (isDesktopTauri()) {
+        sendDesktopTauriNotification({ title: 'Invitation', body, silent: true }).catch(() => {});
+        return;
+      }
       const noti = new window.Notification('Invitation', {
         icon: LogoSVG,
         badge: LogoSVG,
-        body: `You have ${count} new invitation request.`,
+        body,
         silent: true,
       });
 
@@ -237,7 +252,11 @@ function InviteNotifications() {
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
 
     // OS notification for invites — desktop only.
-    if (!mobileOrTablet() && showSystemNotifications && notificationPermission('granted')) {
+    if (
+      !mobileOrTablet() &&
+      showSystemNotifications &&
+      (isDesktopTauri() || notificationPermission('granted'))
+    ) {
       try {
         notify(invites.length - perviousInviteLen);
       } catch {
@@ -443,7 +462,11 @@ function MessageNotifications() {
       // in sandboxed environments, browsers with DnD active, or Electron — and
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
-      if (!mobileOrTablet() && showSystemNotifications && notificationPermission('granted')) {
+      if (
+        !mobileOrTablet() &&
+        showSystemNotifications &&
+        (isDesktopTauri() || notificationPermission('granted'))
+      ) {
         try {
           const isEncryptedRoom = !!getStateEvent(room, EventType.RoomEncryption);
           const avatarMxc =
@@ -467,17 +490,25 @@ function MessageNotifications() {
             silent: !notificationSound || !isLoud,
             eventId,
           });
-          const noti = new window.Notification(osPayload.title, osPayload.options);
-          const { roomId } = room;
-          noti.addEventListener('click', () => {
-            window.focus();
-            setPending({
-              roomId,
-              eventId,
-              targetSessionId: mx.getUserId() ?? undefined,
+          if (isDesktopTauri()) {
+            sendDesktopTauriNotification({
+              title: osPayload.title,
+              body: osPayload.options.body,
+              silent: osPayload.options.silent ?? false,
+            }).catch(() => {});
+          } else {
+            const noti = new window.Notification(osPayload.title, osPayload.options);
+            const { roomId } = room;
+            noti.addEventListener('click', () => {
+              window.focus();
+              setPending({
+                roomId,
+                eventId,
+                targetSessionId: mx.getUserId() ?? undefined,
+              });
+              noti.close();
             });
-            noti.close();
-          });
+          }
         } catch {
           // window.Notification unavailable or blocked (sandboxed context, DnD, etc.)
         }

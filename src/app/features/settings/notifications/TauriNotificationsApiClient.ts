@@ -1,3 +1,6 @@
+import { isTauri } from '@tauri-apps/api/core';
+import { type as osType } from '@tauri-apps/plugin-os';
+
 export type NotificationPluginListener = {
   unregister: () => Promise<void> | void;
 };
@@ -17,6 +20,8 @@ export type TauriNotificationsApi = {
     importance?: number;
     vibration?: boolean;
   }) => Promise<void>;
+  isPermissionGranted: () => Promise<boolean>;
+  requestPermission: () => Promise<NotificationPermission>;
   sendNotification: (payload: Record<string, unknown>) => Promise<void>;
   removeActive: (payload: Array<{ id: number; tag?: string }>) => Promise<void>;
   onNotificationReceived: (
@@ -33,4 +38,59 @@ export async function getTauriNotificationsApi(): Promise<TauriNotificationsApi>
   }
 
   return notificationsApiPromise;
+}
+
+let permissionPromise: Promise<boolean> | null = null;
+
+export async function ensureTauriNotificationPermission(): Promise<boolean> {
+  if (!permissionPromise) {
+    permissionPromise = (async () => {
+      const api = await getTauriNotificationsApi();
+      if (await api.isPermissionGranted()) return true;
+      return (await api.requestPermission()) === 'granted';
+    })();
+    permissionPromise.then(
+      (granted) => {
+        if (!granted) permissionPromise = null;
+      },
+      () => {
+        permissionPromise = null;
+      }
+    );
+  }
+
+  return permissionPromise;
+}
+
+// Desktop webviews can't show web notifications (WKWebView lacks the API; the
+// Linux CEF runtime never grants it), so desktop routes through the native plugin.
+const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
+export const isDesktopTauri = (): boolean => isTauri() && DESKTOP_TAURI_OS.has(osType());
+
+let desktopNotificationSeq = 1;
+const nextDesktopNotificationId = (): number => {
+  const id = desktopNotificationSeq;
+  desktopNotificationSeq = desktopNotificationSeq >= 2_000_000_000 ? 1 : desktopNotificationSeq + 1;
+  return id;
+};
+
+export type DesktopTauriNotification = {
+  title: string;
+  body?: string;
+  silent?: boolean;
+};
+
+export async function sendDesktopTauriNotification({
+  title,
+  body,
+  silent,
+}: DesktopTauriNotification): Promise<void> {
+  if (!(await ensureTauriNotificationPermission())) return;
+  const api = await getTauriNotificationsApi();
+  await api.sendNotification({
+    id: nextDesktopNotificationId(),
+    title,
+    body,
+    silent: silent ?? false,
+  });
 }
