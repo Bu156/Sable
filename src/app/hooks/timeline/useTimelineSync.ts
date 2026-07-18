@@ -576,8 +576,10 @@ export function useTimelineSync({
       !(isAtBottom || resetAutoScrollPending) ||
       (!liveTimelineLinked && !resetAutoScrollPending) ||
       eventsLength === 0
-    )
+    ) {
+      lastScrolledAtEventsLengthRef.current = eventsLength;
       return;
+    }
 
     if (eventsLength <= lastScrolledAtEventsLengthRef.current && !resetAutoScrollPending) return;
 

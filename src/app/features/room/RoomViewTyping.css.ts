@@ -17,8 +17,6 @@ export const RoomViewTyping = style([
     width: '100%',
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,
-    position: 'absolute',
-    bottom: 0,
     animation: `${SlideUpAnime} 100ms ease-in-out`,
   },
 ]);
