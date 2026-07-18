@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use serde::{Deserialize, Serialize};
 
 use crate::mobile;
