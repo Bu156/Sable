@@ -44,11 +44,16 @@ export function MobileFriendlyBottomNav({ children }: MobileFriendlyClientNavPro
   const homeMatch = useMatch({ path: HOME_PATH, caseSensitive: true, end: true });
   const directMatch = useMatch({ path: DIRECT_PATH, caseSensitive: true, end: true });
   const spaceMatch = useMatch({ path: SPACE_PATH, caseSensitive: true, end: true });
+  const inboxMatch = useMatch({ path: INBOX_PATH, caseSensitive: true, end: false });
+  const navigateMatch = useMatch({ path: NAVIGATE_PATH, caseSensitive: true, end: false });
+  const profileMatch = useMatch({ path: PROFILE_PATH, caseSensitive: true, end: false });
   const settingsMatch = useMatch({ path: '/settings/', caseSensitive: true, end: true });
+  const onBarDestination =
+    homeMatch || directMatch || spaceMatch || inboxMatch || navigateMatch || profileMatch;
   if (
     screenSize !== ScreenSize.Mobile ||
-    mobileGestures ||
-    (!homeMatch && !directMatch && !spaceMatch) ||
+    (mobileGestures && !inboxMatch && !navigateMatch && !profileMatch) ||
+    !onBarDestination ||
     settingsMatch
   ) {
     return null;

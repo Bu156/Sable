@@ -13,6 +13,16 @@ extern "C-unwind" fn input_accessory_view_nil(_this: &AnyObject, _cmd: Sel) -> *
     std::ptr::null_mut()
 }
 
+// Edge-swipe back, matching Android's system back gesture. wry leaves
+// allowsBackForwardNavigationGestures off; react-router entries are
+// same-document navigations, which WKWebView tracks in its back-forward list.
+pub fn enable_swipe_back_navigation(window: &WebviewWindow<crate::BrowserEngine>) {
+    let _ = window.with_webview(|webview| unsafe {
+        let webview: *mut AnyObject = webview.inner().cast();
+        let _: () = msg_send![&*webview, setAllowsBackForwardNavigationGestures: true];
+    });
+}
+
 pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
     let _ = window.with_webview(|webview| unsafe {
         let webview: *mut AnyObject = webview.inner().cast();

@@ -266,6 +266,7 @@ pub fn run() {
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                 ios::hide_form_accessory_bar(&window);
+                ios::enable_swipe_back_navigation(&window);
             }
 
             #[cfg(desktop)]
