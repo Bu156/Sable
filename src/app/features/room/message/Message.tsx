@@ -22,6 +22,7 @@ import { useSetAtom } from 'jotai';
 import {
   AvatarBase,
   BubbleLayout,
+  checkIfGif,
   CompactLayout,
   MessageBase,
   ModernLayout,
@@ -380,6 +381,12 @@ function MessageInternal(
 
   const setModal = useSetAtom(modalAtom);
   const [contentVersion, setContentVersion] = useState(0);
+
+  const isGif = useMemo(() => {
+    const content = mEvent.getContent();
+    if (content.msgtype !== 'm.image') return false;
+    return checkIfGif(content?.info?.url ?? '', content?.info?.mimetype, content?.body);
+  }, [mEvent]);
 
   useEffect(() => {
     const triggerTimelineRegroup = () => {
@@ -848,6 +855,7 @@ function MessageInternal(
           </div>
         ),
         canSendReaction: canSendReaction,
+        isGif: isGif,
       },
     });
   };
@@ -944,6 +952,7 @@ function MessageInternal(
             imagePackRooms={imagePackRooms}
             setIsEmoji={setIsEmoji}
             canSendReaction={canSendReaction}
+            isGif={isGif}
           />
         </div>
       )}

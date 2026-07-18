@@ -67,6 +67,24 @@ function thumbnailDimsForMaxEdge(
   };
 }
 
+export function checkIfGif(url: string, mimetype?: string, body?: string) {
+  return (
+    mimetype === 'image/avif' ||
+    mimetype === 'image/gif' ||
+    mimetype === 'image/apng' ||
+    mimetype === 'image/webp' ||
+    (body ?? '').toLowerCase().endsWith('.avif') ||
+    (body ?? '').toLowerCase().endsWith('.gif') ||
+    (body ?? '').toLowerCase().endsWith('.apng') ||
+    (body ?? '').toLowerCase().endsWith('.webp') ||
+    url.toLowerCase().endsWith('.avif') ||
+    url.toLowerCase().endsWith('.gif') ||
+    url.toLowerCase().endsWith('.apng') ||
+    url.toLowerCase().endsWith('.webp') ||
+    false
+  );
+}
+
 type RenderViewerProps = {
   src: string;
   alt: string;
@@ -140,16 +158,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       favoritedContent.gifs.find((v) => v.url == url) != undefined
     );
 
-    const isGif =
-      info?.mimetype === 'image/gif' ||
-      info?.mimetype === 'image/apng' ||
-      info?.mimetype === 'image/webp' ||
-      (body ?? '').toLowerCase().endsWith('.gif') ||
-      (body ?? '').toLowerCase().endsWith('.apng') ||
-      (body ?? '').toLowerCase().endsWith('.webp') ||
-      url.toLowerCase().endsWith('.gif') ||
-      url.toLowerCase().endsWith('.apng') ||
-      url.toLowerCase().endsWith('.webp');
+    const isGif = checkIfGif(url, info?.mimetype, body);
 
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
@@ -464,7 +473,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   >
                     {menuIcon(Star, {
                       weight: favorited ? 'fill' : 'regular',
-                      color: favorited ? color.Warning.MainHover : color.Surface.OnContainer,
+                      color: favorited ? color.Warning.MainHover : color.Secondary.OnContainer,
                     })}
                   </MenuItem>
                 )}
