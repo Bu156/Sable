@@ -109,11 +109,14 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
 
     #[cfg(desktop)]
     let builder = builder
-        .title(app.package_info().name.clone())
+        .title("Sable")
         .resizable(true)
         .fullscreen(false)
         .inner_size(1280.0, 720.0)
         .visible(false);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.hidden_title(true);
 
     #[cfg(target_os = "windows")]
     let builder = builder.decorations(false);

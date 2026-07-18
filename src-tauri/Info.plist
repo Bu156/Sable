@@ -4,6 +4,8 @@
 <dict>
     <key>CFBundleDisplayName</key>
     <string>Sable</string>
+    <key>CFBundleName</key>
+    <string>Sable</string>
     <key>NSCameraUsageDescription</key>
     <string>Sable needs camera access for video calls.</string>
     <key>NSMicrophoneUsageDescription</key>
