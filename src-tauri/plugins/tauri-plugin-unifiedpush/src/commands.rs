@@ -3,17 +3,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::mobile;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DistributorArgs {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TokenArgs {
     pub token: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PushNotificationResponse {
     pub device_token: String,
 }
