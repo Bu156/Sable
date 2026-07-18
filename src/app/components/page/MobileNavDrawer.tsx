@@ -161,7 +161,6 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     ({
       first,
       active,
-      last,
       canceled,
       movement: [mx],
       offset: [ox],
@@ -205,14 +204,26 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         return;
       }
 
-      // On the list: a leftward flick/drag reveals the last room via navigation.
+      // On the list: dragging left follows the finger to reveal the room; release commits.
       if (mx > DIRECTION_DEADZONE) {
         cancel();
         return;
       }
-      if (last) {
-        const wantRoom = -mx > width * OPEN_FRACTION || (vx > VELOCITY_THRESHOLD && dx < 0);
-        if (wantRoom) goToRoom();
+      if (active) {
+        if (first) {
+          x.stop();
+          applyTransition(false);
+        }
+        draggingRef.current = true;
+        x.set(clamp(ox, -width, 0));
+        return;
+      }
+      draggingRef.current = false;
+      const wantRoom = -ox > width * OPEN_FRACTION || (vx > VELOCITY_THRESHOLD && dx < 0);
+      if (wantRoom) {
+        goToRoom();
+      } else {
+        settle(0);
       }
     },
     // axis:'x' + touch-action:pan-y lets the browser keep native vertical scroll.
