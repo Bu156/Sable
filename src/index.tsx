@@ -22,6 +22,7 @@ import { installConsolePasteScamWarning } from './app/utils/consolePasteScamWarn
 import { registerMatrixUriProtocol } from './app/plugins/matrix-uri';
 import { initTauriMediaSession } from './app/utils/tauriMediaAuth';
 import { registerAppServiceWorker } from './serviceWorkerBootstrap';
+import { hasServiceWorker } from './app/utils/platform';
 
 enableMapSet();
 installConsolePasteScamWarning();
@@ -34,13 +35,15 @@ registerAppServiceWorker();
 
 initTauriMediaSession();
 
-const controllerRefreshed = localStorage.getItem('controllerRefreshed') === 'true';
+if (hasServiceWorker()) {
+  const controllerRefreshed = localStorage.getItem('controllerRefreshed') === 'true';
 
-if (!navigator.serviceWorker.controller && !controllerRefreshed) {
-  localStorage.setItem('controllerRefreshed', 'true');
-  window.location.reload();
+  if (!navigator.serviceWorker.controller && !controllerRefreshed) {
+    localStorage.setItem('controllerRefreshed', 'true');
+    window.location.reload();
+  }
+  if (navigator.serviceWorker.controller) localStorage.setItem('controllerRefreshed', 'false');
 }
-if (navigator.serviceWorker.controller) localStorage.setItem('controllerRefreshed', 'false');
 
 const injectIOSMetaTags = () => {
   const metaTags = [
