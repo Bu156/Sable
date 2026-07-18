@@ -408,6 +408,100 @@ describe('SlidingSyncManager room subscription coordination', () => {
       new Set(['!current:example.com'])
     );
   });
+
+  it('registers the composite space+image-pack subscription', () => {
+    makeManager(makeMockMx());
+
+    const call = (
+      mocks.slidingSyncInstance.addCustomSubscription.mock.calls as unknown as [
+        string,
+        { timeline_limit: number; required_state: [string, string][] },
+      ][]
+    ).find(([name]) => name === 'space_image_packs');
+    expect(call).toBeDefined();
+    const [, subscription] = call!;
+    expect(subscription.timeline_limit).toBe(0);
+    expect(subscription.required_state).toEqual(
+      expect.arrayContaining([
+        ['m.space.child', '*'],
+        ['m.room.image_pack', '*'],
+        ['im.ponies.room_emotes', '*'],
+      ])
+    );
+  });
+
+  it('uses the composite subscription when a pack room is also a space', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!spacepack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.setSpaceSubscriptions([roomId]);
+
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'space_image_packs'
+    );
+  });
+
+  it('uses the composite subscription regardless of registration order', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!spacepack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+
+    manager.setSpaceSubscriptions([roomId]);
+    manager.setImagePackSubscriptions([roomId]);
+
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'space_image_packs'
+    );
+  });
+
+  it('prefers the active subscription over the composite and falls back on unsubscribe', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!spacepack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.setSpaceSubscriptions([roomId]);
+    manager.subscribeToRoom(roomId);
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'active_room'
+    );
+
+    manager.unsubscribeFromRoom(roomId);
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'space_image_packs'
+    );
+  });
+
+  it('reverts to the plain subscription when the other role is removed', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!spacepack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.setSpaceSubscriptions([roomId]);
+
+    manager.setImagePackSubscriptions([]);
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'space'
+    );
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set([roomId])
+    );
+
+    manager.setImagePackSubscriptions([roomId]);
+    manager.setSpaceSubscriptions([]);
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'image_packs'
+    );
+  });
 });
 
 describe('scopeEphemeralExtensions', () => {
