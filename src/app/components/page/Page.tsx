@@ -10,10 +10,12 @@ import * as css from './style.css';
 
 type PageRootProps = {
   nav: ReactNode;
+  rail?: ReactNode;
+  bottomNav?: ReactNode;
   children: ReactNode;
 };
 
-export function PageRoot({ nav, children }: PageRootProps) {
+export function PageRoot({ nav, rail, bottomNav, children }: PageRootProps) {
   const screenSize = useScreenSizeContext();
   const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
   const isMobile = screenSize === ScreenSize.Mobile;
@@ -21,7 +23,9 @@ export function PageRoot({ nav, children }: PageRootProps) {
   if (isMobile && mobileGestures) {
     return (
       <Box grow="Yes" className={ContainerColor({ variant: 'Background' })}>
-        <MobileNavDrawer nav={nav}>{children}</MobileNavDrawer>
+        <MobileNavDrawer nav={nav} rail={rail} bottomNav={bottomNav}>
+          {children}
+        </MobileNavDrawer>
       </Box>
     );
   }

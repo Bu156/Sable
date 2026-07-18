@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { animate, motion, useMotionValue } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
@@ -19,13 +19,16 @@ import {
 } from '$pages/paths';
 import { resolveSection } from '$pages/pathUtils';
 
-const SPRING = { type: 'spring', stiffness: 400, damping: 40 } as const;
+const SLIDE_MS = 300;
+const SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const OPEN_FRACTION = 0.35;
 const VELOCITY_THRESHOLD = 0.4;
 const DIRECTION_DEADZONE = 10;
 
 type MobileNavDrawerProps = {
   nav: ReactNode;
+  rail?: ReactNode;
+  bottomNav?: ReactNode;
   children: ReactNode;
 };
 
@@ -34,8 +37,9 @@ const clamp = (value: number, min: number, max: number): number =>
 
 /** Sliding mobile drawer: the list and active room are adjacent panels; dragging
  * reveals the list and commits the route on release. */
-export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
+export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDrawerProps) {
   const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
+  const reduceMotion = useReducedMotion();
   const location = useLocation();
   const navigate = useNavigate();
   const setLastRoom = useSetAtom(lastVisitedRoomAtom);
@@ -56,12 +60,51 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
   const contentOpen = !listView;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const sliderRef = useRef<HTMLDivElement | null>(null);
   const navPanelRef = useRef<HTMLDivElement | null>(null);
   const contentPanelRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
   const x = useMotionValue(0);
   const draggingRef = useRef(false);
   const prevContentOpenRef = useRef(contentOpen);
+  const openRafRef = useRef(0);
+  const [deferContent, setDeferContent] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(contentOpen);
+
+  // Detect the open transition during render so the room isn't rendered in the slide's commit.
+  if (contentOpen !== prevOpen) {
+    setPrevOpen(contentOpen);
+    setDeferContent(contentOpen && !reduceMotion);
+  }
+
+  // Compositor transition for the settle animation; off = finger-1:1 during drag.
+  const applyTransition = useCallback((animated: boolean) => {
+    const el = sliderRef.current;
+    if (el) el.style.transition = animated ? `transform ${SLIDE_MS}ms ${SLIDE_EASE}` : 'none';
+  }, []);
+
+  const settle = useCallback(
+    (target: number) => {
+      if (reduceMotion) {
+        applyTransition(false);
+        x.jump(target);
+        return;
+      }
+      applyTransition(true);
+      x.set(target);
+    },
+    [reduceMotion, x, applyTransition]
+  );
+
+  // Release the deferred room after the slide is committed to the compositor.
+  useLayoutEffect(() => {
+    if (!deferContent) return undefined;
+    cancelAnimationFrame(openRafRef.current);
+    openRafRef.current = requestAnimationFrame(() =>
+      requestAnimationFrame(() => setDeferContent(false))
+    );
+    return () => cancelAnimationFrame(openRafRef.current);
+  }, [deferContent]);
 
   useLayoutEffect(() => {
     const el = viewportRef.current;
@@ -85,12 +128,13 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
     prevContentOpenRef.current = contentOpen;
     if (draggingRef.current) return;
     const target = contentOpen ? -width : 0;
-    if (routeChanged && width > 0) {
-      animate(x, target, SPRING);
+    if (routeChanged && width > 0 && !reduceMotion) {
+      settle(target);
     } else {
+      applyTransition(false);
       x.jump(target);
     }
-  }, [contentOpen, width, x]);
+  }, [contentOpen, width, x, settle, applyTransition, reduceMotion]);
 
   const goToList = useCallback(() => {
     const section = resolveSection(location.pathname);
@@ -139,21 +183,24 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
         if (mx < -DIRECTION_DEADZONE) {
           if (draggingRef.current) {
             draggingRef.current = false;
-            animate(x, -width, SPRING);
+            settle(-width);
           }
           cancel();
           return;
         }
         if (active) {
-          // Take over any settling spring; offset is seeded from the live position.
-          if (first) x.stop();
+          // Take over any settling animation; offset is seeded from the live position.
+          if (first) {
+            x.stop();
+            applyTransition(false);
+          }
           draggingRef.current = true;
           x.set(clamp(ox, -width, 0));
           return;
         }
         draggingRef.current = false;
         const opened = width + ox > width * OPEN_FRACTION || (vx > VELOCITY_THRESHOLD && dx > 0);
-        animate(x, opened ? 0 : -width, SPRING);
+        settle(opened ? 0 : -width);
         if (opened) goToList();
         return;
       }
@@ -191,7 +238,10 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
         touchAction: 'pan-y',
       }}
     >
-      <motion.div style={{ x, display: 'flex', height: '100%', willChange: 'transform' }}>
+      <motion.div
+        ref={sliderRef}
+        style={{ x, display: 'flex', height: '100%', willChange: 'transform' }}
+      >
         <div
           ref={navPanelRef}
           style={{
@@ -199,10 +249,25 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
             height: '100%',
             flexShrink: 0,
             display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
           }}
         >
-          {nav}
+          <div
+            style={{
+              flexGrow: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'row',
+              overflow: 'hidden',
+            }}
+          >
+            {rail && <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>}
+            <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              {nav}
+            </div>
+          </div>
+          {bottomNav}
         </div>
         <div
           ref={contentPanelRef}
@@ -214,7 +279,7 @@ export function MobileNavDrawer({ nav, children }: MobileNavDrawerProps) {
             overflow: 'hidden',
           }}
         >
-          {children}
+          {deferContent ? null : children}
         </div>
       </motion.div>
     </div>

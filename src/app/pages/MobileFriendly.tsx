@@ -40,12 +40,14 @@ export function MobileFriendlySidebarNav({ children }: MobileFriendlyClientNavPr
 
 export function MobileFriendlyBottomNav({ children }: MobileFriendlyClientNavProps) {
   const screenSize = useScreenSizeContext();
+  const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
   const homeMatch = useMatch({ path: HOME_PATH, caseSensitive: true, end: true });
   const directMatch = useMatch({ path: DIRECT_PATH, caseSensitive: true, end: true });
   const spaceMatch = useMatch({ path: SPACE_PATH, caseSensitive: true, end: true });
   const settingsMatch = useMatch({ path: '/settings/', caseSensitive: true, end: true });
   if (
     screenSize !== ScreenSize.Mobile ||
+    mobileGestures ||
     (!homeMatch && !directMatch && !spaceMatch) ||
     settingsMatch
   ) {
