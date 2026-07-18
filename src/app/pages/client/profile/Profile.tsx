@@ -138,7 +138,7 @@ export function ProfileMobile() {
         gap="0"
         alignItems="Center"
         justifyContent="SpaceBetween"
-        style={{ width: '100%', minWidth: '100%',  background: color.Background.Container }}
+        style={{ width: '100%', minWidth: '100%', background: color.Background.Container }}
       >
         <PageNavHeader size="600">
           <Box grow="Yes" gap="300" justifyContent="Center">
@@ -204,7 +204,7 @@ export function ProfileMobile() {
               radii="300"
               before={menuIcon(GearSix)}
               style={{
-                            position: 'relative',
+                position: 'relative',
                 background: isSettingsOpen ? color.Surface.Container : color.Background.Container,
               }}
               after={menuIcon(isSettingsOpen && isMobile ? CaretDownIcon : CaretRightIcon)}
@@ -215,7 +215,11 @@ export function ProfileMobile() {
               </Text>
             </MenuItem>
             {isSettingsOpen && (
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100, paddingTop: 0 }}>
+              <Box
+                direction="Column"
+                gap="100"
+                style={{ padding: config.space.S100, paddingTop: 0 }}
+              >
                 {menuItems.map((item) => {
                   const IconComponent = item.icon;
 

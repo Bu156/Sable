@@ -217,9 +217,8 @@ export function BackgroundNotifications() {
     async function sendNotification(opts: NotifyOptions): Promise<void> {
       if (isDesktopTauri()) {
         try {
-          const { getTauriNotificationsApi } = await import(
-            '$features/settings/notifications/TauriNotificationsApiClient'
-          );
+          const { getTauriNotificationsApi } =
+            await import('$features/settings/notifications/TauriNotificationsApiClient');
           const api = await getTauriNotificationsApi();
           await api.sendNotification({
             id: nextDesktopNotificationId(),

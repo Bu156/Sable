@@ -262,7 +262,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
               overflow: 'hidden',
             }}
           >
-            {rail && <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>}
+            {rail && (
+              <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>
+            )}
             <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
               {nav}
             </div>

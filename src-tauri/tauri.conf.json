@@ -56,9 +56,7 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": [
-        "https://github.com/SableClient/Sable/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/SableClient/Sable/releases/latest/download/latest.json"],
       "pubkey": "REPLACE_WITH_SABLECLIENT_UPDATER_PUBLIC_KEY"
     },
     "typegen": {
