@@ -1,5 +1,5 @@
 import type { MouseEventHandler, MouseEvent } from 'react';
-import { forwardRef, useState, useEffect } from 'react';
+import { forwardRef, startTransition, useState, useEffect } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { RoomEvent as RoomEventEnum } from '$types/matrix-sdk';
 import type { RectCords } from 'folds';
@@ -359,7 +359,8 @@ export function RoomNavItem({
         navigateRoom(room.roomId);
       }
     } else {
-      navigate(linkPath);
+      // Render the room off the urgent path so the tap doesn't freeze the UI on mount.
+      startTransition(() => navigate(linkPath));
     }
   };
 

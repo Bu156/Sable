@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { startTransition, useCallback } from 'react';
 import type { NavigateOptions } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
@@ -28,7 +28,8 @@ export const useRoomNavigate = () => {
   const navigateSpace = useCallback(
     (roomId: string) => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, roomId);
-      navigate(getSpacePath(roomIdOrAlias));
+      // Render the (heavy) destination off the urgent path so the tap doesn't freeze the UI.
+      startTransition(() => navigate(getSpacePath(roomIdOrAlias)));
     },
     [mx, navigate]
   );
@@ -49,19 +50,21 @@ export const useRoomNavigate = () => {
 
         const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(mx, parentSpace);
 
-        navigate(
-          getSpaceRoomPath(pSpaceIdOrAlias, openSpaceTimeline ? roomId : roomIdOrAlias, eventId),
-          opts
+        startTransition(() =>
+          navigate(
+            getSpaceRoomPath(pSpaceIdOrAlias, openSpaceTimeline ? roomId : roomIdOrAlias, eventId),
+            opts
+          )
         );
         return;
       }
 
       if (mDirects.has(roomId)) {
-        navigate(getDirectRoomPath(roomIdOrAlias, eventId), opts);
+        startTransition(() => navigate(getDirectRoomPath(roomIdOrAlias, eventId), opts));
         return;
       }
 
-      navigate(getHomeRoomPath(roomIdOrAlias, eventId), opts);
+      startTransition(() => navigate(getHomeRoomPath(roomIdOrAlias, eventId), opts));
     },
     [mx, navigate, spaceSelectedId, roomToParents, mDirects, developerTools]
   );
