@@ -51,6 +51,10 @@ import {
 } from '$features/bookmarks';
 import { CopyIcon } from '@phosphor-icons/react';
 import * as OptionsCss from './Options.css';
+import { MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS } from '$unstable/prefixes';
+import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
+import type { IImageInfo } from '$types/matrix/common';
+import { getIncomingMediaMxcUrl } from '../MsgTypeRenderers';
 
 function WrappedMessage({
   isModal,
@@ -239,7 +243,9 @@ export const MessageBookmarkItem = as<
   return (
     <MenuItem
       size="300"
-      after={menuIcon(BookmarkIcon)}
+      after={menuIcon(BookmarkIcon, {
+        weight: bookmarked ? 'fill' : 'regular',
+      })}
       radii="300"
       onClick={handleClick}
       {...props}
@@ -247,6 +253,70 @@ export const MessageBookmarkItem = as<
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
         {bookmarked ? 'Remove Bookmark' : 'Bookmark Message'}
+      </Text>
+    </MenuItem>
+  );
+});
+
+export const MessageFavoriteGifItem = as<
+  'button',
+  {
+    room: Room;
+    mEvent: MatrixEvent;
+    onClose?: () => void;
+  }
+>(({ room, mEvent, onClose, ...props }, ref) => {
+  const mx = useMatrixClient();
+  const content = mEvent.getContent();
+  const url = getIncomingMediaMxcUrl(content.file?.url ?? content.url) ?? '';
+  const favoritedContent = useFavoriteGifs();
+  const [favorited, setFavorited] = useState(
+    favoritedContent.gifs.find((v) => v.url == url) != undefined
+  );
+  const handleClick = async () => {
+    if (!favorited) {
+      const info: IImageInfo | undefined = content?.info;
+      const body = content?.body;
+      setFavorited(true);
+      await mx
+        .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
+          gifs: [
+            ...favoritedContent.gifs,
+            {
+              title: body ?? '',
+              url: url,
+              width: info?.w,
+              height: info?.h,
+              size: info?.size,
+              mimetype: info?.mimetype,
+            },
+          ],
+        })
+        .catch(() => setFavorited(false));
+    } else {
+      setFavorited(false);
+      await mx
+        .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
+          gifs: favoritedContent.gifs.filter((v) => v.url != url),
+        })
+        .catch(() => setFavorited(true));
+    }
+
+    onClose?.();
+  };
+  return (
+    <MenuItem
+      size="300"
+      after={menuIcon(Star, {
+        weight: favorited ? 'fill' : 'regular',
+      })}
+      radii="300"
+      onClick={handleClick}
+      {...props}
+      ref={ref}
+    >
+      <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+        {favorited ? 'Unfavorite Gif' : 'Favorite Gif'}
       </Text>
     </MenuItem>
   );
@@ -334,6 +404,7 @@ export function OptionQuickMenu({
   menuAnchor,
   imagePackRooms,
   setIsEmoji,
+  isGif,
 }: OptionMenuProps) {
   const mx = useMatrixClient();
   const isThreadedMessage = isThreadRelationEvent(mEvent, mEvent.threadRootId);
@@ -438,6 +509,7 @@ export function OptionQuickMenu({
               setIsEmoji={setIsEmoji}
               emojiBoardAnchor={menuAnchor}
               canSendReaction={canSendReaction}
+              isGif={isGif}
             />
           }
         >
@@ -484,6 +556,7 @@ export type OptionMenuProps = {
   canDelete?: boolean;
   handleOpenMenu?: MouseEventHandler<HTMLButtonElement>;
   menuAnchor?: RectCords | undefined;
+  isGif?: boolean;
 
   emojiBoardAnchor?: RectCords;
   imagePackRooms?: Room[];
@@ -511,6 +584,7 @@ export function OptionMenu({
   ActualMessage,
   isModal,
   dragOpts,
+  isGif,
 }: OptionMenuProps) {
   const setModal = useSetAtom(modalAtom);
   const store = useStore();
@@ -664,6 +738,9 @@ export function OptionMenu({
                 )}
               {relations && (
                 <MessageAllReactionItem room={room} relations={relations} closeMenu={closeMenu} />
+              )}
+              {isGif && isModal && (
+                <MessageFavoriteGifItem room={room} mEvent={mEvent} onClose={closeMenu} />
               )}
               <MenuItem
                 size="300"
@@ -852,6 +929,7 @@ export function MobileOptionsInternal({ options }: { options: OptionMenuProps })
             canSendReaction={options.canSendReaction}
             isModal
             dragOpts={dragOpts}
+            isGif={options.isGif}
           />
         </Box>
       </Box>

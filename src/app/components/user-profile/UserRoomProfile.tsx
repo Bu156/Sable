@@ -114,9 +114,10 @@ function UserExtendedSection({
 
   const catStatusText = useMemo(() => {
     if (!renderAnimals) return null;
-    if (isAnimal && hasAnimal) return `${isAnimal} with ${hasAnimal}, give ${animalNeed}!`;
-    if (isAnimal) return `Is ${isAnimal}, give ${animalNeed}!`;
-    if (hasAnimal) return `Has ${hasAnimal}, give ${animalNeed}!`;
+    const animalGive = animalNeed ? `, give ${animalNeed}!` : '!';
+    if (isAnimal && hasAnimal) return `${isAnimal} with ${hasAnimal}${animalGive}`;
+    if (isAnimal) return `Is ${isAnimal}${animalGive}`;
+    if (hasAnimal) return `Has ${hasAnimal}${animalGive}`;
     return null;
   }, [renderAnimals, isAnimal, hasAnimal, animalNeed]);
 

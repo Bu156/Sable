@@ -242,8 +242,8 @@ export function ProfileMobile() {
                   <Line variant="Surface" size="300" />
                   <MenuItem
                     size="300"
-                    variant="Background"
-                    style={{ color: color.Critical.OnContainer }}
+                    variant="Critical"
+                    fill="None"
                     before={menuIcon(SignOutIcon)}
                     onClick={() => setLogout(true)}
                   >
@@ -267,7 +267,7 @@ export function ProfileMobile() {
                 </>
               )}
             </UseStateProvider>
-            <div style={{ height: toRem(132) }} />
+            <div style={{ height: '20vh' }} />
           </Box>
         </Menu>
       </Box>
