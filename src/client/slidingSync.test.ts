@@ -333,6 +333,7 @@ describe('SlidingSyncManager room subscription coordination', () => {
   it('uses the active subscription while a room is also an image-pack room', () => {
     const manager = makeManager(makeMockMx());
     const roomId = '!pack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
 
     manager.setImagePackSubscriptions([roomId]);
     manager.subscribeToRoom(roomId);
@@ -346,6 +347,7 @@ describe('SlidingSyncManager room subscription coordination', () => {
   it('restores the image-pack subscription when the room is no longer active', () => {
     const manager = makeManager(makeMockMx());
     const roomId = '!pack:example.com';
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
 
     manager.setImagePackSubscriptions([roomId]);
     manager.subscribeToRoom(roomId);
@@ -400,12 +402,33 @@ describe('SlidingSyncManager room subscription coordination', () => {
 
   it('removes image-pack subscriptions which are no longer configured', () => {
     const manager = makeManager(makeMockMx());
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
 
     manager.setImagePackSubscriptions(['!old:example.com', '!current:example.com']);
     manager.setImagePackSubscriptions(['!current:example.com']);
 
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
       new Set(['!current:example.com'])
+    );
+  });
+
+  it('defers image-pack subscriptions until lists are loaded so pack spaces get the composite key', () => {
+    const manager = makeManager(makeMockMx());
+    const roomId = '!spacepack:example.com';
+
+    manager.setImagePackSubscriptions([roomId]);
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).not.toHaveBeenCalled();
+
+    manager.setSpaceSubscriptions([roomId]);
+    (manager as unknown as { listsFullyLoaded: boolean }).listsFullyLoaded = true;
+    (manager as unknown as { flushDeferredSubscriptions: () => void }).flushDeferredSubscriptions();
+
+    expect(mocks.slidingSyncInstance.useCustomSubscription).toHaveBeenLastCalledWith(
+      roomId,
+      'space_image_packs'
+    );
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
+      new Set([roomId])
     );
   });
 
