@@ -1,0 +1,236 @@
+name: Build desktop apps
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and attach desktop bundles to (e.g. v1.20.0)'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: tauri-build-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            platform: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+          - name: Windows
+            platform: windows-latest
+            rust-targets: ''
+            args: ''
+          - name: Linux (CEF)
+            platform: ubuntu-22.04
+            rust-targets: ''
+            cef: true
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Wait for release to exist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 12); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release $TAG found."
+              exit 0
+            fi
+            echo "Waiting for release $TAG to be published ($i/12)…"
+            sleep 15
+          done
+          echo "Release $TAG was not found." >&2
+          exit 1
+
+      - name: Install Linux build dependencies
+        if: matrix.cef
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            libxdo-dev \
+            build-essential \
+            file \
+            rpm \
+            ruby \
+            ruby-dev
+          sudo gem install --no-document fpm
+
+      - name: Setup app
+        uses: ./.github/actions/setup
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src-tauri
+
+      - name: Stamp release version into tauri.conf.json
+        shell: bash
+        run: node .github/scripts/set-tauri-version.mjs "${TAG#v}"
+
+      # --- macOS / Windows: standard wry build via tauri-action ---
+      - name: Build desktop bundles
+        id: tauri
+        if: ${{ !matrix.cef }}
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Attach bundles to release
+        if: ${{ !matrix.cef }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACTS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          echo "$ARTIFACTS" | jq -r '.[]' | while read -r path; do
+            [ -n "$path" ] || continue
+            echo "Uploading $path"
+            gh release upload "$TAG" "$path" --clobber
+          done
+
+      # --- Linux: CEF runtime, packaged as deb / rpm / AppImage ---
+      - name: Build frontend
+        if: matrix.cef
+        shell: bash
+        run: pnpm build
+
+      - name: Build CEF binary
+        if: matrix.cef
+        shell: bash
+        run: |
+          cargo build --release --features cef --no-default-features \
+            --manifest-path src-tauri/Cargo.toml
+
+      - name: Stage CEF runtime next to the binary
+        if: matrix.cef
+        shell: bash
+        run: scripts/cef-copy-libs.sh release
+
+      - name: Build native packages
+        if: matrix.cef
+        shell: bash
+        run: |
+          VERSION="${TAG#v}"
+          STAGE="src-tauri/target/release"
+
+          stage_runtime() {
+            local dest="$1"
+            mkdir -p "$dest"
+            cp "$STAGE/sable" "$dest/"
+            cp -a "$STAGE"/*.so* "$dest/" 2>/dev/null || true
+            cp -a "$STAGE"/*.pak "$STAGE"/*.dat "$STAGE"/*.bin "$dest/" 2>/dev/null || true
+            cp -a "$STAGE"/*.json "$dest/" 2>/dev/null || true
+            cp -a "$STAGE/locales" "$dest/" 2>/dev/null || true
+            if [ -f "$STAGE/chrome-sandbox" ]; then
+              cp -a "$STAGE/chrome-sandbox" "$dest/"
+              chmod 4755 "$dest/chrome-sandbox"
+            fi
+          }
+
+          write_desktop() {
+            cat > "$1" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Sable
+          Comment=A Matrix client
+          Exec=sable %U
+          Icon=sable
+          Terminal=false
+          Categories=Network;InstantMessaging;Chat;
+          StartupWMClass=sable
+          MimeType=x-scheme-handler/sable;x-scheme-handler/moe.sable.app;
+          EOF
+          }
+
+          ROOT="pkgroot"
+          stage_runtime "$ROOT/opt/sable"
+          mkdir -p "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
+                   "$ROOT/usr/share/icons/hicolor/128x128/apps"
+          cat > "$ROOT/usr/bin/sable" <<'EOF'
+          #!/bin/sh
+          exec /opt/sable/sable "$@"
+          EOF
+          chmod 755 "$ROOT/usr/bin/sable"
+          write_desktop "$ROOT/usr/share/applications/sable.desktop"
+          cp src-tauri/icons/128x128.png "$ROOT/usr/share/icons/hicolor/128x128/apps/sable.png"
+
+          COMMON=(-s dir -n sable -v "$VERSION" --iteration 1
+            --description "Sable — a Matrix client"
+            --url "https://sable.moe" --maintainer "SableClient"
+            --category net)
+          # Stable-named deps only: version-suffixed names (e.g. the 24.04 t64
+          # set) would break install on other releases; CEF bundles its own libs.
+          DEB_DEPS=(--depends libwebkit2gtk-4.1-0 --depends libgtk-3-0
+            --depends libnss3 --depends libnspr4 --depends libgbm1
+            --depends libdrm2 --depends libxkbcommon0 --depends xdg-utils)
+          fpm "${COMMON[@]}" -t deb -a amd64 "${DEB_DEPS[@]}" -C "$ROOT" .
+
+          RPM_DEPS=(--depends webkit2gtk4.1 --depends gtk3 --depends nss
+            --depends nspr --depends mesa-libgbm --depends libdrm
+            --depends libxkbcommon --depends xdg-utils)
+          fpm "${COMMON[@]}" -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$ROOT" .
+
+          APPDIR="Sable.AppDir"
+          stage_runtime "$APPDIR/usr/bin"
+          write_desktop "$APPDIR/sable.desktop"
+          cp src-tauri/icons/128x128.png "$APPDIR/sable.png"
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/sable" "$@"
+          EOF
+          chmod 755 "$APPDIR/AppRun"
+
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          # Runner has no FUSE; extract-and-run instead of mounting.
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+            ./appimagetool "$APPDIR" "Sable_${VERSION}_amd64.AppImage"
+
+      - name: Attach native packages to release
+        if: matrix.cef
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in sable_*.deb sable-*.rpm Sable_*_amd64.AppImage; do
+            [ -e "$f" ] || continue
+            echo "Uploading $f"
+            gh release upload "$TAG" "$f" --clobber
+          done
