@@ -23,25 +23,24 @@ class MainActivity : TauriActivity() {
   companion object {
     private var instance: MainActivity? = null
 
-    // Called from Rust (JNI) to tint the status bar and adapt icon contrast.
+    // Bars stay transparent (edge-to-edge plugin) so the webview strips supply the color
+    // on every version; these only adapt icon contrast. setStatusBarColor/setNavigationBarColor
+    // are no-ops under enforced edge-to-edge on Android 15+, so we avoid them.
     @JvmStatic
     fun setStatusBarColorNative(color: Int) {
       val activity = instance ?: return
       activity.runOnUiThread {
         val window = activity.window
-        window.statusBarColor = color
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
           isLight(color)
       }
     }
 
-    // Called from Rust (JNI) to tint the navigation bar and adapt icon contrast.
     @JvmStatic
     fun setNavigationBarColorNative(color: Int) {
       val activity = instance ?: return
       activity.runOnUiThread {
         val window = activity.window
-        window.navigationBarColor = color
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
           isLight(color)
       }
