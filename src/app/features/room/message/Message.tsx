@@ -47,6 +47,7 @@ import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { SwipeableMessageWrapper } from '$components/SwipeableMessageWrapper';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useUserProfile } from '$hooks/useUserProfile';
+import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { useSetting } from '$state/hooks/settings';
 import { useBlobCache } from '$hooks/useBlobCache';
 import { filterPronounsByLanguage, getParsedPronouns } from '$utils/pronouns';
@@ -459,6 +460,7 @@ function MessageInternal(
   // Avatars
   // Prefer the room-scoped member avatar (m.room.member) over the global profile
   // avatar so per-room avatar overrides are respected in the timeline.
+  useRoomMemberHydration(room, senderId);
   const memberAvatarMxc = getMemberAvatarMxc(room, senderId);
   const avatarUrl = useMemo(() => {
     const mxc = pmp?.avatar_url || memberAvatarMxc || profile.avatarUrl;

@@ -46,6 +46,7 @@ const ACTIVE_ROOM_SUBSCRIPTION_KEY = 'active_room';
 const SIDEBAR_ROOM_SUBSCRIPTION_KEY = 'sidebar_room';
 const SPACE_SUBSCRIPTION_KEY = 'space';
 const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
+const SPACE_IMAGE_PACK_SUBSCRIPTION_KEY = 'space_image_packs';
 const ACTIVE_ROOM_TIMELINE_LIMIT = 30;
 
 export type PartialSlidingSyncRequest = {
@@ -138,12 +139,21 @@ const buildUnencryptedSubscription = (timelineLimit: number): MSC3575RoomSubscri
   required_state: ACTIVE_ROOM_REQUIRED_STATE,
 });
 
+const IMAGE_PACK_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
+  [CustomStateEvent.ImagePack, MSC3575_WILDCARD],
+  [CustomStateEvent.PoniesRoomEmotes, MSC3575_WILDCARD],
+];
+
 const buildImagePackSubscription = (): MSC3575RoomSubscription => ({
   timeline_limit: 0,
-  required_state: [
-    [CustomStateEvent.ImagePack, MSC3575_WILDCARD],
-    [CustomStateEvent.PoniesRoomEmotes, MSC3575_WILDCARD],
-  ],
+  required_state: IMAGE_PACK_REQUIRED_STATE,
+});
+
+// Pack rooms that are also spaces need both state sets; room subscriptions
+// use exactly one named key, so register the union as its own subscription.
+const buildSpaceImagePackSubscription = (): MSC3575RoomSubscription => ({
+  timeline_limit: 0,
+  required_state: [...SPACE_REQUIRED_STATE, ...IMAGE_PACK_REQUIRED_STATE],
 });
 
 const buildSpaceSubscription = (): MSC3575RoomSubscription => ({
@@ -344,6 +354,10 @@ export class SlidingSyncManager {
       buildImagePackSubscription()
     );
     this.slidingSync.addCustomSubscription(SPACE_SUBSCRIPTION_KEY, buildSpaceSubscription());
+    this.slidingSync.addCustomSubscription(
+      SPACE_IMAGE_PACK_SUBSCRIPTION_KEY,
+      buildSpaceImagePackSubscription()
+    );
 
     this.onLifecycle = (state, resp, err) => {
       debugLog.info('sync', `Sliding sync lifecycle: ${state}`, {
@@ -1009,7 +1023,12 @@ export class SlidingSyncManager {
       } else if (this.sidebarRoomSubscriptions.has(roomId)) {
         this.slidingSync.useCustomSubscription(roomId, SIDEBAR_ROOM_SUBSCRIPTION_KEY);
       } else if (this.spaceSubscriptions.has(roomId)) {
-        this.slidingSync.useCustomSubscription(roomId, SPACE_SUBSCRIPTION_KEY);
+        this.slidingSync.useCustomSubscription(
+          roomId,
+          this.imagePackRoomSubscriptions.has(roomId)
+            ? SPACE_IMAGE_PACK_SUBSCRIPTION_KEY
+            : SPACE_SUBSCRIPTION_KEY
+        );
       } else {
         this.slidingSync.useCustomSubscription(roomId, IMAGE_PACK_SUBSCRIPTION_KEY);
       }
