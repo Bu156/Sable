@@ -211,6 +211,9 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.plugin(tauri_plugin_android_fs::init());
 
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_unifiedpush::init());
+
     let app = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_http::init())

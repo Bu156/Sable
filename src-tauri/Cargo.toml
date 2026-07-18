@@ -72,6 +72,7 @@ tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin
 
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-android-fs = "=28.4.0"
+tauri-plugin-unifiedpush = { path = "plugins/tauri-plugin-unifiedpush" }
 jni = "0.21"
 
 [features]

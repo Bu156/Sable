@@ -9,14 +9,17 @@ export type UnifiedPushTransportApi = {
 };
 
 export async function getUnifiedPushTransportApi(): Promise<UnifiedPushTransportApi> {
-  const api = await import('@choochmeque/tauri-plugin-notifications-api');
+  const [notificationsApi, unifiedPushApi] = await Promise.all([
+    import('@choochmeque/tauri-plugin-notifications-api'),
+    import('$plugins/unifiedpush/api'),
+  ]);
   return {
-    isPermissionGranted: api.isPermissionGranted,
-    requestPermission: api.requestPermission,
-    registerForPushNotifications: api.registerForPushNotifications,
-    unregisterForPushNotifications: api.unregisterForPushNotifications,
-    listDistributors: api.listDistributors,
-    setDistributor: api.setDistributor,
-    setToken: api.setToken,
+    isPermissionGranted: notificationsApi.isPermissionGranted,
+    requestPermission: notificationsApi.requestPermission,
+    registerForPushNotifications: unifiedPushApi.registerForPushNotifications,
+    unregisterForPushNotifications: unifiedPushApi.unregisterForPushNotifications,
+    listDistributors: unifiedPushApi.listDistributors,
+    setDistributor: unifiedPushApi.setDistributor,
+    setToken: unifiedPushApi.setToken,
   };
 }
