@@ -88,9 +88,17 @@ type SystemBarStripProps = {
   background: string;
   stripRef?: RefObject<HTMLDivElement>;
   transition?: string;
+  border?: boolean;
 };
 
-function SystemBarStrip({ position, size, background, stripRef, transition }: SystemBarStripProps) {
+function SystemBarStrip({
+  position,
+  size,
+  background,
+  stripRef,
+  transition,
+  border = true,
+}: SystemBarStripProps) {
   return (
     <div
       ref={stripRef}
@@ -106,9 +114,10 @@ function SystemBarStrip({ position, size, background, stripRef, transition }: Sy
           width: '100%',
           height: '100%',
           background,
-          ...(position === 'top'
-            ? { borderBottom: '1px solid var(--sable-bg-container-line)' }
-            : { borderTop: '1px solid var(--sable-surface-container-line)' }),
+          ...(border &&
+            (position === 'top'
+              ? { borderBottom: '1px solid var(--sable-bg-container-line)' }
+              : { borderTop: '1px solid var(--sable-surface-container-line)' })),
         }}
       />
     </div>
@@ -171,6 +180,7 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
           size={tauriOs === 'ios' ? iosBottomInset : safeAreaBottom}
           background="var(--sable-surface-container)"
           transition={tauriOs === 'ios' ? 'height 0.25s ease-out' : undefined}
+          border={false}
         />
       )}
     </>
