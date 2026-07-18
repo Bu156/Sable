@@ -40,6 +40,8 @@ dist-js
 src-tauri/target/
 # Tauri Android build outputs
 src-tauri/gen/android/app/build/
+# Tauri Apple build outputs
+src-tauri/gen/apple
 # Tauri Android release keystore
 *.jks
 
