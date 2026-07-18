@@ -1,5 +1,7 @@
 #[cfg(desktop)]
 mod desktop;
+#[cfg(target_os = "ios")]
+mod ios;
 #[cfg(target_os = "android")]
 mod mobile;
 mod network;
@@ -233,6 +235,11 @@ pub fn run() {
             }
 
             show_or_create_main_window(app.handle())?;
+
+            #[cfg(target_os = "ios")]
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                ios::hide_form_accessory_bar(&window);
+            }
 
             #[cfg(desktop)]
             desktop::tray::sync_desktop_settings_inner(app.handle())?;

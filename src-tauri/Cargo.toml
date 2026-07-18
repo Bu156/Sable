@@ -70,6 +70,9 @@ tauri-plugin-notifications = { git = "https://github.com/Choochmeque/tauri-plugi
 ] }
 tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin-edge-to-edge.git", rev = "33c6116c27be28c06df5a9d02231ecc5fdeb93c5" }
 
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-android-fs = "=28.4.0"
 tauri-plugin-unifiedpush = { path = "plugins/tauri-plugin-unifiedpush" }
