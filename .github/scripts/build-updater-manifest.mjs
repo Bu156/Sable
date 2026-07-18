@@ -61,4 +61,4 @@ try {
 
 const manifest = { version, notes, pub_date: new Date().toISOString(), platforms };
 writeFileSync('latest.json', JSON.stringify(manifest, null, 2));
-console.log(JSON.stringify(manifest, null, 2));
+console.warn(JSON.stringify(manifest, null, 2));
