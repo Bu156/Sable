@@ -5,7 +5,7 @@ use crate::mobile;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DistributorArgs {
-    pub name: String,
+    pub distributor: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -18,6 +18,11 @@ pub struct PushNotificationResponse {
     pub device_token: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DistributorsResponse {
+    pub distributors: Vec<String>,
+}
+
 #[tauri::command]
 pub async fn list_distributors<R: Runtime>(
     _app: AppHandle<R>,
@@ -26,8 +31,9 @@ pub async fn list_distributors<R: Runtime>(
     {
         let plugin = _app.state::<mobile::UnifiedPush<R>>().inner().0.clone();
         plugin
-            .run_mobile_plugin_async::<Vec<String>>("listDistributors", ())
+            .run_mobile_plugin_async::<DistributorsResponse>("listDistributors", ())
             .await
+            .map(|r| r.distributors)
             .map_err(|e| e.to_string())
     }
     #[cfg(not(target_os = "android"))]

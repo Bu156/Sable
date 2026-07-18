@@ -30,5 +30,6 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("org.unifiedpush.android:connector:3.3.2")
     implementation(project(":tauri-android"))
 }

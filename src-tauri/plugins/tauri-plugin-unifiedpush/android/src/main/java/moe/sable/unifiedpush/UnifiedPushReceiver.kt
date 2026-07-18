@@ -1,34 +1,25 @@
 package moe.sable.unifiedpush
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
+import org.unifiedpush.android.connector.FailedReason
+import org.unifiedpush.android.connector.MessagingReceiver
+import org.unifiedpush.android.connector.data.PushEndpoint
+import org.unifiedpush.android.connector.data.PushMessage
 
-class UnifiedPushReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val plugin = UnifiedPushPlugin.instance ?: return
+class UnifiedPushReceiver : MessagingReceiver() {
+    override fun onNewEndpoint(context: Context, endpoint: PushEndpoint, instance: String) {
+        UnifiedPushPlugin.instance?.onNewEndpoint(endpoint.url)
+    }
 
-        when (intent.action) {
-            UnifiedPushPlugin.ACTION_CONNECTOR_NEW_ENDPOINT -> {
-                val endpoint = intent.getStringExtra("endpoint")
-                val token = intent.getStringExtra("token")
-                if (endpoint != null) {
-                    plugin.onNewEndpoint(endpoint, token)
-                }
-            }
-            UnifiedPushPlugin.ACTION_CONNECTOR_NEW_ENDPOINT_DENIED -> {
-                plugin.onRegistrationDenied()
-            }
-            UnifiedPushPlugin.ACTION_CONNECTOR_UNREGISTERED -> {
-                plugin.onUnregistered()
-            }
-            UnifiedPushPlugin.ACTION_CONNECTOR_MESSAGE -> {
-                val message = intent.getStringExtra("message")
-                val eventId = intent.getStringExtra("eventId")
-                if (message != null) {
-                    plugin.onMessage(message, eventId)
-                }
-            }
-        }
+    override fun onRegistrationFailed(context: Context, reason: FailedReason, instance: String) {
+        UnifiedPushPlugin.instance?.onRegistrationFailed(reason.name)
+    }
+
+    override fun onUnregistered(context: Context, instance: String) {
+        UnifiedPushPlugin.instance?.onUnregistered()
+    }
+
+    override fun onMessage(context: Context, message: PushMessage, instance: String) {
+        UnifiedPushPlugin.instance?.onMessage(String(message.content), null)
     }
 }
