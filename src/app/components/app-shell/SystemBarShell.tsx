@@ -5,6 +5,7 @@ import { updateThemeColorMeta } from '../../theme/themeColorMeta';
 
 const safeAreaTop = 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
 const safeAreaBottom = 'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
+const iosBottomInset = `max(${safeAreaBottom}, var(--keyboard-height, 0px))`;
 const safeAreaLeft = 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))';
 const safeAreaRight = 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))';
 
@@ -86,9 +87,10 @@ type SystemBarStripProps = {
   size: string;
   background: string;
   stripRef?: RefObject<HTMLDivElement>;
+  transition?: string;
 };
 
-function SystemBarStrip({ position, size, background, stripRef }: SystemBarStripProps) {
+function SystemBarStrip({ position, size, background, stripRef, transition }: SystemBarStripProps) {
   return (
     <div
       ref={stripRef}
@@ -96,6 +98,7 @@ function SystemBarStrip({ position, size, background, stripRef }: SystemBarStrip
         height: size,
         flexShrink: 0,
         overflow: 'hidden',
+        transition,
       }}
     >
       <div
@@ -165,8 +168,9 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
       {enabled && (
         <SystemBarStrip
           position="bottom"
-          size={safeAreaBottom}
+          size={tauriOs === 'ios' ? iosBottomInset : safeAreaBottom}
           background="var(--sable-surface-container)"
+          transition={tauriOs === 'ios' ? 'height 0.25s ease-out' : undefined}
         />
       )}
     </>
