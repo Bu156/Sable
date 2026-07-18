@@ -15,6 +15,12 @@ fn main() {
                 "sable-media".into(),
             ],
             deep_link_schemes: vec!["moe.sable.app".into(), "sable".into()],
+            command_line_args: vec![
+                // NVIDIA GPU-sandbox denies GBM access → SIGSEGV; keeps HW accel.
+                ("disable-gpu-sandbox".into(), None),
+                ("disable-font-subpixel-positioning".into(), None),
+                ("enable-font-antialiasing".into(), None),
+            ],
             ..Default::default()
         });
 
