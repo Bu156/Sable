@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -19,6 +20,11 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.sable"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
+
+        <receiver
+            android:name="app.tauri.notification.TauriUnifiedPushMessagingService"
+            tools:node="remove" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:launchMode="singleTask"

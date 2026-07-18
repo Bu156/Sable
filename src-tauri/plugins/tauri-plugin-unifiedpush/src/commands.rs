@@ -14,6 +14,7 @@ pub struct TokenArgs {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PushNotificationResponse {
     pub device_token: String,
 }

@@ -8,4 +8,6 @@ permissions = [
   "allow-register-for-push-notifications",
   "allow-unregister-for-push-notifications",
   "allow-set-token",
+  "allow-register-listener",
+  "allow-remove-listener",
 ]

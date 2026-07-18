@@ -5,7 +5,7 @@ export async function listDistributors(): Promise<string[]> {
 }
 
 export async function setDistributor(name: string): Promise<void> {
-  await invoke('plugin:unifiedpush|set_distributor', { name });
+  await invoke('plugin:unifiedpush|set_distributor', { args: { distributor: name } });
 }
 
 export async function registerForPushNotifications(): Promise<string> {
@@ -17,5 +17,5 @@ export async function unregisterForPushNotifications(): Promise<void> {
 }
 
 export async function setToken(token: string): Promise<void> {
-  await invoke('plugin:unifiedpush|set_token', { token });
+  await invoke('plugin:unifiedpush|set_token', { args: { token } });
 }

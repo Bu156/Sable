@@ -6,11 +6,6 @@ import {
 } from './UnifiedPushNotifications';
 
 const notificationsApi = vi.hoisted(() => ({
-  onNotificationReceived: vi.fn<
-    (cb: (notification: Record<string, unknown>) => void) => Promise<{
-      unregister: () => Promise<void> | void;
-    }>
-  >(),
   sendNotification: vi.fn<() => void>(),
   removeActive: vi.fn<() => void>(),
   createChannel: vi.fn<() => void>(),

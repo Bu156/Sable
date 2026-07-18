@@ -4,6 +4,8 @@ const COMMANDS: &[&str] = &[
     "register_for_push_notifications",
     "unregister_for_push_notifications",
     "set_token",
+    "register_listener",
+    "remove_listener",
 ];
 
 fn main() {

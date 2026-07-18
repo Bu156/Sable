@@ -20,6 +20,12 @@ class UnifiedPushReceiver : MessagingReceiver() {
     }
 
     override fun onMessage(context: Context, message: PushMessage, instance: String) {
-        UnifiedPushPlugin.instance?.onMessage(String(message.content), null)
+        val content = String(message.content, Charsets.UTF_8)
+        val plugin = UnifiedPushPlugin.instance
+        if (plugin != null) {
+            plugin.onMessage(content, null)
+        } else {
+            UnifiedPushNotifier.showFromPush(context, content)
+        }
     }
 }

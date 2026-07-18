@@ -9,6 +9,8 @@ Default permissions for the UnifiedPush plugin.
 - `allow-register-for-push-notifications`
 - `allow-unregister-for-push-notifications`
 - `allow-set-token`
+- `allow-register-listener`
+- `allow-remove-listener`
 
 ## Permission Table
 
@@ -67,6 +69,58 @@ Enables the register_for_push_notifications command without any pre-configured s
 <td>
 
 Denies the register_for_push_notifications command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`unifiedpush:allow-register-listener`
+
+</td>
+<td>
+
+Enables the register_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`unifiedpush:deny-register-listener`
+
+</td>
+<td>
+
+Denies the register_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`unifiedpush:allow-remove-listener`
+
+</td>
+<td>
+
+Enables the remove_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`unifiedpush:deny-remove-listener`
+
+</td>
+<td>
+
+Denies the remove_listener command without any pre-configured scope.
 
 </td>
 </tr>

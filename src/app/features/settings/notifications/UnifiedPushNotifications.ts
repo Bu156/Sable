@@ -12,7 +12,11 @@ import {
   type UnifiedPushRegistrationResult,
   unregisterUnifiedPushTransport,
 } from './UnifiedPushTransport';
-import { createUnifiedPushMessageListener } from './UnifiedPushMessageListener';
+import {
+  createUnifiedPushMessageListener,
+  parseUnifiedPushMessage,
+} from './UnifiedPushMessageListener';
+import { addPluginListener } from '@tauri-apps/api/core';
 import type { PushTransportConfig } from './NotificationTransport';
 import { getTauriNotificationsApi } from './TauriNotificationsApiClient';
 
@@ -583,18 +587,19 @@ async function handleUnifiedPushPayload(
 }
 
 export function listenForUnifiedPushMessages(getSettings: () => NotificationSettings) {
-  return getTauriNotificationsApi().then((notificationsApi) =>
-    notificationsApi.onNotificationReceived(
-      createUnifiedPushMessageListener(
-        (notification) => handleUnifiedPushPayload(notification, getSettings),
-        (error) => {
-          unifiedPushLog.error(
-            'notification',
-            'UnifiedPush payload handling failed',
-            error instanceof Error ? error : new Error(String(error))
-          );
-        }
-      )
-    )
+  const dispatch = createUnifiedPushMessageListener(
+    (notification) => handleUnifiedPushPayload(notification, getSettings),
+    (error) => {
+      unifiedPushLog.error(
+        'notification',
+        'UnifiedPush payload handling failed',
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
   );
+
+  return addPluginListener('unifiedpush', 'push-message', (data: unknown) => {
+    const notification = parseUnifiedPushMessage(data);
+    if (notification) dispatch(notification);
+  });
 }
