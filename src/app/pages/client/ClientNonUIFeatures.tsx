@@ -130,14 +130,16 @@ function getUnreadTotals(roomToUnread: RoomToUnread) {
   return { total, highlightTotal, notification, highlight };
 }
 
-// Show the mention count in the tab title.
+// Updates document.title with an unread count.
 function PageTitleUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const [faviconForMentionsOnly] = useSetting(settingsAtom, 'faviconForMentionsOnly');
 
   useEffect(() => {
-    const { highlightTotal } = getUnreadTotals(roomToUnread);
-    document.title = highlightTotal > 0 ? `(${highlightTotal}) Sable Client` : 'Sable Client';
-  }, [roomToUnread]);
+    const { total, highlightTotal } = getUnreadTotals(roomToUnread);
+    const count = faviconForMentionsOnly ? highlightTotal : total;
+    document.title = count > 0 ? `(${count}) Sable Client` : 'Sable Client';
+  }, [roomToUnread, faviconForMentionsOnly]);
 
   return null;
 }
@@ -905,9 +907,7 @@ function PresenceFeature() {
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
     const syncPresence = sendPresence ? undefined : SetPresence.Offline;
     mx.setSyncPresence(syncPresence);
-    const presenceManager = getPresenceSyncManager(mx);
-    presenceManager?.setPresence(syncPresence);
-    presenceManager?.setPresenceEnabled(sendPresence);
+    getPresenceSyncManager(mx)?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
 
   return null;
