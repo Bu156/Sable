@@ -61,35 +61,37 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                     }
                   />
                 </SequenceCard>
-                <SequenceCard
-                  className={SequenceCardStyle}
-                  variant="SurfaceVariant"
-                  direction="Column"
-                  gap="400"
-                >
-                  <SettingTile
-                    title="Show system tray icon"
-                    focusId="show-system-tray-icon"
-                    description={
-                      trayFallback ? (
-                        <Text as="span" style={{ color: color.Warning.Main }} size="T200">
-                          System tray is unavailable on this system. Sable can still keep running in
-                          the background without it.
-                        </Text>
-                      ) : (
-                        'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
-                      )
-                    }
-                    after={
-                      <Switch
-                        aria-label="show-system-tray-icon"
-                        value={!trayFallback ? showSystemTrayIcon : false}
-                        disabled={trayFallback}
-                        onChange={setShowSystemTrayIcon}
-                      />
-                    }
-                  />
-                </SequenceCard>
+                {type !== 'macos' && (
+                  <SequenceCard
+                    className={SequenceCardStyle}
+                    variant="SurfaceVariant"
+                    direction="Column"
+                    gap="400"
+                  >
+                    <SettingTile
+                      title="Show system tray icon"
+                      focusId="show-system-tray-icon"
+                      description={
+                        trayFallback ? (
+                          <Text as="span" style={{ color: color.Warning.Main }} size="T200">
+                            System tray is unavailable on this system. Sable can still keep running
+                            in the background without it.
+                          </Text>
+                        ) : (
+                          'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
+                        )
+                      }
+                      after={
+                        <Switch
+                          aria-label="show-system-tray-icon"
+                          value={!trayFallback ? showSystemTrayIcon : false}
+                          disabled={trayFallback}
+                          onChange={setShowSystemTrayIcon}
+                        />
+                      }
+                    />
+                  </SequenceCard>
+                )}
               </Box>
             </Box>
           </PageContent>

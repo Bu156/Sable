@@ -149,7 +149,7 @@ fn apply_desktop_settings(
         .show_system_tray_icon
         .store(settings.show_system_tray_icon, Ordering::Relaxed);
 
-    if settings.show_system_tray_icon {
+    if settings.show_system_tray_icon && cfg!(not(target_os = "macos")) {
         if app.tray_by_id(MAIN_TRAY_ID).is_none() {
             match create_system_tray(app) {
                 Ok(()) => state.tray_available.store(
