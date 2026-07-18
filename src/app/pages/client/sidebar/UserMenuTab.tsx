@@ -274,11 +274,10 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
           after={isOpen && isMobile ? menuIcon(CaretDownIcon) : menuIcon(CaretRightIcon)}
           style={{
             position: 'relative',
-            background: isMobile
-              ? color.Background.Container
-              : isOpen
-                ? color.Secondary.Container
-                : color.Surface.Container,
+            background: isOpen
+              ? (isMobile ? color.Surface.Container
+                : color.Secondary.Container)
+                : color.Background.Container,
           }}
           onClick={() => isMobile && setIsOpen(!isOpen)}
           {...hoverProps}
@@ -498,11 +497,10 @@ export function PresenceMenuOption({
         after={isOpen && isMobile ? menuIcon(CaretDownIcon) : menuIcon(CaretRightIcon)}
         style={{
           position: 'relative',
-          background: isMobile
-            ? color.Background.Container
-            : isOpen
-              ? color.Secondary.Container
-              : color.Surface.Container,
+          background: isOpen
+              ? (isMobile ? color.Surface.Container
+                : color.Secondary.Container)
+                : color.Background.Container,
         }}
         onClick={() => isMobile && setIsOpen(!isOpen)}
         {...hoverProps}
