@@ -138,11 +138,6 @@ jobs:
           cargo build --release --features cef --no-default-features \
             --manifest-path src-tauri/Cargo.toml
 
-      - name: Stage CEF runtime next to the binary
-        if: matrix.cef
-        shell: bash
-        run: scripts/cef-copy-libs.sh release
-
       - name: Build native packages
         if: matrix.cef
         shell: bash
@@ -150,18 +145,13 @@ jobs:
           VERSION="${TAG#v}"
           STAGE="src-tauri/target/release"
 
+          # Binary plus the full CEF runtime (cef-copy-libs is the single source
+          # of truth for the runtime file set).
           stage_runtime() {
             local dest="$1"
             mkdir -p "$dest"
             cp "$STAGE/sable" "$dest/"
-            cp -a "$STAGE"/*.so* "$dest/" 2>/dev/null || true
-            cp -a "$STAGE"/*.pak "$STAGE"/*.dat "$STAGE"/*.bin "$dest/" 2>/dev/null || true
-            cp -a "$STAGE"/*.json "$dest/" 2>/dev/null || true
-            cp -a "$STAGE/locales" "$dest/" 2>/dev/null || true
-            if [ -f "$STAGE/chrome-sandbox" ]; then
-              cp -a "$STAGE/chrome-sandbox" "$dest/"
-              chmod 4755 "$dest/chrome-sandbox"
-            fi
+            scripts/cef-copy-libs.sh release "$dest"
           }
 
           write_desktop() {
@@ -209,6 +199,9 @@ jobs:
 
           APPDIR="Sable.AppDir"
           stage_runtime "$APPDIR/usr/bin"
+          # nosuid mount: a setuid chrome-sandbox can't work here and would stop
+          # Chromium from starting, so drop it and use the user-namespace sandbox.
+          rm -f "$APPDIR/usr/bin/chrome-sandbox"
           write_desktop "$APPDIR/sable.desktop"
           cp src-tauri/icons/128x128.png "$APPDIR/sable.png"
           cat > "$APPDIR/AppRun" <<'EOF'
