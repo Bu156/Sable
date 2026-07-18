@@ -24,8 +24,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       '@choochmeque/tauri-plugin-notifications-api':
-        specifier: git+https://github.com/Choochmeque/tauri-plugin-notifications.git#2ff1373d218ff02a93f71f589c56e4e8b588ea7d
-        version: https://codeload.github.com/Choochmeque/tauri-plugin-notifications/tar.gz/2ff1373d218ff02a93f71f589c56e4e8b588ea7d
+        specifier: 0.5.0-rc.11
+        version: 0.5.0-rc.11
       '@fontsource-variable/nunito':
         specifier: 5.2.7
         version: 5.2.7
@@ -914,9 +914,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@choochmeque/tauri-plugin-notifications-api@https://codeload.github.com/Choochmeque/tauri-plugin-notifications/tar.gz/2ff1373d218ff02a93f71f589c56e4e8b588ea7d':
-    resolution: {tarball: https://codeload.github.com/Choochmeque/tauri-plugin-notifications/tar.gz/2ff1373d218ff02a93f71f589c56e4e8b588ea7d}
-    version: 0.5.0-rc.11
+  '@choochmeque/tauri-plugin-notifications-api@0.5.0-rc.11':
+    resolution: {integrity: sha512-TSuf8HQ4Ayp9IKKB5v2yTdgKMa/I0bqbcACj0IZ46CSpzn/HKner/BKG7rM8tGOarEcyBd/VXnDhK5cJA/YMtw==}
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -6144,7 +6143,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@choochmeque/tauri-plugin-notifications-api@https://codeload.github.com/Choochmeque/tauri-plugin-notifications/tar.gz/2ff1373d218ff02a93f71f589c56e4e8b588ea7d':
+  '@choochmeque/tauri-plugin-notifications-api@0.5.0-rc.11':
     dependencies:
       '@tauri-apps/api': 2.11.1
 

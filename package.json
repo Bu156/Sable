@@ -39,7 +39,7 @@
     "@fontsource-variable/nunito": "5.2.7",
     "@fontsource/space-mono": "5.2.9",
     "@phosphor-icons/react": "^2.1.10",
-    "@choochmeque/tauri-plugin-notifications-api": "git+https://github.com/Choochmeque/tauri-plugin-notifications.git#2ff1373d218ff02a93f71f589c56e4e8b588ea7d",
+    "@choochmeque/tauri-plugin-notifications-api": "0.5.0-rc.11",
     "@sableclient/twemoji-font": "^1.0.4",
     "@sentry/react": "^10.63.0",
     "@tanstack/react-query": "^5.101.2",
