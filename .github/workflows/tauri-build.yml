@@ -235,17 +235,10 @@ jobs:
           done
 
       # --- Linux: CEF runtime, packaged as deb / rpm / AppImage ---
-      - name: Build frontend
-        if: matrix.cef
-        shell: bash
-        run: pnpm build
-
       - name: Build CEF binary
         if: matrix.cef
         shell: bash
-        run: |
-          cargo build --release --features cef --no-default-features \
-            --manifest-path src-tauri/Cargo.toml
+        run: pnpm tauri:cef build
 
       - name: Build native packages
         if: matrix.cef

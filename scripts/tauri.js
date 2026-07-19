@@ -9,10 +9,10 @@
  * Examples:
  *   script/tauri cef dev --verbose
  *   script/tauri cef dev -- --verbose
- *   Both will run: cargo tauri dev --features cef -- --verbose --no-default-features
+ *   Both will run: tauri dev --features cef -- --verbose --no-default-features
  */
 
-import { spawn } from 'child_process';
+import { run } from '@tauri-apps/cli';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import process from 'node:process';
@@ -57,24 +57,13 @@ if (!tauriArgs.includes('--')) {
 }
 tauriArgs.push('--no-default-features');
 
-const args = ['tauri', cmd, ...tauriArgs];
+const args = [cmd, ...tauriArgs];
 
-const command = 'cargo';
+process.chdir(join(__dirname, '..'));
 
-logger.info(`${dim('Running:')} ${command} ${args.join(' ')}`);
+logger.info(`${dim('Running:')} tauri ${args.join(' ')}`);
 
-// Spawn the tauri process
-const proc = spawn(command, args, {
-  stdio: 'inherit',
-  shell: false,
-  cwd: join(__dirname, '..'),
-});
-
-proc.on('error', (error) => {
-  logger.error(`Failed to start process: ${error.message}`);
+run(args, 'tauri').catch((error) => {
+  logger.error(`Failed to run tauri: ${error?.message ?? error}`);
   process.exit(1);
-});
-
-proc.on('exit', (code) => {
-  process.exit(code ?? 0);
 });
