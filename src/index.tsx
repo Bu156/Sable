@@ -23,6 +23,7 @@ import { registerMatrixUriProtocol } from './app/plugins/matrix-uri';
 import { initTauriMediaSession } from './app/utils/tauriMediaAuth';
 import { registerAppServiceWorker } from './serviceWorkerBootstrap';
 import { hasServiceWorker } from './app/utils/platform';
+import { installIosPwaViewportHeight } from './app/utils/iosPwaViewport';
 
 enableMapSet();
 installConsolePasteScamWarning();
@@ -30,6 +31,7 @@ registerMatrixUriProtocol();
 const log = createLogger('index');
 
 document.body.classList.add(configClass, varsClass);
+installIosPwaViewportHeight();
 
 registerAppServiceWorker();
 

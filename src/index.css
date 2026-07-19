@@ -63,7 +63,7 @@ body {
     html,
     body,
     #root {
-      height: 100dvh;
+      height: var(--sable-ios-pwa-viewport-height, 100dvh);
     }
   }
 }

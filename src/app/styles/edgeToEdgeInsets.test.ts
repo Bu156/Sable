@@ -64,10 +64,16 @@ describe('android edge-to-edge inset contract', () => {
 
   it('extends only standalone iOS PWAs to the dynamic viewport bottom', () => {
     const indexCss = readWorkspaceFile('src/index.css');
+    const indexTsx = readWorkspaceFile('src/index.tsx');
+    const iosPwaViewport = readWorkspaceFile('src/app/utils/iosPwaViewport.ts');
 
     expect(indexCss).toContain('@media (display-mode: standalone)');
     expect(indexCss).toContain('@supports (-webkit-touch-callout: none)');
-    expect(indexCss).toContain('height: 100dvh');
+    expect(indexCss).toContain('var(--sable-ios-pwa-viewport-height, 100dvh)');
+    expect(indexTsx).toContain('installIosPwaViewportHeight();');
+    expect(iosPwaViewport).toContain("window.matchMedia('(display-mode: standalone)').matches");
+    expect(iosPwaViewport).toContain('viewport.height + viewport.offsetTop');
+    expect(iosPwaViewport).toContain("window.setTimeout(updateHeight, 350)");
   });
 
   it('removes the scattered safe-area css consumers', () => {
