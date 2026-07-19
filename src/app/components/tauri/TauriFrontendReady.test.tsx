@@ -35,12 +35,20 @@ function setDocumentReadyState(value: DocumentReadyState) {
   });
 }
 
+function setDocumentVisibility(value: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    value,
+  });
+}
+
 describe('TauriFrontendReady', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsTauri.mockReturnValue(true);
     mockGetCurrentWindow.mockReturnValue({ show: mockShow });
     setDocumentReadyState('complete');
+    setDocumentVisibility('visible');
   });
 
   afterEach(() => {
@@ -77,9 +85,10 @@ describe('TauriFrontendReady', () => {
     expect(mockGetCurrentWindow).toHaveBeenCalledOnce();
   });
 
-  it('waits for the window load event before showing the desktop window', async () => {
+  it('falls back to the load event when the document is hidden and still loading', async () => {
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
     mockOsType.mockReturnValue('linux');
+    setDocumentVisibility('hidden');
     setDocumentReadyState('loading');
 
     render(<TauriFrontendReady />);

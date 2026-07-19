@@ -105,7 +105,8 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     let builder =
         tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default())
             .disable_drag_drop_handler()
-            .use_https_scheme(true);
+            .use_https_scheme(true)
+            .background_color(tauri::window::Color(0x1A, 0x1C, 0x28, 0xFF));
 
     #[cfg(desktop)]
     let title = if app
@@ -275,6 +276,25 @@ pub fn run() {
             deep_link_ipc::drain_pending_urls(app.handle());
 
             show_or_create_main_window(app.handle())?;
+
+            // Failsafe: if the frontend never calls show() (hung webview), force-show
+            // the window after 5s so the app isn't invisible forever.
+            #[cfg(desktop)]
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    if let Some(window) = handle.get_webview_window(MAIN_WINDOW_LABEL) {
+                        if !window.is_visible().unwrap_or(true) {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            log::warn!(
+                                "Frontend show() not received within 5s — force-showing window"
+                            );
+                        }
+                    }
+                });
+            }
 
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {

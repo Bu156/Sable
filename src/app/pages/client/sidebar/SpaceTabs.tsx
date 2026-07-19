@@ -344,11 +344,13 @@ const useDraggableItem = (
   item: SidebarDraggable,
   targetRef: RefObject<HTMLElement | null>,
   onDragging: (item?: SidebarDraggable) => void,
-  dragHandleRef?: RefObject<HTMLElement | null>
+  dragHandleRef?: RefObject<HTMLElement | null>,
+  enabled: boolean = true
 ): boolean => {
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const target = targetRef.current;
     const dragHandle = dragHandleRef?.current ?? undefined;
 
@@ -367,18 +369,20 @@ const useDraggableItem = (
           },
         })
       : undefined;
-  }, [targetRef, dragHandleRef, item, onDragging]);
+  }, [targetRef, dragHandleRef, item, onDragging, enabled]);
 
   return dragging;
 };
 
 const useDropTarget = (
   item: SidebarDraggable,
-  targetRef: RefObject<HTMLElement | null>
+  targetRef: RefObject<HTMLElement | null>,
+  enabled: boolean = true
 ): Instruction | undefined => {
   const [dropState, setDropState] = useState<Instruction>();
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const target = targetRef.current;
     if (!target) return undefined;
 
@@ -415,7 +419,7 @@ const useDropTarget = (
       onDragLeave: () => setDropState(undefined),
       onDrop: () => setDropState(undefined),
     });
-  }, [item, targetRef]);
+  }, [item, targetRef, enabled]);
 
   return dropState;
 };
@@ -423,11 +427,13 @@ const useDropTarget = (
 function useDropTargetInstruction<T extends InstructionType>(
   item: SidebarDraggable,
   targetRef: RefObject<HTMLElement | null>,
-  instructionType: T
+  instructionType: T,
+  enabled: boolean = true
 ): T | undefined {
   const [dropState, setDropState] = useState<T>();
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const target = targetRef.current;
     if (!target) return undefined;
 
@@ -448,7 +454,7 @@ function useDropTargetInstruction<T extends InstructionType>(
       onDragLeave: () => setDropState(undefined),
       onDrop: () => setDropState(undefined),
     });
-  }, [item, targetRef, instructionType]);
+  }, [item, targetRef, instructionType, enabled]);
 
   return dropState;
 }
@@ -532,6 +538,7 @@ function SpaceTab({
   disabled,
   onUnpin,
 }: Readonly<SpaceTabProps>) {
+  const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const targetRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: SidebarDraggable = useMemo(
@@ -545,8 +552,8 @@ function SpaceTab({
     [folder, space]
   );
 
-  useDraggableItem(spaceDraggable, targetRef, onDragging);
-  const dropState = useDropTarget(spaceDraggable, targetRef);
+  useDraggableItem(spaceDraggable, targetRef, onDragging, undefined, !isMobile);
+  const dropState = useDropTarget(spaceDraggable, targetRef, !isMobile);
   const dropType = dropState?.type;
 
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
@@ -641,13 +648,24 @@ function OpenedSpaceFolder({
   onFolderContextMenu,
   children,
 }: Readonly<OpenedSpaceFolderProps>) {
+  const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const aboveTargetRef = useRef<HTMLDivElement>(null);
   const belowTargetRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: SidebarDraggable = useMemo(() => ({ folder, open: true }), [folder]);
 
-  const orderAbove = useDropTargetInstruction(spaceDraggable, aboveTargetRef, 'reorder-above');
-  const orderBelow = useDropTargetInstruction(spaceDraggable, belowTargetRef, 'reorder-below');
+  const orderAbove = useDropTargetInstruction(
+    spaceDraggable,
+    aboveTargetRef,
+    'reorder-above',
+    !isMobile
+  );
+  const orderBelow = useDropTargetInstruction(
+    spaceDraggable,
+    belowTargetRef,
+    'reorder-below',
+    !isMobile
+  );
 
   return (
     <SidebarFolder
@@ -684,11 +702,12 @@ function ClosedSpaceFolder({
   onFolderContextMenu,
 }: Readonly<ClosedSpaceFolderProps>) {
   const mx = useMatrixClient();
+  const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const handlerRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: FolderDraggable = useMemo(() => ({ folder }), [folder]);
-  useDraggableItem(spaceDraggable, handlerRef, onDragging);
-  const dropState = useDropTarget(spaceDraggable, handlerRef);
+  useDraggableItem(spaceDraggable, handlerRef, onDragging, undefined, !isMobile);
+  const dropState = useDropTarget(spaceDraggable, handlerRef, !isMobile);
   const dropType = dropState?.type;
 
   const tooltipName = folderDefaultDisplayName(mx, folder);
