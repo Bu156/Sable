@@ -45,8 +45,8 @@ for (const sig of readdirSync(dir).filter((f) => f.endsWith('.sig'))) {
 }
 
 if (Object.keys(platforms).length === 0) {
-  console.error('No .sig assets found on the release; nothing to publish.');
-  process.exit(1);
+  console.warn('No .sig assets found on the release; skipping updater manifest.');
+  process.exit(0);
 }
 
 let notes = `Sable ${version}`;

@@ -2,6 +2,7 @@ name: Build desktop apps
 
 on:
   push:
+    branches: [dev]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -14,12 +15,91 @@ permissions: {}
 
 concurrency:
   group: tauri-build-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref == 'refs/heads/dev' }}
 
 jobs:
+  setup-release:
+    name: Resolve release target
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    if: "${{ !(github.event_name == 'push' && github.ref == 'refs/heads/dev' && contains(github.event.head_commit.message, 'chore: prepare release')) }}"
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      ref: ${{ steps.meta.outputs.ref }}
+      nightly: ${{ steps.meta.outputs.nightly }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Resolve target
+        id: meta
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          GIT_REF: ${{ github.ref }}
+          GIT_REF_NAME: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"; REF="$INPUT_TAG"; NIGHTLY=false
+            VERSION="${TAG#v}"
+          elif [ "$GIT_REF" = "refs/heads/dev" ]; then
+            TAG="nightly"; REF="$GIT_SHA"; NIGHTLY=true
+            VERSION="$(node -p "require('./package.json').version")"
+          else
+            TAG="$GIT_REF_NAME"; REF="$GIT_REF"; NIGHTLY=false
+            VERSION="${TAG#v}"
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "ref=$REF"
+            echo "nightly=$NIGHTLY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Wait for release to exist
+        if: ${{ steps.meta.outputs.nightly != 'true' }}
+        shell: bash
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          for i in $(seq 1 12); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release $TAG found."
+              exit 0
+            fi
+            echo "Waiting for release $TAG to be published ($i/12)…"
+            sleep 15
+          done
+          echo "Release $TAG was not found." >&2
+          exit 1
+
+      - name: Refresh nightly prerelease
+        if: ${{ steps.meta.outputs.nightly == 'true' }}
+        shell: bash
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          gh release delete nightly --yes --cleanup-tag || true
+          gh release create nightly \
+            --prerelease \
+            --target "$GIT_SHA" \
+            --title "Nightly (dev)" \
+            --notes "Rolling nightly build from dev — $GIT_SHA"
+
   build:
     name: Build ${{ matrix.name }}
+    needs: setup-release
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
     permissions:
       contents: write
     strategy:
@@ -39,7 +119,8 @@ jobs:
             rust-targets: ''
             cef: true
     env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
       NODE_OPTIONS: --max-old-space-size=8192
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -47,24 +128,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.setup-release.outputs.ref }}
           persist-credentials: false
-
-      - name: Wait for release to exist
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for i in $(seq 1 12); do
-            if gh release view "$TAG" >/dev/null 2>&1; then
-              echo "Release $TAG found."
-              exit 0
-            fi
-            echo "Waiting for release $TAG to be published ($i/12)…"
-            sleep 15
-          done
-          echo "Release $TAG was not found." >&2
-          exit 1
 
       - name: Install Linux build dependencies
         if: matrix.cef
@@ -102,15 +167,25 @@ jobs:
 
       - name: Stamp release version into tauri.conf.json
         shell: bash
-        run: node .github/scripts/set-tauri-version.mjs "${TAG#v}"
+        run: node .github/scripts/set-tauri-version.mjs "$VERSION"
 
       # --- macOS / Windows: standard wry build via tauri-action ---
+      - name: Configure updater artifacts
+        if: ${{ !matrix.cef }}
+        shell: bash
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo 'TAURI_BUILD_ARGS=--config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_ENV"
+          else
+            echo "TAURI_BUILD_ARGS=" >> "$GITHUB_ENV"
+          fi
+
       - name: Build desktop bundles
         id: tauri
         if: ${{ !matrix.cef }}
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ env.TAURI_BUILD_ARGS }}
 
       - name: Attach bundles to release
         if: ${{ !matrix.cef }}
@@ -141,7 +216,7 @@ jobs:
       - name: Build native packages
         if: matrix.cef
         shell: bash
-        run: bash scripts/cef-package.sh "${TAG#v}"
+        run: bash scripts/cef-package.sh "$VERSION"
 
       - name: Sign the AppImage for the updater
         if: ${{ matrix.cef && env.TAURI_SIGNING_PRIVATE_KEY != '' }}
@@ -167,20 +242,102 @@ jobs:
             gh release upload "$TAG" "$f" --clobber
           done
 
-  updater-manifest:
-    name: Publish updater manifest
-    needs: build
+  android:
+    name: Build Android
+    needs: setup-release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+      NODE_OPTIONS: --max-old-space-size=8192
+      ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.setup-release.outputs.ref }}
+          persist-credentials: false
+
+      - name: Setup app
+        uses: ./.github/actions/setup
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src-tauri
+
+      - name: Resolve NDK
+        shell: bash
+        run: |
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n1)" >> "$GITHUB_ENV"
+
+      - name: Stamp release version into tauri.conf.json
+        shell: bash
+        run: node .github/scripts/set-tauri-version.mjs "$VERSION"
+
+      - name: Setup Android signing
+        if: ${{ env.ANDROID_KEY_BASE64 != '' }}
+        shell: bash
+        run: |
+          cd src-tauri/gen/android
+          echo "keyAlias=$ANDROID_KEY_ALIAS" > keystore.properties
+          echo "password=$ANDROID_KEY_PASSWORD" >> keystore.properties
+          base64 -d <<< "$ANDROID_KEY_BASE64" > "$RUNNER_TEMP/keystore.jks"
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+
+      - name: Build Android bundles
+        shell: bash
+        run: pnpm tauri android build --apk --aab
+
+      - name: Attach Android bundles to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT="src-tauri/gen/android/app/build/outputs"
+          for f in "$OUT"/apk/universal/release/*.apk \
+                   "$OUT"/bundle/universalRelease/*.aab; do
+            [ -e "$f" ] || continue
+            echo "Uploading $f"
+            gh release upload "$TAG" "$f" --clobber
+          done
+
+  updater-manifest:
+    name: Publish updater manifest
+    needs: [setup-release, build]
+    if: ${{ needs.setup-release.outputs.nightly != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
       REPO: ${{ github.repository }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.setup-release.outputs.ref }}
           persist-credentials: false
 
       - name: Build and upload latest.json
@@ -189,4 +346,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           node .github/scripts/build-updater-manifest.mjs
-          gh release upload "$TAG" latest.json --clobber
+          if [ -f latest.json ]; then
+            gh release upload "$TAG" latest.json --clobber
+          else
+            echo "No updater manifest produced (no signed artifacts); skipping upload."
+          fi
