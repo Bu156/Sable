@@ -246,7 +246,32 @@ fn configure_tray_icon_interactions(
     builder
 }
 
+// libappindicator panics (rather than returning an error) when the appindicator
+// library is missing, which would crash the whole app. Probe for it first and
+// treat its absence as a recoverable tray failure.
+#[cfg(target_os = "linux")]
+fn appindicator_available() -> bool {
+    const CANDIDATES: [&str; 4] = [
+        "libayatana-appindicator3.so.1",
+        "libappindicator3.so.1",
+        "libayatana-appindicator3.so",
+        "libappindicator3.so",
+    ];
+    CANDIDATES
+        .iter()
+        .any(|name| unsafe { libloading::Library::new(name) }.is_ok())
+}
+
 pub fn create_system_tray(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
+    #[cfg(target_os = "linux")]
+    if !appindicator_available() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "appindicator library not found; skipping system tray",
+        )
+        .into());
+    }
+
     let show_item = MenuItem::with_id(app, TRAY_MENU_SHOW_ID, "Show", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, "Quit", true, None::<&str>)?;
     let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
