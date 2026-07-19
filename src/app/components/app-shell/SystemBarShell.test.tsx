@@ -27,7 +27,7 @@ describe('SystemBarShell', () => {
     const mutationObserver = vi.fn<() => void>();
     vi.stubGlobal('MutationObserver', mutationObserver);
 
-    render(
+    const { container } = render(
       <SystemBarShell onPortalContainerChange={vi.fn<(node: HTMLDivElement | null) => void>()}>
         <div>Content</div>
       </SystemBarShell>
@@ -35,5 +35,9 @@ describe('SystemBarShell', () => {
 
     expect(mockOsType).not.toHaveBeenCalled();
     expect(mutationObserver).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-system-bar-position="top"]')).toHaveStyle({
+      height: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
+    });
+    expect(container.querySelector('[data-system-bar-position="bottom"]')).not.toBeInTheDocument();
   });
 });

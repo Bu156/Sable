@@ -55,7 +55,27 @@ describe('android edge-to-edge inset contract', () => {
     expect(systemBarShell).toContain(
       'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))'
     );
+    expect(systemBarShell).toContain('<SystemBarStrip\n        edge="top"');
+    expect(systemBarShell).toContain(
+      '{enabled && (\n        <SystemBarStrip\n          edge="bottom"'
+    );
     expect(mobileCapability).toContain('"edge-to-edge:default"');
+  });
+
+  it('extends only standalone iOS PWAs to the dynamic viewport bottom', () => {
+    const indexCss = readWorkspaceFile('src/index.css');
+    const indexTsx = readWorkspaceFile('src/index.tsx');
+    const iosPwaViewport = readWorkspaceFile('src/app/utils/iosPwaViewport.ts');
+
+    expect(indexCss).toContain('@media (display-mode: standalone)');
+    expect(indexCss).toContain('@supports (-webkit-touch-callout: none)');
+    expect(indexCss).toContain('var(--sable-ios-pwa-viewport-height, 100dvh)');
+    expect(indexTsx).toContain('installIosPwaViewportHeight();');
+    expect(iosPwaViewport).toContain("window.matchMedia('(display-mode: standalone)').matches");
+    expect(iosPwaViewport).toContain('const MIN_KEYBOARD_HEIGHT = 100');
+    expect(iosPwaViewport).toContain('const keyboardOpen = fullHeight - visibleHeight');
+    expect(iosPwaViewport).toContain('const height = keyboardOpen ? visibleBottom : fullHeight');
+    expect(iosPwaViewport).toContain('window.setTimeout(updateHeight, 350)');
   });
 
   it('removes the scattered safe-area css consumers', () => {
