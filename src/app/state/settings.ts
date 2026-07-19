@@ -72,6 +72,7 @@ export type RenderUserCardsMode = 'both' | 'light' | 'dark' | 'none';
 
 /** Where to use crisp nearest-neighbor (pixelated) image scaling. */
 export type PixelatedImageRenderingMode = 'always' | 'smart' | 'never';
+export type ProfileChangePropagation = 'all' | 'unchanged' | 'none';
 
 export function isPixelatedRendering(
   mode: PixelatedImageRenderingMode,
@@ -222,6 +223,7 @@ export interface Settings {
   pkCompat: boolean;
   pmpProxying: boolean;
   mentionInReplies: boolean;
+  profileChangePropagation: ProfileChangePropagation;
   showPersonaSetting: boolean;
   closeFoldersByDefault: boolean;
   perRoomShowRoomIcon: PerRoomShowRoomIcon[];
@@ -391,6 +393,7 @@ export const defaultSettings: Settings = {
   pkCompat: false,
   pmpProxying: false,
   mentionInReplies: true,
+  profileChangePropagation: 'unchanged',
   showPersonaSetting: false,
   closeFoldersByDefault: false,
   perRoomShowRoomIcon: [],
@@ -640,6 +643,8 @@ function sanitizeSettingsKey(key: keyof Settings, val: unknown): unknown {
         : undefined;
     case 'pixelatedImageRendering':
       return val === 'always' || val === 'smart' || val === 'never' ? val : undefined;
+    case 'profileChangePropagation':
+      return val === 'all' || val === 'unchanged' || val === 'none' ? val : undefined;
     case 'iconCompactSizePx':
     case 'iconInlineSizePx':
     case 'iconToolbarSizePx':
