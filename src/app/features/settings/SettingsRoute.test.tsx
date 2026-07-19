@@ -617,7 +617,9 @@ describe('SettingsRoute', () => {
         getSettingsPath('notifications')
       )
     );
-    expect(screen.getByRole('heading', { name: 'Notifications section' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Notifications section' })
+    ).toBeInTheDocument();
   });
 
   it('does not push history when the active section is reselected', async () => {

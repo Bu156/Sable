@@ -14,7 +14,6 @@ import {
   as,
 } from 'folds';
 import { ArrowRight, Download, sizedIcon, Warning } from '$components/icons/phosphor';
-import FileSaver from 'file-saver';
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import FocusTrap from 'focus-trap-react';
 import type { IFileInfo } from '$types/matrix/common';
@@ -31,7 +30,7 @@ import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { ModalWide } from '$styles/Modal.css';
-import { getDownloadFilename } from '$utils/download';
+import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 
 const renderErrorButton = (retry: () => void, text: string) => (
   <TooltipProvider
@@ -258,7 +257,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
         : await downloadMedia(mediaUrl);
 
       const fileURL = URL.createObjectURL(fileContent);
-      FileSaver.saveAs(fileURL, getDownloadFilename(body));
+      await saveFileToDevice(fileContent, getDownloadFilename(body), mimeType);
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, body])
   );
@@ -273,7 +272,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
       size="400"
       onClick={() =>
         downloadState.status === AsyncStatus.Success
-          ? FileSaver.saveAs(downloadState.data, getDownloadFilename(body))
+          ? void saveFileToDevice(downloadState.data, getDownloadFilename(body), mimeType)
           : download()
       }
       disabled={downloadState.status === AsyncStatus.Loading}

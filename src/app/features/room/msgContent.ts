@@ -17,6 +17,7 @@ import {
   getThumbnailContent,
   getVideoInfo,
   mxcUrlToHttp,
+  uploadContentToServer,
 } from '$utils/matrix';
 import { mimeTypeToExt } from '$utils/mimeTypes';
 import type { TUploadItem } from '$state/room/roomInputDrafts';
@@ -43,7 +44,7 @@ const generateThumbnailContent = async (
   const thumbnailFile = encThumbData?.file ?? thumbnail;
   if (!thumbnailFile) throw new Error('Can not create thumbnail!');
 
-  const data = await mx.uploadContent(thumbnailFile);
+  const data = await uploadContentToServer(mx, thumbnailFile);
   const thumbMxc = data?.content_uri;
   if (!thumbMxc) throw new Error('Failed when uploading thumbnail!');
   const thumbnailContent = getThumbnailContent({

@@ -13,6 +13,7 @@ export default defineConfig({
       $plugins: path.resolve(__dirname, 'src/app/plugins'),
       $components: path.resolve(__dirname, 'src/app/components'),
       $features: path.resolve(__dirname, 'src/app/features'),
+      $generated: path.resolve(__dirname, 'src/app/generated'),
       $state: path.resolve(__dirname, 'src/app/state'),
       $styles: path.resolve(__dirname, 'src/app/styles'),
       $utils: path.resolve(__dirname, 'src/app/utils'),
@@ -21,6 +22,10 @@ export default defineConfig({
       $public: path.resolve(__dirname, 'public'),
       $client: path.resolve(__dirname, 'src/client'),
       $unstable: path.resolve(__dirname, 'src/unstable'),
+      '@choochmeque/tauri-plugin-notifications-api': path.resolve(
+        __dirname,
+        'src/test/choochmeque-notifications-stub.ts'
+      ),
     },
   },
   define: {

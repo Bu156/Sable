@@ -1,6 +1,11 @@
 import { atom, type WritableAtom } from 'jotai';
 import type { Store } from 'jotai/vanilla/store';
 import { mobileOrTablet } from '$utils/user-agent';
+import type {
+  NotificationTransportMode,
+  NotificationTransportProvider,
+  PushTransportOverrides,
+} from '$features/settings/notifications/NotificationTransport';
 import type { IImageInfo } from '$types/matrix/common';
 
 const STORAGE_KEY = 'settings';
@@ -136,6 +141,7 @@ export interface Settings {
   showEncInteractiveMap: boolean;
 
   usePushNotifications: boolean;
+  useUnifiedPush: boolean;
   useInAppNotifications: boolean;
   useSystemNotifications: boolean;
   isNotificationSounds: boolean;
@@ -143,6 +149,10 @@ export interface Settings {
   showMessageContentInNotifications: boolean;
   showMessageContentInEncryptedNotifications: boolean;
   clearNotificationsOnRead: boolean;
+  backgroundPushEnabled: boolean;
+  backgroundPushProvider: NotificationTransportProvider | null;
+  pushTransportMode: NotificationTransportMode;
+  pushTransportOverride: PushTransportOverrides;
 
   hour24Clock: boolean;
   dateFormatString: string;
@@ -304,6 +314,7 @@ export const defaultSettings: Settings = {
   // In-app pill banner: default on for mobile (primary foreground alert), opt-in on desktop.
   // System (OS) notifications: desktop-only; hidden and disabled on mobile.
   usePushNotifications: mobileOrTablet(),
+  useUnifiedPush: false,
   useInAppNotifications: mobileOrTablet(),
   useSystemNotifications: !mobileOrTablet(),
   isNotificationSounds: true,
@@ -311,6 +322,10 @@ export const defaultSettings: Settings = {
   showMessageContentInNotifications: false,
   showMessageContentInEncryptedNotifications: false,
   clearNotificationsOnRead: false,
+  backgroundPushEnabled: mobileOrTablet(),
+  backgroundPushProvider: null,
+  pushTransportMode: 'auto',
+  pushTransportOverride: {},
 
   hour24Clock: false,
   dateFormatString: 'D MMM YYYY',

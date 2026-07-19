@@ -12,6 +12,7 @@ import {
 } from '$types/matrix-sdk';
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { fetch } from '$utils/fetch';
 import type { Session } from '$state/sessions';
 import {
   sessionsAtom,
@@ -45,12 +46,26 @@ import * as Sentry from '@sentry/react';
 import { startClient, stopClient } from '$client/initMatrix';
 import { SessionOidcTokenRefresher } from '$client/oidcTokenRefresher';
 import { mobileOrTablet } from '$utils/user-agent';
+import { isTauri } from '@tauri-apps/api/core';
+import { type as osType } from '@tauri-apps/plugin-os';
 
 const log = createLogger('BackgroundNotifications');
 const debugLog = createDebugLogger('BackgroundNotifications');
 
 const BACKGROUND_SYNC_POLL_TIMEOUT_MS = 60_000;
 const BACKGROUND_STAGGER_DELAY_MS = 5_000;
+
+// Desktop webviews can't show web notifications (WKWebView lacks the API; the
+// Linux CEF runtime never grants it), so desktop routes through the native plugin.
+const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
+const isDesktopTauri = (): boolean => isTauri() && DESKTOP_TAURI_OS.has(osType());
+
+let desktopNotificationSeq = 1;
+const nextDesktopNotificationId = (): number => {
+  const id = desktopNotificationSeq;
+  desktopNotificationSeq = desktopNotificationSeq >= 2_000_000_000 ? 1 : desktopNotificationSeq + 1;
+  return id;
+};
 
 const isClientReadyForNotifications = (state: SyncState | string | null): boolean =>
   state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
@@ -73,6 +88,7 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
 
   const mx = createClient({
     baseUrl: session.baseUrl,
+    fetchFn: fetch,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     userId: session.userId,
@@ -201,6 +217,23 @@ export function BackgroundNotifications() {
     const activeIds = new Set(inactiveSessions.map((s) => s.userId));
 
     async function sendNotification(opts: NotifyOptions): Promise<void> {
+      if (isDesktopTauri()) {
+        try {
+          const { getTauriNotificationsApi } =
+            await import('$features/settings/notifications/TauriNotificationsApiClient');
+          const api = await getTauriNotificationsApi();
+          await api.sendNotification({
+            id: nextDesktopNotificationId(),
+            title: opts.title,
+            body: opts.body,
+            silent: opts.silent ?? false,
+          });
+          return;
+        } catch (err) {
+          log.error('failed to show native desktop notification', err);
+          // Fall through to the web Notification path as a best-effort fallback.
+        }
+      }
       // Prefer ServiceWorkerRegistration.showNotification so that taps are handled
       // by the SW notificationclick event. This routes through HandleNotificationClick
       // (postMessage path) which does the account switch + deep link reliably on all

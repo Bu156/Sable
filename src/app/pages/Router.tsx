@@ -83,6 +83,7 @@ import {
 } from './MobileFriendly';
 import { ClientInitStorageAtom } from './client/ClientInitStorageAtom';
 import { AuthRouteThemeManager, UnAuthRouteThemeManager } from './ThemeManager';
+import { TauriDeepLinkBridge } from './TauriDeepLinkBridge';
 import { ClientRoomsNotificationPreferences } from './client/ClientRoomsNotificationPreferences';
 import { HomeCreateRoom } from './client/home/CreateRoom';
 import { Create } from './client/create';
@@ -148,6 +149,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             beforeCapture={(scope) => scope.setTag('section', 'auth')}
           >
             <>
+              <TauriDeepLinkBridge />
               <AuthLayout />
               <UnAuthRouteThemeManager />
             </>
@@ -247,6 +249,8 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           path={HOME_PATH}
           element={
             <PageRoot
+              rail={<SidebarNav />}
+              bottomNav={<UserQuickToolsProvider />}
               nav={
                 <MobileFriendlyPageNav path={HOME_PATH}>
                   <Home />
@@ -274,6 +278,8 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           path={DIRECT_PATH}
           element={
             <PageRoot
+              rail={<SidebarNav />}
+              bottomNav={<UserQuickToolsProvider />}
               nav={
                 <MobileFriendlyPageNav path={DIRECT_PATH}>
                   <Direct />
@@ -300,6 +306,8 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           element={
             <RouteSpaceProvider>
               <PageRoot
+                rail={<SidebarNav />}
+                bottomNav={<UserQuickToolsProvider />}
                 nav={
                   <MobileFriendlyPageNav path={SPACE_PATH}>
                     <Space />
@@ -342,6 +350,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           path={EXPLORE_PATH}
           element={
             <PageRoot
+              rail={<SidebarNav />}
               nav={
                 <MobileFriendlyPageNav path={EXPLORE_PATH}>
                   <Explore />

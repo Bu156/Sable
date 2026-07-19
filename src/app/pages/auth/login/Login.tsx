@@ -11,6 +11,8 @@ import { usePathWithOrigin } from '$hooks/usePathWithOrigin';
 import type { LoginPathSearchParams } from '$pages/paths';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { SSOLogin } from '$pages/auth/SSOLogin';
+import { isTauri } from '@tauri-apps/api/core';
+import { buildTauriSsoRedirectUrl } from '$pages/auth/SSOTauri';
 import { OrDivider } from '$pages/auth/OrDivider';
 import { PasswordLoginForm } from './PasswordLoginForm';
 import { TokenLogin } from './TokenLogin';
@@ -89,7 +91,8 @@ export function Login() {
   const baseUrl = discovery['m.homeserver'].base_url;
   const [searchParams] = useSearchParams();
   const loginSearchParams = useLoginSearchParams(searchParams);
-  const ssoRedirectUrl = usePathWithOrigin(getLoginPath(server));
+  const webSsoRedirectUrl = usePathWithOrigin(getLoginPath(server));
+  const ssoRedirectUrl = isTauri() ? buildTauriSsoRedirectUrl(server) : webSsoRedirectUrl;
   const oidcRedirectUri = usePathWithOrigin(getLoginPath(server), { ignoreHashRouter: true });
   const external = getExternalSearchParams();
   const absoluteLoginPath = usePathWithOrigin(getLoginPath(server));
@@ -169,6 +172,7 @@ export function Login() {
             redirectUri={oidcRedirectUri}
             label={`Continue with ${server}`}
             notice={oidcNotice}
+            server={server}
           />
           <span data-spacing-node />
         </>

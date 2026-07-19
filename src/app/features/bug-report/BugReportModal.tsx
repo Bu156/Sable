@@ -23,6 +23,7 @@ import * as Sentry from '@sentry/react';
 import { useCloseBugReportModal, useBugReportModalOpen } from '$state/hooks/bugReportModal';
 import { stopPropagation } from '$utils/keyboard';
 import { getDebugLogger } from '$utils/debugLogger';
+import { fetch } from '$utils/fetch';
 
 type ReportType = 'bug' | 'feature';
 

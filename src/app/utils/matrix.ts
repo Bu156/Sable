@@ -1,5 +1,6 @@
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { decryptAttachment, encryptAttachment } from 'browser-encrypt-attachment';
+import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import type {
   AccountDataEvents,
   EventTimelineSet,
@@ -11,16 +12,25 @@ import type {
   UploadProgress,
   UploadResponse,
 } from '$types/matrix-sdk';
-import { EventTimeline, MatrixError, EventType, KnownMembership } from '$types/matrix-sdk';
+import {
+  EventTimeline,
+  MatrixError,
+  EventType,
+  KnownMembership,
+  MediaPrefix,
+} from '$types/matrix-sdk';
 import to from 'await-to-js';
 import type { IImageInfo, IThumbnailContent, IVideoInfo } from '$types/matrix/common';
 
 import * as Sentry from '@sentry/react';
+import { fetch } from '$utils/fetch';
 import { getEventReactions, getStateEvent } from './room';
 import { getReactionContent } from './messageReaction';
 import { matchMxId, validMxId } from './mxIdHelper';
+import { fetchMediaBlob, type MediaTransportOptions } from './mediaTransport';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
+const TAURI_MEDIA_CACHE_VERSION = '__sable_media_cache=2';
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
 
@@ -140,6 +150,92 @@ export const decryptFile = async (
 
 export type TUploadContent = File;
 
+export type UploadContentOpts = {
+  name?: string;
+  type?: string;
+  includeFilename?: boolean;
+  progressHandler?: (progress: UploadProgress) => void;
+  abortController?: AbortController;
+};
+
+/**
+ * matrix-js-sdk's `MatrixClient.uploadContent` uploads via `XMLHttpRequest` (to
+ * expose progress events), which bypasses the client's configured `fetchFn`. In
+ * the Tauri webview that XHR is subject to CORS / Private Network Access checks
+ * and gets blocked, so uploads to the homeserver fail. Route the upload through
+ * our Tauri-aware `fetch` instead, keeping the SDK path (with progress) on web.
+ */
+const tauriUploadAbortControllers = new WeakMap<Promise<UploadResponse>, AbortController>();
+
+type UploadFileType = TUploadContent | Blob | XMLHttpRequestBodyInit;
+
+export const uploadContentToServer = (
+  mx: MatrixClient,
+  file: UploadFileType,
+  opts: UploadContentOpts = {}
+): Promise<UploadResponse> => {
+  if (!isTauri()) {
+    return mx.uploadContent(file, opts);
+  }
+
+  const abortController = opts.abortController ?? new AbortController();
+  const includeFilename = opts.includeFilename ?? true;
+  const isFile = file instanceof File;
+  const contentType =
+    opts.type || (file instanceof Blob ? file.type : '') || 'application/octet-stream';
+  const fileName = opts.name ?? (isFile ? file.name : undefined);
+
+  const url = new URL(`${mx.baseUrl}${MediaPrefix.V3}/upload`);
+  if (includeFilename && fileName) {
+    url.searchParams.set('filename', fileName);
+  }
+
+  const headers: Record<string, string> = { 'Content-Type': contentType };
+  const accessToken = mx.getAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const promise = (async (): Promise<UploadResponse> => {
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body: file,
+      signal: abortController.signal,
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      let parsed: { errcode?: string; error?: string } = {};
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        // Non-JSON error body; fall back to the status text.
+      }
+      throw new MatrixError({
+        errcode: parsed.errcode,
+        error: parsed.error ?? `Upload failed with status ${response.status}`,
+      });
+    }
+    return (await response.json()) as UploadResponse;
+  })();
+
+  tauriUploadAbortControllers.set(promise, abortController);
+  void promise.finally(() => tauriUploadAbortControllers.delete(promise));
+  return promise;
+};
+
+export const cancelUploadContent = (
+  mx: MatrixClient,
+  promise: Promise<UploadResponse>
+): boolean => {
+  const abortController = tauriUploadAbortControllers.get(promise);
+  if (abortController) {
+    abortController.abort();
+    return true;
+  }
+  return mx.cancelUpload(promise);
+};
+
 export type ContentUploadOptions = {
   name?: string;
   fileType?: string;
@@ -158,7 +254,7 @@ export const uploadContent = async (
   const { name, fileType, hideFilename, onProgress, onPromise, onSuccess, onError } = options;
 
   const uploadStart = performance.now();
-  const uploadPromise = mx.uploadContent(file, {
+  const uploadPromise = uploadContentToServer(mx, file, {
     name,
     type: fileType,
     includeFilename: !hideFilename,
@@ -313,6 +409,17 @@ export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string):
   );
 };
 
+export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | null => {
+  if (!httpUrl) return null;
+  if (!isTauri()) return httpUrl;
+  if (!httpUrl.includes('/_matrix/client/v1/media/')) return httpUrl;
+  const mediaUrl = httpUrl.startsWith('sable-media://')
+    ? httpUrl
+    : convertFileSrc(httpUrl, 'sable-media');
+  if (mediaUrl.includes(TAURI_MEDIA_CACHE_VERSION)) return mediaUrl;
+  return `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}${TAURI_MEDIA_CACHE_VERSION}`;
+};
+
 export const mxcUrlToHttp = (
   mx: MatrixClient,
   mxcUrl: string,
@@ -321,8 +428,8 @@ export const mxcUrlToHttp = (
   height?: number,
   resizeMethod?: string,
   allowDirectLinks?: boolean
-): string | null =>
-  mx.mxcUrlToHttp(
+): string | null => {
+  const httpUrl = mx.mxcUrlToHttp(
     mxcUrl.replace(/^["']|["']$/g, ''),
     width,
     height,
@@ -332,21 +439,23 @@ export const mxcUrlToHttp = (
     useAuthentication
   );
 
-export const downloadMedia = async (src: string): Promise<Blob> => {
-  // this request is authenticated by service worker
-  const res = await fetch(src, { method: 'GET' });
-  const blob = await res.blob();
-  return blob;
+  // Authenticated media has no service worker under Tauri to attach the token, so route it
+  // through the native sable-media:// protocol which injects the token in Rust.
+  if (httpUrl && useAuthentication) {
+    return rewriteAuthenticatedMediaUrl(httpUrl);
+  }
+  return httpUrl;
 };
+
+export const downloadMedia = async (src: string, options?: MediaTransportOptions): Promise<Blob> =>
+  fetchMediaBlob(src, options);
 
 export const downloadEncryptedMedia = async (
   src: string,
   decryptContent: (buf: ArrayBuffer) => Promise<Blob>
 ): Promise<Blob> => {
   const encryptedContent = await downloadMedia(src);
-  const decryptedContent = await decryptContent(await encryptedContent.arrayBuffer());
-
-  return decryptedContent;
+  return decryptContent(await encryptedContent.arrayBuffer());
 };
 
 const sleepForMs = (ms: number) =>

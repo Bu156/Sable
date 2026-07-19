@@ -1,6 +1,7 @@
 import type { Path } from 'react-router-dom';
-import { generatePath } from 'react-router-dom';
+import { generatePath, matchPath } from 'react-router-dom';
 import { trimLeadingSlash, trimTrailingSlash } from '$utils/common';
+import { getAppOrigin } from '$utils/platform';
 import type { HashRouterConfig } from '$hooks/useClientConfig';
 import type { SettingsPathSearchParams } from './paths';
 import {
@@ -44,7 +45,7 @@ export const encodeSearchParamValueArray = (ids: string[]): string => ids.join('
 export const decodeSearchParamValueArray = (idsParam: string): string[] => idsParam.split(',');
 
 export const getOriginBaseUrl = (hashRouterConfig?: HashRouterConfig): string => {
-  const baseUrl = `${trimTrailingSlash(window.location.origin)}${import.meta.env.BASE_URL}`;
+  const baseUrl = `${trimTrailingSlash(getAppOrigin())}${import.meta.env.BASE_URL}`;
 
   if (hashRouterConfig?.enabled) {
     return `${trimTrailingSlash(baseUrl)}/#${hashRouterConfig.basename}`;
@@ -164,6 +165,54 @@ export const getInboxPath = (): string => INBOX_PATH;
 export const getInboxNotificationsPath = (): string => INBOX_NOTIFICATIONS_PATH;
 export const getInboxInvitesPath = (): string => INBOX_INVITES_PATH;
 export const getInboxBookmarksPath = (): string => INBOX_BOOKMARKS_PATH;
+
+export type SectionNav = {
+  /** Stable key identifying the section, used to scope the last-visited room. */
+  key: string;
+  /** Path to the section's bare list route. */
+  listPath: string;
+  /** Builds the path to a room within this section, or null when the section has no rooms. */
+  getRoomPath: ((roomIdOrAlias: string) => string) | null;
+};
+
+/**
+ * Resolves the navigable section for a pathname. `SPACE_PATH` is a catch-all first
+ * segment, so the literal sections (home, direct, explore, inbox) must be matched
+ * before falling back to a space. Returns null for unmatched paths.
+ */
+export const resolveSection = (pathname: string): SectionNav | null => {
+  if (matchPath({ path: HOME_PATH, end: false }, pathname)) {
+    return {
+      key: 'home',
+      listPath: getHomePath(),
+      getRoomPath: getHomeRoomPath,
+    };
+  }
+  if (matchPath({ path: DIRECT_PATH, end: false }, pathname)) {
+    return {
+      key: 'direct',
+      listPath: getDirectPath(),
+      getRoomPath: getDirectRoomPath,
+    };
+  }
+  if (matchPath({ path: EXPLORE_PATH, end: false }, pathname)) {
+    return { key: 'explore', listPath: getExplorePath(), getRoomPath: null };
+  }
+  if (matchPath({ path: INBOX_PATH, end: false }, pathname)) {
+    return { key: 'inbox', listPath: getInboxPath(), getRoomPath: null };
+  }
+  const spaceMatch = matchPath({ path: SPACE_PATH, end: false }, pathname);
+  const encodedSpaceId = spaceMatch?.params.spaceIdOrAlias;
+  if (encodedSpaceId) {
+    const spaceId = decodeURIComponent(encodedSpaceId);
+    return {
+      key: `space:${spaceId}`,
+      listPath: getSpacePath(spaceId),
+      getRoomPath: (roomIdOrAlias) => getSpaceRoomPath(spaceId, roomIdOrAlias),
+    };
+  }
+  return null;
+};
 
 export const getSettingsPath = (section?: string, focus?: string): string => {
   const path = trimTrailingSlash(generatePath(SETTINGS_PATH, { section: section ?? null }));

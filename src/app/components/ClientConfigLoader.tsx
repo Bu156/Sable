@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Dialog, Text, color, config } from 'folds';
 import type { ClientConfig } from '$hooks/useClientConfig';
 import { trimTrailingSlash } from '$utils/common';
+import { fetch } from '$utils/fetch';
 import { SplashScreen } from '$components/splash-screen';
 
 export const FALLBACK_CLIENT_CONFIG: ClientConfig = {

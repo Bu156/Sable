@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -49,23 +49,7 @@ import {
   MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME,
 } from '../../../../unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
-
-function thumbnailDimsForMaxEdge(
-  maxEdge: number,
-  w?: number,
-  h?: number
-): { tw: number; th: number } {
-  const safeEdge = Math.max(1, Math.round(maxEdge));
-  const iw = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : safeEdge;
-  const ih = typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : safeEdge;
-  const longest = Math.max(iw, ih);
-  if (longest <= safeEdge) return { tw: Math.round(iw), th: Math.round(ih) };
-  const scale = safeEdge / longest;
-  return {
-    tw: Math.max(1, Math.round(iw * scale)),
-    th: Math.max(1, Math.round(ih * scale)),
-  };
-}
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
 export function checkIfGif(url: string, mimetype?: string, body?: string) {
   return (
@@ -160,26 +144,24 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const isGif = checkIfGif(url, info?.mimetype, body);
 
+    const rawMediaUrl = useMemo(() => {
+      if (url.startsWith('http')) return url;
+      return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
+    }, [mx, url, useAuthentication]);
+
+    const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
+
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
-        if (url.startsWith('http')) return url;
-
-        if (typeof matrixThumbnailMaxEdge === 'number' && matrixThumbnailMaxEdge > 0 && !encInfo) {
-          const { tw, th } = thumbnailDimsForMaxEdge(matrixThumbnailMaxEdge, info?.w, info?.h);
-          const thumbUrl = mxcUrlToHttp(mx, url, useAuthentication, tw, th, 'scale', false);
-          if (thumbUrl) return thumbUrl;
-        }
-
-        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-        if (!mediaUrl) throw new Error('Invalid media URL');
         if (encInfo) {
-          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+          if (!rawMediaUrl) throw new Error('Invalid media URL');
+          const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
             decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
           return URL.createObjectURL(fileContent);
         }
-        return mediaUrl;
-      }, [mx, url, useAuthentication, mimeType, encInfo, matrixThumbnailMaxEdge, info?.w, info?.h])
+        return resolvedMediaUrl ?? rawMediaUrl ?? url;
+      }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo])
     );
 
     useEffect(() => {

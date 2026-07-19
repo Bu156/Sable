@@ -3,13 +3,12 @@ import { Download, sizedIcon } from '$components/icons/phosphor';
 import type { ReactNode } from 'react';
 import { useCallback } from 'react';
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import FileSaver from 'file-saver';
 import { mimeTypeToExt } from '$utils/mimeTypes';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
-import { getDownloadFilename } from '$utils/download';
+import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 
 const badgeStyles = { maxWidth: toRem(100) };
 
@@ -32,7 +31,7 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
         : await downloadMedia(mediaUrl);
 
       const fileURL = URL.createObjectURL(fileContent);
-      FileSaver.saveAs(fileURL, getDownloadFilename(filename));
+      await saveFileToDevice(fileContent, getDownloadFilename(filename), mimeType);
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, filename])
   );

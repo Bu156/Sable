@@ -24,7 +24,6 @@ import {
 import type { VirtualItem } from '@tanstack/react-virtual';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import FocusTrap from 'focus-trap-react';
-import { useNavigate } from 'react-router-dom';
 import type { MatrixClient, Room, RoomJoinRulesEventContent } from '$types/matrix-sdk';
 import { JoinRule, EventType, KnownMembership } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -92,9 +91,6 @@ import { ContainerColor } from '$styles/ContainerColor.css';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { BreakWord } from '$styles/Text.css';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
-import { mobileOrTablet } from '$utils/user-agent';
-import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
-import { SwipeableOverlayWrapper } from '$components/SwipeableOverlayWrapper';
 import { useCallEmbed } from '$hooks/useCallEmbed';
 import { createDebugLogger } from '$utils/debugLogger';
 import { SidebarResizer } from '$pages/client/sidebar/SidebarResizer';
@@ -111,6 +107,7 @@ import { reportMediaLoadFailure } from '$utils/mediaLoadDiagnostics';
 import * as css from './styles.css';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
+import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 
 const debugLog = createDebugLogger('Space');
 
@@ -286,7 +283,8 @@ function SpaceHeader({ hideText, mx }: { hideText?: boolean; mx: MatrixClient })
 
   const bannerState = useStateEvent(space, CustomStateEvent.RoomBanner);
   const bannerMXC = bannerState?.getContent<RoomBannerContent>()?.url;
-  const bannerURI = mxcUrlToHttp(mx, bannerMXC ?? '', useAuthentication);
+  const rawBannerURI = mxcUrlToHttp(mx, bannerMXC ?? '', useAuthentication);
+  const bannerURI = useRenderableMediaUrl(rawBannerURI || undefined);
   const hasBanner = !!(bannerURI && !hideText && showBanners);
 
   const [bannerViewerOpen, setBannerViewerOpen] = useState(false);
@@ -854,16 +852,6 @@ export function Space() {
   const getToLink = (roomId: string) =>
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
 
-  const navigate = useNavigate();
-  const lastRoomId = useAtomValue(lastVisitedRoomIdAtom);
-
-  const handleSwipeToRoom = useCallback(() => {
-    if (mobileOrTablet() && lastRoomId) {
-      const roomAliasOrId = getCanonicalAliasOrRoomId(mx, lastRoomId);
-      navigate(getSpaceRoomPath(spaceIdOrAlias, roomAliasOrId));
-    }
-  }, [lastRoomId, spaceIdOrAlias, mx, navigate]);
-
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
   const hideText = curWidth <= 80 && !isMobile;
@@ -878,146 +866,79 @@ export function Space() {
       }}
     >
       <PageNav>
-        <SwipeableOverlayWrapper direction="left" onClose={handleSwipeToRoom}>
-          <SpaceHeader hideText={hideText} mx={mx} />
-          <PageNavContent scrollRef={scrollRef}>
-            <Box direction="Column" gap="300">
-              {tombstoneEvent && (
-                <SpaceTombstone
-                  roomId={space.roomId}
-                  replacementRoomId={tombstoneEvent.getContent().replacement_room}
-                />
-              )}
-              <NavCategory>
-                <NavItem variant="Background" radii="400" aria-selected={lobbySelected}>
-                  <NavLink to={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
-                    <NavItemContent>
-                      <Box
-                        as="span"
-                        grow="Yes"
-                        alignItems="Center"
-                        justifyContent="Start"
-                        gap="200"
+        <SpaceHeader hideText={hideText} mx={mx} />
+        <PageNavContent scrollRef={scrollRef}>
+          <Box direction="Column" gap="300">
+            {tombstoneEvent && (
+              <SpaceTombstone
+                roomId={space.roomId}
+                replacementRoomId={tombstoneEvent.getContent().replacement_room}
+              />
+            )}
+            <NavCategory>
+              <NavItem variant="Background" radii="400" aria-selected={lobbySelected}>
+                <NavLink to={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+                  <NavItemContent>
+                    <Box as="span" grow="Yes" alignItems="Center" justifyContent="Start" gap="200">
+                      <Avatar
+                        size={hideText ? undefined : '200'}
+                        radii="400"
+                        style={hideText ? { width: '100%', padding: '0' } : undefined}
                       >
-                        <Avatar
-                          size={hideText ? undefined : '200'}
-                          radii="400"
-                          style={hideText ? { width: '100%', padding: '0' } : undefined}
-                        >
-                          {menuIcon(Flag, { weight: lobbySelected ? 'fill' : 'regular' })}
-                        </Avatar>
+                        {menuIcon(Flag, { weight: lobbySelected ? 'fill' : 'regular' })}
+                      </Avatar>
+                      {!hideText && (
+                        <Box as="span" grow="Yes">
+                          <Text as="span" size="Inherit" truncate>
+                            Lobby
+                          </Text>
+                        </Box>
+                      )}
+                    </Box>
+                  </NavItemContent>
+                </NavLink>
+              </NavItem>
+              <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
+                <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+                  <NavItemContent>
+                    <Box as="span" grow="Yes" alignItems="Center" justifyContent="Start" gap="200">
+                      <Avatar
+                        size={hideText ? undefined : '200'}
+                        radii="400"
+                        style={hideText ? { width: '100%' } : undefined}
+                      >
+                        {menuIcon(MagnifyingGlass, {
+                          weight: searchSelected ? 'fill' : 'regular',
+                        })}
+                      </Avatar>
+                      <Box as="span" grow="Yes">
                         {!hideText && (
-                          <Box as="span" grow="Yes">
-                            <Text as="span" size="Inherit" truncate>
-                              Lobby
-                            </Text>
-                          </Box>
+                          <Text as="span" size="Inherit" truncate>
+                            Message Search
+                          </Text>
                         )}
                       </Box>
-                    </NavItemContent>
-                  </NavLink>
-                </NavItem>
-                <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-                  <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
-                    <NavItemContent>
-                      <Box
-                        as="span"
-                        grow="Yes"
-                        alignItems="Center"
-                        justifyContent="Start"
-                        gap="200"
-                      >
-                        <Avatar
-                          size={hideText ? undefined : '200'}
-                          radii="400"
-                          style={hideText ? { width: '100%' } : undefined}
-                        >
-                          {menuIcon(MagnifyingGlass, {
-                            weight: searchSelected ? 'fill' : 'regular',
-                          })}
-                        </Avatar>
-                        <Box as="span" grow="Yes">
-                          {!hideText && (
-                            <Text as="span" size="Inherit" truncate>
-                              Message Search
-                            </Text>
-                          )}
-                        </Box>
-                      </Box>
-                    </NavItemContent>
-                  </NavLink>
-                </NavItem>
-              </NavCategory>
-              <NavCategory
-                style={{
-                  height: virtualizer.getTotalSize(),
-                  position: 'relative',
-                  overflow: 'visible',
-                }}
-              >
-                {virtualizedItems.map((vItem) => {
-                  const hierarchyItem = hierarchy[vItem.index];
-                  if (!hierarchyItem) return null;
-                  const { roomId, depth: itemDepth } = hierarchyItem;
-                  const depth = itemDepth ?? 0;
-                  const room = mx.getRoom(roomId);
-                  const renderDepth = room?.isSpaceRoom() ? depth - 2 : depth - 1;
-                  if (!room) return null;
-                  if (depth === subspaceHierarchyLimit && room.isSpaceRoom()) {
-                    return (
-                      <VirtualTile
-                        virtualItem={vItem}
-                        key={vItem.index}
-                        ref={virtualizer.measureElement}
-                      >
-                        <div
-                          style={
-                            hideText
-                              ? {}
-                              : {
-                                  paddingLeft: `calc(${renderDepth} * ${config.space.S400})`,
-                                }
-                          }
-                        >
-                          <SpaceNavItem
-                            room={room}
-                            selected={selectedRoomId === roomId}
-                            linkPath={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, roomId))}
-                            hideText={hideText}
-                          />
-                        </div>
-                      </VirtualTile>
-                    );
-                  }
-
-                  const paddingTop = getCategoryPadding(depth);
-                  const paddingLeft = `calc(${renderDepth} * ${config.space.S400})`;
-
-                  if (room.isSpaceRoom()) {
-                    const categoryId = makeNavCategoryId(space.roomId, roomId);
-                    const closedViaCategory = getInClosedCategories(space.roomId, roomId);
-
-                    return (
-                      <VirtualTile
-                        virtualItem={vItem}
-                        key={vItem.index}
-                        ref={virtualizer.measureElement}
-                      >
-                        <div style={hideText ? { paddingTop: '0' } : { paddingTop, paddingLeft }}>
-                          <NavCategoryHeader style={hideText ? { justifyContent: 'Center' } : {}}>
-                            <RoomNavCategoryButton
-                              data-category-id={categoryId}
-                              onClick={handleCategoryClick}
-                              closed={closedCategories.has(categoryId) || closedViaCategory}
-                            >
-                              {!hideText && (roomId === space.roomId ? 'Rooms' : room?.name)}
-                            </RoomNavCategoryButton>
-                          </NavCategoryHeader>
-                        </div>
-                      </VirtualTile>
-                    );
-                  }
-
+                    </Box>
+                  </NavItemContent>
+                </NavLink>
+              </NavItem>
+            </NavCategory>
+            <NavCategory
+              style={{
+                height: virtualizer.getTotalSize(),
+                position: 'relative',
+                overflow: 'visible',
+              }}
+            >
+              {virtualizedItems.map((vItem) => {
+                const hierarchyItem = hierarchy[vItem.index];
+                if (!hierarchyItem) return null;
+                const { roomId, depth: itemDepth } = hierarchyItem;
+                const depth = itemDepth ?? 0;
+                const room = mx.getRoom(roomId);
+                const renderDepth = room?.isSpaceRoom() ? depth - 2 : depth - 1;
+                if (!room) return null;
+                if (depth === subspaceHierarchyLimit && room.isSpaceRoom()) {
                   return (
                     <VirtualTile
                       virtualItem={vItem}
@@ -1027,40 +948,93 @@ export function Space() {
                       <div
                         style={
                           hideText
-                            ? {
-                                padding: '0',
-                                width: '100%',
-                                aspectRatio: 1,
-                                display: 'flex',
-                                flexDirection: 'column',
+                            ? {}
+                            : {
+                                paddingLeft: `calc(${renderDepth} * ${config.space.S400})`,
                               }
-                            : { paddingLeft }
                         }
                       >
-                        <RoomNavItem
+                        <SpaceNavItem
                           room={room}
                           selected={selectedRoomId === roomId}
-                          showAvatar={mDirects.has(roomId) || showIcons()}
-                          direct={mDirects.has(roomId)}
-                          linkPath={getToLink(roomId)}
+                          linkPath={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, roomId))}
                           hideText={hideText}
-                          notificationMode={getRoomNotificationMode(
-                            notificationPreferences,
-                            room.roomId
-                          )}
-                          joinCallOnSingleClick={joinCallOnSingleClick}
-                          isStrict={showRoomIcon === ShowRoomIcon.Strict}
                         />
                       </div>
                     </VirtualTile>
                   );
-                })}
-                {getConnectorSVG(hierarchy, virtualizedItems)}
-              </NavCategory>
-              {!isMobile && <div style={{ height: toRem(40) }} />}
-            </Box>
-          </PageNavContent>
-        </SwipeableOverlayWrapper>
+                }
+
+                const paddingTop = getCategoryPadding(depth);
+                const paddingLeft = `calc(${renderDepth} * ${config.space.S400})`;
+
+                if (room.isSpaceRoom()) {
+                  const categoryId = makeNavCategoryId(space.roomId, roomId);
+                  const closedViaCategory = getInClosedCategories(space.roomId, roomId);
+
+                  return (
+                    <VirtualTile
+                      virtualItem={vItem}
+                      key={vItem.index}
+                      ref={virtualizer.measureElement}
+                    >
+                      <div style={hideText ? { paddingTop: '0' } : { paddingTop, paddingLeft }}>
+                        <NavCategoryHeader style={hideText ? { justifyContent: 'Center' } : {}}>
+                          <RoomNavCategoryButton
+                            data-category-id={categoryId}
+                            onClick={handleCategoryClick}
+                            closed={closedCategories.has(categoryId) || closedViaCategory}
+                          >
+                            {!hideText && (roomId === space.roomId ? 'Rooms' : room?.name)}
+                          </RoomNavCategoryButton>
+                        </NavCategoryHeader>
+                      </div>
+                    </VirtualTile>
+                  );
+                }
+
+                return (
+                  <VirtualTile
+                    virtualItem={vItem}
+                    key={vItem.index}
+                    ref={virtualizer.measureElement}
+                  >
+                    <div
+                      style={
+                        hideText
+                          ? {
+                              padding: '0',
+                              width: '100%',
+                              aspectRatio: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                            }
+                          : { paddingLeft }
+                      }
+                    >
+                      <RoomNavItem
+                        room={room}
+                        selected={selectedRoomId === roomId}
+                        showAvatar={mDirects.has(roomId) || showIcons()}
+                        direct={mDirects.has(roomId)}
+                        linkPath={getToLink(roomId)}
+                        hideText={hideText}
+                        notificationMode={getRoomNotificationMode(
+                          notificationPreferences,
+                          room.roomId
+                        )}
+                        joinCallOnSingleClick={joinCallOnSingleClick}
+                        isStrict={showRoomIcon === ShowRoomIcon.Strict}
+                      />
+                    </div>
+                  </VirtualTile>
+                );
+              })}
+              {getConnectorSVG(hierarchy, virtualizedItems)}
+            </NavCategory>
+            {!isMobile && <div style={{ height: toRem(40) }} />}
+          </Box>
+        </PageNavContent>
       </PageNav>
       {!isMobile && (
         <SidebarResizer

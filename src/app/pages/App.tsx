@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useMemo, useRef } from 'react';
 import { Provider as JotaiProvider } from 'jotai';
 import { createStore } from 'jotai/vanilla';
-import { OverlayContainerProvider, PopOutContainerProvider, TooltipContainerProvider } from 'folds';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
@@ -11,13 +10,14 @@ import type { ClientConfig } from '$hooks/useClientConfig';
 import { ClientConfigProvider } from '$hooks/useClientConfig';
 import { setMatrixToBase } from '$plugins/matrix-to';
 import type { ScreenSize } from '$hooks/useScreenSize';
-import { ScreenSizeProvider, useScreenSize } from '$hooks/useScreenSize';
+import { useScreenSize } from '$hooks/useScreenSize';
 import { useCompositionEndTracking } from '$hooks/useComposingCheck';
 import { ErrorPage } from '$components/DefaultErrorPage';
 import { FeatureCheck } from './FeatureCheck';
 import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
 import { bootstrapSettingsStore } from '$state/settings';
+import { AppShell } from '$components/app-shell';
 
 const queryClient = new QueryClient();
 const ReactQueryDevtools = lazy(async () => {
@@ -66,7 +66,6 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
 function App() {
   const screenSize = useScreenSize();
   useCompositionEndTracking();
-  const portalContainer = document.getElementById('portalContainer') ?? undefined;
 
   const renderConfiguredApp = useCallback(
     (clientConfig: ClientConfig) => {
@@ -82,17 +81,11 @@ function App() {
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
-      <TooltipContainerProvider value={portalContainer}>
-        <PopOutContainerProvider value={portalContainer}>
-          <OverlayContainerProvider value={portalContainer}>
-            <ScreenSizeProvider value={screenSize}>
-              <FeatureCheck>
-                <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
-              </FeatureCheck>
-            </ScreenSizeProvider>
-          </OverlayContainerProvider>
-        </PopOutContainerProvider>
-      </TooltipContainerProvider>
+      <AppShell screenSize={screenSize} queryClient={queryClient}>
+        <FeatureCheck>
+          <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
+        </FeatureCheck>
+      </AppShell>
     </Sentry.ErrorBoundary>
   );
 }

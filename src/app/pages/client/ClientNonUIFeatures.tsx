@@ -24,6 +24,13 @@ import LogoHighlightSVG from '$public/res/svg/highlight.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
+import {
+  getTauriNotificationsApi,
+  isDesktopTauri,
+  isIosTauri,
+  isNativeNotificationTauri,
+  sendNativeTauriNotification,
+} from '$features/settings/notifications/TauriNotificationsApiClient';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { IconSizesProvider } from '$components/icons/phosphor';
@@ -58,15 +65,17 @@ import { NotificationBanner } from '$components/notification-banner';
 import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
 import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
-import { getBlobCacheStats } from '$hooks/useBlobCache';
-import { lastVisitedRoomIdAtom } from '$state/room/lastRoom';
+import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
 import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
 import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
 import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
+import { DesktopUpdater } from './DesktopUpdater';
+import { NotificationTransportRuntimeFeature } from '$features/settings/notifications/NotificationTransportRuntimeFeature';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
+import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
 
@@ -129,14 +138,16 @@ function getUnreadTotals(roomToUnread: RoomToUnread) {
   return { total, highlightTotal, notification, highlight };
 }
 
-// Show the mention count in the tab title.
+// Updates document.title with an unread count.
 function PageTitleUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const [faviconForMentionsOnly] = useSetting(settingsAtom, 'faviconForMentionsOnly');
 
   useEffect(() => {
-    const { highlightTotal } = getUnreadTotals(roomToUnread);
-    document.title = highlightTotal > 0 ? `(${highlightTotal}) Sable Client` : 'Sable Client';
-  }, [roomToUnread]);
+    const { total, highlightTotal } = getUnreadTotals(roomToUnread);
+    const count = faviconForMentionsOnly ? highlightTotal : total;
+    document.title = count > 0 ? `(${count}) Sable Client` : 'Sable Client';
+  }, [roomToUnread, faviconForMentionsOnly]);
 
   return null;
 }
@@ -160,7 +171,13 @@ function FaviconUpdater() {
     try {
       // Only badge with highlight (mention) counts — total unread is too noisy
       // for an OS-level app badge.
-      if (highlightTotal > 0) {
+      if (isNativeNotificationTauri()) {
+        import('@tauri-apps/api/window')
+          .then(({ getCurrentWindow }) =>
+            getCurrentWindow().setBadgeCount(highlightTotal > 0 ? highlightTotal : undefined)
+          )
+          .catch(() => {});
+      } else if (highlightTotal > 0) {
         navigator.setAppBadge(highlightTotal);
       } else {
         navigator.clearAppBadge();
@@ -205,10 +222,20 @@ function InviteNotifications() {
 
   const notify = useCallback(
     (count: number) => {
+      const body = `You have ${count} new invitation request.`;
+      if (isNativeNotificationTauri()) {
+        sendNativeTauriNotification({
+          title: 'Invitation',
+          body,
+          silent: true,
+          extra: { type: 'invite' },
+        }).catch(() => {});
+        return;
+      }
       const noti = new window.Notification('Invitation', {
         icon: LogoSVG,
         badge: LogoSVG,
-        body: `You have ${count} new invitation request.`,
+        body,
         silent: true,
       });
 
@@ -232,8 +259,12 @@ function InviteNotifications() {
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
 
-    // OS notification for invites — desktop only.
-    if (!mobileOrTablet() && showSystemNotifications && notificationPermission('granted')) {
+    // OS notification for invites — desktop, plus iOS while foregrounded (testing).
+    if (
+      (!mobileOrTablet() || isIosTauri()) &&
+      showSystemNotifications &&
+      (isNativeNotificationTauri() || notificationPermission('granted'))
+    ) {
       try {
         notify(invites.length - perviousInviteLen);
       } catch {
@@ -439,7 +470,11 @@ function MessageNotifications() {
       // in sandboxed environments, browsers with DnD active, or Electron — and
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
-      if (!mobileOrTablet() && showSystemNotifications && notificationPermission('granted')) {
+      if (
+        (!mobileOrTablet() || isIosTauri()) &&
+        showSystemNotifications &&
+        (isNativeNotificationTauri() || notificationPermission('granted'))
+      ) {
         try {
           const isEncryptedRoom = !!getStateEvent(room, EventType.RoomEncryption);
           const avatarMxc =
@@ -463,17 +498,30 @@ function MessageNotifications() {
             silent: !notificationSound || !isLoud,
             eventId,
           });
-          const noti = new window.Notification(osPayload.title, osPayload.options);
-          const { roomId } = room;
-          noti.addEventListener('click', () => {
-            window.focus();
-            setPending({
-              roomId,
-              eventId,
-              targetSessionId: mx.getUserId() ?? undefined,
+          if (isNativeNotificationTauri()) {
+            const extra: Record<string, string> = { type: mEvent.getType(), room_id: room.roomId };
+            if (eventId) extra.event_id = eventId;
+            const userId = mx.getUserId();
+            if (userId) extra.user_id = userId;
+            sendNativeTauriNotification({
+              title: osPayload.title,
+              body: osPayload.options.body,
+              silent: osPayload.options.silent ?? false,
+              extra,
+            }).catch(() => {});
+          } else {
+            const noti = new window.Notification(osPayload.title, osPayload.options);
+            const { roomId } = room;
+            noti.addEventListener('click', () => {
+              window.focus();
+              setPending({
+                roomId,
+                eventId,
+                targetSessionId: mx.getUserId() ?? undefined,
+              });
+              noti.close();
             });
-            noti.close();
-          });
+          }
         } catch {
           // window.Notification unavailable or blocked (sandboxed context, DnD, etc.)
         }
@@ -611,7 +659,7 @@ function PrivacyBlurFeature() {
 function HealthMonitor() {
   useEffect(() => {
     const id = window.setInterval(() => {
-      const { cacheSize, inflightCount } = getBlobCacheStats();
+      const { cacheSize, inflightCount } = getRenderableMediaUrlStats();
       Sentry.metrics.gauge('sable.media.blob_cache_size', cacheSize);
       if (inflightCount > 0) {
         Sentry.metrics.gauge('sable.media.inflight_requests', inflightCount);
@@ -755,7 +803,7 @@ function SlidingSyncActiveRoomSubscriber() {
 function SentryRoomContextFeature() {
   const mx = useMatrixClient();
   const mDirect = useAtomValue(mDirectAtom);
-  const roomId = useAtomValue(lastVisitedRoomIdAtom);
+  const roomId = useAtomValue(lastVisitedRoomAtom)?.roomId;
 
   useEffect(() => {
     if (!roomId) {
@@ -904,9 +952,7 @@ function PresenceFeature() {
     // Passing undefined restores the default (online); Offline suppresses broadcasting.
     const syncPresence = sendPresence ? undefined : SetPresence.Offline;
     mx.setSyncPresence(syncPresence);
-    const presenceManager = getPresenceSyncManager(mx);
-    presenceManager?.setPresence(syncPresence);
-    presenceManager?.setPresenceEnabled(sendPresence);
+    getPresenceSyncManager(mx)?.setPresenceEnabled(sendPresence);
   }, [mx, sendPresence]);
 
   return null;
@@ -914,6 +960,54 @@ function PresenceFeature() {
 
 function SettingsSyncFeature() {
   useSettingsSyncEffect();
+  return null;
+}
+
+// Routes taps on native plugin notifications (desktop + iOS) using the `extra`
+// payload attached in sendNativeTauriNotification.
+function NativeNotificationClickRouting() {
+  const setPending = useSetAtom(pendingNotificationAtom);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isNativeNotificationTauri()) return undefined;
+
+    let unregister: (() => Promise<void> | void) | undefined;
+    let disposed = false;
+    getTauriNotificationsApi()
+      .then((api) =>
+        api.onNotificationClicked(({ data }) => {
+          if (isDesktopTauri()) {
+            import('@tauri-apps/api/window')
+              .then(({ getCurrentWindow }) => getCurrentWindow().setFocus())
+              .catch(() => {});
+          }
+          if (!data) return;
+          if (data.type === 'invite') {
+            navigate(getInboxInvitesPath());
+            return;
+          }
+          if (data.room_id) {
+            setPending({
+              roomId: data.room_id,
+              eventId: data.event_id,
+              targetSessionId: data.user_id,
+            });
+          }
+        })
+      )
+      .then((listener) => {
+        if (disposed) listener.unregister();
+        else unregister = listener.unregister;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      unregister?.();
+    };
+  }, [setPending, navigate]);
+
   return null;
 }
 
@@ -929,7 +1023,10 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageTitleUpdater />
       <InviteNotifications />
       <MessageNotifications />
+      <NativeNotificationClickRouting />
       <BackgroundNotifications />
+      <DesktopUpdater />
+      <NotificationTransportRuntimeFeature />
       <SyncNotificationSettingsWithServiceWorker />
       <HandleDecryptPushEvent />
       <NotificationBanner />

@@ -1,6 +1,5 @@
 import type { MouseEventHandler } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import FileSaver from 'file-saver';
 import classNames from 'classnames';
 import {
   Box,
@@ -37,7 +36,7 @@ import { CheckerboardIcon, CopyIcon, DownloadIcon } from '@phosphor-icons/react'
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '$utils/keyboard';
 import { copyImageToClipboard } from '$utils/dom';
-import { getDownloadFilename } from '$utils/download';
+import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 
 export type ImageViewerProps = {
   alt: string;
@@ -100,7 +99,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
     const handleDownload = async () => {
       const fileContent = await downloadMedia(src);
-      FileSaver.saveAs(fileContent, getDownloadFilename(filename, alt, 'image'));
+      await saveFileToDevice(fileContent, getDownloadFilename(filename, alt, 'image'));
     };
 
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();

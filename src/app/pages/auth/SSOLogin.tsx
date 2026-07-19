@@ -1,8 +1,13 @@
 import { Avatar, AvatarImage, Box, Button, Text } from 'folds';
 import type { IIdentityProvider, SSOAction } from '$types/matrix-sdk';
 import { createClient } from '$types/matrix-sdk';
+import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { useAutoDiscoveryInfo } from '$hooks/useAutoDiscoveryInfo';
+import { type as osType } from '@tauri-apps/plugin-os';
+import { fetch } from '$utils/fetch';
 
 type SSOLoginProps = {
   providers?: IIdentityProvider[];
@@ -13,7 +18,7 @@ type SSOLoginProps = {
 export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SSOLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
-  const mx = useMemo(() => createClient({ baseUrl }), [baseUrl]);
+  const mx = useMemo(() => createClient({ baseUrl, fetchFn: fetch }), [baseUrl]);
 
   const getSSOIdUrl = (ssoId?: string): string =>
     mx.getSsoLoginUrl(redirectUrl, 'sso', ssoId, action);
@@ -25,6 +30,14 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
     : true;
 
   const renderAsIcons = withoutIcon ? false : saveScreenSpace && providers && providers.length > 2;
+
+  const openSso = async (event: MouseEvent, url: string) => {
+    if (!isTauri()) return;
+    event.preventDefault();
+    const os = osType();
+    const urlProgram = os === 'ios' || os === 'android' ? 'inAppBrowser' : undefined;
+    await openUrl(url, urlProgram);
+  };
 
   return (
     <Box justifyContent="Center" gap="600" wrap="Wrap">
@@ -42,6 +55,7 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
                 key={id}
                 as="a"
                 href={getSSOIdUrl(id)}
+                onClick={(event) => openSso(event, getSSOIdUrl(id))}
                 aria-label={buttonTitle}
                 size="300"
                 radii="300"
@@ -57,6 +71,7 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
               key={id}
               as="a"
               href={getSSOIdUrl(id)}
+              onClick={(event) => openSso(event, getSSOIdUrl(id))}
               size="500"
               variant="Secondary"
               fill="Soft"
@@ -80,6 +95,7 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
           style={{ width: '100%' }}
           as="a"
           href={getSSOIdUrl()}
+          onClick={(event) => openSso(event, getSSOIdUrl())}
           size="500"
           variant="Secondary"
           fill="Soft"
