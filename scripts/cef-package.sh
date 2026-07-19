@@ -38,6 +38,30 @@ stage_runtime() {
   bash scripts/cef-copy-libs.sh release "$dest"
 }
 
+# Bundle the system-tray libraries (Tauri's linuxdeploy path normally does this,
+# which the CEF build bypasses). Bundle libayatana-appindicator3 plus its
+# ayatana/dbusmenu/indicator dependency closure; host libs (gtk, glib, X11, …)
+# are left to the system, matching linuxdeploy-plugin-appindicator.
+stage_appindicator() {
+  local dest="$1" main dep
+  mkdir -p "$dest"
+  # awk reads to EOF (no early exit) so ldconfig never gets SIGPIPE under pipefail.
+  main="$(ldconfig -p 2>/dev/null | awk '$1=="libayatana-appindicator3.so.1"{v=$NF} END{print v}')"
+  [ -n "$main" ] || main="$(find /usr/lib /usr/lib64 /lib -name libayatana-appindicator3.so.1 2>/dev/null | sort | tail -n1)"
+  if [ -z "$main" ] || [ ! -e "$main" ]; then
+    echo "warning: libayatana-appindicator3.so.1 not found; tray disabled in the AppImage" >&2
+    return 0
+  fi
+  {
+    echo "$main"
+    ldd "$main" 2>/dev/null | awk '/=>/ {print $3}' | grep -iE 'ayatana|dbusmenu|indicator|ido' || true
+  } | sort -u | while read -r dep; do
+    if [ -e "$dep" ]; then
+      cp -Lf "$dep" "$dest/$(basename "$dep")"
+    fi
+  done
+}
+
 write_desktop() {
   cat > "$1" <<'EOF'
 [Desktop Entry]
@@ -73,13 +97,15 @@ EOF
   # Stable-named deps only; version-suffixed names break install across releases.
   DEB_DEPS=(--depends libwebkit2gtk-4.1-0 --depends libgtk-3-0
     --depends libnss3 --depends libnspr4 --depends libgbm1
-    --depends libdrm2 --depends libxkbcommon0 --depends xdg-utils)
+    --depends libdrm2 --depends libxkbcommon0 --depends xdg-utils
+    --depends libayatana-appindicator3-1)
   (cd "$OUT/deb" && fpm "${COMMON[@]}" -v "$DEB_VERSION" --iteration 1 \
     -t deb -a amd64 "${DEB_DEPS[@]}" -C "$PKGROOT" .)
 
   RPM_DEPS=(--depends webkit2gtk4.1 --depends gtk3 --depends nss
     --depends nspr --depends mesa-libgbm --depends libdrm
-    --depends libxkbcommon --depends xdg-utils)
+    --depends libxkbcommon --depends xdg-utils
+    --depends 'libayatana-appindicator3.so.1()(64bit)')
   (cd "$OUT/rpm" && fpm "${COMMON[@]}" -v "$RPM_VERSION" --iteration "$RPM_ITERATION" \
     -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$PKGROOT" .)
 else
@@ -88,6 +114,7 @@ fi
 
 APPDIR="$WORK/Sable.AppDir"
 stage_runtime "$APPDIR/usr/bin"
+stage_appindicator "$APPDIR/usr/bin"
 # nosuid AppImage mount: drop setuid chrome-sandbox, use the namespace sandbox.
 rm -f "$APPDIR/usr/bin/chrome-sandbox"
 write_desktop "$APPDIR/sable.desktop"
@@ -95,6 +122,7 @@ cp src-tauri/icons/128x128.png "$APPDIR/sable.png"
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
+export LD_LIBRARY_PATH="$HERE/usr/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$HERE/usr/bin/sable" "$@"
 EOF
 chmod 755 "$APPDIR/AppRun"
