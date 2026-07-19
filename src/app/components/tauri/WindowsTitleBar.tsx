@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow, type Window } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
@@ -115,13 +116,12 @@ export function WindowsTitleBar() {
     let unlistenResize: (() => void) | undefined;
     let unlistenTracking: (() => void) | undefined;
 
-    appWindow
-      .title()
-      .then((title) => {
-        if (mounted) setWindowTitle(title);
+    getVersion()
+      .then((version) => {
+        if (mounted) setWindowTitle(version.includes('-nightly.') ? 'Sable Nightly' : 'Sable');
       })
       .catch((error) => {
-        log.warn('Failed to read window title:', error);
+        log.warn('Failed to read app version for window title:', error);
       });
 
     const syncMaximized = async () => {
