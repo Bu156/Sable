@@ -97,6 +97,7 @@ import { safeFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { matchesShortcut } from '../../keyboard/shortcuts';
 import { getMentionContent, isThreadRelationEvent, reactionOrEditEvent } from '$utils/room';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
 import { mobileOrTablet } from '$utils/user-agent';
@@ -296,6 +297,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
     const [showGifPicker] = useSetting(settingsAtom, 'enableGifPicker');
+    const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
 
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
     const [mentionInReplies] = useSetting(settingsAtom, 'mentionInReplies');
@@ -1268,7 +1270,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           setReplyDraft(undefined);
         }
 
-        if (isKeyHotkey('control+e', evt)) {
+        if (matchesShortcut('composer.openStickerPicker', evt, shortcutOverrides)) {
           evt.preventDefault();
           setEmojiBoardTab(EmojiBoardTab.Sticker);
         }
@@ -1284,6 +1286,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         editor,
         onEditLastMessage,
         setEmojiBoardTab,
+        shortcutOverrides,
       ]
     );
 

@@ -7,6 +7,7 @@ import type {
   PushTransportOverrides,
 } from '$features/settings/notifications/NotificationTransport';
 import type { IImageInfo } from '$types/matrix/common';
+import { sanitizeShortcutOverrides, type ShortcutOverrides } from '../keyboard/shortcuts';
 
 const STORAGE_KEY = 'settings';
 export type DateFormat = 'D MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY/MM/DD' | '';
@@ -94,6 +95,7 @@ export function shouldApplyUserHeroCards(
 }
 
 export interface Settings {
+  shortcutOverrides: ShortcutOverrides;
   themeId?: string;
   useSystemTheme: boolean;
   lightThemeId?: string;
@@ -263,6 +265,7 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
+  shortcutOverrides: {},
   themeId: undefined,
   useSystemTheme: true,
   lightThemeId: undefined,
@@ -434,6 +437,7 @@ export const defaultSettings: Settings = {
 function cloneDefaultSettings(): Settings {
   return {
     ...defaultSettings,
+    shortcutOverrides: { ...defaultSettings.shortcutOverrides },
     themeRemoteFavorites: defaultSettings.themeRemoteFavorites.map((x) => ({
       ...x,
     })),
@@ -449,6 +453,10 @@ const isCallToneId = (value: unknown): value is CallRingtoneId => CALL_TONE_ID_S
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 
 function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
+  const shortcutOverrides = sanitizeShortcutOverrides(parsed.shortcutOverrides);
+  if (shortcutOverrides) parsed.shortcutOverrides = shortcutOverrides;
+  else delete parsed.shortcutOverrides;
+
   if (parsed.monochromeMode === true && parsed.saturationLevel === undefined) {
     parsed.saturationLevel = 0;
   } else if (parsed.monochromeMode === false && parsed.saturationLevel === undefined) {
@@ -610,6 +618,8 @@ function isSanitizableSettingsKey(k: string): k is keyof Settings {
 
 function sanitizeSettingsKey(key: keyof Settings, val: unknown): unknown {
   switch (key) {
+    case 'shortcutOverrides':
+      return sanitizeShortcutOverrides(val);
     case 'filterPronounsBasedOnLanguage':
       return typeof val === 'boolean' ? val : undefined;
     case 'filterPronounsLanguages':
