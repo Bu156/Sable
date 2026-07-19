@@ -1,5 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core';
+import { useAtom } from 'jotai';
 import { Box, Text, Scroll, Switch, color } from 'folds';
+import { autoUpdateCheckAtom } from '$state/autoUpdateCheck';
 import { PageContent } from '$components/page';
 import { SequenceCard } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
@@ -26,6 +28,7 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
     'closeToBackgroundOnClose'
   );
   const [showSystemTrayIcon, setShowSystemTrayIcon] = useDesktopSetting('showSystemTrayIcon');
+  const [autoUpdateCheck, setAutoUpdateCheck] = useAtom(autoUpdateCheckAtom);
 
   if (!isTauri() || !ready) return null;
 
@@ -92,6 +95,28 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                     />
                   </SequenceCard>
                 )}
+              </Box>
+              <Box direction="Column" gap="100">
+                <Text size="L400">Updates</Text>
+                <SequenceCard
+                  className={SequenceCardStyle}
+                  variant="SurfaceVariant"
+                  direction="Column"
+                  gap="400"
+                >
+                  <SettingTile
+                    title="Automatically check for updates"
+                    focusId="auto-update-check"
+                    description="Check GitHub for a new release on launch. Turn off to avoid contacting GitHub."
+                    after={
+                      <Switch
+                        aria-label="auto-update-check"
+                        value={autoUpdateCheck}
+                        onChange={setAutoUpdateCheck}
+                      />
+                    }
+                  />
+                </SequenceCard>
               </Box>
             </Box>
           </PageContent>

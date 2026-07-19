@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
+import { autoUpdateCheckAtom } from '$state/autoUpdateCheck';
 import { createLogger } from '$utils/debug';
 
 const log = createLogger('DesktopUpdater');
@@ -37,10 +39,13 @@ async function checkForDesktopUpdate(): Promise<void> {
 }
 
 export function DesktopUpdater() {
+  const autoUpdateCheck = useAtomValue(autoUpdateCheckAtom);
+
   useEffect(() => {
     if (!isDesktopTauri()) return;
+    if (!autoUpdateCheck) return;
     checkForDesktopUpdate().catch((err) => log.error('update check failed', err));
-  }, []);
+  }, [autoUpdateCheck]);
 
   return null;
 }
