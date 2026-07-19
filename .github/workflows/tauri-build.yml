@@ -183,15 +183,21 @@ jobs:
         run: node .github/scripts/set-tauri-version.mjs "$VERSION" "$UPDATER_ENDPOINT"
 
       # --- macOS / Windows: standard wry build via tauri-action ---
-      - name: Configure updater artifacts
+      - name: Configure desktop bundles
         if: ${{ !matrix.cef }}
         shell: bash
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+          MATRIX_NAME: ${{ matrix.name }}
         run: |
+          ARGS=""
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo 'TAURI_BUILD_ARGS=--config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_ENV"
-          else
-            echo "TAURI_BUILD_ARGS=" >> "$GITHUB_ENV"
+            ARGS='--config {"bundle":{"createUpdaterArtifacts":false}}'
           fi
+          if [ "$IS_NIGHTLY" = "true" ] && [ "$MATRIX_NAME" = "Windows" ]; then
+            ARGS="$ARGS --bundles nsis"
+          fi
+          echo "TAURI_BUILD_ARGS=${ARGS# }" >> "$GITHUB_ENV"
 
       - name: Build desktop bundles
         id: tauri
@@ -219,6 +225,10 @@ jobs:
         run: |
           echo "$ARTIFACTS" | jq -r '.[]' | while read -r path; do
             [ -n "$path" ] || continue
+            if [ ! -f "$path" ]; then
+              echo "Skipping non-file artifact: $path"
+              continue
+            fi
             echo "Uploading $path"
             gh release upload "$TAG" "$path" --clobber
           done

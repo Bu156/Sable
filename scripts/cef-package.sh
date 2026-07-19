@@ -19,7 +19,7 @@ if [[ "$VERSION" == *-* ]]; then
   RPM_VERSION="$BASE_VERSION"
   RPM_ITERATION="0.${PRERELEASE}"
 fi
-STAGE="src-tauri/target/release"
+STAGE="$ROOT/src-tauri/target/release"
 OUT="$STAGE/bundle"
 WORK="$STAGE/cef-pkg"
 
