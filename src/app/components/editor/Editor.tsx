@@ -440,9 +440,12 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 onPaste={onPaste}
                 // Defer to OS capitalization setting (respects iOS sentence-case toggle).
                 autoCapitalize="sentences"
-                // keeps focus after pressing send.
-                onBlur={() => {
-                  if (mobileOrTablet()) ReactEditor.focus(editor);
+                // keeps focus after pressing send, but yields to another editor.
+                onBlur={(evt) => {
+                  if (!mobileOrTablet()) return;
+                  const next = evt.relatedTarget as HTMLElement | null;
+                  if (next && next !== editableRef.current && next.isContentEditable) return;
+                  ReactEditor.focus(editor);
                 }}
                 style={{ boxShadow: 'none' }}
               />
