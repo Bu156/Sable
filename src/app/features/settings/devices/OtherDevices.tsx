@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
 import { Box, Button, config, Menu, Spinner, Text } from 'folds';
 import type { AuthDict, IAuthData, IMyDevice, MatrixError, UIAFlow } from '$types/matrix-sdk';
 import { SequenceCard } from '$components/sequence-card';
@@ -65,12 +66,16 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
     if (!authUrl) return;
 
-    window.open(
-      withSearchParam(authUrl, {
-        action: accountManagementActions.sessionsList,
-      }),
-      '_blank'
-    );
+    const url = withSearchParam(authUrl, {
+      action: accountManagementActions.sessionsList,
+    });
+    if (isTauri()) {
+      import('@tauri-apps/plugin-opener')
+        .then(({ openUrl }) => openUrl(url))
+        .catch(() => window.open(url, '_blank'));
+      return;
+    }
+    window.open(url, '_blank');
   }, [authMetadata, accountManagementActions]);
 
   const handleDeleteOIDC = useCallback(
@@ -78,13 +83,17 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
       if (!authUrl) return;
 
-      window.open(
-        withSearchParam(authUrl, {
-          action: accountManagementActions.sessionEnd,
-          device_id: deviceId,
-        }),
-        '_blank'
-      );
+      const url = withSearchParam(authUrl, {
+        action: accountManagementActions.sessionEnd,
+        device_id: deviceId,
+      });
+      if (isTauri()) {
+        import('@tauri-apps/plugin-opener')
+          .then(({ openUrl }) => openUrl(url))
+          .catch(() => window.open(url, '_blank'));
+        return;
+      }
+      window.open(url, '_blank');
     },
     [authMetadata, accountManagementActions]
   );
