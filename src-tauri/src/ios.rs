@@ -35,10 +35,9 @@ pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
             if !class.name().to_bytes().starts_with(b"WKContent") {
                 continue;
             }
-            let Ok(subclass_name) = CString::new(format!(
-                "{}_NoAccessoryBar",
-                class.name().to_string_lossy()
-            )) else {
+            let Ok(subclass_name) =
+                CString::new(format!("{}_NoAccessoryBar", class.name().to_string_lossy()))
+            else {
                 continue;
             };
             let subclass = AnyClass::get(&subclass_name).unwrap_or_else(|| {
