@@ -224,6 +224,7 @@ jobs:
           ARTIFACTS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
           echo "$ARTIFACTS" | jq -r '.[]' | while read -r path; do
+            path="${path%$'\r'}"
             [ -n "$path" ] || continue
             if [ -d "$path" ]; then
               echo "Skipping directory artifact: $path"
