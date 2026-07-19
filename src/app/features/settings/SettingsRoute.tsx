@@ -102,15 +102,18 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
     if (section === undefined) return;
 
     if (screenSize === ScreenSize.Mobile) {
+      if (routeState?.backgroundLocation) {
+        const backTarget = getSettingsCloseTarget(routeState);
+        navigate(backTarget.to, { replace: true, state: backTarget.state });
+        return;
+      }
+
       if (hasPreviousEntry) {
         navigate(-1);
         return;
       }
 
-      navigate(getSettingsPath(), {
-        replace: true,
-        state: routeState?.backgroundLocation ? routeState : undefined,
-      });
+      navigate(getSettingsPath(), { replace: true });
       return;
     }
 

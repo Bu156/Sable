@@ -13,6 +13,7 @@ import {
 } from 'folds';
 import { GearSix, SquaresFour, menuIcon, sizedIcon } from '$components/icons/phosphor';
 import { PageNav, PageNavHeader } from '$components/page';
+import { NavButton, NavItem, NavItemContent } from '$components/nav';
 import { useEffect, useMemo, useState } from 'react';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useSetting } from '$state/hooks/settings';
@@ -224,18 +225,18 @@ export function ProfileMobile() {
                   const IconComponent = item.icon;
 
                   return (
-                    <MenuItem
-                      key={item.id}
-                      radii="300"
-                      size="300"
-                      variant="Background"
-                      before={menuIcon(IconComponent)}
-                      onClick={() => openSettings(item.id)}
-                    >
-                      <Text size="T300" truncate>
-                        {item.name}
-                      </Text>
-                    </MenuItem>
+                    <NavItem key={item.id} variant="Background" radii="400">
+                      <NavButton onClick={() => openSettings(item.id)} aria-label={item.name}>
+                        <NavItemContent>
+                          <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                            {menuIcon(IconComponent)}
+                            <Text as="span" size="Inherit" truncate>
+                              {item.name}
+                            </Text>
+                          </Box>
+                        </NavItemContent>
+                      </NavButton>
+                    </NavItem>
                   );
                 })}
               </Box>

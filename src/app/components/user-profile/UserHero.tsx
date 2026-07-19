@@ -202,7 +202,7 @@ export function UserHero({
                 maxHeight: isFullStatus ? toRem(105) : toRem(48),
                 cursor: allowEditing || isExpandable ? 'pointer' : 'default',
                 display: 'flex',
-                width: 'fit-content',
+                width: allowEditing ? '100%' : 'fit-content',
                 padding: `${toRem(8)} ${toRem(12)}`,
                 backgroundColor: statusSurfaceColor,
                 color: textColor,
@@ -218,7 +218,7 @@ export function UserHero({
               <Box
                 direction="Row"
                 gap="100"
-                style={{ height: '100%', maxWidth: allowEditing ? toRem(210) : '100%' }}
+                style={{ height: '100%', maxWidth: '100%', flex: allowEditing ? 1 : undefined }}
               >
                 {isFullStatus ? (
                   <Scroll visibility="Hover" hideTrack style={{ height: '100%', flex: 1 }}>
