@@ -72,6 +72,7 @@ import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useRoomName, useRoomTopic } from '$hooks/useRoomMeta';
 import { nicknamesAtom } from '$state/nicknames';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { warmupRoomDecryption } from '$utils/decryptScheduler';
 
 // Call Hooks & Plugins
 import { useCallMembers, useCallSession } from '$hooks/useCall';
@@ -425,6 +426,7 @@ export function RoomNavItem({
             {(triggerRef) => (
               <NavButton
                 onClick={handleNavItemClick}
+                onPointerDown={() => warmupRoomDecryption(mx, room.roomId)}
                 aria-label={ariaLabel}
                 ref={triggerRef}
                 style={hideTextStyling(hideText)}

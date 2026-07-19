@@ -25,6 +25,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useAlive } from '$hooks/useAlive';
 import { useMessageEdit } from '$hooks/useMessageEdit';
 import { useDocumentFocusChange } from '$hooks/useDocumentFocusChange';
+import { useIsInactivePanel } from '$hooks/useRoom';
 import { markAsRead } from '$utils/notifications';
 import {
   getReactCustomHtmlParser,
@@ -287,6 +288,7 @@ export function RoomTimeline({
 
   const { editId, handleEdit } = useMessageEdit(editor, { onReset: onEditorReset, alive });
   const { navigateRoom } = useRoomNavigate();
+  const isInactivePanel = useIsInactivePanel();
 
   const [hideReads] = useSetting(settingsAtom, 'hideReads');
   const [messageLayout] = useSetting(settingsAtom, 'messageLayout');
@@ -823,6 +825,7 @@ export function RoomTimeline({
   });
 
   const tryAutoMarkAsRead = useCallback(() => {
+    if (isInactivePanel) return; // Don't clear unread while room is behind the list
     if (!readUptoEventIdRef.current) {
       requestAnimationFrame(() => markAsRead(mx, room.roomId, hideReads));
       return;
@@ -832,7 +835,7 @@ export function RoomTimeline({
     if (latestTimeline === room.getLiveTimeline()) {
       requestAnimationFrame(() => markAsRead(mx, room.roomId, hideReads));
     }
-  }, [mx, room, hideReads]);
+  }, [mx, room, hideReads, isInactivePanel]);
 
   useDocumentFocusChange(
     useCallback(
