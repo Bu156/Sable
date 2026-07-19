@@ -19,6 +19,8 @@ export type MediaTransportOptions = {
 
 const inflightRequests = new Map<string, Promise<Blob>>();
 
+const MEDIA_FETCH_TIMEOUT_MS = 30_000;
+
 const MATRIX_SESSIONS_KEY = 'matrixSessions';
 const ACTIVE_SESSION_KEY = 'matrixActiveSession';
 const FALLBACK_ACCESS_TOKEN_KEY = 'cinny_access_token';
@@ -214,6 +216,7 @@ async function fetchMediaResponse(
   const init: RequestInit = {
     method: 'GET',
     cache: getFetchCacheMode(cacheMode),
+    signal: AbortSignal.timeout(MEDIA_FETCH_TIMEOUT_MS),
     ...(Object.keys(headers).length > 0 ? { headers } : {}),
   };
 
