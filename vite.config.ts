@@ -295,10 +295,7 @@ export default defineConfig(({ command }) => ({
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] }) as PluginOption],
       output: {
         manualChunks: (id) => {
-          if (id.includes('pdfjs-dist')) return 'pdf';
-          if (id.includes('@sableclient/sable-call-embedded')) return 'element-call';
           if (id.includes('@matrix-org') || id.includes('matrix-js-sdk')) return 'matrix';
-          if (id.includes('react-prism') || id.includes('prism')) return 'prism';
           return undefined;
         },
       },
