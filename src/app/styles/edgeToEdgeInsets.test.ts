@@ -73,7 +73,7 @@ describe('android edge-to-edge inset contract', () => {
     expect(indexTsx).toContain('installIosPwaViewportHeight();');
     expect(iosPwaViewport).toContain("window.matchMedia('(display-mode: standalone)').matches");
     expect(iosPwaViewport).toContain('viewport.height + viewport.offsetTop');
-    expect(iosPwaViewport).toContain("window.setTimeout(updateHeight, 350)");
+    expect(iosPwaViewport).toContain('window.setTimeout(updateHeight, 350)');
   });
 
   it('removes the scattered safe-area css consumers', () => {
