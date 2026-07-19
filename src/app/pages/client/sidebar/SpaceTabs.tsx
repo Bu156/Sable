@@ -654,8 +654,18 @@ function OpenedSpaceFolder({
 
   const spaceDraggable: SidebarDraggable = useMemo(() => ({ folder, open: true }), [folder]);
 
-  const orderAbove = useDropTargetInstruction(spaceDraggable, aboveTargetRef, 'reorder-above', !isMobile);
-  const orderBelow = useDropTargetInstruction(spaceDraggable, belowTargetRef, 'reorder-below', !isMobile);
+  const orderAbove = useDropTargetInstruction(
+    spaceDraggable,
+    aboveTargetRef,
+    'reorder-above',
+    !isMobile
+  );
+  const orderBelow = useDropTargetInstruction(
+    spaceDraggable,
+    belowTargetRef,
+    'reorder-below',
+    !isMobile
+  );
 
   return (
     <SidebarFolder

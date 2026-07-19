@@ -74,7 +74,9 @@ const Login = lazy(() => import('./auth').then((m) => ({ default: m.Login })));
 const Register = lazy(() => import('./auth').then((m) => ({ default: m.Register })));
 const ResetPassword = lazy(() => import('./auth').then((m) => ({ default: m.ResetPassword })));
 
-const SettingsRoute = lazy(() => import('$features/settings').then((m) => ({ default: m.SettingsRoute })));
+const SettingsRoute = lazy(() =>
+  import('$features/settings').then((m) => ({ default: m.SettingsRoute }))
+);
 const SettingsShallowRouteRenderer = lazy(() =>
   import('$features/settings/SettingsShallowRouteRenderer').then((m) => ({
     default: m.SettingsShallowRouteRenderer,

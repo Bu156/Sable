@@ -29,7 +29,11 @@ import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 import { hydrateRoomMember } from './roomMemberHydration';
-import { primeVersionsFromCache, revalidateVersionsCache, clearCachedVersions } from './versionsCache';
+import {
+  primeVersionsFromCache,
+  revalidateVersionsCache,
+  clearCachedVersions,
+} from './versionsCache';
 
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');

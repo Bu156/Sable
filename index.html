@@ -146,9 +146,7 @@
     <script>
       (function () {
         var base = '%BASE_URL%';
-        var lng =
-          (localStorage.getItem('i18nextLng') || navigator.language || 'en')
-            .split('-')[0];
+        var lng = (localStorage.getItem('i18nextLng') || navigator.language || 'en').split('-')[0];
         var configPromise = fetch(base + 'config.json').then(function (r) {
           if (!r.ok) return undefined;
           return r.json();

@@ -24,7 +24,11 @@ const readCache = (baseUrl: string, userId: string): CachedVersions | undefined 
   }
 };
 
-const writeCache = (baseUrl: string, userId: string, data: { versions: unknown; unstable_features: Record<string, boolean> | undefined }): void => {
+const writeCache = (
+  baseUrl: string,
+  userId: string,
+  data: { versions: unknown; unstable_features: Record<string, boolean> | undefined }
+): void => {
   try {
     const entry: CachedVersions = { ...data, fetchedAt: Date.now() };
     localStorage.setItem(keyFor(baseUrl, userId), JSON.stringify(entry));
@@ -45,7 +49,10 @@ export const primeVersionsFromCache = async (
 ): Promise<boolean> => {
   const cached = readCache(baseUrl, userId);
   if (!cached) return false;
-  const serverVersions = { versions: cached.versions, unstable_features: cached.unstable_features ?? {} };
+  const serverVersions = {
+    versions: cached.versions,
+    unstable_features: cached.unstable_features ?? {},
+  };
   (mx as unknown as { serverVersionsPromise: Promise<unknown> | undefined }).serverVersionsPromise =
     Promise.resolve(serverVersions);
   (mx as unknown as { canSupport: Map<unknown, unknown> }).canSupport =
@@ -71,9 +78,13 @@ export const revalidateVersionsCache = async (
       { prefix: '' }
     );
     const data = resp as { versions: unknown; unstable_features?: Record<string, boolean> };
-    writeCache(baseUrl, userId, { versions: data.versions, unstable_features: data.unstable_features });
-    (mx as unknown as { serverVersionsPromise: Promise<unknown> | undefined }).serverVersionsPromise =
-      Promise.resolve(data);
+    writeCache(baseUrl, userId, {
+      versions: data.versions,
+      unstable_features: data.unstable_features,
+    });
+    (
+      mx as unknown as { serverVersionsPromise: Promise<unknown> | undefined }
+    ).serverVersionsPromise = Promise.resolve(data);
     (mx as unknown as { canSupport: Map<unknown, unknown> }).canSupport =
       await buildFeatureSupportMap(data as Parameters<typeof buildFeatureSupportMap>[0]);
   } catch {
