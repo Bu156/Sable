@@ -9,31 +9,9 @@ Join our matrix space [here](https://matrix.to/#/#sable:sable.moe) to discuss fe
 Forked from [Cinny](https://github.com/cinnyapp/cinny/).
 
 ## Getting started
-The web app is available at [app.sable.moe](https://app.sable.moe/) and gets updated on frequently, as soon as a feature is deemed stable.
+The stable web app is available at [app.sable.moe](https://app.sable.moe/) and tracks the [latest GitHub release](https://github.com/SableClient/Sable/releases/latest). Nightly builds are available at [dev.sable.moe](https://dev.sable.moe/) and from the [`nightly` GitHub release](https://github.com/SableClient/Sable/releases/tag/nightly).
 
-You can also download our desktop app for windows and linux from [releases](https://github.com/SableClient/Sable/releases/latest).
-
-### Verify release provenance
-
-Release binaries and updater metadata are attested by their GitHub Actions build workflow. After downloading an artifact, verify that it was built by this repository:
-
-```sh
-gh attestation verify <downloaded-file> --repo SableClient/Sable
-```
-
-For example:
-
-```sh
-gh attestation verify Sable_1.20.0_amd64.AppImage --repo SableClient/Sable
-```
-
-The container attestation is published alongside the image in GHCR:
-
-```sh
-gh attestation verify oci://ghcr.io/sableclient/sable:latest --repo SableClient/Sable
-```
-
-Artifact attestations establish which repository, workflow, commit, and runner produced a file. Tauri updater signatures and Android package signatures provide the platform-specific update and installation guarantees separately.
+You can also download our desktop app for Windows and Linux from [releases](https://github.com/SableClient/Sable/releases/latest). Release artifacts include build attestations, and desktop installations update automatically.
 
 ## Self-hosting
 You have a few options for self hosting, you can:

@@ -7,6 +7,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="${1:-$(grep -m1 '^version' src-tauri/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')}"
+DEB_VERSION="$VERSION"
+RPM_VERSION="$VERSION"
+RPM_ITERATION=1
+if [[ "$VERSION" == *-* ]]; then
+  BASE_VERSION="${VERSION%%-*}"
+  PRERELEASE="${VERSION#*-}"
+  # Debian sorts ~ before the final version. RPM uses the release field so its
+  # Version remains hyphen-free and a 0.* prerelease sorts before release 1.
+  DEB_VERSION="${BASE_VERSION}~${PRERELEASE}"
+  RPM_VERSION="$BASE_VERSION"
+  RPM_ITERATION="0.${PRERELEASE}"
+fi
 STAGE="src-tauri/target/release"
 OUT="$STAGE/bundle"
 WORK="$STAGE/cef-pkg"
@@ -54,7 +66,7 @@ EOF
   write_desktop "$PKGROOT/usr/share/applications/sable.desktop"
   cp src-tauri/icons/128x128.png "$PKGROOT/usr/share/icons/hicolor/128x128/apps/sable.png"
 
-  COMMON=(-s dir -n sable -v "$VERSION" --iteration 1
+  COMMON=(-s dir -n sable
     --description "Sable, a Matrix client"
     --url "https://sable.moe" --maintainer "SableClient"
     --category net)
@@ -62,12 +74,14 @@ EOF
   DEB_DEPS=(--depends libwebkit2gtk-4.1-0 --depends libgtk-3-0
     --depends libnss3 --depends libnspr4 --depends libgbm1
     --depends libdrm2 --depends libxkbcommon0 --depends xdg-utils)
-  (cd "$OUT/deb" && fpm "${COMMON[@]}" -t deb -a amd64 "${DEB_DEPS[@]}" -C "$PKGROOT" .)
+  (cd "$OUT/deb" && fpm "${COMMON[@]}" -v "$DEB_VERSION" --iteration 1 \
+    -t deb -a amd64 "${DEB_DEPS[@]}" -C "$PKGROOT" .)
 
   RPM_DEPS=(--depends webkit2gtk4.1 --depends gtk3 --depends nss
     --depends nspr --depends mesa-libgbm --depends libdrm
     --depends libxkbcommon --depends xdg-utils)
-  (cd "$OUT/rpm" && fpm "${COMMON[@]}" -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$PKGROOT" .)
+  (cd "$OUT/rpm" && fpm "${COMMON[@]}" -v "$RPM_VERSION" --iteration "$RPM_ITERATION" \
+    -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$PKGROOT" .)
 else
   echo "fpm not found; skipping deb/rpm (building AppImage only)"
 fi

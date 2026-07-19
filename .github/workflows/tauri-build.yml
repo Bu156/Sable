@@ -30,6 +30,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       ref: ${{ steps.meta.outputs.ref }}
       nightly: ${{ steps.meta.outputs.nightly }}
+      started_at: ${{ steps.meta.outputs.started_at }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -47,13 +48,16 @@ jobs:
           GIT_REF: ${{ github.ref }}
           GIT_REF_NAME: ${{ github.ref_name }}
           GIT_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             TAG="$INPUT_TAG"; REF="$INPUT_TAG"; NIGHTLY=false
             VERSION="${TAG#v}"
           elif [ "$GIT_REF" = "refs/heads/dev" ]; then
             TAG="nightly"; REF="$GIT_SHA"; NIGHTLY=true
-            VERSION="$(node -p "require('./package.json').version")"
+            VERSION="$(node .github/scripts/nightly-version.mjs "$RUN_NUMBER" "$RUN_ATTEMPT")"
           else
             TAG="$GIT_REF_NAME"; REF="$GIT_REF"; NIGHTLY=false
             VERSION="${TAG#v}"
@@ -63,6 +67,7 @@ jobs:
             echo "version=$VERSION"
             echo "ref=$REF"
             echo "nightly=$NIGHTLY"
+            echo "started_at=$STARTED_AT"
           } >> "$GITHUB_OUTPUT"
 
       - name: Wait for release to exist
@@ -82,18 +87,21 @@ jobs:
           echo "Release $TAG was not found." >&2
           exit 1
 
-      - name: Refresh nightly prerelease
+      - name: Ensure nightly prerelease exists
         if: ${{ steps.meta.outputs.nightly == 'true' }}
         shell: bash
         env:
           GIT_SHA: ${{ github.sha }}
         run: |
-          gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly \
-            --prerelease \
-            --target "$GIT_SHA" \
-            --title "Nightly (dev)" \
-            --notes "Rolling nightly build from dev — $GIT_SHA"
+          if gh release view nightly >/dev/null 2>&1; then
+            echo "Reusing the existing nightly release while the new build is prepared."
+          else
+            gh release create nightly \
+              --prerelease \
+              --target "$GIT_SHA" \
+              --title "Nightly (dev)" \
+              --notes "Rolling nightly build from dev — $GIT_SHA"
+          fi
 
   build:
     name: Build ${{ matrix.name }}
@@ -170,7 +178,9 @@ jobs:
 
       - name: Stamp release version into tauri.conf.json
         shell: bash
-        run: node .github/scripts/set-tauri-version.mjs "$VERSION"
+        env:
+          UPDATER_ENDPOINT: ${{ needs.setup-release.outputs.nightly == 'true' && format('https://github.com/{0}/releases/download/nightly/latest.json', github.repository) || '' }}
+        run: node .github/scripts/set-tauri-version.mjs "$VERSION" "$UPDATER_ENDPOINT"
 
       # --- macOS / Windows: standard wry build via tauri-action ---
       - name: Configure updater artifacts
@@ -357,8 +367,7 @@ jobs:
 
   updater-manifest:
     name: Publish updater manifest
-    needs: [setup-release, build]
-    if: ${{ needs.setup-release.outputs.nightly != 'true' }}
+    needs: [setup-release, build, android]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -368,7 +377,9 @@ jobs:
       artifact-metadata: write
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
       REPO: ${{ github.repository }}
+      STARTED_AT: ${{ needs.setup-release.outputs.started_at }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -382,6 +393,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "${{ needs.setup-release.outputs.nightly }}" = "true" ]; then
+            gh release view "$TAG" --json assets \
+              | jq -r --arg cutoff "$STARTED_AT" \
+                  '.assets[] | select(.updatedAt <= $cutoff and (.name | endswith(".sig"))) | .name' \
+              | while read -r name; do
+                  [ -n "$name" ] || continue
+                  echo "Removing superseded nightly signature: $name"
+                  gh release delete-asset "$TAG" "$name" --yes
+                done
+          fi
           node .github/scripts/build-updater-manifest.mjs
           if [ -f latest.json ]; then
             echo "produced=true" >> "$GITHUB_OUTPUT"
@@ -402,3 +423,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" latest.json --clobber
+
+      - name: Finalize nightly release
+        if: ${{ needs.setup-release.outputs.nightly == 'true' && steps.manifest.outputs.produced == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_SHA: ${{ needs.setup-release.outputs.ref }}
+        run: |
+          gh api --method PATCH "repos/$REPO/git/refs/tags/nightly" \
+            -f sha="$GIT_SHA" -F force=true
+          gh release edit nightly \
+            --prerelease \
+            --target "$GIT_SHA" \
+            --title "Nightly (dev)" \
+            --notes "Rolling nightly build $VERSION from dev — $GIT_SHA"
+
+          gh release view nightly --json assets \
+            | jq -r --arg cutoff "$STARTED_AT" \
+                '.assets[] | select(.updatedAt <= $cutoff) | .name' \
+            | while read -r name; do
+                [ -n "$name" ] || continue
+                echo "Removing superseded nightly asset: $name"
+                gh release delete-asset nightly "$name" --yes
+              done

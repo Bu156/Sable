@@ -1,6 +1,6 @@
 // Composes the Tauri updater manifest (latest.json) from the per-platform .sig
 // assets already attached to the release.
-// Required env: TAG, REPO, GH_TOKEN.
+// Required env: TAG, VERSION, REPO, GH_TOKEN.
 
 import { execSync } from 'node:child_process';
 import { readFileSync, readdirSync, writeFileSync, mkdtempSync } from 'node:fs';
@@ -8,12 +8,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const TAG = process.env.TAG;
+const VERSION = process.env.VERSION;
 const REPO = process.env.REPO;
-if (!TAG || !REPO) {
-  console.error('TAG and REPO env vars are required');
+if (!TAG || !VERSION || !REPO) {
+  console.error('TAG, VERSION, and REPO env vars are required');
   process.exit(1);
 }
-const version = TAG.replace(/^v/, '');
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(VERSION)) {
+  console.error(`VERSION must be valid SemVer (got: ${VERSION})`);
+  process.exit(1);
+}
+const version = VERSION;
 
 const dir = mkdtempSync(join(tmpdir(), 'sable-sigs-'));
 execSync(`gh release download "${TAG}" --repo "${REPO}" --pattern '*.sig' --dir "${dir}"`, {
@@ -50,13 +55,15 @@ if (Object.keys(platforms).length === 0) {
 }
 
 let notes = `Sable ${version}`;
-try {
-  notes =
-    execSync(`gh release view "${TAG}" --repo "${REPO}" --json body -q .body`, {
-      encoding: 'utf8',
-    }).trim() || notes;
-} catch {
-  // keep the default note
+if (TAG !== 'nightly') {
+  try {
+    notes =
+      execSync(`gh release view "${TAG}" --repo "${REPO}" --json body -q .body`, {
+        encoding: 'utf8',
+      }).trim() || notes;
+  } catch {
+    // keep the default note
+  }
 }
 
 const manifest = { version, notes, pub_date: new Date().toISOString(), platforms };
