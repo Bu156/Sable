@@ -225,8 +225,8 @@ jobs:
         run: |
           echo "$ARTIFACTS" | jq -r '.[]' | while read -r path; do
             [ -n "$path" ] || continue
-            if [ ! -f "$path" ]; then
-              echo "Skipping non-file artifact: $path"
+            if [ -d "$path" ]; then
+              echo "Skipping directory artifact: $path"
               continue
             fi
             echo "Uploading $path"
