@@ -108,8 +108,21 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
             .use_https_scheme(true);
 
     #[cfg(desktop)]
+    let title = if app
+        .package_info()
+        .version
+        .pre
+        .as_str()
+        .starts_with("nightly.")
+    {
+        "Sable Nightly"
+    } else {
+        "Sable"
+    };
+
+    #[cfg(desktop)]
     let builder = builder
-        .title("Sable")
+        .title(title)
         .resizable(true)
         .fullscreen(false)
         .inner_size(1280.0, 720.0)

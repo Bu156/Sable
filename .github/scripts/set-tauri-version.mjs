@@ -16,7 +16,7 @@ if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
   process.exit(1);
 }
 
-if (updaterEndpoint && !/^https:\/\//.test(updaterEndpoint)) {
+if (updaterEndpoint && !updaterEndpoint.startsWith('https://')) {
   console.error(`Updater endpoint must use HTTPS (got: ${updaterEndpoint})`);
   process.exit(1);
 }
