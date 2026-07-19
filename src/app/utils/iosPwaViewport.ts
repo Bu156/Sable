@@ -1,4 +1,5 @@
 const IOS_PWA_VIEWPORT_HEIGHT = '--sable-ios-pwa-viewport-height';
+const MIN_KEYBOARD_HEIGHT = 100;
 
 const isStandaloneIosPwa = (): boolean =>
   window.matchMedia('(display-mode: standalone)').matches &&
@@ -9,11 +10,24 @@ export function installIosPwaViewportHeight(): void {
 
   let frame = 0;
   let settleTimer = 0;
+  let fullHeight = 0;
+  let viewportWidth = window.innerWidth;
 
   const updateHeight = () => {
     frame = 0;
     const viewport = window.visualViewport;
-    const height = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+    const visibleHeight = viewport?.height ?? window.innerHeight;
+    const visibleBottom = visibleHeight + (viewport?.offsetTop ?? 0);
+
+    if (window.innerWidth !== viewportWidth) {
+      viewportWidth = window.innerWidth;
+      fullHeight = visibleBottom;
+    }
+
+    const keyboardOpen = fullHeight - visibleHeight > MIN_KEYBOARD_HEIGHT;
+    if (!keyboardOpen) fullHeight = Math.max(fullHeight, visibleBottom);
+
+    const height = keyboardOpen ? visibleBottom : fullHeight;
     document.documentElement.style.setProperty(IOS_PWA_VIEWPORT_HEIGHT, `${Math.round(height)}px`);
   };
 
