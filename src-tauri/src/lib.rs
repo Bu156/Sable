@@ -313,6 +313,8 @@ pub fn run() {
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]
             desktop::tray::sync_desktop_settings,
+            #[cfg(target_os = "linux")]
+            desktop::tray_badge::set_tray_badge,
             #[cfg(windows)]
             desktop::windows::snap_overlay::show_snap_overlay,
             #[cfg(windows)]
