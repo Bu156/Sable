@@ -1,5 +1,5 @@
 import type { MatrixClient } from '$types/matrix-sdk';
-import { buildFeatureSupportMap, Method } from '$types/matrix-sdk';
+import { buildFeatureSupportMap, Method, Thread } from '$types/matrix-sdk';
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const keyFor = (baseUrl: string, userId: string): string =>
@@ -34,6 +34,23 @@ const writeCache = (
     localStorage.setItem(keyFor(baseUrl, userId), JSON.stringify(entry));
   } catch {
     // localStorage full or disabled — non-fatal, skip caching.
+  }
+};
+
+/** Fetch /versions through the SDK and persist the response for the next startup. */
+export const cacheVersionsFromClient = async (
+  mx: MatrixClient,
+  baseUrl: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const data = await mx.getVersions();
+    writeCache(baseUrl, userId, {
+      versions: data.versions,
+      unstable_features: data.unstable_features,
+    });
+  } catch {
+    // startup can continue without a cache entry.
   }
 };
 
@@ -87,6 +104,10 @@ export const revalidateVersionsCache = async (
     ).serverVersionsPromise = Promise.resolve(data);
     (mx as unknown as { canSupport: Map<unknown, unknown> }).canSupport =
       await buildFeatureSupportMap(data as Parameters<typeof buildFeatureSupportMap>[0]);
+    const { threads, list, fwdPagination } = await mx.doesServerSupportThread();
+    Thread.setServerSideSupport(threads);
+    Thread.setServerSideListSupport(list);
+    Thread.setServerSideFwdPaginationSupport(fwdPagination);
   } catch {
     // Revalidation failed — cached values remain in effect. Non-fatal.
   }

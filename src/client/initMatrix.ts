@@ -33,6 +33,7 @@ import {
   primeVersionsFromCache,
   revalidateVersionsCache,
   clearCachedVersions,
+  cacheVersionsFromClient,
 } from './versionsCache';
 
 const log = createLogger('initMatrix');
@@ -281,7 +282,7 @@ const initializeClient = async (
 
   void primeVersionsFromCache(mx, session.baseUrl, session.userId).then((primed) => {
     if (primed) void revalidateVersionsCache(mx, session.baseUrl, session.userId);
-    else void mx.getVersions().catch(() => undefined);
+    else void cacheVersionsFromClient(mx, session.baseUrl, session.userId);
   });
 
   const syncStorePromise = measureStartupPhase('sync_store', () => indexedDBStore.startup());
