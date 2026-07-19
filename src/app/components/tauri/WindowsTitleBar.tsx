@@ -91,6 +91,7 @@ function CloseIcon() {
 
 export function WindowsTitleBar() {
   const [maximized, setMaximized] = useState(false);
+  const [windowTitle, setWindowTitle] = useState('Sable');
   const appWindowRef = useRef<Window | null>(null);
   const snapTimerRef = useRef<number | undefined>(undefined);
   const isWindowsDesktopTauri = isTauri() && osType() === 'windows';
@@ -113,6 +114,15 @@ export function WindowsTitleBar() {
     let mounted = true;
     let unlistenResize: (() => void) | undefined;
     let unlistenTracking: (() => void) | undefined;
+
+    appWindow
+      .title()
+      .then((title) => {
+        if (mounted) setWindowTitle(title);
+      })
+      .catch((error) => {
+        log.warn('Failed to read window title:', error);
+      });
 
     const syncMaximized = async () => {
       try {
@@ -245,7 +255,7 @@ export function WindowsTitleBar() {
     <nav className="tauri-titlebar">
       <div className="tauri-titlebar__drag" data-tauri-drag-region>
         <span className="tauri-titlebar__title" data-tauri-drag-region>
-          sable
+          {windowTitle}
         </span>
       </div>
       <div className="tauri-titlebar__status" data-tauri-drag-region>
