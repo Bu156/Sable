@@ -13,6 +13,28 @@ The web app is available at [app.sable.moe](https://app.sable.moe/) and gets upd
 
 You can also download our desktop app for windows and linux from [releases](https://github.com/SableClient/Sable/releases/latest).
 
+### Verify release provenance
+
+Release binaries and updater metadata are attested by their GitHub Actions build workflow. After downloading an artifact, verify that it was built by this repository:
+
+```sh
+gh attestation verify <downloaded-file> --repo SableClient/Sable
+```
+
+For example:
+
+```sh
+gh attestation verify Sable_1.20.0_amd64.AppImage --repo SableClient/Sable
+```
+
+The container attestation is published alongside the image in GHCR:
+
+```sh
+gh attestation verify oci://ghcr.io/sableclient/sable:latest --repo SableClient/Sable
+```
+
+Artifact attestations establish which repository, workflow, commit, and runner produced a file. Tauri updater signatures and Android package signatures provide the platform-specific update and installation guarantees separately.
+
 ## Self-hosting
 You have a few options for self hosting, you can:
 1. Run the prebuilt docker container.
