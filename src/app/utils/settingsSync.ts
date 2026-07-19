@@ -1,4 +1,5 @@
 import type { Settings } from '$state/settings';
+import { sanitizeShortcutOverrides } from '../keyboard/shortcuts';
 
 /**
  * Keys excluded from cross-device sync.
@@ -54,6 +55,9 @@ export const deserializeFromSync = (data: unknown, currentSettings: Settings): S
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return null;
 
   const merged = { ...currentSettings, ...(remote as Partial<Settings>) };
+  merged.shortcutOverrides =
+    sanitizeShortcutOverrides((remote as Partial<Settings>).shortcutOverrides) ??
+    currentSettings.shortcutOverrides;
   // Always restore non-syncable keys from local state.
   NON_SYNCABLE_KEYS.forEach((key) => {
     (merged as unknown as Record<string, unknown>)[key] = (

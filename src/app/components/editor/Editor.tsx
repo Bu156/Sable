@@ -12,6 +12,8 @@ import { RenderElement, RenderLeaf } from './Elements';
 import type { CustomElement } from './slate';
 import * as css from './Editor.css';
 import { toggleKeyboardShortcut } from './keyboard';
+import { useSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
 
 const withInline = (editor: Editor): Editor => {
   const { isInline } = editor;
@@ -94,6 +96,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
     },
     ref
   ) => {
+    const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
     // Each <Slate> instance must receive its own fresh node objects.
     // Sharing a module-level constant causes Slate's global NODE_TO_ELEMENT
     // WeakMap to be overwritten when multiple editors are mounted at the same
@@ -378,10 +381,10 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
 
         onKeyDown?.(evt);
 
-        const shortcutToggled = toggleKeyboardShortcut(editor, evt);
+        const shortcutToggled = toggleKeyboardShortcut(editor, evt, shortcutOverrides);
         if (shortcutToggled) evt.preventDefault();
       },
-      [editor, onKeyDown]
+      [editor, onKeyDown, shortcutOverrides]
     );
 
     const renderPlaceholder = useCallback(

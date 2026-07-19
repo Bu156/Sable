@@ -47,10 +47,11 @@ import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
 import { searchModalAtom } from '$state/searchModal';
 import { useKeyDown } from '$hooks/useKeyDown';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { KeySymbol } from '$utils/key-symbol';
-import { isMacOS } from '$utils/user-agent';
 import { useSelectedSpace } from '$hooks/router/useSelectedSpace';
 import { getMxIdServer } from '$utils/mxIdHelper';
+import { useSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
+import { formatShortcut, getShortcutBinding, matchesShortcut } from '../../keyboard/shortcuts';
 
 enum SearchRoomType {
   Rooms = '#',
@@ -138,6 +139,7 @@ export type RoomSearchModalProps = {
 };
 
 export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearchModalProps) {
+  const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -495,7 +497,9 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
           ) : (
             <>
               Type <b>#</b> for rooms, <b>@</b> for DMs and <b>*</b> for spaces. Hotkey:{' '}
-              <b>{isMacOS() ? KeySymbol.Command : 'Ctrl'} + k</b>
+              <b>
+                {formatShortcut(getShortcutBinding('navigation.openRoomSearch', shortcutOverrides))}
+              </b>
             </>
           )}
         </Text>
@@ -506,18 +510,19 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
 
 export function SearchModalRenderer() {
   const [opened, setOpen] = useAtom(searchModalAtom);
+  const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
 
   useKeyDown(
     window,
     useCallback(
       (event) => {
-        if (isKeyHotkey('mod+k', event)) {
+        if (matchesShortcut('navigation.openRoomSearch', event, shortcutOverrides)) {
           event.preventDefault();
           setOpen(!opened);
           return;
         }
       },
-      [opened, setOpen]
+      [opened, setOpen, shortcutOverrides]
     )
   );
 
