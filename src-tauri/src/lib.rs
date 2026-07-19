@@ -89,12 +89,12 @@ fn resolve_webview_permission(
 }
 
 pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+    if let Some(_window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         #[cfg(desktop)]
         {
-            window.unminimize()?;
-            window.show()?;
-            window.set_focus()?;
+            _window.unminimize()?;
+            _window.show()?;
+            _window.set_focus()?;
         }
 
         return Ok(());
