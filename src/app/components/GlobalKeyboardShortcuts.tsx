@@ -165,7 +165,7 @@ export function GlobalKeyboardShortcuts() {
 
   const handleBookmarkKeyDown = useCallback(
     (evt: KeyboardEvent) => {
-      if (!isKeyHotkey('mod+b', evt)) return;
+      if (!isKeyHotkey('mod+shift+b', evt)) return;
       evt.preventDefault();
 
       navigate(getInboxBookmarksPath());
