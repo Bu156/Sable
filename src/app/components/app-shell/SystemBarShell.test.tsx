@@ -40,4 +40,19 @@ describe('SystemBarShell', () => {
     });
     expect(container.querySelector('[data-system-bar-position="bottom"]')).not.toBeInTheDocument();
   });
+
+  it('ignores the bottom safe area on iOS while preserving the keyboard offset', () => {
+    mockIsTauri.mockReturnValue(true);
+    mockOsType.mockReturnValue('ios');
+
+    const { container } = render(
+      <SystemBarShell onPortalContainerChange={vi.fn<(node: HTMLDivElement | null) => void>()}>
+        <div>Content</div>
+      </SystemBarShell>
+    );
+
+    expect(container.querySelector('[data-system-bar-position="bottom"]')).toHaveStyle({
+      height: 'var(--keyboard-height, 0px)',
+    });
+  });
 });
