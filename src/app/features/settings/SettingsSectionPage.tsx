@@ -3,7 +3,7 @@ import { Box, IconButton, Text } from 'folds';
 import { Page, PageHeader } from '$components/page';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { ArrowLeft, composerIcon, X } from '$components/icons/phosphor';
-import { settingsHeader } from './styles.css';
+import { settingsHeader, settingsSectionBody } from './styles.css';
 
 type SettingsSectionPageProps = {
   title: ReactNode;
@@ -49,7 +49,9 @@ export function SettingsSectionPage({
           </Box>
         </Box>
       </PageHeader>
-      <Box grow="Yes">{children}</Box>
+      <Box grow="Yes" className={settingsSectionBody}>
+        {children}
+      </Box>
     </Page>
   );
 }
