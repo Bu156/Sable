@@ -17,7 +17,7 @@ use tauri_plugin_store::StoreExt;
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::{MouseButton, TrayIconEvent};
 
-const MAIN_TRAY_ID: &str = "main";
+pub(crate) const MAIN_TRAY_ID: &str = "main";
 const TRAY_MENU_SHOW_ID: &str = "tray_show";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 
@@ -295,6 +295,10 @@ pub fn create_system_tray(app: &AppHandle<crate::BrowserEngine>) -> tauri::Resul
     }
 
     tray_builder.build(app)?;
+
+    #[cfg(target_os = "linux")]
+    crate::desktop::tray_badge::reset_badge_state();
+
     Ok(())
 }
 

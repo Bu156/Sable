@@ -1,5 +1,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import * as Sentry from '@sentry/react';
+import { type as osType } from '@tauri-apps/plugin-os';
+import { setTrayBadge } from '$generated/tauri/commands';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -172,11 +174,15 @@ function FaviconUpdater() {
       // Only badge with highlight (mention) counts — total unread is too noisy
       // for an OS-level app badge.
       if (isNativeNotificationTauri()) {
-        import('@tauri-apps/api/window')
-          .then(({ getCurrentWindow }) =>
-            getCurrentWindow().setBadgeCount(highlightTotal > 0 ? highlightTotal : undefined)
-          )
-          .catch(() => {});
+        const badgeCount = highlightTotal > 0 ? highlightTotal : undefined;
+        if (osType() === 'linux') {
+          // Linux has no taskbar badge; the count goes on the tray icon instead.
+          setTrayBadge({ count: badgeCount ?? null }).catch(() => {});
+        } else {
+          import('@tauri-apps/api/window')
+            .then(({ getCurrentWindow }) => getCurrentWindow().setBadgeCount(badgeCount))
+            .catch(() => {});
+        }
       } else if (highlightTotal > 0) {
         navigator.setAppBadge(highlightTotal);
       } else {
