@@ -11,7 +11,8 @@ import {
 const unifiedPushApi = vi.hoisted(() => ({
   isPermissionGranted: vi.fn<() => Promise<boolean>>(),
   requestPermission: vi.fn<() => Promise<string>>(),
-  registerForPushNotifications: vi.fn<() => Promise<string>>(),
+  registerForPushNotifications:
+    vi.fn<(vapid?: string) => Promise<{ deviceToken: string; p256dh?: string; auth?: string }>>(),
   unregisterForPushNotifications: vi.fn<() => Promise<void>>(),
   listDistributors: vi.fn<() => Promise<string[]>>(),
   setDistributor: vi.fn<(name: string) => Promise<void>>(),
@@ -49,7 +50,9 @@ describe('registerUnifiedPushTransport', () => {
     unifiedPushApi.requestPermission.mockResolvedValue('granted');
     localStorage.removeItem('unifiedpush_distributor');
     unifiedPushApi.listDistributors.mockResolvedValue(['org.unifiedpush.distributor.ntfy']);
-    unifiedPushApi.registerForPushNotifications.mockResolvedValue('https://up.example/endpoint');
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue({
+      deviceToken: 'https://up.example/endpoint',
+    });
 
     await expect(registerUnifiedPushTransport()).resolves.toEqual({
       status: 'registered',
@@ -108,7 +111,7 @@ describe('registerUnifiedPushTransport', () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
     localStorage.setItem('unifiedpush_distributor', 'org.example.up');
     unifiedPushApi.listDistributors.mockResolvedValue(['org.example.up']);
-    unifiedPushApi.registerForPushNotifications.mockResolvedValue('');
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: '' });
 
     await expect(registerUnifiedPushTransport()).resolves.toMatchObject({
       status: 'hard-failure',
@@ -121,7 +124,7 @@ describe('registerUnifiedPushTransport', () => {
     unifiedPushApi.isPermissionGranted.mockResolvedValue(true);
     localStorage.setItem('unifiedpush_distributor', 'org.example.up');
     unifiedPushApi.listDistributors.mockResolvedValue(['org.example.up']);
-    unifiedPushApi.registerForPushNotifications.mockResolvedValue('   ');
+    unifiedPushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: '   ' });
 
     await expect(registerUnifiedPushTransport()).resolves.toMatchObject({
       status: 'hard-failure',

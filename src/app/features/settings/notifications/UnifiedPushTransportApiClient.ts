@@ -1,7 +1,15 @@
+import { invoke } from '@tauri-apps/api/core';
+
+export type UnifiedPushRegistration = {
+  deviceToken: string;
+  p256dh?: string;
+  auth?: string;
+};
+
 export type UnifiedPushTransportApi = {
   isPermissionGranted: () => Promise<boolean>;
   requestPermission: () => Promise<NotificationPermission>;
-  registerForPushNotifications: () => Promise<string>;
+  registerForPushNotifications: (vapid?: string) => Promise<UnifiedPushRegistration>;
   unregisterForPushNotifications: () => Promise<void>;
   listDistributors: () => Promise<string[]>;
   setDistributor: (name: string) => Promise<void>;
@@ -13,7 +21,10 @@ export async function getUnifiedPushTransportApi(): Promise<UnifiedPushTransport
   return {
     isPermissionGranted: notificationsApi.isPermissionGranted,
     requestPermission: notificationsApi.requestPermission,
-    registerForPushNotifications: notificationsApi.registerForPushNotifications,
+    registerForPushNotifications: (vapid?: string) =>
+      invoke<UnifiedPushRegistration>('plugin:notifications|register_for_push_notifications', {
+        vapid,
+      }),
     unregisterForPushNotifications: notificationsApi.unregisterForPushNotifications,
     listDistributors: notificationsApi.listDistributors,
     setDistributor: notificationsApi.setDistributor,

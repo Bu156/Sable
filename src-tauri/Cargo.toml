@@ -62,12 +62,12 @@ windows = { version = "0.61", features = [
 tauri-plugin-single-instance = { version = "2.4.3", features = ["deep-link"] }
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "95c1574cf4c2be0f3e7c1d7b8102b2f7b59bcb68" }
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c" }
 
 # default-features = false drops notify-rust so macOS uses the native
 # UNUserNotificationCenter backend (needs a signed .app to deliver).
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "95c1574cf4c2be0f3e7c1d7b8102b2f7b59bcb68", default-features = false }
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c", default-features = false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
@@ -88,7 +88,7 @@ cef = { version = "=148.0.0", optional = true }
 libloading = "0.8"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "95c1574cf4c2be0f3e7c1d7b8102b2f7b59bcb68", features = [
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c", features = [
   "push-notifications",
 ] }
 tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin-edge-to-edge.git", rev = "33c6116c27be28c06df5a9d02231ecc5fdeb93c5" }

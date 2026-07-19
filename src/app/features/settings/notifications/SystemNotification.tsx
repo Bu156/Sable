@@ -589,6 +589,9 @@ function BackgroundPushNotificationSetting() {
   const buildUnifiedPushTransportConfig = (): UnifiedPushTransportConfigInput => ({
     unifiedPushGatewayUrl: effectivePushTransport.unifiedPushGatewayUrl,
     unifiedPushAppID: effectivePushTransport.unifiedPushAppID,
+    vapidPublicKey: clientConfig.pushNotificationDetails?.vapidPublicKey,
+    webPushAppID: clientConfig.pushNotificationDetails?.webPushAppID,
+    pushNotifyUrl: clientConfig.pushNotificationDetails?.pushNotifyUrl,
   });
 
   const buildRegisteredUnifiedPushState = (
@@ -683,6 +686,7 @@ function BackgroundPushNotificationSetting() {
         config: {
           unifiedPushAppID:
             currentUnifiedPushState?.appId ?? effectivePushTransport.unifiedPushAppID,
+          webPushAppID: clientConfig.pushNotificationDetails?.webPushAppID,
         },
       });
       setUnifiedPushEndpointState(null);

@@ -2,12 +2,15 @@ import type { IPusherRequest, MatrixClient } from '$types/matrix-sdk';
 import type { ClientConfig } from '$hooks/useClientConfig';
 import { getNativePushNotificationsApi } from './NativePushNotificationsApiClient';
 
-const NATIVE_PUSH_TOKEN_STORAGE_KEY = 'nativePushToken';
+const NATIVE_PUSH_PUSHKEY_STORAGE_KEY = 'nativePushToken';
+const NATIVE_PUSH_APP_ID_STORAGE_KEY = 'nativePushAppId';
 
 export type NativePushRegistrationResult =
   | {
       permission: 'granted';
       token: string;
+      p256dh?: string;
+      auth?: string;
     }
   | {
       permission: 'default' | 'denied';
@@ -16,22 +19,44 @@ export type NativePushRegistrationResult =
 
 export type { NativePushNotificationsApi } from './NativePushNotificationsApiClient';
 
-function storeNativePushToken(token: string): void {
-  localStorage.setItem(NATIVE_PUSH_TOKEN_STORAGE_KEY, token);
+const FIREBASE_UNCONFIGURED_PATTERN = /firebaseapp is not initialized|default firebaseapp/i;
+
+function describeNativePushRegistrationError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (FIREBASE_UNCONFIGURED_PATTERN.test(detail)) {
+    return 'Native push (FCM) is unavailable: this build has no Firebase configuration (google-services.json).';
+  }
+  return `Native push registration failed: ${detail}`;
 }
 
-function getStoredNativePushToken(): string | null {
-  return localStorage.getItem(NATIVE_PUSH_TOKEN_STORAGE_KEY);
+function storeNativePushRegistration(appId: string, pushkey: string): void {
+  localStorage.setItem(NATIVE_PUSH_APP_ID_STORAGE_KEY, appId);
+  localStorage.setItem(NATIVE_PUSH_PUSHKEY_STORAGE_KEY, pushkey);
 }
 
-function clearStoredNativePushToken(): void {
-  localStorage.removeItem(NATIVE_PUSH_TOKEN_STORAGE_KEY);
+function getStoredNativePushRegistration(): { appId: string; pushkey: string } | null {
+  const appId = localStorage.getItem(NATIVE_PUSH_APP_ID_STORAGE_KEY);
+  const pushkey = localStorage.getItem(NATIVE_PUSH_PUSHKEY_STORAGE_KEY);
+  return appId && pushkey ? { appId, pushkey } : null;
+}
+
+function clearStoredNativePushRegistration(): void {
+  localStorage.removeItem(NATIVE_PUSH_APP_ID_STORAGE_KEY);
+  localStorage.removeItem(NATIVE_PUSH_PUSHKEY_STORAGE_KEY);
 }
 
 function getNativePushAppId(clientConfig: ClientConfig): string {
   const appId = clientConfig.pushNotificationDetails?.nativePushAppID;
   if (!appId) {
     throw new Error('Native push requires pushNotificationDetails.nativePushAppID in config.json.');
+  }
+  return appId;
+}
+
+function getWebPushAppId(clientConfig: ClientConfig): string {
+  const appId = clientConfig.pushNotificationDetails?.webPushAppID;
+  if (!appId) {
+    throw new Error('WebPush push requires pushNotificationDetails.webPushAppID in config.json.');
   }
   return appId;
 }
@@ -54,7 +79,9 @@ export async function requestNativePushPermission(): Promise<NotificationPermiss
   return api.requestPermission();
 }
 
-export async function ensureNativePushRegistered(): Promise<NativePushRegistrationResult> {
+export async function ensureNativePushRegistered(
+  vapid?: string
+): Promise<NativePushRegistrationResult> {
   const permission = (await isNativePushPermissionGranted())
     ? 'granted'
     : await requestNativePushPermission();
@@ -67,40 +94,28 @@ export async function ensureNativePushRegistered(): Promise<NativePushRegistrati
   }
 
   const api = await getNativePushNotificationsApi();
-  const token = await api.registerForPushNotifications();
+  let registration;
+  try {
+    registration = await api.registerForPushNotifications(vapid);
+  } catch (error) {
+    throw new Error(describeNativePushRegistrationError(error), { cause: error });
+  }
+
+  if (!registration?.deviceToken) {
+    throw new Error('Native push registration returned no device token.');
+  }
+
   return {
     permission: 'granted',
-    token,
+    token: registration.deviceToken,
+    p256dh: registration.p256dh,
+    auth: registration.auth,
   };
 }
 
 export async function ensureNativePushUnregistered(): Promise<void> {
   const api = await getNativePushNotificationsApi();
   await api.unregisterForPushNotifications();
-}
-
-async function getCurrentNativePushToken(): Promise<string | null> {
-  const storedToken = getStoredNativePushToken();
-  if (storedToken) {
-    return storedToken;
-  }
-
-  if (!(await isNativePushPermissionGranted())) {
-    return null;
-  }
-
-  try {
-    const api = await getNativePushNotificationsApi();
-    const token = await api.registerForPushNotifications();
-    if (!token) {
-      return null;
-    }
-
-    storeNativePushToken(token);
-    return token;
-  } catch {
-    return null;
-  }
 }
 
 async function removeNativePushersForCurrentDevice(mx: MatrixClient, appId: string): Promise<void> {
@@ -143,7 +158,8 @@ export async function enableNativePush(
   mx: MatrixClient,
   clientConfig: ClientConfig
 ): Promise<string> {
-  const registration = await ensureNativePushRegistered();
+  const vapid = clientConfig.pushNotificationDetails?.vapidPublicKey;
+  const registration = await ensureNativePushRegistered(vapid);
 
   if (registration.permission !== 'granted' || !registration.token) {
     throw new Error(
@@ -153,16 +169,40 @@ export async function enableNativePush(
     );
   }
 
-  const appId = getNativePushAppId(clientConfig);
   const pushGatewayUrl = getPushGatewayUrl(clientConfig);
+  const deviceDisplayName =
+    (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Mobile Device';
 
+  if (registration.p256dh && registration.auth) {
+    const appId = getWebPushAppId(clientConfig);
+    await mx.setPusher({
+      kind: 'http',
+      app_id: appId,
+      pushkey: registration.p256dh,
+      app_display_name: 'Sable (Native Push)',
+      device_display_name: deviceDisplayName,
+      lang: navigator.language || 'en',
+      data: {
+        url: pushGatewayUrl,
+        format: 'event_id_only',
+        endpoint: registration.token,
+        p256dh: registration.p256dh,
+        auth: registration.auth,
+      },
+      append: false,
+    } as unknown as IPusherRequest);
+
+    storeNativePushRegistration(appId, registration.p256dh);
+    return registration.p256dh;
+  }
+
+  const appId = getNativePushAppId(clientConfig);
   await mx.setPusher({
     kind: 'http',
     app_id: appId,
     pushkey: registration.token,
     app_display_name: 'Sable (Native Push)',
-    device_display_name:
-      (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Mobile Device',
+    device_display_name: deviceDisplayName,
     lang: navigator.language || 'en',
     data: {
       url: pushGatewayUrl,
@@ -171,7 +211,7 @@ export async function enableNativePush(
     append: false,
   } as unknown as IPusherRequest);
 
-  storeNativePushToken(registration.token);
+  storeNativePushRegistration(appId, registration.token);
   return registration.token;
 }
 
@@ -179,21 +219,21 @@ export async function disableNativePush(
   mx: MatrixClient,
   clientConfig: ClientConfig
 ): Promise<void> {
-  const appId = clientConfig.pushNotificationDetails?.nativePushAppID;
-  if (appId) {
-    const token = await getCurrentNativePushToken();
-
-    if (token) {
-      await mx.setPusher({
-        kind: null,
-        app_id: appId,
-        pushkey: token,
-      } as unknown as IPusherRequest);
-    } else {
-      await removeNativePushersForCurrentDevice(mx, appId);
-    }
+  const stored = getStoredNativePushRegistration();
+  if (stored) {
+    await mx.setPusher({
+      kind: null,
+      app_id: stored.appId,
+      pushkey: stored.pushkey,
+    } as unknown as IPusherRequest);
+  } else {
+    const appIds = [
+      clientConfig.pushNotificationDetails?.webPushAppID,
+      clientConfig.pushNotificationDetails?.nativePushAppID,
+    ].filter((appId): appId is string => Boolean(appId));
+    await Promise.all(appIds.map((appId) => removeNativePushersForCurrentDevice(mx, appId)));
   }
 
   await ensureNativePushUnregistered();
-  clearStoredNativePushToken();
+  clearStoredNativePushRegistration();
 }

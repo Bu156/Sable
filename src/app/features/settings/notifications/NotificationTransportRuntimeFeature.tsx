@@ -7,6 +7,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { enableUnifiedPush } from './UnifiedPushNotifications';
+import { enableNativePush } from './NativePushNotifications';
 import {
   NotificationTransportRuntime,
   type NotificationTransportRuntimeContext,
@@ -76,7 +77,13 @@ export function NotificationTransportRuntimeFeature() {
     void runtimeRef.current?.sync(provider, () => contextRef.current);
   }, [provider]);
 
-  const upConfigRef = useRef<{ unifiedPushAppID?: string; unifiedPushGatewayUrl?: string }>({});
+  const upConfigRef = useRef<{
+    unifiedPushAppID?: string;
+    unifiedPushGatewayUrl?: string;
+    vapidPublicKey?: string;
+    webPushAppID?: string;
+    pushNotifyUrl?: string;
+  }>({});
   upConfigRef.current = {
     unifiedPushAppID:
       pushTransportOverride?.unifiedPushAppID ??
@@ -84,17 +91,23 @@ export function NotificationTransportRuntimeFeature() {
     unifiedPushGatewayUrl:
       pushTransportOverride?.unifiedPushGatewayUrl ??
       clientConfig.pushNotificationDetails?.unifiedPushGatewayUrl,
+    vapidPublicKey: clientConfig.pushNotificationDetails?.vapidPublicKey,
+    webPushAppID: clientConfig.pushNotificationDetails?.webPushAppID,
+    pushNotifyUrl: clientConfig.pushNotificationDetails?.pushNotifyUrl,
   };
 
   // Keep the pusher current: establish it when UnifiedPush becomes the active
   // transport (so it survives a fresh install/session, not just a manual toggle)
   // and refresh it whenever the distributor rotates the endpoint. Deduped by
   // endpoint so re-registration can't loop.
+  const clientConfigRef = useRef(clientConfig);
+  clientConfigRef.current = clientConfig;
+
   const lastEndpointRef = useRef<string | null>(null);
   useEffect(() => {
-    if (provider !== 'unifiedpush' || !mx) return undefined;
+    if (!mx) return undefined;
 
-    const establish = () => {
+    if (provider === 'unifiedpush') {
       enableUnifiedPush(mx, upConfigRef.current)
         .then((result) => {
           lastEndpointRef.current = result.endpoint;
@@ -102,9 +115,15 @@ export function NotificationTransportRuntimeFeature() {
         .catch((error) => {
           log.warn('UnifiedPush pusher registration failed at startup', error);
         });
-    };
-
-    establish();
+    } else if (provider === 'native') {
+      enableNativePush(mx, clientConfigRef.current)
+        .then((token) => {
+          lastEndpointRef.current = token;
+        })
+        .catch((error) => {
+          log.warn('Native push pusher registration failed at startup', error);
+        });
+    }
 
     return () => {};
   }, [provider, mx]);
