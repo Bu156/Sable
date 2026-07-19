@@ -45,6 +45,8 @@ export * from 'matrix-js-sdk/lib/@types/read_receipts';
 export * from 'matrix-js-sdk/lib/@types/membership';
 export * from 'matrix-js-sdk/lib/@types/registration';
 
+export * from 'matrix-js-sdk/lib/feature';
+
 export * from 'matrix-js-sdk/lib/oidc';
 
 // oidc-client-ts is a transitive dep (not resolvable here), so derive its type from the SDK.

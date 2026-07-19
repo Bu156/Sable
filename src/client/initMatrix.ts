@@ -29,6 +29,7 @@ import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 import { hydrateRoomMember } from './roomMemberHydration';
+import { primeVersionsFromCache, revalidateVersionsCache, clearCachedVersions } from './versionsCache';
 
 const log = createLogger('initMatrix');
 const debugLog = createDebugLogger('initMatrix');
@@ -274,7 +275,10 @@ const initializeClient = async (
   }
   const { mx, indexedDBStore } = builtClient;
 
-  void mx.getVersions().catch(() => undefined);
+  void primeVersionsFromCache(mx, session.baseUrl, session.userId).then((primed) => {
+    if (primed) void revalidateVersionsCache(mx, session.baseUrl, session.userId);
+    else void mx.getVersions().catch(() => undefined);
+  });
 
   const syncStorePromise = measureStartupPhase('sync_store', () => indexedDBStore.startup());
   const cryptoPromise = measureStartupPhase('rust_crypto', () =>
@@ -597,6 +601,7 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
 
   if (session) {
     SlidingSyncSidebarCache.clear(session.userId);
+    clearCachedVersions(session.baseUrl, session.userId);
     const storeName: SessionStoreName = getSessionStoreName(session);
     await mx.clearStores({ cryptoDatabasePrefix: storeName.rustCryptoPrefix });
     await deleteDatabase(storeName.sync);
