@@ -2,6 +2,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{OnceLock, RwLock},
+    time::Duration,
 };
 
 use sha2::{Digest, Sha256};
@@ -13,22 +14,44 @@ use tauri_plugin_http::reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client, Url,
 };
+use tokio::sync::Semaphore;
 
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
 
 const MEDIA_PATH_PREFIXES: [&str; 2] = ["/_matrix/media/", "/_matrix/client/v1/media/"];
 const CACHE_SUBDIR: &str = "sable-media";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_CONCURRENT_REQUESTS: usize = 8;
 
-#[derive(Default)]
 pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
     client: OnceLock<Client>,
+    semaphore: Semaphore,
+}
+
+impl Default for MediaSessionState {
+    fn default() -> Self {
+        Self {
+            inner: RwLock::new(None),
+            client: OnceLock::new(),
+            semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+        }
+    }
 }
 
 impl MediaSessionState {
     // Shared across requests so the connection pool and TLS sessions stay warm.
     fn client(&self) -> Client {
-        self.client.get_or_init(Client::new).clone()
+        self.client
+            .get_or_init(|| {
+                Client::builder()
+                    .timeout(REQUEST_TIMEOUT)
+                    .connect_timeout(CONNECT_TIMEOUT)
+                    .build()
+                    .unwrap_or_else(|_| Client::new())
+            })
+            .clone()
     }
 }
 
@@ -122,14 +145,21 @@ async fn handle_request<R: Runtime>(
     let body_path = dir.join(&key);
     let content_type_path = dir.join(format!("{key}.ct"));
 
-    if let (Ok(body), Ok(content_type)) =
-        (fs::read(&body_path), fs::read_to_string(&content_type_path))
+    let state = app.state::<MediaSessionState>();
+    let _permit = state
+        .semaphore
+        .acquire()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((body, content_type)) =
+        read_cache(body_path.clone(), content_type_path.clone()).await
     {
         return Ok(ok_response(body, &content_type));
     }
 
-    let client = app.state::<MediaSessionState>().client();
-    let upstream = client
+    let upstream = state
+        .client()
         .get(media_url)
         .header(AUTHORIZATION, format!("Bearer {}", session.token))
         .send()
@@ -154,12 +184,43 @@ async fn handle_request<R: Runtime>(
         .map_err(|_| StatusCode::BAD_GATEWAY)?
         .to_vec();
 
-    if fs::create_dir_all(&dir).is_ok() {
-        let _ = fs::write(&body_path, &body);
-        let _ = fs::write(&content_type_path, &content_type);
-    }
+    write_cache(
+        dir,
+        body_path,
+        content_type_path,
+        body.clone(),
+        content_type.clone(),
+    )
+    .await;
 
     Ok(ok_response(body, &content_type))
+}
+
+async fn read_cache(body_path: PathBuf, content_type_path: PathBuf) -> Option<(Vec<u8>, String)> {
+    tokio::task::spawn_blocking(move || {
+        match (fs::read(&body_path), fs::read_to_string(&content_type_path)) {
+            (Ok(body), Ok(content_type)) => Some((body, content_type)),
+            _ => None,
+        }
+    })
+    .await
+    .unwrap_or(None)
+}
+
+async fn write_cache(
+    dir: PathBuf,
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+    body: Vec<u8>,
+    content_type: String,
+) {
+    let _ = tokio::task::spawn_blocking(move || {
+        if fs::create_dir_all(&dir).is_ok() {
+            let _ = fs::write(&body_path, &body);
+            let _ = fs::write(&content_type_path, &content_type);
+        }
+    })
+    .await;
 }
 
 fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {

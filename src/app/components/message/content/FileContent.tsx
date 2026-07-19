@@ -29,6 +29,7 @@ import {
 import { stopPropagation } from '$utils/keyboard';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import { useRevokeObjectURL } from '$hooks/useObjectURL';
 import { ModalWide } from '$styles/Modal.css';
 import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 
@@ -182,6 +183,8 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
     }, [mx, url, useAuthentication, mimeType, encInfo])
   );
 
+  useRevokeObjectURL(pdfState.status === AsyncStatus.Success ? pdfState.data : undefined);
+
   return (
     <>
       {pdfState.status === AsyncStatus.Success && (
@@ -261,6 +264,8 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, body])
   );
+
+  useRevokeObjectURL(downloadState.status === AsyncStatus.Success ? downloadState.data : undefined);
 
   return downloadState.status === AsyncStatus.Error ? (
     renderErrorButton(download, `Retry Download (${bytesToSize(info.size ?? 0)})`)

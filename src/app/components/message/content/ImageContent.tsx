@@ -50,6 +50,7 @@ import {
 } from '../../../../unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
+import { useRevokeObjectURL } from '$hooks/useObjectURL';
 
 export function checkIfGif(url: string, mimetype?: string, body?: string) {
   return (
@@ -204,6 +205,10 @@ export const ImageContent = as<'div', ImageContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
+
+    useRevokeObjectURL(
+      encInfo && srcState.status === AsyncStatus.Success ? srcState.data : undefined
+    );
 
     const imageW = info?.w;
     const imageH = info?.h;

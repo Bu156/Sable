@@ -6,6 +6,7 @@ import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
+import { useRevokeObjectURL } from '$hooks/useObjectURL';
 import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 
 export type ThumbnailContentProps = {
@@ -46,6 +47,10 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
   useEffect(() => {
     loadThumbSrc();
   }, [loadThumbSrc]);
+
+  useRevokeObjectURL(
+    encInfo && thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined
+  );
 
   return thumbSrcState.status === AsyncStatus.Success ? renderImage(thumbSrcState.data) : null;
 }

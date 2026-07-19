@@ -1,17 +1,27 @@
 use std::{
     collections::HashMap,
     sync::{LazyLock, Mutex},
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
 use tauri_plugin_http::reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
-    ClientBuilder, Method, Url,
+    Client, ClientBuilder, Method, Url,
 };
 use tokio::sync::watch;
 
 static LOOPBACK_ABORT_SENDERS: LazyLock<Mutex<HashMap<String, watch::Sender<bool>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+static LOOPBACK_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    ClientBuilder::new()
+        .no_proxy()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .expect("failed to build loopback client")
+});
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,12 +120,7 @@ pub async fn loopback_fetch(
     let result = async {
         let method = Method::from_bytes(request.method.as_bytes()).map_err(|err| err.to_string())?;
         let headers = build_headers(request.headers)?;
-        let mut req = ClientBuilder::new()
-            .no_proxy()
-            .build()
-            .map_err(|err| err.to_string())?
-            .request(method, url)
-            .headers(headers);
+        let mut req = LOOPBACK_CLIENT.request(method, url).headers(headers);
 
         if let Some(body) = request.body {
             req = req.body(body);
