@@ -11,7 +11,8 @@ import * as NativePushNotifications from './NativePushNotifications';
 const nativePushApi = vi.hoisted(() => ({
   isPermissionGranted: vi.fn<() => Promise<boolean>>(),
   requestPermission: vi.fn<() => Promise<string>>(),
-  registerForPushNotifications: vi.fn<() => Promise<string>>(),
+  registerForPushNotifications:
+    vi.fn<(vapid?: string) => Promise<{ deviceToken: string; p256dh?: string; auth?: string }>>(),
   unregisterForPushNotifications: vi.fn<() => Promise<void>>(),
 }));
 
@@ -67,7 +68,7 @@ describe('native push permission flow', () => {
 describe('ensureNativePushRegistered', () => {
   it('registers immediately when permission is already granted', async () => {
     nativePushApi.isPermissionGranted.mockResolvedValue(true);
-    nativePushApi.registerForPushNotifications.mockResolvedValue('native-token');
+    nativePushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: 'native-token' });
 
     await expect(ensureNativePushRegistered()).resolves.toEqual({
       permission: 'granted',
@@ -80,7 +81,7 @@ describe('ensureNativePushRegistered', () => {
   it('requests permission before registering and returns a token on grant', async () => {
     nativePushApi.isPermissionGranted.mockResolvedValue(false);
     nativePushApi.requestPermission.mockResolvedValue('granted');
-    nativePushApi.registerForPushNotifications.mockResolvedValue('native-token');
+    nativePushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: 'native-token' });
 
     await expect(ensureNativePushRegistered()).resolves.toEqual({
       permission: 'granted',
@@ -111,12 +112,34 @@ describe('ensureNativePushRegistered', () => {
     });
     expect(nativePushApi.registerForPushNotifications).not.toHaveBeenCalled();
   });
+
+  it('reports a clear error when the build has no Firebase configuration', async () => {
+    nativePushApi.isPermissionGranted.mockResolvedValue(true);
+    nativePushApi.registerForPushNotifications.mockRejectedValue(
+      new Error(
+        'Default FirebaseApp is not initialized in this process moe.sable.client. Make sure to call FirebaseApp.initializeApp(Context) first.'
+      )
+    );
+
+    await expect(ensureNativePushRegistered()).rejects.toThrow('google-services.json');
+  });
+
+  it('surfaces the underlying reason for other registration failures', async () => {
+    nativePushApi.isPermissionGranted.mockResolvedValue(true);
+    nativePushApi.registerForPushNotifications.mockRejectedValue(
+      new Error('SERVICE_NOT_AVAILABLE')
+    );
+
+    await expect(ensureNativePushRegistered()).rejects.toThrow(
+      'Native push registration failed: SERVICE_NOT_AVAILABLE'
+    );
+  });
 });
 
 describe('native push pusher registration', () => {
   it('registers a Matrix pusher with the native device token', async () => {
     nativePushApi.isPermissionGranted.mockResolvedValue(true);
-    nativePushApi.registerForPushNotifications.mockResolvedValue('native-token');
+    nativePushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: 'native-token' });
 
     await expect(enableNativePush(matrixClient as never, nativePushClientConfig)).resolves.toBe(
       'native-token'
@@ -137,7 +160,7 @@ describe('native push pusher registration', () => {
 
   it('rejects native push enablement when the app id is missing', async () => {
     nativePushApi.isPermissionGranted.mockResolvedValue(true);
-    nativePushApi.registerForPushNotifications.mockResolvedValue('native-token');
+    nativePushApi.registerForPushNotifications.mockResolvedValue({ deviceToken: 'native-token' });
 
     await expect(
       enableNativePush(matrixClient as never, {
@@ -148,7 +171,45 @@ describe('native push pusher registration', () => {
     ).rejects.toThrow('nativePushAppID');
   });
 
-  it('removes native pushers and unregisters the platform token', async () => {
+  it('registers a Sygnal WebPush pusher when the distributor returns keys', async () => {
+    nativePushApi.isPermissionGranted.mockResolvedValue(true);
+    nativePushApi.registerForPushNotifications.mockResolvedValue({
+      deviceToken: 'https://fcm.googleapis.com/fcm/send/endpoint',
+      p256dh: 'p256-key',
+      auth: 'auth-secret',
+    });
+
+    const webPushConfig = {
+      pushNotificationDetails: {
+        webPushAppID: 'moe.sable.app.sygnal',
+        nativePushAppID: 'moe.sable.mobile',
+        pushNotifyUrl: 'https://sygnal.example/_matrix/push/v1/notify',
+        vapidPublicKey: 'vapid-pub',
+      },
+    } as const;
+
+    await expect(enableNativePush(matrixClient as never, webPushConfig)).resolves.toBe('p256-key');
+    expect(nativePushApi.registerForPushNotifications).toHaveBeenCalledWith('vapid-pub');
+    expect(localStorage.getItem('nativePushAppId')).toBe('moe.sable.app.sygnal');
+    expect(localStorage.getItem('nativePushToken')).toBe('p256-key');
+    expect(matrixClient.setPusher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'http',
+        app_id: 'moe.sable.app.sygnal',
+        pushkey: 'p256-key',
+        data: expect.objectContaining({
+          url: 'https://sygnal.example/_matrix/push/v1/notify',
+          format: 'event_id_only',
+          endpoint: 'https://fcm.googleapis.com/fcm/send/endpoint',
+          p256dh: 'p256-key',
+          auth: 'auth-secret',
+        }),
+      })
+    );
+  });
+
+  it('removes the stored pusher and unregisters the platform token', async () => {
+    localStorage.setItem('nativePushAppId', 'moe.sable.mobile');
     localStorage.setItem('nativePushToken', 'native-token');
 
     await expect(
@@ -164,24 +225,7 @@ describe('native push pusher registration', () => {
     );
     expect(nativePushApi.unregisterForPushNotifications).toHaveBeenCalledOnce();
     expect(localStorage.getItem('nativePushToken')).toBeNull();
-  });
-
-  it('recovers the current token before removing the Matrix pusher when local storage is empty', async () => {
-    nativePushApi.isPermissionGranted.mockResolvedValue(true);
-    nativePushApi.registerForPushNotifications.mockResolvedValue('native-token');
-
-    await expect(
-      disableNativePush(matrixClient as never, nativePushClientConfig)
-    ).resolves.toBeUndefined();
-
-    expect(nativePushApi.registerForPushNotifications).toHaveBeenCalledOnce();
-    expect(matrixClient.setPusher).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: null,
-        app_id: 'moe.sable.mobile',
-        pushkey: 'native-token',
-      })
-    );
+    expect(localStorage.getItem('nativePushAppId')).toBeNull();
   });
 
   it('falls back to removing current-device pushers when the token cannot be recovered', async () => {

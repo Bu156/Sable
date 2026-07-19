@@ -29,6 +29,10 @@ const defaultListenerFactories: NotificationTransportListenerFactories = {
     const { listenForUnifiedPushMessages } = await import('./UnifiedPushNotifications');
     return listenForUnifiedPushMessages(getContext);
   },
+  native: async (getContext) => {
+    const { listenForUnifiedPushMessages } = await import('./UnifiedPushNotifications');
+    return listenForUnifiedPushMessages(getContext);
+  },
 };
 
 export class NotificationTransportRuntime {

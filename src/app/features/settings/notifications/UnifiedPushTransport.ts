@@ -20,6 +20,8 @@ export type UnifiedPushRegistrationResult =
       permissionState: 'granted';
       endpoint: string;
       distributor: string;
+      p256dh?: string;
+      auth?: string;
     }
   | {
       status: 'temp-unavailable';
@@ -191,7 +193,9 @@ export async function switchUnifiedPushDistributorSelection<T>(
   }
 }
 
-export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistrationResult> {
+export async function registerUnifiedPushTransport(
+  vapid?: string
+): Promise<UnifiedPushRegistrationResult> {
   let permissionState: UnifiedPushPermissionState = 'default';
   let selectedDistributor: string | undefined;
 
@@ -224,7 +228,8 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
     }
 
     const api = await getUnifiedPushTransportApi();
-    const endpoint = await api.registerForPushNotifications();
+    const registration = await api.registerForPushNotifications(vapid);
+    const endpoint = registration?.deviceToken;
     if (!endpoint || !endpoint.trim()) {
       return {
         status: 'hard-failure',
@@ -239,6 +244,8 @@ export async function registerUnifiedPushTransport(): Promise<UnifiedPushRegistr
       permissionState: 'granted',
       endpoint,
       distributor,
+      p256dh: registration.p256dh,
+      auth: registration.auth,
     };
   } catch (error) {
     const failureStatus = classifyUnifiedPushFailure(error);

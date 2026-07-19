@@ -50,7 +50,11 @@ const UP_REGISTER_TIMEOUT_MS = 30_000;
 export type UnifiedPushTransportConfigInput = Pick<
   PushTransportConfig,
   'unifiedPushGatewayUrl' | 'unifiedPushAppID'
->;
+> & {
+  vapidPublicKey?: string;
+  webPushAppID?: string;
+  pushNotifyUrl?: string;
+};
 
 type UnifiedPushPusherConfig = {
   appId: string;
@@ -80,7 +84,9 @@ export type EnableUnifiedPushResult =
     }
   | Exclude<UnifiedPushRegistrationResult, { status: 'registered' }>;
 
-async function registerUnifiedPushWithTimeout(): Promise<UnifiedPushRegistrationResult> {
+async function registerUnifiedPushWithTimeout(
+  vapid?: string
+): Promise<UnifiedPushRegistrationResult> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
@@ -89,7 +95,7 @@ async function registerUnifiedPushWithTimeout(): Promise<UnifiedPushRegistration
   });
 
   try {
-    return await Promise.race([registerUnifiedPushTransport(), timeout]);
+    return await Promise.race([registerUnifiedPushTransport(vapid), timeout]);
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
@@ -111,13 +117,42 @@ export async function tryEnableUnifiedPush(
     vibration: true,
   });
 
-  const registration = await registerUnifiedPushWithTimeout();
+  const registration = await registerUnifiedPushWithTimeout(config?.vapidPublicKey);
 
   if (registration.status !== 'registered') {
     return registration;
   }
 
   const { endpoint } = registration;
+  const deviceDisplayName =
+    (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Android Device';
+
+  if (registration.p256dh && registration.auth && config?.webPushAppID && config?.pushNotifyUrl) {
+    await mx.setPusher({
+      kind: 'http',
+      app_id: config.webPushAppID,
+      pushkey: registration.p256dh,
+      app_display_name: 'Sable (UnifiedPush)',
+      device_display_name: deviceDisplayName,
+      lang: navigator.language || 'en',
+      data: {
+        url: config.pushNotifyUrl,
+        format: 'event_id_only',
+        endpoint,
+        p256dh: registration.p256dh,
+        auth: registration.auth,
+      },
+      append: false,
+    } as unknown as IPusherRequest);
+
+    return {
+      status: 'registered',
+      endpoint,
+      gatewayUrl: config.pushNotifyUrl,
+      distributor: registration.distributor,
+    };
+  }
+
   const resolvedConfig = resolveUnifiedPushPusherConfig(config);
   const gatewayUrl = resolvedConfig.gatewayUrl ?? UP_PUBLIC_GATEWAY;
 
@@ -130,8 +165,7 @@ export async function tryEnableUnifiedPush(
     app_id: resolvedConfig.appId,
     pushkey: endpoint,
     app_display_name: 'Sable (UnifiedPush)',
-    device_display_name:
-      (await mx.getDevice(mx.getDeviceId() ?? ''))?.display_name ?? 'Android Device',
+    device_display_name: deviceDisplayName,
     lang: navigator.language || 'en',
     data: pusherData,
     append: false,
@@ -230,6 +264,20 @@ export async function disableUnifiedPush(
       } as unknown as IPusherRequest)
     )
   );
+
+  const webPushAppId = trimConfigValue(options.config?.webPushAppID);
+  if (webPushAppId && webPushAppId !== appId) {
+    const webPushKeys = await getCurrentDeviceUnifiedPushPushkeys(mx, webPushAppId);
+    await Promise.allSettled(
+      webPushKeys.map((pushkey) =>
+        mx.setPusher({
+          kind: null,
+          app_id: webPushAppId,
+          pushkey,
+        } as unknown as IPusherRequest)
+      )
+    );
+  }
 
   await unregisterUnifiedPushTransport();
 }
@@ -598,7 +646,7 @@ export function listenForUnifiedPushMessages(getSettings: () => NotificationSett
     }
   );
 
-  return addPluginListener('unifiedpush', 'push-message', (data: unknown) => {
+  return addPluginListener('notifications', 'push-message', (data: unknown) => {
     const notification = parseUnifiedPushMessage(data);
     if (notification) dispatch(notification);
   });
