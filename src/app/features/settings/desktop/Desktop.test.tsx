@@ -93,7 +93,7 @@ describe('Desktop', () => {
         'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
       )
     ).toBeInTheDocument();
-    expect(container.getElementsByClassName(SequenceCardStyle)).toHaveLength(2);
+    expect(container.getElementsByClassName(SequenceCardStyle)).toHaveLength(3);
   });
 
   it('shows fallback copy while the tray icon is enabled but unavailable', () => {
