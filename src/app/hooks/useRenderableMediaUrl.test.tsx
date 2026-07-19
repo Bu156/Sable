@@ -213,7 +213,7 @@ describe('useRenderableMediaUrl', () => {
       'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96&height=96';
     const { result } = renderHook(() => useRenderableMediaUrl(rawAuthUrl));
 
-    expect(result.current).toBe(`sable-media://${rawAuthUrl}`);
+    expect(result.current).toBe(`sable-media://${rawAuthUrl}&__sable_media_cache=2`);
     expect(tauriApi.convertFileSrc).toHaveBeenCalledWith(rawAuthUrl, 'sable-media');
   });
 
@@ -225,7 +225,7 @@ describe('useRenderableMediaUrl', () => {
       'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
     const { result } = renderHook(() => useRenderableMediaUrl(rewrittenUrl));
 
-    expect(result.current).toBe(rewrittenUrl);
+    expect(result.current).toBe(`${rewrittenUrl}?__sable_media_cache=2`);
     expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
   });
 

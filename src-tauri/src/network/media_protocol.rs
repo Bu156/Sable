@@ -78,7 +78,9 @@ pub fn respond<R: Runtime>(
     let app = ctx.app_handle().clone();
     let uri = request.uri().clone();
     tauri::async_runtime::spawn(async move {
-        let response = handle_request(&app, uri).await.unwrap_or_else(error_response);
+        let response = handle_request(&app, uri)
+            .await
+            .unwrap_or_else(error_response);
         responder.respond(response);
     });
 }
@@ -115,7 +117,7 @@ async fn handle_request<R: Runtime>(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let key = cache_key(&target);
+    let key = cache_key(&session.token, &target);
     let dir = cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let body_path = dir.join(&key);
     let content_type_path = dir.join(format!("{key}.ct"));
@@ -135,8 +137,9 @@ async fn handle_request<R: Runtime>(
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     if !upstream.status().is_success() {
-        return Err(StatusCode::from_u16(upstream.status().as_u16())
-            .unwrap_or(StatusCode::BAD_GATEWAY));
+        return Err(
+            StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY)
+        );
     }
 
     let content_type = upstream
@@ -164,7 +167,9 @@ fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        // Authorization is enforced by the protocol handler. Do not let the
+        // webview reuse this response after the active Matrix session changes.
+        .header(header::CACHE_CONTROL, "private, no-store")
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(
             header::CONTENT_SECURITY_POLICY,
@@ -189,23 +194,45 @@ fn cache_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
         .map_err(|err| err.to_string())
 }
 
-fn cache_key(url: &str) -> String {
-    let digest = Sha256::digest(url.as_bytes());
+fn cache_key(session_token: &str, url: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(session_token.as_bytes());
+    hasher.update([0]);
+    hasher.update(url.as_bytes());
+    let digest = hasher.finalize();
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::cache_key;
+    use tauri::http::header;
+
+    use super::{cache_key, ok_response};
 
     #[test]
     fn cache_key_is_stable_and_hex() {
-        let key = cache_key("https://matrix.example.org/_matrix/client/v1/media/download/x/y");
+        let url = "https://matrix.example.org/_matrix/client/v1/media/download/x/y";
+        let key = cache_key("account-a-token", url);
         assert_eq!(key.len(), 64);
         assert!(key.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(key, cache_key("account-a-token", url));
+    }
+
+    #[test]
+    fn cache_key_is_scoped_to_the_session() {
+        let url = "https://matrix.example.org/_matrix/client/v1/media/download/x/y";
+        assert_ne!(
+            cache_key("account-a-token", url),
+            cache_key("account-b-token", url)
+        );
+    }
+
+    #[test]
+    fn protocol_responses_are_not_cached_by_the_webview() {
+        let response = ok_response(Vec::new(), "image/png");
         assert_eq!(
-            key,
-            cache_key("https://matrix.example.org/_matrix/client/v1/media/download/x/y")
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "private, no-store"
         );
     }
 }

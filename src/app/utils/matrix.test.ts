@@ -38,7 +38,7 @@ describe('rewriteAuthenticatedMediaUrl', () => {
   it('rewrites authenticated-media download URLs under Tauri', () => {
     tauriApi.isTauri.mockReturnValue(true);
     const url = 'https://matrix.example.org/_matrix/client/v1/media/download/example.org/abc123';
-    expect(rewriteAuthenticatedMediaUrl(url)).toBe(`sable-media://${url}`);
+    expect(rewriteAuthenticatedMediaUrl(url)).toBe(`sable-media://${url}?__sable_media_cache=2`);
     expect(tauriApi.convertFileSrc).toHaveBeenCalledWith(url, 'sable-media');
   });
 
@@ -46,14 +46,14 @@ describe('rewriteAuthenticatedMediaUrl', () => {
     tauriApi.isTauri.mockReturnValue(true);
     const url =
       'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96&height=96&method=crop';
-    expect(rewriteAuthenticatedMediaUrl(url)).toBe(`sable-media://${url}`);
+    expect(rewriteAuthenticatedMediaUrl(url)).toBe(`sable-media://${url}&__sable_media_cache=2`);
   });
 
   it('passes through already-rewritten sable-media:// URLs', () => {
     tauriApi.isTauri.mockReturnValue(true);
     const url =
       'sable-media://https://matrix.example.org/_matrix/client/v1/media/download/example.org/abc123';
-    expect(rewriteAuthenticatedMediaUrl(url)).toBe(url);
+    expect(rewriteAuthenticatedMediaUrl(url)).toBe(`${url}?__sable_media_cache=2`);
     expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
   });
 });

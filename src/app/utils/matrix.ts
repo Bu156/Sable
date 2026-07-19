@@ -23,6 +23,7 @@ import { matchMxId, validMxId } from './mxIdHelper';
 import { fetchMediaBlob, type MediaTransportOptions } from './mediaTransport';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
+const TAURI_MEDIA_CACHE_VERSION = '__sable_media_cache=2';
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
 
@@ -318,9 +319,12 @@ export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string):
 export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | null => {
   if (!httpUrl) return null;
   if (!isTauri()) return httpUrl;
-  if (httpUrl.startsWith('sable-media://')) return httpUrl;
   if (!httpUrl.includes('/_matrix/client/v1/media/')) return httpUrl;
-  return convertFileSrc(httpUrl, 'sable-media');
+  const mediaUrl = httpUrl.startsWith('sable-media://')
+    ? httpUrl
+    : convertFileSrc(httpUrl, 'sable-media');
+  if (mediaUrl.includes(TAURI_MEDIA_CACHE_VERSION)) return mediaUrl;
+  return `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}${TAURI_MEDIA_CACHE_VERSION}`;
 };
 
 export const mxcUrlToHttp = (
