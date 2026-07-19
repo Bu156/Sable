@@ -35,12 +35,15 @@ function rgbToArgb(color: string): number | undefined {
 function useBarColor(
   probeRef: RefObject<HTMLDivElement>,
   edge: 'top' | 'bottom',
-  android: boolean
+  android: boolean,
+  enabled: boolean
 ): string | undefined {
   const [color, setColor] = useState<string>();
   const lastRef = useRef<string>();
 
   useEffect(() => {
+    if (!enabled) return undefined;
+
     let frame = 0;
     const sample = () => {
       frame = 0;
@@ -85,7 +88,7 @@ function useBarColor(
       observer.disconnect();
       window.removeEventListener('resize', schedule);
     };
-  }, [probeRef, edge, android]);
+  }, [probeRef, edge, android, enabled]);
 
   return color;
 }
@@ -130,8 +133,8 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
 
   const topStripRef = useRef<HTMLDivElement>(null);
   const bottomStripRef = useRef<HTMLDivElement>(null);
-  const topColor = useBarColor(topStripRef, 'top', tauriOs === 'android');
-  const bottomColor = useBarColor(bottomStripRef, 'bottom', tauriOs === 'android');
+  const topColor = useBarColor(topStripRef, 'top', tauriOs === 'android', enabled);
+  const bottomColor = useBarColor(bottomStripRef, 'bottom', tauriOs === 'android', enabled);
 
   return (
     <>
