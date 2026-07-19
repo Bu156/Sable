@@ -99,16 +99,19 @@ function useBarColor(
 }
 
 type SystemBarStripProps = {
+  edge: 'top' | 'bottom';
   size: string;
   background: string;
   stripRef?: RefObject<HTMLDivElement>;
   transition?: string;
 };
 
-function SystemBarStrip({ size, background, stripRef, transition }: SystemBarStripProps) {
+function SystemBarStrip({ edge, size, background, stripRef, transition }: SystemBarStripProps) {
   return (
     <div
       ref={stripRef}
+      aria-hidden="true"
+      data-system-bar-position={edge}
       style={{
         height: size,
         flexShrink: 0,
@@ -143,13 +146,12 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
 
   return (
     <>
-      {enabled && (
-        <SystemBarStrip
-          size={safeAreaTop}
-          background={topColor ?? 'var(--sable-bg-container)'}
-          stripRef={topStripRef}
-        />
-      )}
+      <SystemBarStrip
+        edge="top"
+        size={safeAreaTop}
+        background={topColor ?? 'var(--sable-bg-container)'}
+        stripRef={topStripRef}
+      />
 
       <div
         style={{
@@ -180,6 +182,7 @@ export function SystemBarShell({ children, onPortalContainerChange }: SystemBarS
 
       {enabled && (
         <SystemBarStrip
+          edge="bottom"
           size={tauriOs === 'ios' ? iosBottomInset : safeAreaBottom}
           background={bottomColor ?? 'var(--sable-surface-container)'}
           stripRef={bottomStripRef}

@@ -55,6 +55,8 @@ describe('android edge-to-edge inset contract', () => {
     expect(systemBarShell).toContain(
       'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))'
     );
+    expect(systemBarShell).toContain('<SystemBarStrip\n        edge="top"');
+    expect(systemBarShell).toContain('{enabled && (\n        <SystemBarStrip\n          edge="bottom"');
     expect(mobileCapability).toContain('"edge-to-edge:default"');
   });
 
