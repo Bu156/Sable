@@ -55,12 +55,19 @@ describe('android edge-to-edge inset contract', () => {
     expect(systemBarShell).toContain(
       'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))'
     );
-    expect(systemBarShell).toContain("const iosBottomInset = 'var(--keyboard-height, 0px)'");
     expect(systemBarShell).toContain('<SystemBarStrip\n        edge="top"');
     expect(systemBarShell).toContain(
       '{enabled && (\n        <SystemBarStrip\n          edge="bottom"'
     );
     expect(mobileCapability).toContain('"edge-to-edge:default"');
+  });
+
+  it('extends only standalone iOS PWAs to the dynamic viewport bottom', () => {
+    const indexCss = readWorkspaceFile('src/index.css');
+
+    expect(indexCss).toContain('@media (display-mode: standalone)');
+    expect(indexCss).toContain('@supports (-webkit-touch-callout: none)');
+    expect(indexCss).toContain('height: 100dvh');
   });
 
   it('removes the scattered safe-area css consumers', () => {

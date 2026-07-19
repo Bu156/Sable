@@ -5,7 +5,7 @@ import { updateThemeColorMeta } from '../../theme/themeColorMeta';
 
 const safeAreaTop = 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
 const safeAreaBottom = 'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
-const iosBottomInset = 'var(--keyboard-height, 0px)';
+const iosBottomInset = `max(${safeAreaBottom}, var(--keyboard-height, 0px))`;
 const safeAreaLeft = 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))';
 const safeAreaRight = 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))';
 
