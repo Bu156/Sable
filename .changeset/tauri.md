@@ -1,5 +1,5 @@
 ---
-default: patch
+default: minor
 ---
 
-Add tauri build for desktop and mobile.
+Add beta builds for desktop and mobile.
