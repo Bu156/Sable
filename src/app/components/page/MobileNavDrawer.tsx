@@ -269,11 +269,15 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         return;
       }
 
-      if (mx > DIRECTION_DEADZONE || !canOpenRoom) {
+      if (mx > DIRECTION_DEADZONE) {
         if (draggingRef.current) {
           draggingRef.current = false;
           settle(0);
         }
+        cancel();
+        return;
+      }
+      if (!canOpenRoom && mx < -DIRECTION_DEADZONE) {
         cancel();
         return;
       }
@@ -307,6 +311,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     {
       axis: 'x',
       filterTaps: true,
+      tapsThreshold: DIRECTION_DEADZONE,
       pointer: { capture: false },
       from: () => [readX(), 0],
     }
