@@ -369,6 +369,84 @@ jobs:
             gh release upload "$TAG" "$f" --clobber
           done
 
+  ios:
+    name: Build iOS (AltStore/SideStore)
+    needs: setup-release
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447e83dd # v6.0.2
+        with:
+          ref: ${{ needs.setup-release.outputs.ref }}
+          persist-credentials: false
+
+      - name: Setup app
+        uses: ./.github/actions/setup
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src-tauri
+
+      - name: Stamp release version into tauri.conf.json
+        shell: bash
+        run: node .github/scripts/set-tauri-version.mjs "$VERSION"
+
+      - name: Build unsigned IPA
+        id: ipa
+        shell: bash
+        run: |
+          pnpm tauri ios build --no-sign --ci
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
+          [ -n "$IPA" ] || { echo "IPA not found"; ls -R src-tauri/gen/apple/build 2>/dev/null || true; exit 1; }
+          echo "size=$(stat -f%z "$IPA")" >> "$GITHUB_OUTPUT"
+          echo "path=$IPA" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$IPA")" >> "$GITHUB_OUTPUT"
+
+      - name: Attest iOS bundle
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ${{ steps.ipa.outputs.path }}
+
+      - name: Attach IPA to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "${{ steps.ipa.outputs.path }}" --clobber
+
+      - name: Update AltStore/SideStore source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.ipa.outputs.name }}"
+          DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          if gh release download "$TAG" --pattern 'altstore-source.json' --dir . --clobber 2>/dev/null; then
+            echo "Using existing altstore-source.json from release $TAG"
+          else
+            echo "Using repo altstore-source.json"
+          fi
+          node .github/scripts/update-altstore-source.mjs \
+            altstore-source.json "$VERSION" "$VERSION" "${{ steps.ipa.outputs.size }}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
+          gh release upload "$TAG" altstore-source.json --clobber
+
   updater-manifest:
     name: Publish updater manifest
     needs: [setup-release, build, android]
