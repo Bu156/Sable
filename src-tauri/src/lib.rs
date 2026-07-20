@@ -268,6 +268,8 @@ pub fn run() {
             network::media_protocol::respond,
         )
         .setup(|app| {
+            network::native_upload::cleanup_uploads(app.handle());
+
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;

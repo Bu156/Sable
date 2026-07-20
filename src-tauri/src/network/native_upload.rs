@@ -63,6 +63,17 @@ fn upload_temp_path<R: Runtime>(app: &AppHandle<R>, request_id: &str) -> Result<
     Ok(dir.join(request_id))
 }
 
+/// Drop leftover upload temp files from a session that ended without running
+/// the normal cleanup (crash, OS kill, ...). No upload can be in flight yet at
+/// startup, so removing the whole subdir is safe; it is recreated on demand by
+/// `upload_write_chunk`.
+pub fn cleanup_uploads<R: Runtime>(app: &AppHandle<R>) {
+    let Ok(dir) = app.path().app_cache_dir() else {
+        return;
+    };
+    let _ = std::fs::remove_dir_all(dir.join(UPLOAD_SUBDIR));
+}
+
 fn register_abort_sender(request_id: &str) -> watch::Receiver<bool> {
     let (sender, receiver) = watch::channel(false);
     UPLOAD_ABORT_SENDERS
