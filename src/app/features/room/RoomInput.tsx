@@ -102,7 +102,6 @@ import { matchesShortcut } from '../../keyboard/shortcuts';
 import { getMentionContent, isThreadRelationEvent, reactionOrEditEvent } from '$utils/room';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
 import { mobileOrTablet } from '$utils/user-agent';
-import { useElementSizeObserver } from '$hooks/useElementSizeObserver';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { nicknamesAtom } from '$state/nicknames';
@@ -146,6 +145,7 @@ import {
   composerIcon,
   dropzoneIcon,
   File as FileIcon,
+  Image as ImageIcon,
   ListBullets,
   MapPinPlusIcon,
   menuIcon,
@@ -154,7 +154,6 @@ import {
   getPhosphorIconSize,
   PlusCircle,
   Smiley,
-  Sticker,
   Stop,
   X,
 } from '$components/icons/phosphor';
@@ -194,7 +193,6 @@ import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { LocationDialog } from './location-modal';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { GifIcon } from '@phosphor-icons/react';
 import { PersonaPicker } from './persona-picker/PersonaPicker.tsx';
 
 // Returns the event ID of the most recent non-reaction/non-edit event in a thread,
@@ -298,7 +296,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
-    const [showGifPicker] = useSetting(settingsAtom, 'enableGifPicker');
     const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
 
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -402,6 +399,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
         setUploadBoard(true);
         const safeFiles = files.map(safeFile);
+        // Eager-read to avoid Android content URI expiry after SAF picker
+        const blobbedFiles = await Promise.all(
+          safeFiles.map(async (f) => {
+            const buf = await f.arrayBuffer();
+            return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+          })
+        );
         const makeMetadata = () => ({
           markedAsSpoiler: false,
           waveform: audioMeta?.waveform,
@@ -409,7 +413,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         });
 
         if (room.hasEncryptionStateEvent()) {
-          const placeholders: TUploadItem[] = safeFiles.map((f) => ({
+          const placeholders: TUploadItem[] = blobbedFiles.map((f) => ({
             file: f,
             originalFile: f,
             encInfo: undefined,
@@ -436,7 +440,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
         setSelectedFiles({
           type: 'PUT',
-          item: safeFiles.map((f) => ({
+          item: blobbedFiles.map((f) => ({
             file: f,
             originalFile: f,
             encInfo: undefined,
@@ -449,7 +453,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const pickFile = useFilePicker(handleFiles, true);
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
-    const [hideStickerBtn, setHideStickerBtn] = useState(document.body.clientWidth < 500);
+    const [hasText, setHasText] = useState(false);
+    const handleEditorChange = useCallback(() => {
+      setHasText(!isEmptyEditor(editor));
+    }, [editor]);
+    const hasContent = hasText || selectedFiles.length > 0;
 
     const isComposing = useComposingCheck();
 
@@ -474,11 +482,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendIndividualAttachmentAsCaption] = useSetting(
       settingsAtom,
       'sendIndividualAttachmentAsCaption'
-    );
-
-    useElementSizeObserver(
-      useCallback(() => fileDropContainerRef.current, [fileDropContainerRef]),
-      useCallback((width) => setHideStickerBtn(width < 500), [])
     );
 
     const replyEvent = replyDraft ? room.findEventById(replyDraft.eventId) : undefined;
@@ -1528,6 +1531,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           suppressBlurRefocusRef={suppressBlurRefocusRef}
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
+          onChange={handleEditorChange}
           onPaste={handlePaste}
           responsiveAfter={audioRecorder}
           forceMultilineLayout={showAudioRecorder}
@@ -1743,6 +1747,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                           size="300"
                           radii="300"
                           onClick={() => {
+                            pickFile('image/*');
+                            setAddMenuAnchor(undefined);
+                          }}
+                          before={menuIcon(ImageIcon)}
+                        >
+                          <Text size="B300">Photos</Text>
+                        </MenuItem>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          onClick={() => {
                             pickFile('*');
                             setAddMenuAnchor(undefined);
                           }}
@@ -1782,64 +1797,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           after={
             <>
-              {/* ── Mic button — always present; icon swaps to Stop while recording ── */}
-              <IconButton
-                ref={micBtnRef}
-                variant={showAudioRecorder ? 'Critical' : 'SurfaceVariant'}
-                size="300"
-                radii="300"
-                title={showAudioRecorder ? 'Stop recording' : 'Record audio message'}
-                aria-label={showAudioRecorder ? 'Stop recording' : 'Record audio message'}
-                style={{ backgroundColor: 'transparent' }}
-                aria-pressed={showAudioRecorder}
-                onClick={() => {
-                  if (mobileOrTablet() && !showAudioRecorder) return;
-                  if (showAudioRecorder) {
-                    audioRecorderRef.current?.stop();
-                  } else {
-                    setShowAudioRecorder(true);
-                  }
-                }}
-                onPointerDown={() => {
-                  if (!mobileOrTablet()) return;
-                  if (showAudioRecorder) return;
-                  micHoldStartRef.current = Date.now();
-                  setShowAudioRecorder(true);
-
-                  function onUp() {
-                    cleanup();
-                    const held = Date.now() - micHoldStartRef.current;
-                    if (held >= HOLD_THRESHOLD_MS) {
-                      setTimeout(() => {
-                        audioRecorderRef.current?.stop();
-                      }, 50);
-                    } else {
-                      setTimeout(() => {
-                        audioRecorderRef.current?.cancel();
-                      }, 50);
-                    }
-                  }
-                  function cleanup() {
-                    window.removeEventListener('pointerup', onUp);
-                    window.removeEventListener('pointercancel', cleanup);
-                  }
-                  window.addEventListener('pointerup', onUp);
-                  window.addEventListener('pointercancel', cleanup);
-                }}
-              >
-                {showAudioRecorder ? (
-                  <Stop
-                    size={getPhosphorIconSize('toolbar')}
-                    weight="fill"
-                    style={{ color: color.Critical.Main }}
-                  />
-                ) : (
-                  composerIcon(Microphone)
-                )}
-              </IconButton>
-
-              <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
-
               <UseStateProvider initial={undefined}>
                 {() => {
                   const emojiBoard = (
@@ -1865,67 +1822,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     />
                   );
                   const triggers = (
-                    <>
-                      {showGifPicker && (
-                        <IconButton
-                          aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
-                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
-                          onPointerDown={suppressEditorRefocus}
-                          variant="SurfaceVariant"
-                          size="300"
-                          radii="300"
-                          style={{ backgroundColor: 'transparent' }}
-                        >
-                          {composerIcon(GifIcon, {
-                            weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
-                          })}
-                        </IconButton>
-                      )}
-                      {!hideStickerBtn && (
-                        <IconButton
-                          aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
-                          onPointerDown={suppressEditorRefocus}
-                          variant="SurfaceVariant"
-                          size="300"
-                          radii="300"
-                          style={{ backgroundColor: 'transparent' }}
-                          title="open sticker picker"
-                          aria-label="Open sticker picker"
-                        >
-                          {composerIcon(Sticker, {
-                            weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
-                          })}
-                        </IconButton>
-                      )}
-                      <IconButton
-                        ref={emojiBtnRef}
-                        aria-pressed={
-                          hideStickerBtn
-                            ? emojiBoardTab === EmojiBoardTab.Emoji ||
-                              emojiBoardTab === EmojiBoardTab.Gif
-                            : emojiBoardTab === EmojiBoardTab.Emoji
-                        }
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
-                        onPointerDown={suppressEditorRefocus}
-                        variant="SurfaceVariant"
-                        size="300"
-                        radii="300"
-                        style={{ backgroundColor: 'transparent' }}
-                        title="open emoji picker"
-                        aria-label="Open emoji picker"
-                      >
-                        {composerIcon(Smiley, {
-                          weight: hideStickerBtn
-                            ? emojiBoardTab
-                              ? 'fill'
-                              : 'regular'
-                            : emojiBoardTab === EmojiBoardTab.Emoji
-                              ? 'fill'
-                              : 'regular',
-                        })}
-                      </IconButton>
-                    </>
+                    <IconButton
+                      ref={emojiBtnRef}
+                      aria-pressed={emojiBoardTab !== undefined}
+                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                      onPointerDown={suppressEditorRefocus}
+                      variant="SurfaceVariant"
+                      size="300"
+                      radii="300"
+                      style={{ backgroundColor: 'transparent' }}
+                      title="open emoji board"
+                      aria-label="Open emoji board"
+                    >
+                      {composerIcon(Smiley, {
+                        weight: emojiBoardTab !== undefined ? 'fill' : 'regular',
+                      })}
+                    </IconButton>
                   );
                   if (mobileOrTablet()) {
                     return (
@@ -1966,6 +1878,120 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   );
                 }}
               </UseStateProvider>
+
+              <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
+
+              <IconButton
+                ref={micBtnRef}
+                variant={
+                  showAudioRecorder ? 'Critical' : scheduledTime ? 'Primary' : 'SurfaceVariant'
+                }
+                size="300"
+                radii={hasContent || showAudioRecorder ? '0' : '300'}
+                title={
+                  showAudioRecorder
+                    ? 'Stop recording'
+                    : hasContent
+                      ? 'Send Message'
+                      : 'Record audio message'
+                }
+                aria-label={
+                  showAudioRecorder
+                    ? 'Stop recording'
+                    : hasContent
+                      ? 'Send your composed Message'
+                      : 'Record audio message'
+                }
+                style={{ backgroundColor: 'transparent' }}
+                aria-pressed={showAudioRecorder}
+                onClick={() => {
+                  if (showAudioRecorder) {
+                    audioRecorderRef.current?.stop();
+                    return;
+                  }
+                  if (hasContent) {
+                    if (isLongPress.current) {
+                      isLongPress.current = false;
+                      return;
+                    }
+                    submit();
+                    return;
+                  }
+                  if (mobileOrTablet()) return;
+                  setShowAudioRecorder(true);
+                }}
+                onMouseDown={(e: MouseEvent) => {
+                  if (hasContent) e.preventDefault();
+                }}
+                onPointerDown={() => {
+                  if (showAudioRecorder) return;
+                  if (hasContent) {
+                    isLongPress.current = false;
+                    if (mobileOrTablet() && delayedEventsSupported) {
+                      longPressTimer.current = setTimeout(() => {
+                        isLongPress.current = true;
+                        setShowSchedulePicker(true);
+                      }, 1000);
+                    }
+                    return;
+                  }
+                  if (!mobileOrTablet()) return;
+                  micHoldStartRef.current = Date.now();
+                  setShowAudioRecorder(true);
+
+                  function onUp() {
+                    cleanup();
+                    const held = Date.now() - micHoldStartRef.current;
+                    if (held >= HOLD_THRESHOLD_MS) {
+                      setTimeout(() => {
+                        audioRecorderRef.current?.stop();
+                      }, 50);
+                    } else {
+                      setTimeout(() => {
+                        audioRecorderRef.current?.cancel();
+                      }, 50);
+                    }
+                  }
+                  function cleanup() {
+                    window.removeEventListener('pointerup', onUp);
+                    window.removeEventListener('pointercancel', cleanup);
+                  }
+                  window.addEventListener('pointerup', onUp);
+                  window.addEventListener('pointercancel', cleanup);
+                }}
+                onPointerUp={() => {
+                  if (longPressTimer.current !== null) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                }}
+                onPointerCancel={() => {
+                  if (longPressTimer.current !== null) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                }}
+                disabled={hasContent && sendBusy && !showAudioRecorder}
+                className={hasContent && delayedEventsSupported ? css.SplitSendButton : undefined}
+              >
+                {showAudioRecorder ? (
+                  <Stop
+                    size={getPhosphorIconSize('toolbar')}
+                    weight="fill"
+                    style={{ color: color.Critical.Main }}
+                  />
+                ) : hasContent ? (
+                  sendBusy ? (
+                    <Spinner size="300" variant="Secondary" />
+                  ) : scheduledTime ? (
+                    composerIcon(Clock)
+                  ) : (
+                    composerIcon(PaperPlaneTilt)
+                  )
+                ) : (
+                  composerIcon(Microphone)
+                )}
+              </IconButton>
               <PopOut
                 anchor={scheduleMenuAnchor}
                 position="Top"
@@ -2009,71 +2035,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </FocusTrap>
                 }
               />
-              <Box display="Flex" alignItems="Center">
+              {delayedEventsSupported && !mobileOrTablet() && (
                 <IconButton
-                  title="Send Message"
-                  aria-label="Send your composed Message"
-                  disabled={sendBusy}
-                  style={{ backgroundColor: 'transparent' }}
-                  onClick={() => {
-                    if (isLongPress.current) {
-                      isLongPress.current = false;
-                      return;
-                    }
-                    submit();
+                  onClick={(evt: MouseEvent<HTMLButtonElement>) => {
+                    setScheduleMenuAnchor(evt.currentTarget.getBoundingClientRect());
                   }}
-                  onMouseDown={(e: MouseEvent) => e.preventDefault()}
-                  onPointerDown={() => {
-                    isLongPress.current = false;
-                    if (mobileOrTablet() && delayedEventsSupported) {
-                      longPressTimer.current = setTimeout(() => {
-                        isLongPress.current = true;
-                        setShowSchedulePicker(true);
-                      }, 1000);
-                    }
-                  }}
-                  onPointerUp={() => {
-                    if (longPressTimer.current !== null) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
-                  }}
-                  onPointerCancel={() => {
-                    if (longPressTimer.current !== null) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
-                  }}
+                  title="Schedule Message"
+                  aria-label="Schedule message send"
                   variant={scheduledTime ? 'Primary' : 'SurfaceVariant'}
+                  style={{ backgroundColor: 'transparent' }}
                   size="300"
                   radii="0"
-                  className={delayedEventsSupported ? css.SplitSendButton : undefined}
+                  className={css.SplitChevronButton}
                 >
-                  {sendBusy ? (
-                    <Spinner size="300" variant="Secondary" />
-                  ) : scheduledTime ? (
-                    composerIcon(Clock)
-                  ) : (
-                    composerIcon(PaperPlaneTilt)
-                  )}
+                  {chipIcon(CaretDown)}
                 </IconButton>
-                {delayedEventsSupported && !mobileOrTablet() && (
-                  <IconButton
-                    onClick={(evt: MouseEvent<HTMLButtonElement>) => {
-                      setScheduleMenuAnchor(evt.currentTarget.getBoundingClientRect());
-                    }}
-                    title="Schedule Message"
-                    aria-label="Schedule message send"
-                    variant={scheduledTime ? 'Primary' : 'SurfaceVariant'}
-                    style={{ backgroundColor: 'transparent' }}
-                    size="300"
-                    radii="0"
-                    className={css.SplitChevronButton}
-                  >
-                    {chipIcon(CaretDown)}
-                  </IconButton>
-                )}
-              </Box>
+              )}
             </>
           }
           bottom={<MarkdownFormattingToolbarBottom />}
