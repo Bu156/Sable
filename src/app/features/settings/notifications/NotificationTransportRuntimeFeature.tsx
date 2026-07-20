@@ -7,18 +7,28 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { enableUnifiedPush } from './UnifiedPushNotifications';
-import { enableNativePush } from './NativePushNotifications';
+import { enableNativePush, isNativePushPermissionGranted } from './NativePushNotifications';
+import { isUnifiedPushPermissionGranted } from './UnifiedPushTransport';
 import {
   NotificationTransportRuntime,
   type NotificationTransportRuntimeContext,
 } from './NotificationTransportRuntime';
 import {
   type NotificationTransportPlatform,
+  type NotificationTransportProvider,
   normalizeNotificationTransportMode,
   resolvePreferredNotificationTransportProvider,
 } from './NotificationTransport';
 
 const log = createLogger('NotificationTransportRuntimeFeature');
+
+async function checkPushPermission(
+  provider: NotificationTransportProvider | null
+): Promise<boolean | null> {
+  if (provider === 'unifiedpush') return isUnifiedPushPermissionGranted();
+  if (provider === 'native') return isNativePushPermissionGranted();
+  return null;
+}
 
 function currentPlatform(): NotificationTransportPlatform {
   if (!isTauri()) return 'web';
@@ -31,8 +41,14 @@ function currentPlatform(): NotificationTransportPlatform {
 export function NotificationTransportRuntimeFeature() {
   const mx = useMatrixClient();
   const clientConfig = useClientConfig();
-  const [backgroundPushEnabled] = useSetting(settingsAtom, 'backgroundPushEnabled');
-  const [backgroundPushProvider] = useSetting(settingsAtom, 'backgroundPushProvider');
+  const [backgroundPushEnabled, setBackgroundPushEnabled] = useSetting(
+    settingsAtom,
+    'backgroundPushEnabled'
+  );
+  const [backgroundPushProvider, setBackgroundPushProvider] = useSetting(
+    settingsAtom,
+    'backgroundPushProvider'
+  );
   const [pushTransportMode] = useSetting(settingsAtom, 'pushTransportMode');
   const [pushTransportOverride] = useSetting(settingsAtom, 'pushTransportOverride');
   const [useInAppNotifications] = useSetting(settingsAtom, 'useInAppNotifications');
@@ -107,26 +123,33 @@ export function NotificationTransportRuntimeFeature() {
   useEffect(() => {
     if (!mx) return undefined;
 
-    if (provider === 'unifiedpush') {
-      enableUnifiedPush(mx, upConfigRef.current)
-        .then((result) => {
+    void (async () => {
+      const granted = await checkPushPermission(provider);
+      if (granted === false) {
+        setBackgroundPushEnabled(false);
+        setBackgroundPushProvider(null);
+        return;
+      }
+
+      try {
+        if (provider === 'unifiedpush') {
+          const result = await enableUnifiedPush(mx, upConfigRef.current);
           lastEndpointRef.current = result.endpoint;
-        })
-        .catch((error) => {
-          log.warn('UnifiedPush pusher registration failed at startup', error);
-        });
-    } else if (provider === 'native') {
-      enableNativePush(mx, clientConfigRef.current)
-        .then((token) => {
+        } else if (provider === 'native') {
+          const token = await enableNativePush(mx, clientConfigRef.current);
           lastEndpointRef.current = token;
-        })
-        .catch((error) => {
-          log.warn('Native push pusher registration failed at startup', error);
-        });
-    }
+        }
+      } catch (error) {
+        log.warn('Pusher registration failed at startup', error);
+        if ((await checkPushPermission(provider)) === false) {
+          setBackgroundPushEnabled(false);
+          setBackgroundPushProvider(null);
+        }
+      }
+    })();
 
     return () => {};
-  }, [provider, mx]);
+  }, [provider, mx, setBackgroundPushEnabled, setBackgroundPushProvider]);
 
   useEffect(
     () => () => {

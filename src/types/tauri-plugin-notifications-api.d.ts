@@ -62,7 +62,7 @@ declare module '@choochmeque/tauri-plugin-notifications-api' {
     unregister: () => Promise<void> | void;
   };
 
-  export function isPermissionGranted(): Promise<boolean>;
+  export function isPermissionGranted(): Promise<boolean | null>;
   export function requestPermission(): Promise<NotificationPermission>;
   export function sendNotification(options: NotificationOptions | string): Promise<void>;
   export function registerForPushNotifications(): Promise<string>;
