@@ -76,8 +76,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-window-state = "2.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
-webkit2gtk = "2.0"
 gtk = "0.18"
+
+# WebKitGTK is the wry runtime; not needed under CEF.
+[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"), not(feature = "cef")))'.dependencies]
+webkit2gtk = "2.0"
 
 # CEF (Chromium) runtime — Linux only; other platforms use wry.
 # Repackage of tauri's unreleased feat/cef branch. Switch to the official
