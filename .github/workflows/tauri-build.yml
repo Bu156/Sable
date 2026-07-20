@@ -408,6 +408,14 @@ jobs:
         shell: bash
         run: node .github/scripts/set-tauri-version.mjs "$VERSION"
 
+      - name: Setup Xcode
+        shell: bash
+        run: pnpm tauri ios init
+
+      - name: Symlink icons to the ios folder
+        shell: bash
+        run: pnpm run setup:tauri-icons --write --force
+
       - name: Build unsigned IPA
         id: ipa
         shell: bash
