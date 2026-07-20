@@ -73,6 +73,7 @@ type CustomEditorProps = {
   onPaste?: ClipboardEventHandler;
   className?: string;
   variant?: 'Surface' | 'SurfaceVariant' | 'Background';
+  enterKeyHint?: 'enter' | 'send';
 };
 export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
   (
@@ -93,6 +94,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       onPaste,
       className,
       variant = 'SurfaceVariant',
+      enterKeyHint,
     },
     ref
   ) => {
@@ -443,6 +445,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 onPaste={onPaste}
                 // Defer to OS capitalization setting (respects iOS sentence-case toggle).
                 autoCapitalize="sentences"
+                enterKeyHint={enterKeyHint}
                 // keeps focus after pressing send, but yields to another editor.
                 onBlur={(evt) => {
                   if (!mobileOrTablet()) return;

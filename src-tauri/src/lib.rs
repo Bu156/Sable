@@ -323,6 +323,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             network::loopback_http::abort_loopback_fetch,
             network::loopback_http::loopback_fetch,
+            network::native_upload::native_upload,
+            network::native_upload::upload_write_chunk,
+            network::native_upload::abort_native_upload,
             network::media_protocol::set_media_session,
             network::media_protocol::clear_media_session,
             #[cfg(target_os = "android")]

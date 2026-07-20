@@ -29,6 +29,7 @@ import {
   OverlayCenter,
   PopOut,
   Scroll,
+  Spinner,
   Text,
   toRem,
 } from 'folds';
@@ -339,7 +340,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(draftKey));
 
     const [uploadBoard, setUploadBoard] = useState(true);
+    const [uploadSending, setUploadSending] = useState(false);
+    const [uploadBusy, setUploadBusy] = useState(false);
     const [selectedFiles, setSelectedFiles] = useAtom(roomIdToUploadItemsAtomFamily(draftKey));
+    const isEncrypting = selectedFiles.some((f) => f.encrypting);
+    const sendBusy = uploadSending || isEncrypting || uploadBusy;
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -387,39 +392,46 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
         setUploadBoard(true);
         const safeFiles = files.map(safeFile);
-        const fileItems: TUploadItem[] = [];
+        const makeMetadata = () => ({
+          markedAsSpoiler: false,
+          waveform: audioMeta?.waveform,
+          audioDuration: audioMeta?.audioDuration,
+        });
 
         if (room.hasEncryptionStateEvent()) {
-          const encryptFiles = fulfilledPromiseSettledResult(
-            await Promise.allSettled(safeFiles.map((f) => encryptFile(f)))
-          );
-          encryptFiles.forEach((ef) =>
-            fileItems.push({
-              ...ef,
-              metadata: {
-                markedAsSpoiler: false,
-                waveform: audioMeta?.waveform,
-                audioDuration: audioMeta?.audioDuration,
-              },
-            })
-          );
-        } else {
-          safeFiles.forEach((f) =>
-            fileItems.push({
-              file: f,
-              originalFile: f,
-              encInfo: undefined,
-              metadata: {
-                markedAsSpoiler: false,
-                waveform: audioMeta?.waveform,
-                audioDuration: audioMeta?.audioDuration,
-              },
-            })
-          );
+          const placeholders: TUploadItem[] = safeFiles.map((f) => ({
+            file: f,
+            originalFile: f,
+            encInfo: undefined,
+            encrypting: true,
+            metadata: makeMetadata(),
+          }));
+          setSelectedFiles({ type: 'PUT', item: placeholders });
+          placeholders.forEach((placeholder) => {
+            encryptFile(placeholder.originalFile)
+              .then((ef) =>
+                setSelectedFiles({
+                  type: 'REPLACE',
+                  item: placeholder,
+                  replacement: { ...ef, encrypting: false, metadata: placeholder.metadata },
+                })
+              )
+              .catch((encryptError: unknown) => {
+                log.warn('Failed to encrypt file for upload:', encryptError);
+                setSelectedFiles({ type: 'DELETE', item: placeholder });
+              });
+          });
+          return;
         }
+
         setSelectedFiles({
           type: 'PUT',
-          item: fileItems,
+          item: safeFiles.map((f) => ({
+            file: f,
+            originalFile: f,
+            encInfo: undefined,
+            metadata: makeMetadata(),
+          })),
         });
       },
       [setSelectedFiles, room]
@@ -708,7 +720,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       return getFileMsgContent(fileItem, upload.mxc);
     };
 
-    const handleSendUpload = async (uploads: UploadSuccess[]) => {
+    const handleSendUpload = async (uploads: Upload[]) => {
       const plainText = toPlainText(editor.children).trim();
       const caption = plainText.length > 0 ? plainText : undefined;
       let customHtml = trimCustomHtml(
@@ -720,11 +732,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const formattedCaption =
         caption && !customHtmlEqualsPlainText(customHtml, plainText) ? customHtml : undefined;
 
-      if (uploads.length == 1 && sendIndividualAttachmentAsCaption) {
-        const upload = uploads[0];
+      const resolved = fulfilledPromiseSettledResult(
+        await Promise.allSettled(
+          uploads.map(async (upload): Promise<UploadSuccess> => {
+            if (upload.status === UploadStatus.Success) return upload;
+            if (upload.status === UploadStatus.Loading) {
+              const response = await upload.promise;
+              if (!response.content_uri) throw new Error('Upload failed');
+              return { status: UploadStatus.Success, file: upload.file, mxc: response.content_uri };
+            }
+            throw new Error('Upload not ready');
+          })
+        )
+      );
+      if (resolved.length === 0) return;
+
+      if (resolved.length == 1 && sendIndividualAttachmentAsCaption) {
+        const upload = resolved[0];
         if (!upload) throw new Error('Broken upload');
         let content = await uploadToContent(upload);
-        handleCancelUpload(uploads);
+        handleCancelUpload(resolved);
 
         content.body = caption ?? '';
         content.formatted_body = undefined;
@@ -737,13 +764,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await handleSendContents([content]);
         return;
       }
-      if (uploads.length >= 2 && enableMediaGalleries) {
-        const itemsPromises = uploads.map(async (upload) => {
+      if (resolved.length >= 2 && enableMediaGalleries) {
+        const itemsPromises = resolved.map(async (upload) => {
           const fileItem = selectedFiles.find((f) => f.file === upload.file);
           if (!fileItem) throw new Error('Broken upload');
           return getGalleryItemContent(mx, fileItem, upload.mxc);
         });
-        handleCancelUpload(uploads);
+        handleCancelUpload(resolved);
         const items = fulfilledPromiseSettledResult(await Promise.allSettled(itemsPromises));
 
         if (items.length === 0) return;
@@ -753,8 +780,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await handleSendContents([galleryContent]);
         return;
       }
-      const contentsPromises = uploads.map(uploadToContent);
-      handleCancelUpload(uploads);
+      const contentsPromises = resolved.map(uploadToContent);
+      handleCancelUpload(resolved);
       const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
 
       await handleSendContents(contents);
@@ -800,6 +827,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(async () => {
+      if (selectedFiles.some((f) => f.encrypting)) return;
       uploadBoardHandlers.current?.handleSend();
       if (
         (selectedFiles.length >= 2 && enableMediaGalleries) ||
@@ -1486,6 +1514,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           editor={editor}
           key={inputKey}
           placeholder="Send a message..."
+          enterKeyHint={enterForNewline ? 'enter' : 'send'}
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
@@ -1500,7 +1529,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       open={uploadBoard}
                       onToggle={() => setUploadBoard(!uploadBoard)}
                       uploadFamilyObserverAtom={uploadFamilyObserverAtom}
-                      onSend={handleSendUpload}
+                      onSend={async (uploads) => {
+                        setUploadSending(true);
+                        try {
+                          await handleSendUpload(uploads);
+                        } finally {
+                          setUploadSending(false);
+                        }
+                      }}
+                      onBusyChange={setUploadBusy}
                       imperativeHandlerRef={uploadBoardHandlers}
                       onCancel={handleCancelUpload}
                     />
@@ -1924,6 +1961,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 <IconButton
                   title="Send Message"
                   aria-label="Send your composed Message"
+                  disabled={sendBusy}
                   style={{ backgroundColor: 'transparent' }}
                   onClick={() => {
                     if (isLongPress.current) {
@@ -1959,7 +1997,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   radii="0"
                   className={delayedEventsSupported ? css.SplitSendButton : undefined}
                 >
-                  {scheduledTime ? composerIcon(Clock) : composerIcon(PaperPlaneTilt)}
+                  {sendBusy ? (
+                    <Spinner size="300" variant="Secondary" />
+                  ) : scheduledTime ? (
+                    composerIcon(Clock)
+                  ) : (
+                    composerIcon(PaperPlaneTilt)
+                  )}
                 </IconButton>
                 {delayedEventsSupported && !mobileOrTablet() && (
                   <IconButton
