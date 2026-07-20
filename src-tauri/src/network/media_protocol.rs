@@ -161,8 +161,11 @@ async fn handle_request<R: Runtime>(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Cache to disk first, then serve from there so Range works regardless of homeserver support.
-    let content_type = ensure_cached(
+    // Cache to disk first, then serve from there so Range works regardless of
+    // homeserver support. Files larger than the cache budget are served from
+    // memory for this request and never persisted, so evict_if_needed can't
+    // drop them on write.
+    let (content_type, in_memory_body) = ensure_cached(
         &state,
         &session,
         media_url,
@@ -172,9 +175,13 @@ async fn handle_request<R: Runtime>(
     )
     .await?;
 
-    match range {
-        Some(range_header) => serve_range(body_path, content_type, range_header).await,
-        None => Ok(ok_response(read_full(body_path).await?, &content_type)),
+    match (range, in_memory_body) {
+        (Some(range_header), Some(body)) => {
+            Ok(serve_range_memory(body, &content_type, &range_header))
+        }
+        (Some(range_header), None) => serve_range(body_path, content_type, range_header).await,
+        (None, Some(body)) => Ok(ok_response(body, &content_type)),
+        (None, None) => Ok(ok_response(read_full(body_path).await?, &content_type)),
     }
 }
 
@@ -186,11 +193,11 @@ async fn ensure_cached(
     dir: PathBuf,
     body_path: PathBuf,
     content_type_path: PathBuf,
-) -> Result<String, StatusCode> {
+) -> Result<(String, Option<Vec<u8>>), StatusCode> {
     if let Some(content_type) =
         read_content_type(body_path.clone(), content_type_path.clone()).await
     {
-        return Ok(content_type);
+        return Ok((content_type, None));
     }
 
     let upstream = state
@@ -219,16 +226,23 @@ async fn ensure_cached(
         .map_err(|_| StatusCode::BAD_GATEWAY)?
         .to_vec();
 
-    write_cache(
-        dir,
-        body_path,
-        content_type_path,
-        body,
-        content_type.clone(),
-    )
-    .await;
+    if fits_in_cache(body.len() as u64) {
+        write_cache(
+            dir,
+            body_path,
+            content_type_path,
+            body,
+            content_type.clone(),
+        )
+        .await;
+        Ok((content_type, None))
+    } else {
+        Ok((content_type, Some(body)))
+    }
+}
 
-    Ok(content_type)
+fn fits_in_cache(len: u64) -> bool {
+    len <= MAX_CACHE_BYTES
 }
 
 // Only a hit when the body file is also present, so a stray `.ct` counts as a miss.
@@ -279,6 +293,18 @@ async fn serve_range(
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+// Serve a Range request from an in-memory body. Mirrors serve_range but slices
+// the buffer instead of seeking.
+fn serve_range_memory(body: Vec<u8>, content_type: &str, range_header: &str) -> Response<Vec<u8>> {
+    let total = body.len() as u64;
+    let Some((start, end)) = parse_range(range_header, total) else {
+        return range_not_satisfiable(total);
+    };
+    let end = end.min(start + MAX_RANGE_CHUNK - 1);
+    let buf = body[start as usize..=(end as usize)].to_vec();
+    partial_response(buf, content_type, start, end, total)
 }
 
 // First byte range of a `Range: bytes=...` header as inclusive (start, end); None → 416.
@@ -442,7 +468,9 @@ fn cache_key(session_token: &str, url: &str) -> String {
 mod tests {
     use tauri::http::{header, StatusCode};
 
-    use super::{cache_key, ok_response, parse_range, partial_response};
+    use super::{
+        cache_key, fits_in_cache, ok_response, parse_range, partial_response, serve_range_memory,
+    };
 
     #[test]
     fn cache_key_is_stable_and_hex() {
@@ -507,5 +535,43 @@ mod tests {
             response.headers().get(header::ACCEPT_RANGES).unwrap(),
             "bytes"
         );
+    }
+
+    #[test]
+    fn oversized_media_is_not_cacheable() {
+        assert!(fits_in_cache(0));
+        assert!(fits_in_cache(super::MAX_CACHE_BYTES));
+        assert!(!fits_in_cache(super::MAX_CACHE_BYTES + 1));
+    }
+
+    #[test]
+    fn serve_range_memory_slices_the_in_memory_body() {
+        let body: Vec<u8> = (0..200u8).collect();
+        let response = serve_range_memory(body.clone(), "application/octet-stream", "bytes=10-19");
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.body(), &body[10..=19]);
+        assert_eq!(
+            response.headers().get(header::CONTENT_RANGE).unwrap(),
+            "bytes 10-19/200"
+        );
+    }
+
+    #[test]
+    fn serve_range_memory_caps_at_max_range_chunk() {
+        let body = vec![7_u8; (super::MAX_RANGE_CHUNK * 2) as usize];
+        let response = serve_range_memory(body, "application/octet-stream", "bytes=0-");
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.body().len() as u64, super::MAX_RANGE_CHUNK);
+        let total = super::MAX_RANGE_CHUNK * 2;
+        assert_eq!(
+            response.headers().get(header::CONTENT_RANGE).unwrap(),
+            &format!("bytes 0-{}/{total}", super::MAX_RANGE_CHUNK - 1)
+        );
+    }
+
+    #[test]
+    fn serve_range_memory_rejects_unsatisfiable_range() {
+        let response = serve_range_memory(Vec::new(), "application/octet-stream", "bytes=0-0");
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
     }
 }
