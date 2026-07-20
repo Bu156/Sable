@@ -30,6 +30,7 @@ import {
   menuIcon,
   PencilSimple,
   PushPinSlash,
+  ShareNetwork,
   UserPlus,
   X,
 } from '$components/icons/phosphor';
@@ -88,6 +89,7 @@ import { useRoomsUnread } from '$state/hooks/unread';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { markAsRead } from '$utils/notifications';
 import { copyToClipboard } from '$utils/dom';
+import { shareText } from '$utils/share';
 import { stopPropagation } from '$utils/keyboard';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
@@ -142,6 +144,13 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
       const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
       copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
+      requestClose();
+    };
+
+    const handleShareLink = () => {
+      const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
+      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+      shareText(getMatrixToRoom(roomIdOrAlias, viaServers)).catch(() => {});
       requestClose();
     };
 
@@ -204,6 +213,11 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
           <MenuItem onClick={handleCopyLink} size="300" after={menuIcon(Link)} radii="300">
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Copy Link
+            </Text>
+          </MenuItem>
+          <MenuItem onClick={handleShareLink} size="300" after={menuIcon(ShareNetwork)} radii="300">
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              Share Link
             </Text>
           </MenuItem>
           <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">

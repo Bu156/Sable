@@ -1,5 +1,5 @@
-import { Box, IconButton, Scroll, toRem, Text, color, config } from 'folds';
-import { SquaresFour, composerIcon, sizedIcon, X } from '$components/icons/phosphor';
+import { Box, Scroll, toRem, Text, color, config } from 'folds';
+import { SquaresFour, sizedIcon } from '$components/icons/phosphor';
 import {
   Page,
   PageContent,
@@ -9,14 +9,10 @@ import {
   PageNav,
   PageNavHeader,
 } from '$components/page';
-import { CreateSpaceForm } from '$features/create-space';
-import { useRoomNavigate } from '$hooks/useRoomNavigate';
+import { BugReportForm } from '$features/bug-report';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
-import { SpaceProvider } from '$hooks/useSpace';
-import { useAllJoinedRoomsSet, useGetRoom } from '$hooks/useGetRoom';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { SidebarResizer } from '../sidebar/SidebarResizer';
@@ -24,15 +20,9 @@ import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
 
-export function Create() {
-  const { navigateSpace } = useRoomNavigate();
+export function BugReportPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const spaceId = searchParams.get('spaceId') ?? undefined;
-
-  const allJoinedRooms = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allJoinedRooms);
-  const space = spaceId ? getRoom(spaceId) : undefined;
+  const navigateBack = () => navigate(-1);
 
   const setIsResizingSidebar = useSetAtom(isResizingSidebarAtom);
   const [roomSidebarWidth, setRoomSidebarWidth] = useSetting(settingsAtom, 'roomSidebarWidth');
@@ -65,7 +55,7 @@ export function Create() {
                 {!hideText ? (
                   <Box grow="Yes">
                     <Text size="H4" truncate align="Center">
-                      Create Space
+                      Report an Issue
                     </Text>
                   </Box>
                 ) : (
@@ -89,29 +79,6 @@ export function Create() {
       )}
       <Page>
         <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
-          {isMobile && (
-            <PageNav>
-              <PageNavHeader size="600">
-                <Box grow="Yes" gap="300" justifyContent="Center">
-                  <Box grow="Yes">
-                    <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-                      Create Space
-                    </Text>
-                  </Box>
-                  <Box shrink="No">
-                    <IconButton
-                      size="300"
-                      radii="300"
-                      aria-label="Close create space"
-                      onClick={() => navigate(-1)}
-                    >
-                      {composerIcon(X)}
-                    </IconButton>
-                  </Box>
-                </Box>
-              </PageNavHeader>
-            </PageNav>
-          )}
           <Scroll hideTrack visibility="Hover">
             <PageContent>
               <PageContentCenter>
@@ -119,12 +86,10 @@ export function Create() {
                   <Box direction="Column" gap="700">
                     <PageHero
                       icon={sizedIcon(SquaresFour, '600')}
-                      title="Create Space"
-                      subTitle="Build a space for your community."
+                      title="Report an Issue"
+                      subTitle="Report a bug or request a feature."
                     />
-                    <SpaceProvider value={space ?? null}>
-                      <CreateSpaceForm space={space} onCreate={navigateSpace} />
-                    </SpaceProvider>
+                    <BugReportForm onDone={navigateBack} />
                   </Box>
                 </PageHeroSection>
               </PageContentCenter>

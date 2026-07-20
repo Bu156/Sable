@@ -15,6 +15,7 @@ import {
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '$components/page';
+import { SettingsSectionHeader } from '$components/page/style.css';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -57,7 +58,6 @@ import { KeyboardShortcuts } from './keyboard-shortcuts';
 import { Notifications } from './notifications';
 import { PerMessageProfilePage } from './Persona/ProfilesPage';
 import { settingsSections, type SettingsSectionId } from './routes';
-import { settingsHeader } from './styles.css';
 import { useSettingsFocus } from './useSettingsFocus';
 import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
@@ -285,7 +285,7 @@ export function Settings({
       nav={
         screenSize === ScreenSize.Mobile && visibleSection !== null ? undefined : (
           <PageNav size="300">
-            <PageNavHeader className={settingsHeader} size="600">
+            <PageNavHeader className={SettingsSectionHeader} size="600">
               <Box grow="Yes" gap="200">
                 <Box grow="Yes" alignItems="Center" gap="200">
                   <Avatar size="200" radii="300">

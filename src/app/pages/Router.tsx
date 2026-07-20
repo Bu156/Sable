@@ -53,6 +53,8 @@ import {
   SETTINGS_PATH,
   NAVIGATE_PATH,
   PROFILE_PATH,
+  CREATE_ROOM_PATH,
+  BUG_REPORT_PATH,
   BOOKMARKS_PATH_SEGMENT,
 } from './paths';
 import {
@@ -123,6 +125,14 @@ import { CallStatusRenderer } from './CallStatusRenderer';
 import { UserQuickToolsProvider } from '$components/UserQuickToolsProvider';
 import { Navigate } from './client/navigate';
 import { ProfileMobile } from './client/profile';
+
+// Lazy-loaded: mobile full-screen pages for flows that are modals on desktop.
+const CreateRoomPage = lazy(() =>
+  import('./client/create-room').then((m) => ({ default: m.CreateRoomPage }))
+);
+const BugReportPage = lazy(() =>
+  import('./client/bug-report').then((m) => ({ default: m.BugReportPage }))
+);
 
 /**
  * Returns true if there is at least one stored session.
@@ -428,6 +438,22 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           />
         </Route>
         <Route path={CREATE_PATH} element={<Create />} />
+        <Route
+          path={CREATE_ROOM_PATH}
+          element={
+            <Suspense fallback={<SplashScreen>{null}</SplashScreen>}>
+              <CreateRoomPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={BUG_REPORT_PATH}
+          element={
+            <Suspense fallback={<SplashScreen>{null}</SplashScreen>}>
+              <BugReportPage />
+            </Suspense>
+          }
+        />
         <Route path={NAVIGATE_PATH} element={<Navigate />} />
         <Route path={PROFILE_PATH} element={<ProfileMobile />} />
         <Route

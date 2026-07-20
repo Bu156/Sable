@@ -121,4 +121,3 @@ export interface UploadWriteChunkParams {
   chunk: string;
   [key: string]: unknown;
 }
-

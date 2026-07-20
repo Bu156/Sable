@@ -8,6 +8,7 @@
     "core:window:allow-set-badge-count",
     "deep-link:default",
     "edge-to-edge:default",
-    "notifications:default"
+    "notifications:default",
+    "sharekit:default"
   ]
 }

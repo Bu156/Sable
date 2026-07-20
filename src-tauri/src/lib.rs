@@ -260,7 +260,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init());
 
     #[cfg(mobile)]
-    let builder = builder.plugin(tauri_plugin_edge_to_edge::init());
+    let builder = builder
+        .plugin(tauri_plugin_edge_to_edge::init())
+        .plugin(tauri_plugin_sharekit::init());
 
     #[cfg(target_os = "android")]
     let builder = builder.plugin(tauri_plugin_android_fs::init());
