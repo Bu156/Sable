@@ -62,6 +62,7 @@ import { useSettingsFocus } from './useSettingsFocus';
 import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
 import { Desktop } from './desktop';
+import { isDesktopTauri } from '$utils/platform';
 
 export enum SettingsPages {
   GeneralPage,
@@ -192,12 +193,16 @@ export function Settings({
     : undefined;
 
   const [showPersona] = useSetting(settingsAtom, 'showPersonaSetting');
+  const isDesktop = isDesktopTauri();
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
   const screenSize = useScreenSizeContext();
   const isControlled = activeSection !== undefined;
 
   const [legacyActivePage, setLegacyActivePage] = useState<SettingsPages | undefined>(() => {
     if (initialPage === SettingsPages.PerMessageProfilesPage && !showPersona) {
+      return SettingsPages.GeneralPage;
+    }
+    if (initialPage === SettingsPages.DesktopPage && !isDesktop) {
       return SettingsPages.GeneralPage;
     }
     if (initialPage) return initialPage;
@@ -215,18 +220,24 @@ export function Settings({
     if (section === 'persona' && !showPersona) {
       return 'general';
     }
+    if (section === 'desktop' && !isDesktop) {
+      return 'general';
+    }
     return section;
-  }, [activeSection, isControlled, legacyActivePage, showPersona]);
+  }, [activeSection, isControlled, legacyActivePage, showPersona, isDesktop]);
 
   const menuItems = useMemo<SettingsMenuItem[]>(
     () =>
       settingsSections
-        .filter((section) => showPersona || section.id !== 'persona')
+        .filter(
+          (section) =>
+            (showPersona || section.id !== 'persona') && (isDesktop || section.id !== 'desktop')
+        )
         .map((section) => {
           const icon = settingsMenuIcons[section.id];
           return { id: section.id, name: section.label, ...icon };
         }),
-    [showPersona]
+    [showPersona, isDesktop]
   );
 
   const handleSelectSection = (section: SettingsSectionId) => {
