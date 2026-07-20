@@ -352,6 +352,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const uploadBoardHandlers = useRef<UploadBoardImperativeHandlers>();
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
+    const suppressBlurRefocusRef = useRef(false);
+    const suppressEditorRefocus = useCallback(() => {
+      suppressBlurRefocusRef.current = true;
+      requestAnimationFrame(() => {
+        suppressBlurRefocusRef.current = false;
+      });
+    }, []);
 
     const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
 
@@ -1515,6 +1522,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           key={inputKey}
           placeholder="Send a message..."
           enterKeyHint={enterForNewline ? 'enter' : 'send'}
+          suppressBlurRefocusRef={suppressBlurRefocusRef}
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
@@ -1750,6 +1758,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     ? pickFile('*')
                     : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
                 }
+                onPointerDown={suppressEditorRefocus}
                 variant="SurfaceVariant"
                 size="300"
                 radii="300"
@@ -1822,97 +1831,130 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
 
               <UseStateProvider initial={undefined}>
-                {() => (
-                  <PopOut
-                    offset={16}
-                    alignOffset={-44}
-                    position="Top"
-                    align="End"
-                    anchor={
-                      emojiBoardTab === undefined
-                        ? undefined
-                        : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
-                    }
-                    content={
-                      <EmojiBoard
-                        tab={emojiBoardTab}
-                        onTabChange={setEmojiBoardTab}
-                        imagePackRooms={imagePackRooms}
-                        returnFocusOnDeactivate={false}
-                        onEmojiSelect={handleEmoticonSelect}
-                        onCustomEmojiSelect={handleEmoticonSelect}
-                        onStickerSelect={handleStickerSelect}
-                        onGifSelect={handleGifSelect}
-                        requestClose={() => {
-                          setEmojiBoardTab((t) => {
-                            if (t) {
-                              if (!mobileOrTablet()) ReactEditor.focus(editor);
-                              return undefined;
-                            }
-                            return t;
-                          });
-                        }}
-                      />
-                    }
-                  >
-                    {showGifPicker && (
+                {() => {
+                  const emojiBoard = (
+                    <EmojiBoard
+                      tab={emojiBoardTab}
+                      onTabChange={setEmojiBoardTab}
+                      imagePackRooms={imagePackRooms}
+                      returnFocusOnDeactivate={false}
+                      isFullWidth={mobileOrTablet()}
+                      onEmojiSelect={handleEmoticonSelect}
+                      onCustomEmojiSelect={handleEmoticonSelect}
+                      onStickerSelect={handleStickerSelect}
+                      onGifSelect={handleGifSelect}
+                      requestClose={() => {
+                        setEmojiBoardTab((t) => {
+                          if (t) {
+                            if (!mobileOrTablet()) ReactEditor.focus(editor);
+                            return undefined;
+                          }
+                          return t;
+                        });
+                      }}
+                    />
+                  );
+                  const triggers = (
+                    <>
+                      {showGifPicker && (
+                        <IconButton
+                          aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                          onPointerDown={suppressEditorRefocus}
+                          variant="SurfaceVariant"
+                          size="300"
+                          radii="300"
+                          style={{ backgroundColor: 'transparent' }}
+                        >
+                          {composerIcon(GifIcon, {
+                            weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                          })}
+                        </IconButton>
+                      )}
+                      {!hideStickerBtn && (
+                        <IconButton
+                          aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
+                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
+                          onPointerDown={suppressEditorRefocus}
+                          variant="SurfaceVariant"
+                          size="300"
+                          radii="300"
+                          style={{ backgroundColor: 'transparent' }}
+                          title="open sticker picker"
+                          aria-label="Open sticker picker"
+                        >
+                          {composerIcon(Sticker, {
+                            weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
+                          })}
+                        </IconButton>
+                      )}
                       <IconButton
-                        aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                        ref={emojiBtnRef}
+                        aria-pressed={
+                          hideStickerBtn
+                            ? emojiBoardTab === EmojiBoardTab.Emoji ||
+                              emojiBoardTab === EmojiBoardTab.Gif
+                            : emojiBoardTab === EmojiBoardTab.Emoji
+                        }
+                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                        onPointerDown={suppressEditorRefocus}
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
                         style={{ backgroundColor: 'transparent' }}
+                        title="open emoji picker"
+                        aria-label="Open emoji picker"
                       >
-                        {composerIcon(GifIcon, {
-                          weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                        {composerIcon(Smiley, {
+                          weight: hideStickerBtn
+                            ? emojiBoardTab
+                              ? 'fill'
+                              : 'regular'
+                            : emojiBoardTab === EmojiBoardTab.Emoji
+                              ? 'fill'
+                              : 'regular',
                         })}
                       </IconButton>
-                    )}
-                    {!hideStickerBtn && (
-                      <IconButton
-                        aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
-                        variant="SurfaceVariant"
-                        size="300"
-                        radii="300"
-                        style={{ backgroundColor: 'transparent' }}
-                        title="open sticker picker"
-                        aria-label="Open sticker picker"
-                      >
-                        {composerIcon(Sticker, {
-                          weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
-                        })}
-                      </IconButton>
-                    )}
-                    <IconButton
-                      ref={emojiBtnRef}
-                      aria-pressed={
-                        hideStickerBtn
-                          ? emojiBoardTab === EmojiBoardTab.Emoji ||
-                            emojiBoardTab === EmojiBoardTab.Gif
-                          : emojiBoardTab === EmojiBoardTab.Emoji
+                    </>
+                  );
+                  if (mobileOrTablet()) {
+                    return (
+                      <>
+                        {triggers}
+                        <Overlay open={emojiBoardTab !== undefined} backdrop={<OverlayBackdrop />}>
+                          <div
+                            style={{
+                              position: 'fixed',
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              display: 'flex',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {emojiBoard}
+                          </div>
+                        </Overlay>
+                      </>
+                    );
+                  }
+                  return (
+                    <PopOut
+                      offset={16}
+                      alignOffset={-44}
+                      position="Top"
+                      align="End"
+                      anchor={
+                        emojiBoardTab === undefined
+                          ? undefined
+                          : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
                       }
-                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
-                      variant="SurfaceVariant"
-                      size="300"
-                      radii="300"
-                      style={{ backgroundColor: 'transparent' }}
-                      title="open emoji picker"
-                      aria-label="Open emoji picker"
+                      content={emojiBoard}
                     >
-                      {composerIcon(Smiley, {
-                        weight: hideStickerBtn
-                          ? emojiBoardTab
-                            ? 'fill'
-                            : 'regular'
-                          : emojiBoardTab === EmojiBoardTab.Emoji
-                            ? 'fill'
-                            : 'regular',
-                      })}
-                    </IconButton>
-                  </PopOut>
-                )}
+                      {triggers}
+                    </PopOut>
+                  );
+                }}
               </UseStateProvider>
               <PopOut
                 anchor={scheduleMenuAnchor}

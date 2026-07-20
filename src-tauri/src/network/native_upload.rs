@@ -112,7 +112,9 @@ pub async fn upload_write_chunk<R: Runtime>(
         .open(&path)
         .await
         .map_err(|err| err.to_string())?;
-    file.write_all(&bytes).await.map_err(|err| err.to_string())?;
+    file.write_all(&bytes)
+        .await
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -140,7 +142,15 @@ pub async fn native_upload<R: Runtime>(
     on_progress: Channel<ProgressPayload>,
 ) -> Result<NativeUploadResponse, String> {
     let path = upload_temp_path(&app, &request_id)?;
-    let result = run_upload(&path, url, content_type, authorization, &request_id, on_progress).await;
+    let result = run_upload(
+        &path,
+        url,
+        content_type,
+        authorization,
+        &request_id,
+        on_progress,
+    )
+    .await;
     let _ = tokio::fs::remove_file(&path).await;
     remove_abort_sender(&request_id);
     result
