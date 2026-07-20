@@ -31,8 +31,7 @@ export function installIosPwaViewportHeight(): void {
     const visibleBottom = visibleHeight + (viewport?.offsetTop ?? 0);
 
     const screenHeight = fullScreenHeight();
-    const keyboardOpen =
-      isEditableFocused() && screenHeight - visibleHeight > MIN_KEYBOARD_HEIGHT;
+    const keyboardOpen = isEditableFocused() && screenHeight - visibleHeight > MIN_KEYBOARD_HEIGHT;
     const height = keyboardOpen ? visibleBottom : screenHeight;
 
     document.documentElement.style.setProperty(IOS_PWA_VIEWPORT_HEIGHT, `${Math.round(height)}px`);
