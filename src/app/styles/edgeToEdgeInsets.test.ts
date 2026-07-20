@@ -73,9 +73,11 @@ describe('android edge-to-edge inset contract', () => {
     expect(indexTsx).toContain('installIosPwaViewportHeight();');
     expect(iosPwaViewport).toContain("window.matchMedia('(display-mode: standalone)').matches");
     expect(iosPwaViewport).toContain('const MIN_KEYBOARD_HEIGHT = 100');
-    expect(iosPwaViewport).toContain('const keyboardOpen = fullHeight - visibleHeight');
-    expect(iosPwaViewport).toContain('const height = keyboardOpen ? visibleBottom : fullHeight');
+    expect(iosPwaViewport).toContain('isEditableFocused()');
+    expect(iosPwaViewport).toContain('screenHeight - visibleHeight > MIN_KEYBOARD_HEIGHT');
     expect(iosPwaViewport).toContain('window.setTimeout(updateHeight, 350)');
+    expect(iosPwaViewport).not.toContain('fullHeight');
+    expect(iosPwaViewport).not.toContain('viewportWidth');
   });
 
   it('removes the scattered safe-area css consumers', () => {
