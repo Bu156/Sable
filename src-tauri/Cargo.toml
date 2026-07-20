@@ -86,12 +86,9 @@ tauri-plugin-window-state = "2.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
 gtk = "0.18"
-
-# WebKitGTK is the wry runtime on Linux, pulled transitively via
-# tauri-runtime-wry when Sable's `wry` feature is on. Not declared directly
-# here because cargo cannot gate target-cfg deps on cargo features
-# (`not(feature = "cef")` is silently ignored), and it's redundant with the
-# transitive dep from tauri-runtime-wry.
+# Used directly in lib.rs for WebKitGTK permission handling (wry only).
+# Optional + gated via the `wry` feature so CEF builds don't pull it.
+webkit2gtk = { version = "2.0", optional = true }
 
 # CEF (Chromium) runtime — Linux only; other platforms use wry.
 # Repackage of tauri's unreleased feat/cef branch. Switch to the official
@@ -117,7 +114,7 @@ jni = "0.21"
 [features]
 default = ["wry", "updater"]
 custom-protocol = ["tauri/custom-protocol"]
-wry = ["tauri/wry"]
+wry = ["tauri/wry", "dep:webkit2gtk"]
 # Tauri auto-updater. Disable with --no-default-features --features wry,cef.
 updater = ["dep:tauri-plugin-updater"]
 # CEF (Chromium) runtime. Build with --no-default-features --features cef.
