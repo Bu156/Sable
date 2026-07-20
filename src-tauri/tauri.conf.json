@@ -64,7 +64,10 @@
       "projectPath": ".",
       "outputPath": "../src/app/generated/tauri",
       "validationLibrary": "none",
-      "verbose": false
+      "verbose": false,
+      "typeMappings": {
+        "Response": "unknown"
+      }
     },
     "deep-link": {
       "desktop": {

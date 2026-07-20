@@ -7,6 +7,7 @@ mod ios;
 #[cfg(target_os = "android")]
 mod mobile;
 mod network;
+mod share_inbox;
 
 use tauri::{AppHandle, Manager};
 #[cfg(desktop)]
@@ -344,6 +345,9 @@ pub fn run() {
             network::native_upload::abort_native_upload,
             network::media_protocol::set_media_session,
             network::media_protocol::clear_media_session,
+            share_inbox::share_inbox_drain,
+            share_inbox::share_inbox_read,
+            share_inbox::share_inbox_clear,
             #[cfg(target_os = "android")]
             mobile::set_status_bar_color,
             #[cfg(target_os = "android")]

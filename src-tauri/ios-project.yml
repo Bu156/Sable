@@ -27,6 +27,42 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
+  share-extension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../../share-extension-ios
+    info:
+      path: share-extension/Info.plist
+      properties:
+        CFBundleDisplayName: {{app.stylized-name}}
+        CFBundleShortVersionString: {{apple.bundle-version-short}}
+        CFBundleVersion: "{{apple.bundle-version}}"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+              NSExtensionActivationSupportsMovieWithMaxCount: 1
+              NSExtensionActivationSupportsFileWithMaxCount: 10
+    entitlements:
+      path: share-extension/share-extension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.{{app.identifier}}
+    settings:
+      base:
+        PRODUCT_NAME: ShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.share-extension
+        # APPLICATION_EXTENSION_API_ONLY must stay unset: NO fails Xcode's
+        # validation, YES breaks UIApplication.open in ShareViewController.
+        SKIP_INSTALL: YES
+        {{#if apple.development-team}}
+        DEVELOPMENT_TEAM: {{apple.development-team}}
+        {{/if}}
   {{app.name}}_iOS:
     type: application
     platform: iOS
@@ -61,12 +97,22 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: {{apple.bundle-version-short}}
         CFBundleVersion: "{{apple.bundle-version}}"
+        # Mirrors plugins.deep-link in tauri.conf.json: the plugin only patches
+        # these in when cargo reruns its build script, so a fresh `tauri ios
+        # init` silently loses them unless they live here.
+        CFBundleURLTypes:
+          - CFBundleURLName: sable
+            CFBundleURLSchemes:
+              - sable
+              - moe.sable.app
         {{~#each apple.plist-pairs}}
         {{this.key}}: {{this.value}}{{/each}}
     entitlements:
       path: {{app.name}}_iOS/{{app.name}}_iOS.entitlements
       properties:
         aps-environment: development
+        com.apple.security.application-groups:
+          - group.{{app.identifier}}
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
@@ -87,6 +133,8 @@ targets:
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
       groups: [app]
     dependencies:
+      - target: share-extension
+        embed: true
       - framework: {{ lib-output-file-name }}
         embed: false
       {{~#each ios-libraries}}
