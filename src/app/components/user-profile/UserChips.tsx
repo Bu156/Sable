@@ -313,9 +313,9 @@ export function ShareChip({
                     },
                     chipHoverBrightness
                   )}
-                  onClick={() => {
-                    shareText(getMatrixToUser(userId));
-                    setCopied();
+                  onClick={async () => {
+                    const shared = await shareText(getMatrixToUser(userId));
+                    if (shared) setCopied();
                     close();
                   }}
                 >

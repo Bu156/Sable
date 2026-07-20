@@ -100,24 +100,26 @@ export function CreateRoomPage() {
       <Page>
         <Box grow="Yes">
           {isMobile && (
-            <PageNavHeader size="600">
-              <Box grow="Yes" gap="300" justifyContent="Center">
-                <Box grow="Yes">
-                  <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-                    {title}
-                  </Text>
+            <PageNav>
+              <PageNavHeader size="600">
+                <Box grow="Yes" gap="300" justifyContent="Center">
+                  <Box grow="Yes">
+                    <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                      {title}
+                    </Text>
+                  </Box>
+                  <Box shrink="No">
+                    <IconButton
+                      aria-label="Close create room"
+                      onClick={() => backNavigate(-1)}
+                      variant="Background"
+                    >
+                      {composerIcon(X)}
+                    </IconButton>
+                  </Box>
                 </Box>
-                <Box shrink="No">
-                  <IconButton
-                    aria-label="Close create room"
-                    onClick={() => backNavigate(-1)}
-                    variant="Background"
-                  >
-                    {composerIcon(X)}
-                  </IconButton>
-                </Box>
-              </Box>
-            </PageNavHeader>
+              </PageNavHeader>
+            </PageNav>
           )}
           <Scroll hideTrack visibility="Hover">
             <PageContent>

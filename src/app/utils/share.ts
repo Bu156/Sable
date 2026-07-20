@@ -2,7 +2,9 @@ import { copyToClipboard } from '$utils/dom';
 
 /**
  * Shares text via the native share sheet on mobile (Tauri + sharekit),
- * the Web Share API on web (PWA), or falls back to clipboard copy on desktop.
+ * the Web Share API on web (PWA), or falls back to clipboard copy when no
+ * share API is available. Returns true if the text was shared or copied;
+ * false if the user cancelled the share sheet.
  */
 export async function shareText(text: string): Promise<boolean> {
   // 1. Tauri mobile: use sharekit plugin
@@ -23,10 +25,10 @@ export async function shareText(text: string): Promise<boolean> {
       await navigator.share({ text });
       return true;
     } catch {
-      // User cancelled or share failed — fall through to clipboard
+      return false;
     }
   }
 
-  // 3. Fallback: clipboard copy (existing behavior)
+  // 3. Fallback: clipboard copy when no share API is available
   return copyToClipboard(text);
 }

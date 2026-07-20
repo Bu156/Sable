@@ -16,9 +16,21 @@ export function Modal500({ requestClose, children }: Modal500Props) {
   if (screenSize === ScreenSize.Mobile) {
     return (
       <Overlay open>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-          {children}
-        </div>
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            escapeDeactivates: stopPropagation,
+            onDeactivate: requestClose,
+          }}
+        >
+          <div
+            ref={modalRef}
+            tabIndex={-1}
+            style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            {children}
+          </div>
+        </FocusTrap>
       </Overlay>
     );
   }

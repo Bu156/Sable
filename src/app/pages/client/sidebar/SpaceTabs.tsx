@@ -150,7 +150,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
     const handleShareLink = () => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
       const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
-      shareText(getMatrixToRoom(roomIdOrAlias, viaServers));
+      shareText(getMatrixToRoom(roomIdOrAlias, viaServers)).catch(() => {});
       requestClose();
     };
 

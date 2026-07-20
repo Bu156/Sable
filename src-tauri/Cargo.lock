@@ -6562,7 +6562,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-sharekit"
 version = "0.4.0-rc.5"
-source = "git+https://github.com/Choochmeque/tauri-plugin-sharekit#9f2b4c5d8a4f0ab910d900ba234ed8bae0ab854b"
+source = "git+https://github.com/Choochmeque/tauri-plugin-sharekit?rev=9f2b4c5d8a4f0ab910d900ba234ed8bae0ab854b#9f2b4c5d8a4f0ab910d900ba234ed8bae0ab854b"
 dependencies = [
  "log",
  "objc2",

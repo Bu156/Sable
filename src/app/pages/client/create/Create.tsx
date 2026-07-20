@@ -90,25 +90,27 @@ export function Create() {
       <Page>
         <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
           {isMobile && (
-            <PageNavHeader size="600">
-              <Box grow="Yes" gap="300" justifyContent="Center">
-                <Box grow="Yes">
-                  <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-                    Create Space
-                  </Text>
+            <PageNav>
+              <PageNavHeader size="600">
+                <Box grow="Yes" gap="300" justifyContent="Center">
+                  <Box grow="Yes">
+                    <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
+                      Create Space
+                    </Text>
+                  </Box>
+                  <Box shrink="No">
+                    <IconButton
+                      size="300"
+                      radii="300"
+                      aria-label="Close create space"
+                      onClick={() => navigate(-1)}
+                    >
+                      {composerIcon(X)}
+                    </IconButton>
+                  </Box>
                 </Box>
-                <Box shrink="No">
-                  <IconButton
-                    size="300"
-                    radii="300"
-                    aria-label="Close create space"
-                    onClick={() => navigate(-1)}
-                  >
-                    {composerIcon(X)}
-                  </IconButton>
-                </Box>
-              </Box>
-            </PageNavHeader>
+              </PageNavHeader>
+            </PageNav>
           )}
           <Scroll hideTrack visibility="Hover">
             <PageContent>
