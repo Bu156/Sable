@@ -129,10 +129,14 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
         .inner_size(1280.0, 720.0)
         .visible(false);
 
+    // Float the native traffic lights over the content for a unified look.
     #[cfg(target_os = "macos")]
-    let builder = builder.hidden_title(true);
+    let builder = builder
+        .hidden_title(true)
+        .title_bar_style(tauri::TitleBarStyle::Transparent);
 
-    #[cfg(target_os = "windows")]
+    // Windows and Linux draw their own titlebar (DesktopTitleBar).
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.decorations(false);
 
     let _webview_window = builder.build()?;
@@ -215,7 +219,12 @@ pub fn run() {
     // copy/paste/select-all to work in the webview. It lives in the system menu
     // bar, so it is macOS-only to avoid an in-window menu bar elsewhere.
     #[cfg(target_os = "macos")]
-    let builder = builder.menu(|handle| tauri::menu::Menu::default(handle));
+    let builder = builder
+        .menu(|handle| desktop::menu::build_app_menu(handle))
+        .on_menu_event(|app, event| desktop::menu::handle_menu_event(app, &event));
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(desktop::menu::global_shortcut_plugin());
 
     #[cfg(desktop)]
     let builder = builder.plugin(
@@ -309,6 +318,9 @@ pub fn run() {
             #[cfg(desktop)]
             desktop::tray::sync_desktop_settings_inner(app.handle())?;
 
+            #[cfg(desktop)]
+            desktop::menu::register_global_shortcuts(app.handle());
+
             #[cfg(debug_assertions)]
             {
                 let (log_plugin, _level, logger) = tauri_plugin_log::Builder::default()
@@ -334,6 +346,8 @@ pub fn run() {
             mobile::set_status_bar_color,
             #[cfg(target_os = "android")]
             mobile::set_navigation_bar_color,
+            #[cfg(target_os = "ios")]
+            ios::haptic_feedback,
             #[cfg(desktop)]
             desktop::download::save_download,
             #[cfg(desktop)]
