@@ -457,7 +457,7 @@ jobs:
 
   updater-manifest:
     name: Publish updater manifest
-    needs: [setup-release, build, android]
+    needs: [setup-release, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
