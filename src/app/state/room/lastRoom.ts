@@ -1,12 +1,15 @@
-import { atom } from 'jotai';
+import {
+  atomWithLocalStorage,
+  getLocalStorageItem,
+  setLocalStorageItem,
+} from '$state/utils/atomWithLocalStorage';
 
-export type LastVisitedRoom = {
-  /** Section key the room was open under (see `resolveSection`). */
-  section: string;
-  roomId: string;
-};
+const LAST_VISITED_ROOM_KEY = 'sable.lastVisitedRoom';
 
-// This is only used for mobile swipe gestures
-// It is not particularly accurate and shouldn't be used for much else
-// unless you plan major refractors
-export const lastVisitedRoomAtom = atom<LastVisitedRoom | undefined>(undefined);
+const lastVisitedRoomBaseAtom = atomWithLocalStorage<Record<string, string>>(
+  LAST_VISITED_ROOM_KEY,
+  (key) => getLocalStorageItem<Record<string, string>>(key, {}),
+  (key, value) => setLocalStorageItem(key, value)
+);
+
+export const lastVisitedRoomAtom = lastVisitedRoomBaseAtom;

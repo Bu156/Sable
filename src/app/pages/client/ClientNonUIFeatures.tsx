@@ -4,7 +4,8 @@ import { type as osType } from '@tauri-apps/plugin-os';
 import { setTrayBadge } from '$generated/tauri/commands';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { resolveSection } from '$pages/pathUtils';
 import type { RoomEventHandlerMap } from '$types/matrix-sdk';
 import { getPresenceSyncManager } from '$client/initMatrix';
 import {
@@ -808,8 +809,11 @@ function SlidingSyncActiveRoomSubscriber() {
  */
 function SentryRoomContextFeature() {
   const mx = useMatrixClient();
+  const location = useLocation();
   const mDirect = useAtomValue(mDirectAtom);
-  const roomId = useAtomValue(lastVisitedRoomAtom)?.roomId;
+  const lastRoom = useAtomValue(lastVisitedRoomAtom);
+  const section = resolveSection(location.pathname);
+  const roomId = section ? lastRoom?.[section.key] : undefined;
 
   useEffect(() => {
     if (!roomId) {

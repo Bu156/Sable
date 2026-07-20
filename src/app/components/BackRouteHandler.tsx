@@ -5,6 +5,7 @@ import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { resolveSection } from '$pages/pathUtils';
 import { HOME_ROOM_PATH, DIRECT_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
+import { isRoomAlias, isRoomId } from '$utils/matrix';
 
 type BackRouteHandlerProps = {
   children: (onBack: () => void) => ReactNode;
@@ -24,11 +25,9 @@ export function BackRouteHandler({ children }: BackRouteHandlerProps) {
       .find((match) => match !== null);
 
     const currentRoomIdOrAlias = roomMatch?.params.roomIdOrAlias;
-    if (section.getRoomPath && currentRoomIdOrAlias) {
-      setLastRoom({
-        section: section.key,
-        roomId: decodeURIComponent(currentRoomIdOrAlias),
-      });
+    const decoded = currentRoomIdOrAlias && decodeURIComponent(currentRoomIdOrAlias);
+    if (section.getRoomPath && decoded && (isRoomId(decoded) || isRoomAlias(decoded))) {
+      setLastRoom((prev) => ({ ...prev, [section.key]: decoded }));
     }
 
     navigate(section.listPath);
