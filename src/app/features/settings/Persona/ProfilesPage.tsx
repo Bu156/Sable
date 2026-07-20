@@ -3,6 +3,7 @@ import { Box } from 'folds';
 import { SettingsSectionPage } from '../SettingsSectionPage';
 import { PerMessageProfileOverview } from './PerMessageProfileOverview';
 import { PKCompatSettings } from './PKCompat';
+import { PickerPageSettings } from './PickerPage';
 
 type PerMessageProfilePageProps = {
   requestBack?: () => void;
@@ -26,6 +27,7 @@ export function PerMessageProfilePage({ requestBack, requestClose }: PerMessageP
           direction="Column"
           shrink="No"
         >
+          <PickerPageSettings />
           <PKCompatSettings />
           <PerMessageProfileOverview />
         </Box>
