@@ -16,5 +16,14 @@ fn main() {
     tauri_typegen::BuildSystem::generate_at_build_time()
         .expect("Failed to generate TypeScript bindings");
 
-    tauri_build::build()
+    // tauri-build fails on permissions from missing plugins, so only glob the
+    // updater capability file when the `updater` feature is on.
+    #[cfg(feature = "updater")]
+    let tauri_attrs =
+        tauri_build::Attributes::new().capabilities_path_pattern("./capabilities/**/*.json");
+    #[cfg(not(feature = "updater"))]
+    let tauri_attrs =
+        tauri_build::Attributes::new().capabilities_path_pattern("./capabilities/*.json");
+
+    tauri_build::try_build(tauri_attrs).expect("tauri-build failed");
 }

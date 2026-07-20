@@ -29,6 +29,7 @@ import {
   OverlayCenter,
   PopOut,
   Scroll,
+  Spinner,
   Text,
   toRem,
 } from 'folds';
@@ -339,7 +340,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(draftKey));
 
     const [uploadBoard, setUploadBoard] = useState(true);
+    const [uploadSending, setUploadSending] = useState(false);
+    const [uploadBusy, setUploadBusy] = useState(false);
     const [selectedFiles, setSelectedFiles] = useAtom(roomIdToUploadItemsAtomFamily(draftKey));
+    const isEncrypting = selectedFiles.some((f) => f.encrypting);
+    const sendBusy = uploadSending || isEncrypting || uploadBusy;
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -347,6 +352,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const uploadBoardHandlers = useRef<UploadBoardImperativeHandlers>();
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
+    const suppressBlurRefocusRef = useRef(false);
+    const suppressEditorRefocus = useCallback(() => {
+      suppressBlurRefocusRef.current = true;
+      requestAnimationFrame(() => {
+        suppressBlurRefocusRef.current = false;
+      });
+    }, []);
 
     const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
 
@@ -387,39 +399,46 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
         setUploadBoard(true);
         const safeFiles = files.map(safeFile);
-        const fileItems: TUploadItem[] = [];
+        const makeMetadata = () => ({
+          markedAsSpoiler: false,
+          waveform: audioMeta?.waveform,
+          audioDuration: audioMeta?.audioDuration,
+        });
 
         if (room.hasEncryptionStateEvent()) {
-          const encryptFiles = fulfilledPromiseSettledResult(
-            await Promise.allSettled(safeFiles.map((f) => encryptFile(f)))
-          );
-          encryptFiles.forEach((ef) =>
-            fileItems.push({
-              ...ef,
-              metadata: {
-                markedAsSpoiler: false,
-                waveform: audioMeta?.waveform,
-                audioDuration: audioMeta?.audioDuration,
-              },
-            })
-          );
-        } else {
-          safeFiles.forEach((f) =>
-            fileItems.push({
-              file: f,
-              originalFile: f,
-              encInfo: undefined,
-              metadata: {
-                markedAsSpoiler: false,
-                waveform: audioMeta?.waveform,
-                audioDuration: audioMeta?.audioDuration,
-              },
-            })
-          );
+          const placeholders: TUploadItem[] = safeFiles.map((f) => ({
+            file: f,
+            originalFile: f,
+            encInfo: undefined,
+            encrypting: true,
+            metadata: makeMetadata(),
+          }));
+          setSelectedFiles({ type: 'PUT', item: placeholders });
+          placeholders.forEach((placeholder) => {
+            encryptFile(placeholder.originalFile)
+              .then((ef) =>
+                setSelectedFiles({
+                  type: 'REPLACE',
+                  item: placeholder,
+                  replacement: { ...ef, encrypting: false, metadata: placeholder.metadata },
+                })
+              )
+              .catch((encryptError: unknown) => {
+                log.warn('Failed to encrypt file for upload:', encryptError);
+                setSelectedFiles({ type: 'DELETE', item: placeholder });
+              });
+          });
+          return;
         }
+
         setSelectedFiles({
           type: 'PUT',
-          item: fileItems,
+          item: safeFiles.map((f) => ({
+            file: f,
+            originalFile: f,
+            encInfo: undefined,
+            metadata: makeMetadata(),
+          })),
         });
       },
       [setSelectedFiles, room]
@@ -708,7 +727,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       return getFileMsgContent(fileItem, upload.mxc);
     };
 
-    const handleSendUpload = async (uploads: UploadSuccess[]) => {
+    const handleSendUpload = async (uploads: Upload[]) => {
       const plainText = toPlainText(editor.children).trim();
       const caption = plainText.length > 0 ? plainText : undefined;
       let customHtml = trimCustomHtml(
@@ -720,11 +739,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const formattedCaption =
         caption && !customHtmlEqualsPlainText(customHtml, plainText) ? customHtml : undefined;
 
-      if (uploads.length == 1 && sendIndividualAttachmentAsCaption) {
-        const upload = uploads[0];
+      const resolved = fulfilledPromiseSettledResult(
+        await Promise.allSettled(
+          uploads.map(async (upload): Promise<UploadSuccess> => {
+            if (upload.status === UploadStatus.Success) return upload;
+            if (upload.status === UploadStatus.Loading) {
+              const response = await upload.promise;
+              if (!response.content_uri) throw new Error('Upload failed');
+              return { status: UploadStatus.Success, file: upload.file, mxc: response.content_uri };
+            }
+            throw new Error('Upload not ready');
+          })
+        )
+      );
+      if (resolved.length === 0) return;
+
+      if (resolved.length == 1 && sendIndividualAttachmentAsCaption) {
+        const upload = resolved[0];
         if (!upload) throw new Error('Broken upload');
         let content = await uploadToContent(upload);
-        handleCancelUpload(uploads);
+        handleCancelUpload(resolved);
 
         content.body = caption ?? '';
         content.formatted_body = undefined;
@@ -737,13 +771,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await handleSendContents([content]);
         return;
       }
-      if (uploads.length >= 2 && enableMediaGalleries) {
-        const itemsPromises = uploads.map(async (upload) => {
+      if (resolved.length >= 2 && enableMediaGalleries) {
+        const itemsPromises = resolved.map(async (upload) => {
           const fileItem = selectedFiles.find((f) => f.file === upload.file);
           if (!fileItem) throw new Error('Broken upload');
           return getGalleryItemContent(mx, fileItem, upload.mxc);
         });
-        handleCancelUpload(uploads);
+        handleCancelUpload(resolved);
         const items = fulfilledPromiseSettledResult(await Promise.allSettled(itemsPromises));
 
         if (items.length === 0) return;
@@ -753,8 +787,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await handleSendContents([galleryContent]);
         return;
       }
-      const contentsPromises = uploads.map(uploadToContent);
-      handleCancelUpload(uploads);
+      const contentsPromises = resolved.map(uploadToContent);
+      handleCancelUpload(resolved);
       const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
 
       await handleSendContents(contents);
@@ -800,6 +834,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(async () => {
+      if (selectedFiles.some((f) => f.encrypting)) return;
       uploadBoardHandlers.current?.handleSend();
       if (
         (selectedFiles.length >= 2 && enableMediaGalleries) ||
@@ -1486,6 +1521,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           editor={editor}
           key={inputKey}
           placeholder="Send a message..."
+          enterKeyHint={enterForNewline ? 'enter' : 'send'}
+          suppressBlurRefocusRef={suppressBlurRefocusRef}
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
@@ -1500,7 +1537,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       open={uploadBoard}
                       onToggle={() => setUploadBoard(!uploadBoard)}
                       uploadFamilyObserverAtom={uploadFamilyObserverAtom}
-                      onSend={handleSendUpload}
+                      onSend={async (uploads) => {
+                        setUploadSending(true);
+                        try {
+                          await handleSendUpload(uploads);
+                        } finally {
+                          setUploadSending(false);
+                        }
+                      }}
+                      onBusyChange={setUploadBusy}
                       imperativeHandlerRef={uploadBoardHandlers}
                       onCancel={handleCancelUpload}
                     />
@@ -1713,6 +1758,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     ? pickFile('*')
                     : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
                 }
+                onPointerDown={suppressEditorRefocus}
                 variant="SurfaceVariant"
                 size="300"
                 radii="300"
@@ -1785,97 +1831,130 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               <MarkdownFormattingToolbarToggle variant="SurfaceVariant" />
 
               <UseStateProvider initial={undefined}>
-                {() => (
-                  <PopOut
-                    offset={16}
-                    alignOffset={-44}
-                    position="Top"
-                    align="End"
-                    anchor={
-                      emojiBoardTab === undefined
-                        ? undefined
-                        : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
-                    }
-                    content={
-                      <EmojiBoard
-                        tab={emojiBoardTab}
-                        onTabChange={setEmojiBoardTab}
-                        imagePackRooms={imagePackRooms}
-                        returnFocusOnDeactivate={false}
-                        onEmojiSelect={handleEmoticonSelect}
-                        onCustomEmojiSelect={handleEmoticonSelect}
-                        onStickerSelect={handleStickerSelect}
-                        onGifSelect={handleGifSelect}
-                        requestClose={() => {
-                          setEmojiBoardTab((t) => {
-                            if (t) {
-                              if (!mobileOrTablet()) ReactEditor.focus(editor);
-                              return undefined;
-                            }
-                            return t;
-                          });
-                        }}
-                      />
-                    }
-                  >
-                    {showGifPicker && (
+                {() => {
+                  const emojiBoard = (
+                    <EmojiBoard
+                      tab={emojiBoardTab}
+                      onTabChange={setEmojiBoardTab}
+                      imagePackRooms={imagePackRooms}
+                      returnFocusOnDeactivate={false}
+                      isFullWidth={mobileOrTablet()}
+                      onEmojiSelect={handleEmoticonSelect}
+                      onCustomEmojiSelect={handleEmoticonSelect}
+                      onStickerSelect={handleStickerSelect}
+                      onGifSelect={handleGifSelect}
+                      requestClose={() => {
+                        setEmojiBoardTab((t) => {
+                          if (t) {
+                            if (!mobileOrTablet()) ReactEditor.focus(editor);
+                            return undefined;
+                          }
+                          return t;
+                        });
+                      }}
+                    />
+                  );
+                  const triggers = (
+                    <>
+                      {showGifPicker && (
+                        <IconButton
+                          aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                          onPointerDown={suppressEditorRefocus}
+                          variant="SurfaceVariant"
+                          size="300"
+                          radii="300"
+                          style={{ backgroundColor: 'transparent' }}
+                        >
+                          {composerIcon(GifIcon, {
+                            weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                          })}
+                        </IconButton>
+                      )}
+                      {!hideStickerBtn && (
+                        <IconButton
+                          aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
+                          onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
+                          onPointerDown={suppressEditorRefocus}
+                          variant="SurfaceVariant"
+                          size="300"
+                          radii="300"
+                          style={{ backgroundColor: 'transparent' }}
+                          title="open sticker picker"
+                          aria-label="Open sticker picker"
+                        >
+                          {composerIcon(Sticker, {
+                            weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
+                          })}
+                        </IconButton>
+                      )}
                       <IconButton
-                        aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                        ref={emojiBtnRef}
+                        aria-pressed={
+                          hideStickerBtn
+                            ? emojiBoardTab === EmojiBoardTab.Emoji ||
+                              emojiBoardTab === EmojiBoardTab.Gif
+                            : emojiBoardTab === EmojiBoardTab.Emoji
+                        }
+                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                        onPointerDown={suppressEditorRefocus}
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
                         style={{ backgroundColor: 'transparent' }}
+                        title="open emoji picker"
+                        aria-label="Open emoji picker"
                       >
-                        {composerIcon(GifIcon, {
-                          weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                        {composerIcon(Smiley, {
+                          weight: hideStickerBtn
+                            ? emojiBoardTab
+                              ? 'fill'
+                              : 'regular'
+                            : emojiBoardTab === EmojiBoardTab.Emoji
+                              ? 'fill'
+                              : 'regular',
                         })}
                       </IconButton>
-                    )}
-                    {!hideStickerBtn && (
-                      <IconButton
-                        aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
-                        variant="SurfaceVariant"
-                        size="300"
-                        radii="300"
-                        style={{ backgroundColor: 'transparent' }}
-                        title="open sticker picker"
-                        aria-label="Open sticker picker"
-                      >
-                        {composerIcon(Sticker, {
-                          weight: emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
-                        })}
-                      </IconButton>
-                    )}
-                    <IconButton
-                      ref={emojiBtnRef}
-                      aria-pressed={
-                        hideStickerBtn
-                          ? emojiBoardTab === EmojiBoardTab.Emoji ||
-                            emojiBoardTab === EmojiBoardTab.Gif
-                          : emojiBoardTab === EmojiBoardTab.Emoji
+                    </>
+                  );
+                  if (mobileOrTablet()) {
+                    return (
+                      <>
+                        {triggers}
+                        <Overlay open={emojiBoardTab !== undefined} backdrop={<OverlayBackdrop />}>
+                          <div
+                            style={{
+                              position: 'fixed',
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              display: 'flex',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {emojiBoard}
+                          </div>
+                        </Overlay>
+                      </>
+                    );
+                  }
+                  return (
+                    <PopOut
+                      offset={16}
+                      alignOffset={-44}
+                      position="Top"
+                      align="End"
+                      anchor={
+                        emojiBoardTab === undefined
+                          ? undefined
+                          : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
                       }
-                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
-                      variant="SurfaceVariant"
-                      size="300"
-                      radii="300"
-                      style={{ backgroundColor: 'transparent' }}
-                      title="open emoji picker"
-                      aria-label="Open emoji picker"
+                      content={emojiBoard}
                     >
-                      {composerIcon(Smiley, {
-                        weight: hideStickerBtn
-                          ? emojiBoardTab
-                            ? 'fill'
-                            : 'regular'
-                          : emojiBoardTab === EmojiBoardTab.Emoji
-                            ? 'fill'
-                            : 'regular',
-                      })}
-                    </IconButton>
-                  </PopOut>
-                )}
+                      {triggers}
+                    </PopOut>
+                  );
+                }}
               </UseStateProvider>
               <PopOut
                 anchor={scheduleMenuAnchor}
@@ -1924,6 +2003,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 <IconButton
                   title="Send Message"
                   aria-label="Send your composed Message"
+                  disabled={sendBusy}
                   style={{ backgroundColor: 'transparent' }}
                   onClick={() => {
                     if (isLongPress.current) {
@@ -1959,7 +2039,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   radii="0"
                   className={delayedEventsSupported ? css.SplitSendButton : undefined}
                 >
-                  {scheduledTime ? composerIcon(Clock) : composerIcon(PaperPlaneTilt)}
+                  {sendBusy ? (
+                    <Spinner size="300" variant="Secondary" />
+                  ) : scheduledTime ? (
+                    composerIcon(Clock)
+                  ) : (
+                    composerIcon(PaperPlaneTilt)
+                  )}
                 </IconButton>
                 {delayedEventsSupported && !mobileOrTablet() && (
                   <IconButton

@@ -1,4 +1,9 @@
-import type { ClipboardEventHandler, KeyboardEventHandler, ReactNode } from 'react';
+import type {
+  ClipboardEventHandler,
+  KeyboardEventHandler,
+  MutableRefObject,
+  ReactNode,
+} from 'react';
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Box, Scroll, Text } from 'folds';
 import type { Descendant, Editor } from 'slate';
@@ -73,6 +78,8 @@ type CustomEditorProps = {
   onPaste?: ClipboardEventHandler;
   className?: string;
   variant?: 'Surface' | 'SurfaceVariant' | 'Background';
+  enterKeyHint?: 'enter' | 'send';
+  suppressBlurRefocusRef?: MutableRefObject<boolean>;
 };
 export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
   (
@@ -93,6 +100,8 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       onPaste,
       className,
       variant = 'SurfaceVariant',
+      enterKeyHint,
+      suppressBlurRefocusRef,
     },
     ref
   ) => {
@@ -443,9 +452,12 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 onPaste={onPaste}
                 // Defer to OS capitalization setting (respects iOS sentence-case toggle).
                 autoCapitalize="sentences"
+                autoCorrect="on"
+                enterKeyHint={enterKeyHint}
                 // keeps focus after pressing send, but yields to another editor.
                 onBlur={(evt) => {
                   if (!mobileOrTablet()) return;
+                  if (suppressBlurRefocusRef?.current) return;
                   const next = evt.relatedTarget as HTMLElement | null;
                   if (next && next !== editableRef.current && next.isContentEditable) return;
                   ReactEditor.focus(editor);
