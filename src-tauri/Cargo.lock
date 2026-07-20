@@ -5259,6 +5259,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "ts-rs",
+ "webkit2gtk",
  "windows",
 ]
 
