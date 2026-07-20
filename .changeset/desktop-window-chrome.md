@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Desktop: unify the macOS titlebar (native traffic lights float over the content), add a custom titlebar with window controls on Linux, surface sync/connection status as a pill in the custom titlebar, and suppress the webview's default context menu everywhere except editable fields.
+Cleaner window look on desktop: a seamless titlebar on macOS, custom window controls on Linux with connection status visible, and right-click only works where you'd expect (like text fields).

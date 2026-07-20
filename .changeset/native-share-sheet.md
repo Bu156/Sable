@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Add a native share sheet on mobile via the Tauri sharekit plugin, with Web Share API support on PWA and a clipboard-copy fallback on desktop.
+Share content from Sable using your device's native share menu. On desktop, copies the link instead.
