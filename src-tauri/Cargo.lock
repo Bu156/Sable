@@ -4970,6 +4970,7 @@ dependencies = [
  "cookie_store",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2 0.4.14",
  "http 1.4.0",
  "http-body 1.0.1",
@@ -4991,12 +4992,14 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams 0.4.2",
  "web-sys",
  "webpki-roots",
 ]
@@ -5036,7 +5039,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.5.0",
  "web-sys",
 ]
 
@@ -5218,14 +5221,18 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 name = "sable"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
+ "base64 0.22.1",
  "cef",
  "enigo",
+ "futures-util",
  "gtk",
  "jni 0.21.1",
  "libloading 0.8.9",
  "log",
  "objc2",
  "percent-encoding",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2",
@@ -5250,6 +5257,7 @@ dependencies = [
  "tauri-runtime-cef",
  "tauri-typegen",
  "tokio",
+ "tokio-util",
  "ts-rs",
  "webkit2gtk",
  "windows",
@@ -7804,6 +7812,19 @@ dependencies = [
  "indexmap 2.14.0",
  "wasm-encoder",
  "wasmparser",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
