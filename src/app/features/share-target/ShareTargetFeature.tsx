@@ -12,7 +12,6 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { useSyncState } from '$hooks/useSyncState';
 import { factoryRoomIdByActivity } from '$utils/sort';
-import { fulfilledPromiseSettledResult } from '$utils/common';
 import { encryptFile } from '$utils/matrix';
 import { safeFile } from '$utils/mimeTypes';
 import { createLogger } from '$utils/debug';
@@ -124,24 +123,18 @@ export function ShareTargetFeature() {
     [allRooms, getRoom, mx]
   );
 
-  // Everything on disk, not just pending — leftovers would re-open the modal.
-  const clearInbox = useCallback(async () => {
+  const handleClose = useCallback(async () => {
+    if (busy || !pending) return;
+    const batchIds = pending.batches.map((batch) => batch.batchId);
+    batchIds.forEach((id) => consumedRef.current.add(id));
     try {
-      const batches = await shareInboxDrain();
-      batches.forEach((batch) => consumedRef.current.add(batch.batchId));
-      await Promise.all(batches.map((batch) => shareInboxClear({ batchId: batch.batchId })));
+      await Promise.all(batchIds.map((id) => shareInboxClear({ batchId: id })));
     } catch (err) {
       log.warn('Failed to clear share inbox:', err);
     }
-  }, []);
-
-  const handleClose = useCallback(() => {
-    if (busy) return;
-    pending?.batches.forEach((batch) => consumedRef.current.add(batch.batchId));
-    clearInbox();
     setPending(null);
     setError(null);
-  }, [busy, pending, clearInbox, setPending]);
+  }, [busy, pending, setPending]);
 
   const stageIntoRoom = useCallback(
     async (roomId: string) => {
@@ -175,9 +168,7 @@ export function ShareTargetFeature() {
           const safeFiles = files.map(safeFile);
           const fileItems: TUploadItem[] = [];
           if (room.hasEncryptionStateEvent()) {
-            const encryptedFiles = fulfilledPromiseSettledResult(
-              await Promise.allSettled(safeFiles.map((f) => encryptFile(f)))
-            );
+            const encryptedFiles = await Promise.all(safeFiles.map((f) => encryptFile(f)));
             encryptedFiles.forEach((ef) =>
               fileItems.push({ ...ef, metadata: { markedAsSpoiler: false } })
             );
@@ -194,7 +185,7 @@ export function ShareTargetFeature() {
           store.set(roomIdToUploadItemsAtomFamily(roomId), { type: 'PUT', item: fileItems });
         }
 
-        await clearInbox();
+        await Promise.all(pending.batches.map((b) => shareInboxClear({ batchId: b.batchId })));
         setPending(null);
         // replace, not push: a push records a WebKit swipe-back snapshot with
         // the modal still on screen, replayed on every later edge-swipe.
@@ -206,7 +197,7 @@ export function ShareTargetFeature() {
         setBusy(false);
       }
     },
-    [pending, mx, store, navigateRoom, clearInbox, setPending]
+    [pending, mx, store, navigateRoom, setPending]
   );
 
   const pickRoom = useMemo(

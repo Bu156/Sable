@@ -49,7 +49,7 @@ class MainActivity : TauriActivity() {
       Intent.ACTION_SEND -> {
         when (intent.type) {
           "text/plain" -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { addTextItem(items, it) }
-          else -> if (intent.type?.startsWith("image/") == true) {
+          else -> {
             IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
               ?.let { stageFile(it, 0, batchDir, items) }
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { addTextItem(items, it) }
@@ -57,10 +57,8 @@ class MainActivity : TauriActivity() {
         }
       }
       Intent.ACTION_SEND_MULTIPLE -> {
-        if (intent.type?.startsWith("image/") == true) {
-          IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
-            ?.forEachIndexed { i, uri -> stageFile(uri, i, batchDir, items) }
-        }
+        IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+          ?.forEachIndexed { i, uri -> stageFile(uri, i, batchDir, items) }
       }
     }
 
@@ -99,10 +97,13 @@ class MainActivity : TauriActivity() {
 
     val fileName = "$index-$sanitized"
     val dest = File(batchDir, fileName)
+    val input = resolver.openInputStream(uri)
+    if (input == null) {
+      android.util.Log.w("ShareTarget", "provider returned no stream for $uri")
+      return
+    }
     try {
-      resolver.openInputStream(uri)?.use { input ->
-        FileOutputStream(dest).use { output -> input.copyTo(output) }
-      }
+      input.use { FileOutputStream(dest).use { output -> it.copyTo(output) } }
       items.put(JSONObject().apply {
         put("kind", "file")
         put("fileName", fileName)
