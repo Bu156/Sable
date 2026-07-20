@@ -991,6 +991,7 @@ export class SlidingSyncManager {
       } else if (removedSpaceSubscription || removedSidebarSubscription) {
         this.queueRoomSubscriptionSync();
       }
+      this.mx.store.removeRoom(roomId);
     }
   }
 
