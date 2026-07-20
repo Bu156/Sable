@@ -95,6 +95,7 @@ tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSFileManager", "NSString", "NSURL"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-android-fs = { version = "=28.4.0", features = ["legacy-storage-permission"] }

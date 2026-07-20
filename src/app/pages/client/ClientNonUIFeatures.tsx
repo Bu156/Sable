@@ -55,6 +55,7 @@ import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '$hooks/router/useInbox';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
+import { ShareTargetFeature } from '$features/share-target/ShareTargetFeature';
 import { registrationAtom } from '$state/serviceWorkerRegistration';
 import { pendingNotificationAtom, inAppBannerAtom, activeSessionIdAtom } from '$state/sessions';
 import {
@@ -1048,6 +1049,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SentryRoomContextFeature />
       <SentryTagsFeature />
       <HealthMonitor />
+      <ShareTargetFeature />
       <IconSizesProvider>{children}</IconSizesProvider>
     </>
   );
