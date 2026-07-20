@@ -625,7 +625,7 @@ export class SlidingSyncManager {
   private hydrateReferencedMembers(response: MSC3575SlidingSyncResponse): void {
     const userIdsByRoom = new Map<string, Set<string>>();
     const add = (roomId: string, userId: unknown) => {
-      if (!this.activeRoomSubscriptions.has(roomId) || typeof userId !== 'string') return;
+      if (!this.serverMembershipRoomIds.has(roomId) || typeof userId !== 'string') return;
       const userIds = userIdsByRoom.get(roomId) ?? new Set<string>();
       userIds.add(userId);
       userIdsByRoom.set(roomId, userIds);

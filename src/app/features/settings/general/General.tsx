@@ -1441,15 +1441,7 @@ function Sync() {
           focusId="use-sliding-sync"
           description={
             <>
-              Enable Sliding Sync for this current login/session. Requires server support.{' '}
-              <a
-                href="https://github.com/SableClient/Sable/issues/39"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Known issues (Sable GitHub)
-              </a>
-              .
+              Enable Sliding Sync for this current login/session. Requires server support.
             </>
           }
           after={

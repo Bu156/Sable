@@ -1,5 +1,5 @@
 import type { MouseEventHandler, ComponentProps } from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { IEventWithRoomId, Room } from '$types/matrix-sdk';
 import { JoinRule, RelationType, EventType } from '$types/matrix-sdk';
 import type { IImageContent } from '$types/matrix/common';
@@ -39,6 +39,7 @@ import { RoomAvatar, RoomIcon } from '$components/room-avatar';
 import { getMemberAvatarMxc, getMemberDisplayName, getRoomAvatarUrl } from '$utils/room';
 import { useAtomValue } from 'jotai';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
 import { SequenceCard } from '$components/sequence-card';
 import { UserAvatar } from '$components/user-avatar';
 import { userFallbackIcon } from '$components/icons/phosphor';
@@ -60,6 +61,7 @@ import { useRoomCreatorsTag } from '$hooks/useRoomCreatorsTag';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { hydrateRoomMembers } from '$client/roomMemberHydration';
 import type { ResultItem } from './useMessageSearch';
 
 type SearchResultRendererContext = {
@@ -196,6 +198,17 @@ export function SearchResultGroup({
   const theme = useTheme();
   const accessibleTagColors = useAccessiblePowerTagColors(theme.kind, creatorsTag, powerLevelTags);
   const nicknames = useAtomValue(nicknamesAtom);
+  const cachedProfiles = useAtomValue(profilesCacheAtom);
+
+  useEffect(() => {
+    const unknownUserIds = items
+      .map((item) => item.event.sender)
+      .filter((sender) => sender && !room.getMember(sender));
+    if (unknownUserIds.length > 0) {
+      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+    }
+  }, [mx, room, items]);
+
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
   const [incomingInlineImagesDefaultHeight] = useSetting(
     settingsAtom,
@@ -316,6 +329,7 @@ export function SearchResultGroup({
 
           const displayName =
             getMemberDisplayName(room, event.sender, nicknames) ??
+            cachedProfiles[event.sender]?.displayName ??
             getMxIdLocalPart(event.sender) ??
             event.sender;
           const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);

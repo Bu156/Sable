@@ -62,6 +62,7 @@ import type { StateEvents } from '$types/matrix-sdk';
 
 import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
+import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import {
   factoryRenderLinkifyWithMention,
@@ -96,6 +97,7 @@ import {
 } from '$hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '$hooks/useRoomCreatorsTag';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
 
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { EncryptedContent } from '$features/room/message';
@@ -141,12 +143,17 @@ function PinnedMessageActiveContent(
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const nicknames = useAtomValue(nicknamesAtom);
+  const cachedProfiles = useAtomValue(profilesCacheAtom);
 
   const sender = pinnedEvent.getSender()!;
+  useRoomMemberHydration(room, sender);
   const { color: usernameColor, font: usernameFont } = useSableCosmetics(sender, room);
 
   const displayName =
-    getMemberDisplayName(room, sender, nicknames) ?? getMxIdLocalPart(sender) ?? sender;
+    getMemberDisplayName(room, sender, nicknames) ??
+    cachedProfiles[sender]?.displayName ??
+    getMxIdLocalPart(sender) ??
+    sender;
   const senderAvatarMxc = getMemberAvatarMxc(room, sender);
   const getContent = (() => pinnedEvent.getContent()) as GetContentCallback;
   const content = pinnedEvent.getContent();

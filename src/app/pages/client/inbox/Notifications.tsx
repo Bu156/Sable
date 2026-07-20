@@ -25,6 +25,7 @@ import type { HTMLReactParserOptions } from 'html-react-parser';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
 import { useAtomValue } from 'jotai';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
 import { Page, PageContent, PageContentCenter, PageHeader } from '$components/page';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
@@ -76,6 +77,7 @@ import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { markAsRead } from '$utils/notifications';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { VirtualTile } from '$components/virtualizer';
+import { hydrateRoomMembers } from '$client/roomMemberHydration';
 import { UserAvatar } from '$components/user-avatar';
 import { userFallbackIcon } from '$components/icons/phosphor';
 import { EncryptedContent } from '$features/room/message';
@@ -407,6 +409,16 @@ function RoomNotificationsGroupComp({
   const useAuthentication = useMediaAuthentication();
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
   const nicknames = useAtomValue(nicknamesAtom);
+  const cachedProfiles = useAtomValue(profilesCacheAtom);
+
+  useEffect(() => {
+    const unknownUserIds = notifications
+      .map((n) => n.event.sender)
+      .filter((sender) => sender && !room.getMember(sender));
+    if (unknownUserIds.length > 0) {
+      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+    }
+  }, [mx, room, notifications]);
 
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
@@ -540,6 +552,7 @@ function RoomNotificationsGroupComp({
 
           const displayName =
             getMemberDisplayName(room, event.sender, nicknames) ??
+            cachedProfiles[event.sender]?.displayName ??
             getMxIdLocalPart(event.sender) ??
             event.sender;
           const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);

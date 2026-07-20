@@ -72,6 +72,7 @@ import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { mDirectAtom } from '../../../state/mDirectList';
+import { profilesCacheAtom } from '../../../state/userRoomProfile';
 import { stopPropagation } from '../../../utils/keyboard';
 import { highlightText, makeHighlightRegex } from '../../../plugins/react-custom-html-parser';
 import colorMXID from '$utils/colorMXID';
@@ -87,6 +88,7 @@ import * as customHtmlCss from '$styles/CustomHtml.css';
 import type { IImageContent } from '$types/matrix/common';
 import { useMatrixEventRenderer } from '$hooks/useMatrixEventRenderer';
 import { MATRIX_SABLE_UNSTABLE_BOOKMARKS_INDEX_EVENT } from '$unstable/prefixes';
+import { hydrateRoomMembers } from '$client/roomMemberHydration';
 import { useDebounce } from '$hooks/useDebounce';
 
 type RemoveBookmarkDialogProps = {
@@ -618,6 +620,18 @@ function BookmarkResultGroup({
   const useAuthentication = useMediaAuthentication();
   const room = mx.getRoom(roomId);
 
+  const cachedProfiles = useAtomValue(profilesCacheAtom);
+
+  useEffect(() => {
+    if (!room) return;
+    const unknownUserIds = items
+      .map((item) => item.sender)
+      .filter((sender): sender is string => typeof sender === 'string' && sender.startsWith('@') && !room.getMember(sender));
+    if (unknownUserIds.length > 0) {
+      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+    }
+  }, [mx, room, items]);
+
   const handleOpenClick: MouseEventHandler = (evt) => {
     const eventId = evt.currentTarget.getAttribute('data-event-id');
     if (!eventId) return;
@@ -656,10 +670,14 @@ function BookmarkResultGroup({
         {items.map((item) => {
           const displayName = room
             ? (getMemberDisplayName(room, item.sender ?? '') ??
+              cachedProfiles[item.sender ?? '']?.displayName ??
               getMxIdLocalPart(item.sender ?? '') ??
               item.sender ??
               'Unknown')
-            : (getMxIdLocalPart(item.sender ?? '') ?? item.sender ?? 'Unknown');
+            : (cachedProfiles[item.sender ?? '']?.displayName ??
+              getMxIdLocalPart(item.sender ?? '') ??
+              item.sender ??
+              'Unknown');
           const senderAvatarMxc =
             room && item.sender ? getMemberAvatarMxc(room, item.sender) : undefined;
 
