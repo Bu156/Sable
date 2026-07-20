@@ -22,10 +22,15 @@ tauri-typegen = "0.5"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tokio = { version = "1", features = ["time", "sync"] }
+tokio = { version = "1", features = ["time", "sync", "fs", "io-util"] }
 ts-rs = "12.0.0"
 sha2 = "0.10"
 percent-encoding = "2"
+reqwest = { version = "0.12", default-features = false, features = ["stream"] }
+async-stream = "0.3"
+base64 = "0.22"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = "0.3"
 
 tauri = { version = "2.11.5", default-features = false, features = [
   "tray-icon",
@@ -62,22 +67,26 @@ windows = { version = "0.61", features = [
 tauri-plugin-single-instance = { version = "2.4.3", features = ["deep-link"] }
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c" }
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "4ea297bdeffaba6a8e2e4386a18fbd4dd59fa0f0" }
 
 # default-features = false drops notify-rust so macOS uses the native
 # UNUserNotificationCenter backend (needs a signed .app to deliver).
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c", default-features = false }
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "4ea297bdeffaba6a8e2e4386a18fbd4dd59fa0f0", default-features = false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { version = "2", optional = true }
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-window-state = "2.4.1"
+tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
-webkit2gtk = "2.0"
 gtk = "0.18"
+
+# WebKitGTK is the wry runtime; not needed under CEF.
+[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"), not(feature = "cef")))'.dependencies]
+webkit2gtk = "2.0"
 
 # CEF (Chromium) runtime — Linux only; other platforms use wry.
 # Repackage of tauri's unreleased feat/cef branch. Switch to the official
@@ -88,7 +97,7 @@ cef = { version = "=148.0.0", optional = true }
 libloading = "0.8"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "df09f08e64b840e4d51cde2720030836eed40f4c", features = [
+tauri-plugin-notifications = { git = "https://github.com/SableClient/tauri-plugin-notifications.git", rev = "4ea297bdeffaba6a8e2e4386a18fbd4dd59fa0f0", features = [
   "push-notifications",
 ] }
 tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin-edge-to-edge.git", rev = "33c6116c27be28c06df5a9d02231ecc5fdeb93c5" }
@@ -102,9 +111,11 @@ tauri-plugin-android-fs = { version = "=28.4.0", features = ["legacy-storage-per
 jni = "0.21"
 
 [features]
-default = ["wry"]
+default = ["wry", "updater"]
 custom-protocol = ["tauri/custom-protocol"]
 wry = ["tauri/wry"]
+# Tauri auto-updater. Disable with --no-default-features --features wry,cef.
+updater = ["dep:tauri-plugin-updater"]
 # CEF (Chromium) runtime. Build with --no-default-features --features cef.
 cef = ["dep:tauri-runtime-cef", "dep:cef"]
 [patch.crates-io]

@@ -7,7 +7,7 @@ export type NativePushRegistration = {
 };
 
 export type NativePushNotificationsApi = {
-  isPermissionGranted: () => Promise<boolean>;
+  isPermissionGranted: () => Promise<boolean | null>;
   requestPermission: () => Promise<NotificationPermission>;
   registerForPushNotifications: (vapid?: string) => Promise<NativePushRegistration>;
   unregisterForPushNotifications: () => Promise<void>;

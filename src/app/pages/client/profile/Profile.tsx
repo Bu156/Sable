@@ -34,6 +34,7 @@ import { useUserPresence } from '$hooks/useUserPresence';
 import { useUserProfile } from '$hooks/useUserProfile';
 import type { SettingsMenuItem } from '$features/settings';
 import { settingsMenuIcons, settingsSections, useOpenSettings } from '$features/settings';
+import { isDesktopTauri } from '$utils/platform';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
 import {
   CaretDownIcon,
@@ -82,15 +83,19 @@ export function ProfileMobile() {
   const hideText = curWidth <= 80 && !isMobile;
 
   const [showPersona] = useSetting(settingsAtom, 'showPersonaSetting');
+  const isDesktop = isDesktopTauri();
   const menuItems = useMemo<SettingsMenuItem[]>(
     () =>
       settingsSections
-        .filter((section) => showPersona || section.id !== 'persona')
+        .filter(
+          (section) =>
+            (showPersona || section.id !== 'persona') && (isDesktop || section.id !== 'desktop')
+        )
         .map((section) => {
           const icon = settingsMenuIcons[section.id];
           return { id: section.id, name: section.label, ...icon };
         }),
-    [showPersona]
+    [showPersona, isDesktop]
   );
 
   return (

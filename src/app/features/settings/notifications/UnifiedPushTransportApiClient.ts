@@ -7,7 +7,7 @@ export type UnifiedPushRegistration = {
 };
 
 export type UnifiedPushTransportApi = {
-  isPermissionGranted: () => Promise<boolean>;
+  isPermissionGranted: () => Promise<boolean | null>;
   requestPermission: () => Promise<NotificationPermission>;
   registerForPushNotifications: (vapid?: string) => Promise<UnifiedPushRegistration>;
   unregisterForPushNotifications: () => Promise<void>;

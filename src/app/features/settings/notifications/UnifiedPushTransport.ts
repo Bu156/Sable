@@ -110,6 +110,11 @@ async function getUnifiedPushPermissionState(): Promise<UnifiedPushPermissionSta
   return permission === 'granted' ? 'granted' : permission;
 }
 
+export async function isUnifiedPushPermissionGranted(): Promise<boolean | null> {
+  const api = await getUnifiedPushTransportApi();
+  return api.isPermissionGranted();
+}
+
 export async function getUnifiedPushDistributors(): Promise<string[]> {
   const api = await getUnifiedPushTransportApi();
   return api.listDistributors();

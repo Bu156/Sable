@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${1:-$(grep -m1 '^version' src-tauri/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')}"
+VERSION="${1:-$(grep -m1 '"version":' src-tauri/tauri.conf.json | sed 's/.*: *"\(.*\)".*/\1/')}"
 DEB_VERSION="$VERSION"
 RPM_VERSION="$VERSION"
 RPM_ITERATION=1
@@ -80,31 +80,40 @@ EOF
 if command -v fpm >/dev/null 2>&1; then
   PKGROOT="$WORK/pkgroot"
   stage_runtime "$PKGROOT/opt/sable"
-  mkdir -p "$PKGROOT/usr/bin" "$PKGROOT/usr/share/applications" \
-    "$PKGROOT/usr/share/icons/hicolor/128x128/apps"
+  mkdir -p "$PKGROOT/usr/bin" "$PKGROOT/usr/share/applications"
   cat > "$PKGROOT/usr/bin/sable" <<'EOF'
 #!/bin/sh
 exec /opt/sable/sable "$@"
 EOF
   chmod 755 "$PKGROOT/usr/bin/sable"
   write_desktop "$PKGROOT/usr/share/applications/sable.desktop"
-  cp src-tauri/icons/128x128.png "$PKGROOT/usr/share/icons/hicolor/128x128/apps/sable.png"
+  for size in 32x32 64x64 128x128; do
+    mkdir -p "$PKGROOT/usr/share/icons/hicolor/${size}/apps"
+    cp "src-tauri/icons/${size}.png" \
+      "$PKGROOT/usr/share/icons/hicolor/${size}/apps/sable.png"
+  done
+  # 128x128@2x is 256x256
+  mkdir -p "$PKGROOT/usr/share/icons/hicolor/256x256/apps"
+  cp "src-tauri/icons/128x128@2x.png" \
+    "$PKGROOT/usr/share/icons/hicolor/256x256/apps/sable.png"
 
   COMMON=(-s dir -n sable
     --description "Sable, a Matrix client"
     --url "https://sable.moe" --maintainer "SableClient"
     --category net)
-  # Stable-named deps only; version-suffixed names break install across releases.
-  DEB_DEPS=(--depends libwebkit2gtk-4.1-0 --depends libgtk-3-0
-    --depends libnss3 --depends libnspr4 --depends libgbm1
-    --depends libdrm2 --depends libxkbcommon0 --depends xdg-utils
-    --depends libayatana-appindicator3-1)
+  # CEF deps: no WebKitGTK. ALSA/CUPS are NEEDED by libcef.so;
+  # xwayland because main.rs forces GDK_BACKEND=x11.
+  DEB_DEPS=(--depends libgtk-3-0 --depends libnss3 --depends libnspr4
+    --depends libgbm1 --depends libdrm2 --depends libxkbcommon0
+    --depends libasound2 --depends libcups2 --depends xdg-utils
+    --depends xwayland --depends libayatana-appindicator3-1)
   (cd "$OUT/deb" && fpm "${COMMON[@]}" -v "$DEB_VERSION" --iteration 1 \
     -t deb -a amd64 "${DEB_DEPS[@]}" -C "$PKGROOT" .)
 
-  RPM_DEPS=(--depends webkit2gtk4.1 --depends gtk3 --depends nss
-    --depends nspr --depends mesa-libgbm --depends libdrm
-    --depends libxkbcommon --depends xdg-utils
+  RPM_DEPS=(--depends gtk3 --depends nss --depends nspr
+    --depends mesa-libgbm --depends libdrm --depends libxkbcommon
+    --depends alsa-lib --depends cups-libs --depends xdg-utils
+    --depends xorg-x11-server-Xwayland
     --depends 'libayatana-appindicator3.so.1()(64bit)')
   (cd "$OUT/rpm" && fpm "${COMMON[@]}" -v "$RPM_VERSION" --iteration "$RPM_ITERATION" \
     -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$PKGROOT" .)

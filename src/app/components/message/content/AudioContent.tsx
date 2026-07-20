@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Chip, IconButton, ProgressBar, Spinner, Text, toRem } from 'folds';
 import { sizedIcon, Pause, Play, SpeakerHigh, SpeakerSlash } from '$components/icons/phosphor';
+import { isTauri } from '@tauri-apps/api/core';
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { Range } from 'react-range';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -55,6 +56,8 @@ export function AudioContent({
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
+      // Stream via the sable-media:// protocol (Range) instead of buffering a blob.
+      if (!encInfo && isTauri()) return mediaUrl;
       const fileContent = encInfo
         ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
         : await downloadMedia(mediaUrl);

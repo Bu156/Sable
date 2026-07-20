@@ -69,7 +69,7 @@ function getPushGatewayUrl(clientConfig: ClientConfig): string {
   return pushGatewayUrl;
 }
 
-export async function isNativePushPermissionGranted(): Promise<boolean> {
+export async function isNativePushPermissionGranted(): Promise<boolean | null> {
   const api = await getNativePushNotificationsApi();
   return api.isPermissionGranted();
 }

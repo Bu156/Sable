@@ -64,6 +64,9 @@ function makeMockMx(overrides: Record<string, unknown> = {}) {
     getJoinedRooms: vi.fn<() => Promise<{ joined_rooms: string[] }>>().mockResolvedValue({
       joined_rooms: [],
     }),
+    store: {
+      removeRoom: vi.fn<() => void>(),
+    },
     on: vi.fn<() => void>(),
     off: vi.fn<() => void>(),
     removeListener: vi.fn<() => void>(),
