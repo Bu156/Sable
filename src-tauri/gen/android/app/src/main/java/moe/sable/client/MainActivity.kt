@@ -22,6 +22,7 @@ class MainActivity : TauriActivity() {
   // Route the hardware back button through the web app (see onWebViewCreate).
   override val handleBackNavigation: Boolean = false
   private var webView: WebView? = null
+  private var handlingBack = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -121,15 +122,18 @@ class MainActivity : TauriActivity() {
       this,
       object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
+          if (handlingBack) return
           val wv = this@MainActivity.webView
           if (wv == null) {
             moveTaskToBack(true)
             return
           }
+          handlingBack = true
           // If the web app didn't consume the back press, background the app.
           wv.evaluateJavascript(
             "(typeof window.__sableAndroidBack === 'function' && window.__sableAndroidBack() === true)"
           ) { result ->
+            handlingBack = false
             if (result != "true") moveTaskToBack(true)
           }
         }

@@ -116,6 +116,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
     ]);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const editableRef = useRef<HTMLDivElement>(null);
+    const focusScrollTimerRef = useRef<number>();
     const rowRef = useRef<HTMLDivElement>(null);
     const beforeRef = useRef<HTMLDivElement>(null);
     const afterRef = useRef<HTMLDivElement>(null);
@@ -317,6 +318,12 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       []
     );
 
+    const cancelFocusScroll = useCallback(() => {
+      window.clearTimeout(focusScrollTimerRef.current);
+    }, []);
+
+    useEffect(() => cancelFocusScroll, [cancelFocusScroll]);
+
     const queueMultilineMeasurement = useCallback(
       (resetRetry = true) => {
         if (multilineMeasureFrameRef.current !== null) {
@@ -456,6 +463,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 enterKeyHint={enterKeyHint}
                 // keeps focus after pressing send, but yields to another editor.
                 onBlur={(evt) => {
+                  cancelFocusScroll();
                   if (!mobileOrTablet()) return;
                   if (suppressBlurRefocusRef?.current) return;
                   const next = evt.relatedTarget as HTMLElement | null;
@@ -466,9 +474,14 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 // not left hidden behind it.
                 onFocus={() => {
                   if (!mobileOrTablet()) return;
-                  const scrollIn = () => rootRef.current?.scrollIntoView({ block: 'nearest' });
+                  cancelFocusScroll();
+                  const scrollIn = () => {
+                    if (editableRef.current?.contains(document.activeElement)) {
+                      rootRef.current?.scrollIntoView({ block: 'nearest' });
+                    }
+                  };
                   window.visualViewport?.addEventListener('resize', scrollIn, { once: true });
-                  window.setTimeout(scrollIn, 500);
+                  focusScrollTimerRef.current = window.setTimeout(scrollIn, 500);
                 }}
                 style={{ boxShadow: 'none' }}
               />
