@@ -1,4 +1,5 @@
 import { useAtomValue } from 'jotai';
+import { useEffect } from 'react';
 import { Box, Text, as, config } from 'folds';
 import { Checks, menuIcon } from '$components/icons/phosphor';
 import type { Room } from '$types/matrix-sdk';
@@ -12,6 +13,8 @@ import { useRoomLatestRenderedEvent } from '$hooks/useRoomLatestRenderedEvent';
 import { useRoomEventReaders } from '$hooks/useRoomEventReaders';
 import { modalAtom, ModalType } from '$state/modal';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
+import { hydrateRoomMembers } from '$client/roomMemberHydration';
 import * as css from './RoomViewFollowing.css';
 
 export function RoomViewFollowingPlaceholder() {
@@ -31,12 +34,26 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const resolvedEventId = threadEventId ?? latestEvent?.getId();
     const latestEventReaders = useRoomEventReaders(room, resolvedEventId);
     const nicknames = useAtomValue(nicknamesAtom);
+    const cachedProfiles = useAtomValue(profilesCacheAtom);
+
+    useEffect(() => {
+      const unknownUserIds = latestEventReaders.filter(
+        (readerId) => readerId && !room.getMember(readerId)
+      );
+      if (unknownUserIds.length > 0) {
+        void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+      }
+    }, [mx, room, latestEventReaders]);
+
     const names = latestEventReaders
       .filter((readerId) => readerId !== mx.getUserId())
       .filter((readerId) => !participantIds || participantIds.has(readerId))
       .map(
         (readerId) =>
-          getMemberDisplayName(room, readerId, nicknames) ?? getMxIdLocalPart(readerId) ?? readerId
+          getMemberDisplayName(room, readerId, nicknames) ??
+          cachedProfiles[readerId]?.displayName ??
+          getMxIdLocalPart(readerId) ??
+          readerId
       );
 
     const eventId = resolvedEventId;

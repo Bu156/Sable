@@ -23,6 +23,8 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { nicknamesAtom } from '$state/nicknames';
+import { profilesCacheAtom } from '$state/userRoomProfile';
+import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { getMemberAvatarMxc, getMemberDisplayName, reactionOrEditEvent } from '$utils/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { UserAvatar } from '$components/user-avatar';
@@ -73,8 +75,9 @@ type ThreadPreviewProps = {
 function ThreadPreview({ room, thread, onClick, onJump }: ThreadPreviewProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const { navigateRoom } = useRoomNavigate();
+  const navigateRoom = useRoomNavigate();
   const nicknames = useAtomValue(nicknamesAtom);
+  const cachedProfiles = useAtomValue(profilesCacheAtom);
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
@@ -153,8 +156,12 @@ function ThreadPreview({ room, thread, onClick, onJump }: ThreadPreviewProps) {
   if (!rootEvent) return null;
 
   const senderId = rootEvent.getSender() ?? '';
+  useRoomMemberHydration(room, senderId);
   const displayName =
-    getMemberDisplayName(room, senderId, nicknames) ?? getMxIdLocalPart(senderId) ?? senderId;
+    getMemberDisplayName(room, senderId, nicknames) ??
+    cachedProfiles[senderId]?.displayName ??
+    getMxIdLocalPart(senderId) ??
+    senderId;
   const senderAvatarMxc = getMemberAvatarMxc(room, senderId);
   const getContent = (() => rootEvent.getContent()) as GetContentCallback;
 
@@ -168,8 +175,10 @@ function ThreadPreview({ room, thread, onClick, onJump }: ThreadPreviewProps) {
     (ev: MatrixEvent) => ev.getId() !== thread.id && !reactionOrEditEvent(ev)
   );
   const lastSenderId = lastReply?.getSender() ?? '';
+  useRoomMemberHydration(room, lastSenderId);
   const lastDisplayName =
     getMemberDisplayName(room, lastSenderId, nicknames) ??
+    cachedProfiles[lastSenderId]?.displayName ??
     getMxIdLocalPart(lastSenderId) ??
     lastSenderId;
   const lastContent = lastReply?.getContent();
