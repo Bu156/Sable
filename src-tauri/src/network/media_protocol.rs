@@ -1,13 +1,14 @@
 use std::{
     fs,
-    path::PathBuf,
+    io::{Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
     sync::{OnceLock, RwLock},
     time::Duration,
 };
 
 use sha2::{Digest, Sha256};
 use tauri::{
-    http::{header, Request, Response, StatusCode, Uri},
+    http::{header, response::Builder as ResponseBuilder, Request, Response, StatusCode, Uri},
     AppHandle, Manager, Runtime, UriSchemeContext, UriSchemeResponder,
 };
 use tauri_plugin_http::reqwest::{
@@ -23,6 +24,8 @@ const CACHE_SUBDIR: &str = "sable-media";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_CONCURRENT_REQUESTS: usize = 8;
+const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
 
 pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
@@ -100,8 +103,13 @@ pub fn respond<R: Runtime>(
 ) {
     let app = ctx.app_handle().clone();
     let uri = request.uri().clone();
+    let range = request
+        .headers()
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     tauri::async_runtime::spawn(async move {
-        let response = handle_request(&app, uri)
+        let response = handle_request(&app, uri, range)
             .await
             .unwrap_or_else(error_response);
         responder.respond(response);
@@ -111,6 +119,7 @@ pub fn respond<R: Runtime>(
 async fn handle_request<R: Runtime>(
     app: &AppHandle<R>,
     uri: Uri,
+    range: Option<String>,
 ) -> Result<Response<Vec<u8>>, StatusCode> {
     let target = percent_encoding::percent_decode_str(uri.path().trim_start_matches('/'))
         .decode_utf8()
@@ -152,10 +161,36 @@ async fn handle_request<R: Runtime>(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Some((body, content_type)) =
-        read_cache(body_path.clone(), content_type_path.clone()).await
+    // Cache to disk first, then serve from there so Range works regardless of homeserver support.
+    let content_type = ensure_cached(
+        &state,
+        &session,
+        media_url,
+        dir,
+        body_path.clone(),
+        content_type_path,
+    )
+    .await?;
+
+    match range {
+        Some(range_header) => serve_range(body_path, content_type, range_header).await,
+        None => Ok(ok_response(read_full(body_path).await?, &content_type)),
+    }
+}
+
+// Ensure the body + content type are on disk, fetching from the homeserver on a miss.
+async fn ensure_cached(
+    state: &MediaSessionState,
+    session: &MediaSession,
+    media_url: Url,
+    dir: PathBuf,
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+) -> Result<String, StatusCode> {
+    if let Some(content_type) =
+        read_content_type(body_path.clone(), content_type_path.clone()).await
     {
-        return Ok(ok_response(body, &content_type));
+        return Ok(content_type);
     }
 
     let upstream = state
@@ -188,23 +223,93 @@ async fn handle_request<R: Runtime>(
         dir,
         body_path,
         content_type_path,
-        body.clone(),
+        body,
         content_type.clone(),
     )
     .await;
 
-    Ok(ok_response(body, &content_type))
+    Ok(content_type)
 }
 
-async fn read_cache(body_path: PathBuf, content_type_path: PathBuf) -> Option<(Vec<u8>, String)> {
+// Only a hit when the body file is also present, so a stray `.ct` counts as a miss.
+async fn read_content_type(body_path: PathBuf, content_type_path: PathBuf) -> Option<String> {
     tokio::task::spawn_blocking(move || {
-        match (fs::read(&body_path), fs::read_to_string(&content_type_path)) {
-            (Ok(body), Ok(content_type)) => Some((body, content_type)),
-            _ => None,
+        if !body_path.is_file() {
+            return None;
         }
+        fs::read_to_string(&content_type_path).ok()
     })
     .await
     .unwrap_or(None)
+}
+
+async fn read_full(body_path: PathBuf) -> Result<Vec<u8>, StatusCode> {
+    tokio::task::spawn_blocking(move || fs::read(&body_path))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn serve_range(
+    body_path: PathBuf,
+    content_type: String,
+    range_header: String,
+) -> Result<Response<Vec<u8>>, StatusCode> {
+    tokio::task::spawn_blocking(move || {
+        let mut file = fs::File::open(&body_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let total = file
+            .metadata()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .len();
+
+        let Some((start, end)) = parse_range(&range_header, total) else {
+            return Ok(range_not_satisfiable(total));
+        };
+
+        let end = end.min(start + MAX_RANGE_CHUNK - 1);
+        let length = end - start + 1;
+
+        let mut buf = vec![0_u8; length as usize];
+        file.seek(SeekFrom::Start(start))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        file.read_exact(&mut buf)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        Ok(partial_response(buf, &content_type, start, end, total))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+// First byte range of a `Range: bytes=...` header as inclusive (start, end); None → 416.
+fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
+    if total == 0 {
+        return None;
+    }
+
+    let spec = header.strip_prefix("bytes=")?;
+    let (start_str, end_str) = spec.split(',').next()?.trim().split_once('-')?;
+
+    let (start, end) = if start_str.is_empty() {
+        let suffix: u64 = end_str.parse().ok()?;
+        if suffix == 0 {
+            return None;
+        }
+        (total.saturating_sub(suffix), total - 1)
+    } else {
+        let start: u64 = start_str.parse().ok()?;
+        let end = if end_str.is_empty() {
+            total - 1
+        } else {
+            end_str.parse::<u64>().ok()?.min(total - 1)
+        };
+        (start, end)
+    };
+
+    if start > end || start >= total {
+        return None;
+    }
+    Some((start, end))
 }
 
 async fn write_cache(
@@ -218,26 +323,95 @@ async fn write_cache(
         if fs::create_dir_all(&dir).is_ok() {
             let _ = fs::write(&body_path, &body);
             let _ = fs::write(&content_type_path, &content_type);
+            evict_if_needed(&dir);
         }
     })
     .await;
 }
 
-fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
+// Trim oldest-first when the cache exceeds its byte budget.
+fn evict_if_needed(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+
+    let mut files: Vec<(PathBuf, u64, std::time::SystemTime)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let meta = entry.metadata().ok()?;
+            if !meta.is_file() {
+                return None;
+            }
+            let modified = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+            Some((path, meta.len(), modified))
+        })
+        .collect();
+
+    let mut total: u64 = files.iter().map(|(_, len, _)| *len).sum();
+    if total <= MAX_CACHE_BYTES {
+        return;
+    }
+
+    files.sort_by_key(|(_, _, modified)| *modified);
+    for (path, len, _) in files {
+        if total <= MAX_CACHE_BYTES {
+            break;
+        }
+        if fs::remove_file(&path).is_ok() {
+            total = total.saturating_sub(len);
+        }
+    }
+}
+
+// Shared 200/206 headers. Media is content-addressed and the URL is session-scoped, so
+// it is safe to let the webview cache it as immutable and to advertise Range support.
+fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBuilder {
     Response::builder()
-        .status(StatusCode::OK)
+        .status(status)
         .header(header::CONTENT_TYPE, content_type)
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        // Authorization is enforced by the protocol handler. Do not let the
-        // webview reuse this response after the active Matrix session changes.
-        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(
+            header::CACHE_CONTROL,
+            "private, max-age=31536000, immutable",
+        )
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(
             header::CONTENT_SECURITY_POLICY,
             "sandbox; default-src 'none'; script-src 'none'; object-src 'none'",
         )
+}
+
+fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
+    media_response_builder(StatusCode::OK, content_type)
         .body(body)
         .expect("failed to build media response")
+}
+
+fn partial_response(
+    body: Vec<u8>,
+    content_type: &str,
+    start: u64,
+    end: u64,
+    total: u64,
+) -> Response<Vec<u8>> {
+    media_response_builder(StatusCode::PARTIAL_CONTENT, content_type)
+        .header(
+            header::CONTENT_RANGE,
+            format!("bytes {start}-{end}/{total}"),
+        )
+        .body(body)
+        .expect("failed to build partial media response")
+}
+
+fn range_not_satisfiable(total: u64) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(StatusCode::RANGE_NOT_SATISFIABLE)
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header(header::CONTENT_RANGE, format!("bytes */{total}"))
+        .body(Vec::new())
+        .expect("failed to build range error response")
 }
 
 fn error_response(status: StatusCode) -> Response<Vec<u8>> {
@@ -266,9 +440,9 @@ fn cache_key(session_token: &str, url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use tauri::http::header;
+    use tauri::http::{header, StatusCode};
 
-    use super::{cache_key, ok_response};
+    use super::{cache_key, ok_response, parse_range, partial_response};
 
     #[test]
     fn cache_key_is_stable_and_hex() {
@@ -289,11 +463,49 @@ mod tests {
     }
 
     #[test]
-    fn protocol_responses_are_not_cached_by_the_webview() {
+    fn protocol_responses_are_privately_cacheable_by_the_webview() {
         let response = ok_response(Vec::new(), "image/png");
         assert_eq!(
             response.headers().get(header::CACHE_CONTROL).unwrap(),
-            "private, no-store"
+            "private, max-age=31536000, immutable"
+        );
+        assert_eq!(
+            response.headers().get(header::ACCEPT_RANGES).unwrap(),
+            "bytes"
+        );
+    }
+
+    #[test]
+    fn parse_range_handles_the_common_forms() {
+        assert_eq!(parse_range("bytes=0-499", 1000), Some((0, 499)));
+        assert_eq!(parse_range("bytes=500-", 1000), Some((500, 999)));
+        assert_eq!(parse_range("bytes=0-", 1000), Some((0, 999)));
+        // End past the file is clamped to the last byte.
+        assert_eq!(parse_range("bytes=990-5000", 1000), Some((990, 999)));
+        // Suffix range: the last N bytes.
+        assert_eq!(parse_range("bytes=-200", 1000), Some((800, 999)));
+    }
+
+    #[test]
+    fn parse_range_rejects_unsatisfiable_and_malformed() {
+        assert_eq!(parse_range("bytes=1000-1001", 1000), None);
+        assert_eq!(parse_range("bytes=500-400", 1000), None);
+        assert_eq!(parse_range("bytes=abc-def", 1000), None);
+        assert_eq!(parse_range("items=0-1", 1000), None);
+        assert_eq!(parse_range("bytes=0-0", 0), None);
+    }
+
+    #[test]
+    fn partial_response_reports_the_served_range() {
+        let response = partial_response(vec![0_u8; 100], "video/mp4", 0, 99, 5000);
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(header::CONTENT_RANGE).unwrap(),
+            "bytes 0-99/5000"
+        );
+        assert_eq!(
+            response.headers().get(header::ACCEPT_RANGES).unwrap(),
+            "bytes"
         );
     }
 }

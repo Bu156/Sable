@@ -27,7 +27,11 @@ import { fetch } from '$utils/fetch';
 import { getEventReactions, getStateEvent } from './room';
 import { getReactionContent } from './messageReaction';
 import { matchMxId, validMxId } from './mxIdHelper';
-import { fetchMediaBlob, type MediaTransportOptions } from './mediaTransport';
+import {
+  fetchMediaBlob,
+  getCurrentMediaSessionScope,
+  type MediaTransportOptions,
+} from './mediaTransport';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 const TAURI_MEDIA_CACHE_VERSION = '__sable_media_cache=2';
@@ -413,11 +417,14 @@ export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | n
   if (!httpUrl) return null;
   if (!isTauri()) return httpUrl;
   if (!httpUrl.includes('/_matrix/client/v1/media/')) return httpUrl;
+  if (httpUrl.includes(TAURI_MEDIA_CACHE_VERSION)) return httpUrl;
   const mediaUrl = httpUrl.startsWith('sable-media://')
     ? httpUrl
     : convertFileSrc(httpUrl, 'sable-media');
-  if (mediaUrl.includes(TAURI_MEDIA_CACHE_VERSION)) return mediaUrl;
-  return `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}${TAURI_MEDIA_CACHE_VERSION}`;
+  // Session-scoped so the cacheable response is never shared across accounts.
+  const sessionScope = encodeURIComponent(getCurrentMediaSessionScope());
+  const separator = mediaUrl.includes('?') ? '&' : '?';
+  return `${mediaUrl}${separator}${TAURI_MEDIA_CACHE_VERSION}&__sable_media_session=${sessionScope}`;
 };
 
 export const mxcUrlToHttp = (
