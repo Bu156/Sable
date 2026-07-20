@@ -454,9 +454,9 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 // not left hidden behind it.
                 onFocus={() => {
                   if (!mobileOrTablet()) return;
-                  window.setTimeout(() => {
-                    rootRef.current?.scrollIntoView({ block: 'nearest' });
-                  }, 300);
+                  const scrollIn = () => rootRef.current?.scrollIntoView({ block: 'nearest' });
+                  window.visualViewport?.addEventListener('resize', scrollIn, { once: true });
+                  window.setTimeout(scrollIn, 500);
                 }}
                 style={{ boxShadow: 'none' }}
               />

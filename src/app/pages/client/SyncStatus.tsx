@@ -97,8 +97,8 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   // Publish to the atom that feeds the custom desktop titlebar's status pill.
   useEffect(() => {
     setTitlebarStatus(view);
+    return () => setTitlebarStatus(null);
   }, [setTitlebarStatus, view]);
-  useEffect(() => () => setTitlebarStatus(null), [setTitlebarStatus]);
 
   // Where a custom titlebar renders the pill, skip the inline banner.
   if (hasCustomDesktopTitlebar()) return null;
