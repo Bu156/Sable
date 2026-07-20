@@ -40,6 +40,9 @@ import { factoryRoomIdByActivity } from '$utils/sort';
 import { nameInitials } from '$utils/common';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { useListFocusIndex } from '$hooks/useListFocusIndex';
+import { useNavigate } from 'react-router-dom';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
+import { getNavigatePath } from '$pages/pathUtils';
 import { getMxIdLocalPart, guessDmRoomUserId } from '$utils/matrix';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
@@ -511,6 +514,9 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
 export function SearchModalRenderer() {
   const [opened, setOpen] = useAtom(searchModalAtom);
   const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
+  const navigate = useNavigate();
+  const screenSize = useScreenSizeContext();
+  const isMobile = screenSize === ScreenSize.Mobile;
 
   useKeyDown(
     window,
@@ -518,11 +524,15 @@ export function SearchModalRenderer() {
       (event) => {
         if (matchesShortcut('navigation.openRoomSearch', event, shortcutOverrides)) {
           event.preventDefault();
+          if (isMobile) {
+            navigate(getNavigatePath());
+            return;
+          }
           setOpen(!opened);
           return;
         }
       },
-      [opened, setOpen, shortcutOverrides]
+      [opened, setOpen, shortcutOverrides, isMobile, navigate]
     )
   );
 

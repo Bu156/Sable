@@ -60,6 +60,7 @@ import {
   Lock,
   MagnifyingGlass,
   menuIcon,
+  ShareNetwork,
   SignOut,
   Terminal,
   UserPlus,
@@ -71,6 +72,7 @@ import { useRoomsUnread } from '$state/hooks/unread';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { LeaveSpacePrompt } from '$components/leave-space-prompt';
 import { copyToClipboard } from '$utils/dom';
+import { shareText } from '$utils/share';
 import { useClosedNavCategoriesAtom } from '$state/hooks/closedNavCategories';
 import { useStateEvent } from '$hooks/useStateEvent';
 
@@ -150,6 +152,13 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
     requestClose();
   };
 
+  const handleShareLink = () => {
+    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
+    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+    shareText(getMatrixToRoom(roomIdOrAlias, viaServers));
+    requestClose();
+  };
+
   const handleInvite = () => {
     setInvitePrompt(true);
   };
@@ -208,6 +217,11 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
         <MenuItem onClick={handleCopyLink} size="300" after={menuIcon(Link)} radii="300">
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
             Copy Link
+          </Text>
+        </MenuItem>
+        <MenuItem onClick={handleShareLink} size="300" after={menuIcon(ShareNetwork)} radii="300">
+          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+            Share Link
           </Text>
         </MenuItem>
         <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">

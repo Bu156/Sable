@@ -25,7 +25,6 @@ import { SettingsRoute } from './SettingsRoute';
 import { SettingsShallowRouteRenderer } from './SettingsShallowRouteRenderer';
 import { SettingsSectionPage } from './SettingsSectionPage';
 import { focusedSettingTile } from './styles.css';
-import * as settingsCss from './styles.css';
 import { useOpenSettings } from './useOpenSettings';
 import { useSettingsFocus } from './useSettingsFocus';
 
@@ -423,7 +422,9 @@ describe('SettingsSectionPage', () => {
       </ScreenSizeProvider>
     );
 
-    expect(screen.getByText('Devices').closest('header')).toHaveClass(settingsCss.settingsHeader);
+    expect(screen.getByText('Devices').closest('header')).toHaveClass(
+      pageCss.SettingsSectionHeader
+    );
   });
 });
 

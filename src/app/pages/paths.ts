@@ -80,6 +80,8 @@ export type ExploreServerPathSearchParams = {
 export const EXPLORE_SERVER_PATH = `/explore/${SERVER_PATH_SEGMENT}`;
 
 export const CREATE_PATH = '/create';
+export const CREATE_ROOM_PATH = '/create-room';
+export const BUG_REPORT_PATH = '/bug-report';
 export const NAVIGATE_PATH = '/navigate';
 export const PROFILE_PATH = '/profile/';
 

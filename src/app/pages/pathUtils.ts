@@ -29,6 +29,8 @@ import {
   SPACE_ROOM_PATH,
   SPACE_SEARCH_PATH,
   CREATE_PATH,
+  CREATE_ROOM_PATH,
+  BUG_REPORT_PATH,
   NAVIGATE_PATH,
   PROFILE_PATH,
   INBOX_BOOKMARKS_PATH,
@@ -158,6 +160,16 @@ export const getExploreServerPath = (server: string): string => {
 };
 
 export const getCreatePath = (): string => CREATE_PATH;
+export const getCreateSpacePath = (spaceId?: string): string =>
+  spaceId ? withSearchParam(CREATE_PATH, { spaceId }) : CREATE_PATH;
+export const getCreateRoomPath = (spaceId?: string, type?: string): string => {
+  const params: Record<string, string> = {};
+  if (spaceId) params.spaceId = spaceId;
+  if (type) params.type = type;
+  const keys = Object.keys(params);
+  return keys.length === 0 ? CREATE_ROOM_PATH : withSearchParam(CREATE_ROOM_PATH, params);
+};
+export const getBugReportPath = (): string => BUG_REPORT_PATH;
 export const getNavigatePath = (): string => NAVIGATE_PATH;
 export const getProfilePath = (): string => PROFILE_PATH;
 

@@ -15,7 +15,7 @@ describe('android edge-to-edge inset contract', () => {
     expect(cargoToml).toContain(
       'tauri-plugin-edge-to-edge = { git = "https://github.com/SableClient/tauri-plugin-edge-to-edge.git", rev = "33c6116c27be28c06df5a9d02231ecc5fdeb93c5" }'
     );
-    expect(tauriLib).toContain('builder = builder.plugin(tauri_plugin_edge_to_edge::init());');
+    expect(tauriLib).toContain('.plugin(tauri_plugin_edge_to_edge::init())');
   });
 
   it('keeps MainActivity out of the inset injection path', () => {

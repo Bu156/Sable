@@ -13,14 +13,15 @@ type PageRootProps = {
   rail?: ReactNode;
   bottomNav?: ReactNode;
   children: ReactNode;
+  mobileDrawer?: boolean;
 };
 
-export function PageRoot({ nav, rail, bottomNav, children }: PageRootProps) {
+export function PageRoot({ nav, rail, bottomNav, children, mobileDrawer = true }: PageRootProps) {
   const screenSize = useScreenSizeContext();
   const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
   const isMobile = screenSize === ScreenSize.Mobile;
 
-  if (isMobile && mobileGestures) {
+  if (isMobile && mobileGestures && mobileDrawer) {
     return (
       <Box grow="Yes" className={ContainerColor({ variant: 'Background' })}>
         <MobileNavDrawer nav={nav} rail={rail} bottomNav={bottomNav}>

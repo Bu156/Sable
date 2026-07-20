@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import type { RecipeVariants } from '@vanilla-extract/recipes';
 import { recipe } from '@vanilla-extract/recipes';
 import { DefaultReset, color, config, toRem } from 'folds';
@@ -123,3 +123,21 @@ export const PageContentCenter = style([
     margin: 'auto',
   },
 ]);
+
+export const SettingsSectionBody = style({
+  width: '100%',
+  maxWidth: toRem(800),
+  marginInline: 'auto',
+});
+
+globalStyle(`${SettingsSectionBody} *`, {
+  scrollbarWidth: 'none',
+});
+globalStyle(`${SettingsSectionBody} *::-webkit-scrollbar`, {
+  display: 'none',
+});
+
+export const SettingsSectionHeader = style({
+  paddingLeft: config.space.S300,
+  paddingRight: config.space.S200,
+});

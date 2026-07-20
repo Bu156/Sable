@@ -9,11 +9,10 @@ import {
   PageNav,
   PageNavHeader,
 } from '$components/page';
-import { CreateSpaceForm } from '$features/create-space';
+import { CreateRoomForm } from '$features/create-room/CreateRoom';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { SpaceProvider } from '$hooks/useSpace';
 import { useAllJoinedRoomsSet, useGetRoom } from '$hooks/useGetRoom';
@@ -23,16 +22,25 @@ import { SidebarResizer } from '../sidebar/SidebarResizer';
 import { useSetAtom } from 'jotai';
 import { isResizingSidebarAtom } from '$state/isResizingSidebar';
 import { UserQuickTools } from '../sidebar/UserQuickTools';
+import { CreateRoomType } from '$components/create-room/types';
 
-export function Create() {
-  const { navigateSpace } = useRoomNavigate();
-  const navigate = useNavigate();
+export function CreateRoomPage() {
+  const { navigateRoom } = useRoomNavigate();
+  const backNavigate = useNavigate();
+
   const [searchParams] = useSearchParams();
-  const spaceId = searchParams.get('spaceId') ?? undefined;
+  const spaceIdParam = searchParams.get('spaceId') ?? undefined;
+  const typeParam = searchParams.get('type') ?? undefined;
+
+  // Parse type only for valid CreateRoomType enum values
+  const type: CreateRoomType | undefined =
+    typeParam === CreateRoomType.TextRoom || typeParam === CreateRoomType.VoiceRoom
+      ? (typeParam as CreateRoomType)
+      : undefined;
 
   const allJoinedRooms = useAllJoinedRoomsSet();
   const getRoom = useGetRoom(allJoinedRooms);
-  const space = spaceId ? getRoom(spaceId) : undefined;
+  const space = spaceIdParam ? getRoom(spaceIdParam) : undefined;
 
   const setIsResizingSidebar = useSetAtom(isResizingSidebarAtom);
   const [roomSidebarWidth, setRoomSidebarWidth] = useSetting(settingsAtom, 'roomSidebarWidth');
@@ -45,6 +53,8 @@ export function Create() {
   const isMobile = screenSize === ScreenSize.Mobile;
   const hideText = curWidth <= 80 && !isMobile;
   const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
+
+  const title = type === CreateRoomType.VoiceRoom ? 'New Voice Room' : 'New Chat Room';
 
   return (
     <>
@@ -65,7 +75,7 @@ export function Create() {
                 {!hideText ? (
                   <Box grow="Yes">
                     <Text size="H4" truncate align="Center">
-                      Create Space
+                      {title}
                     </Text>
                   </Box>
                 ) : (
@@ -88,21 +98,20 @@ export function Create() {
         </Box>
       )}
       <Page>
-        <Box grow="Yes" direction="Column" style={{ background: color.Background.Container }}>
+        <Box grow="Yes">
           {isMobile && (
             <PageNavHeader size="600">
               <Box grow="Yes" gap="300" justifyContent="Center">
                 <Box grow="Yes">
                   <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-                    Create Space
+                    {title}
                   </Text>
                 </Box>
                 <Box shrink="No">
                   <IconButton
-                    size="300"
-                    radii="300"
-                    aria-label="Close create space"
-                    onClick={() => navigate(-1)}
+                    aria-label="Close create room"
+                    onClick={() => backNavigate(-1)}
+                    variant="Background"
                   >
                     {composerIcon(X)}
                   </IconButton>
@@ -117,11 +126,11 @@ export function Create() {
                   <Box direction="Column" gap="700">
                     <PageHero
                       icon={sizedIcon(SquaresFour, '600')}
-                      title="Create Space"
-                      subTitle="Build a space for your community."
+                      title={title}
+                      subTitle="Create a new room."
                     />
                     <SpaceProvider value={space ?? null}>
-                      <CreateSpaceForm space={space} onCreate={navigateSpace} />
+                      <CreateRoomForm space={space} onCreate={navigateRoom} defaultType={type} />
                     </SpaceProvider>
                   </Box>
                 </PageHeroSection>

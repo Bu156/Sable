@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { Modal, Overlay, OverlayBackdrop, OverlayCenter } from 'folds';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
 
 type Modal500Props = {
@@ -10,6 +11,17 @@ type Modal500Props = {
 };
 export function Modal500({ requestClose, children }: Modal500Props) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const screenSize = useScreenSizeContext();
+
+  if (screenSize === ScreenSize.Mobile) {
+    return (
+      <Overlay open>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+          {children}
+        </div>
+      </Overlay>
+    );
+  }
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>

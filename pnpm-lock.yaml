@@ -26,6 +26,9 @@ importers:
       '@choochmeque/tauri-plugin-notifications-api':
         specifier: 0.5.0-rc.11
         version: 0.5.0-rc.11
+      '@choochmeque/tauri-plugin-sharekit-api':
+        specifier: 0.4.0-rc.5
+        version: 0.4.0-rc.5
       '@fontsource-variable/nunito':
         specifier: 5.2.7
         version: 5.2.7
@@ -928,6 +931,9 @@ packages:
 
   '@choochmeque/tauri-plugin-notifications-api@0.5.0-rc.11':
     resolution: {integrity: sha512-TSuf8HQ4Ayp9IKKB5v2yTdgKMa/I0bqbcACj0IZ46CSpzn/HKner/BKG7rM8tGOarEcyBd/VXnDhK5cJA/YMtw==}
+
+  '@choochmeque/tauri-plugin-sharekit-api@0.4.0-rc.5':
+    resolution: {integrity: sha512-VpO3Uw5ZmPa0M0ta/oS5WyiW/jdNAPFh1zXbHA5dJtLMeA4RJqqj4vAlVMYoYRqtrE/1Op/GQ3jXvxgU4WgSVA==}
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -6169,6 +6175,10 @@ snapshots:
       css-tree: 3.2.1
 
   '@choochmeque/tauri-plugin-notifications-api@0.5.0-rc.11':
+    dependencies:
+      '@tauri-apps/api': 2.11.1
+
+  '@choochmeque/tauri-plugin-sharekit-api@0.4.0-rc.5':
     dependencies:
       '@tauri-apps/api': 2.11.1
 
