@@ -27,6 +27,7 @@ import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { NotificationJumper } from '$hooks/useNotificationJumper';
 import { SearchModalRenderer } from '$features/navigate';
 import { GlobalKeyboardShortcuts } from '$components/GlobalKeyboardShortcuts';
+import { DesktopShortcuts } from '$components/tauri/DesktopShortcuts';
 import { CallEmbedProvider } from '$components/CallEmbedProvider';
 import { SplashScreen } from '$components/splash-screen';
 import {
@@ -257,6 +258,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
                           <SpaceSettingsRenderer />
                         </Suspense>
                         <GlobalKeyboardShortcuts />
+                        <DesktopShortcuts />
                         {/* Screen reader live region — populated by announce() in utils/announce.ts */}
                         <div
                           id="sable-announcements"

@@ -219,7 +219,12 @@ pub fn run() {
     // copy/paste/select-all to work in the webview. It lives in the system menu
     // bar, so it is macOS-only to avoid an in-window menu bar elsewhere.
     #[cfg(target_os = "macos")]
-    let builder = builder.menu(|handle| tauri::menu::Menu::default(handle));
+    let builder = builder
+        .menu(|handle| desktop::menu::build_app_menu(handle))
+        .on_menu_event(|app, event| desktop::menu::handle_menu_event(app, &event));
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(desktop::menu::global_shortcut_plugin());
 
     #[cfg(desktop)]
     let builder = builder.plugin(
@@ -308,6 +313,9 @@ pub fn run() {
 
             #[cfg(desktop)]
             desktop::tray::sync_desktop_settings_inner(app.handle())?;
+
+            #[cfg(desktop)]
+            desktop::menu::register_global_shortcuts(app.handle());
 
             #[cfg(debug_assertions)]
             {
