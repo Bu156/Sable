@@ -5,13 +5,24 @@ const isStandaloneIosPwa = (): boolean =>
   window.matchMedia('(display-mode: standalone)').matches &&
   CSS.supports('-webkit-touch-callout: none');
 
+const isEditableFocused = (): boolean => {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+};
+
+const fullScreenHeight = (): number => {
+  const { width, height } = window.screen;
+  return window.matchMedia('(orientation: portrait)').matches
+    ? Math.max(width, height)
+    : Math.min(width, height);
+};
+
 export function installIosPwaViewportHeight(): void {
   if (!isStandaloneIosPwa()) return;
 
   let frame = 0;
   let settleTimer = 0;
-  let fullHeight = 0;
-  let viewportWidth = window.innerWidth;
 
   const updateHeight = () => {
     frame = 0;
@@ -19,15 +30,11 @@ export function installIosPwaViewportHeight(): void {
     const visibleHeight = viewport?.height ?? window.innerHeight;
     const visibleBottom = visibleHeight + (viewport?.offsetTop ?? 0);
 
-    if (window.innerWidth !== viewportWidth) {
-      viewportWidth = window.innerWidth;
-      fullHeight = visibleBottom;
-    }
+    const screenHeight = fullScreenHeight();
+    const keyboardOpen =
+      isEditableFocused() && screenHeight - visibleHeight > MIN_KEYBOARD_HEIGHT;
+    const height = keyboardOpen ? visibleBottom : screenHeight;
 
-    const keyboardOpen = fullHeight - visibleHeight > MIN_KEYBOARD_HEIGHT;
-    if (!keyboardOpen) fullHeight = Math.max(fullHeight, visibleBottom);
-
-    const height = keyboardOpen ? visibleBottom : fullHeight;
     document.documentElement.style.setProperty(IOS_PWA_VIEWPORT_HEIGHT, `${Math.round(height)}px`);
   };
 
