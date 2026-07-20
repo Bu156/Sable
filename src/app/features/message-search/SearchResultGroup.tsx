@@ -1,5 +1,5 @@
 import type { MouseEventHandler, ComponentProps } from 'react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { IEventWithRoomId, Room } from '$types/matrix-sdk';
 import { JoinRule, RelationType, EventType } from '$types/matrix-sdk';
 import type { IImageContent } from '$types/matrix/common';
@@ -199,14 +199,21 @@ export function SearchResultGroup({
   const accessibleTagColors = useAccessiblePowerTagColors(theme.kind, creatorsTag, powerLevelTags);
   const nicknames = useAtomValue(nicknamesAtom);
   const cachedProfiles = useAtomValue(profilesCacheAtom);
+  const [, forceUpdate] = useState(0);
 
   useEffect(() => {
+    let disposed = false;
     const unknownUserIds = items
       .map((item) => item.event.sender)
       .filter((sender) => sender && !room.getMember(sender));
     if (unknownUserIds.length > 0) {
-      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+      hydrateRoomMembers(mx, room.roomId, unknownUserIds).then(() => {
+        if (!disposed) forceUpdate((n) => n + 1);
+      });
     }
+    return () => {
+      disposed = true;
+    };
   }, [mx, room, items]);
 
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
@@ -329,6 +336,7 @@ export function SearchResultGroup({
 
           const displayName =
             getMemberDisplayName(room, event.sender, nicknames) ??
+            item.context.profile_info?.[event.sender]?.displayname ??
             cachedProfiles[event.sender]?.displayName ??
             getMxIdLocalPart(event.sender) ??
             event.sender;

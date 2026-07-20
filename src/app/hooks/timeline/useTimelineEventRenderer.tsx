@@ -177,6 +177,9 @@ function ThreadReplyChip({
       );
   }, [room, mEventId, thread, counter]);
 
+  const latestSenderId = replyEvents.at(-1)?.getSender() ?? '';
+  useRoomMemberHydration(room, latestSenderId);
+
   if (!thread) return null;
 
   // Prefer the server-authoritative bundled count. thread.length only reflects
@@ -198,14 +201,10 @@ function ThreadReplyChip({
   });
 
   const latestReply = replyEvents.at(-1);
-  let latestSenderId = '';
   let latestBody = '';
   if (latestReply) {
-    latestSenderId = latestReply.getSender() ?? '';
     latestBody = (latestReply.getContent()?.body as string | undefined) ?? '';
   }
-
-  useRoomMemberHydration(room, latestSenderId);
 
   const latestSenderName =
     getMemberDisplayName(room, latestSenderId, nicknames) ??
@@ -472,8 +471,8 @@ export function useTimelineEventRenderer({
         onReplyClick={onReplyClick}
         onReactionToggle={onReactionToggle}
         senderId={senderId}
-            senderDisplayName={senderName}
-            sendStatus={mEvent.getAssociatedStatus()}
+        senderDisplayName={senderName}
+        sendStatus={mEvent.getAssociatedStatus()}
         collapse={collapse}
         activeReplyId={activeReplyId}
         reactions={(() => {
@@ -1756,12 +1755,12 @@ export function useTimelineEventRenderer({
               onUsernameClick={onUsernameClick}
               onReplyClick={onReplyClick}
               onReactionToggle={onReactionToggle}
-          senderId={senderId}
-          senderDisplayName={senderName}
-          sendStatus={mEvent.getAssociatedStatus()}
-          collapse={collapse}
-          activeReplyId={activeReplyId}
-          reactions={(() => {
+              senderId={senderId}
+              senderDisplayName={senderName}
+              sendStatus={mEvent.getAssociatedStatus()}
+              collapse={collapse}
+              activeReplyId={activeReplyId}
+              reactions={(() => {
                 const threadChip =
                   !hideThreadChip && (room.getThread(mEventId) || mEvent.threadRootId) ? (
                     <ThreadReplyChip

@@ -1,5 +1,5 @@
 import { useAtomValue } from 'jotai';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text, as, config } from 'folds';
 import { Checks, menuIcon } from '$components/icons/phosphor';
 import type { Room } from '$types/matrix-sdk';
@@ -35,14 +35,21 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const latestEventReaders = useRoomEventReaders(room, resolvedEventId);
     const nicknames = useAtomValue(nicknamesAtom);
     const cachedProfiles = useAtomValue(profilesCacheAtom);
+    const [, forceUpdate] = useState(0);
 
     useEffect(() => {
+      let disposed = false;
       const unknownUserIds = latestEventReaders.filter(
         (readerId) => readerId && !room.getMember(readerId)
       );
       if (unknownUserIds.length > 0) {
-        void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+        hydrateRoomMembers(mx, room.roomId, unknownUserIds).then(() => {
+          if (!disposed) forceUpdate((n) => n + 1);
+        });
       }
+      return () => {
+        disposed = true;
+      };
     }, [mx, room, latestEventReaders]);
 
     const names = latestEventReaders

@@ -522,7 +522,11 @@ export const Reply = as<'div', ReplyProps>(
             sender &&
             eventType !== EventType.RoomMember && (
               <Text size="T300" truncate style={{ fontFamily: usernameFont }}>
-                <b>{getMemberDisplayName(room, sender, nicknames) ?? cachedProfiles[sender]?.displayName ?? getMxIdLocalPart(sender)}</b>
+                <b>
+                  {getMemberDisplayName(room, sender, nicknames) ??
+                    cachedProfiles[sender]?.displayName ??
+                    getMxIdLocalPart(sender)}
+                </b>
               </Text>
             )
           }

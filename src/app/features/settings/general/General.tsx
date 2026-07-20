@@ -1440,9 +1440,7 @@ function Sync() {
           title="Use Sliding Sync"
           focusId="use-sliding-sync"
           description={
-            <>
-              Enable Sliding Sync for this current login/session. Requires server support.
-            </>
+            <>Enable Sliding Sync for this current login/session. Requires server support.</>
           }
           after={
             <Switch variant="Primary" value={useSlidingSync} onChange={handleSetSlidingSync} />

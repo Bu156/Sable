@@ -153,10 +153,17 @@ function ThreadPreview({ room, thread, onClick, onJump }: ThreadPreviewProps) {
   );
 
   const { rootEvent } = thread;
+  const senderId = rootEvent?.getSender() ?? '';
+  useRoomMemberHydration(room, senderId);
+
+  const lastReply = thread.events.findLast(
+    (ev: MatrixEvent) => ev.getId() !== thread.id && !reactionOrEditEvent(ev)
+  );
+  const lastSenderId = lastReply?.getSender() ?? '';
+  useRoomMemberHydration(room, lastSenderId);
+
   if (!rootEvent) return null;
 
-  const senderId = rootEvent.getSender() ?? '';
-  useRoomMemberHydration(room, senderId);
   const displayName =
     getMemberDisplayName(room, senderId, nicknames) ??
     cachedProfiles[senderId]?.displayName ??
@@ -171,11 +178,6 @@ function ThreadPreview({ room, thread, onClick, onJump }: ThreadPreviewProps) {
   // Use Math.max so we never show fewer replies than the server reports.
   const replyCount = Math.max(localReplyCount, thread.length ?? 0);
 
-  const lastReply = thread.events.findLast(
-    (ev: MatrixEvent) => ev.getId() !== thread.id && !reactionOrEditEvent(ev)
-  );
-  const lastSenderId = lastReply?.getSender() ?? '';
-  useRoomMemberHydration(room, lastSenderId);
   const lastDisplayName =
     getMemberDisplayName(room, lastSenderId, nicknames) ??
     cachedProfiles[lastSenderId]?.displayName ??

@@ -621,15 +621,25 @@ function BookmarkResultGroup({
   const room = mx.getRoom(roomId);
 
   const cachedProfiles = useAtomValue(profilesCacheAtom);
+  const [, forceUpdate] = useState(0);
 
   useEffect(() => {
     if (!room) return;
+    let disposed = false;
     const unknownUserIds = items
       .map((item) => item.sender)
-      .filter((sender): sender is string => typeof sender === 'string' && sender.startsWith('@') && !room.getMember(sender));
+      .filter(
+        (sender): sender is string =>
+          typeof sender === 'string' && sender.startsWith('@') && !room.getMember(sender)
+      );
     if (unknownUserIds.length > 0) {
-      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+      hydrateRoomMembers(mx, room.roomId, unknownUserIds).then(() => {
+        if (!disposed) forceUpdate((n) => n + 1);
+      });
     }
+    return () => {
+      disposed = true;
+    };
   }, [mx, room, items]);
 
   const handleOpenClick: MouseEventHandler = (evt) => {

@@ -410,14 +410,21 @@ function RoomNotificationsGroupComp({
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
   const nicknames = useAtomValue(nicknamesAtom);
   const cachedProfiles = useAtomValue(profilesCacheAtom);
+  const [, forceUpdate] = useState(0);
 
   useEffect(() => {
+    let disposed = false;
     const unknownUserIds = notifications
       .map((n) => n.event.sender)
       .filter((sender) => sender && !room.getMember(sender));
     if (unknownUserIds.length > 0) {
-      void hydrateRoomMembers(mx, room.roomId, unknownUserIds);
+      hydrateRoomMembers(mx, room.roomId, unknownUserIds).then(() => {
+        if (!disposed) forceUpdate((n) => n + 1);
+      });
     }
+    return () => {
+      disposed = true;
+    };
   }, [mx, room, notifications]);
 
   const powerLevels = usePowerLevels(room);
