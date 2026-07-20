@@ -16,10 +16,17 @@ fn main() {
             ],
             deep_link_schemes: vec!["moe.sable.app".into(), "sable".into()],
             command_line_args: vec![
-                // NVIDIA GPU-sandbox denies GBM access → SIGSEGV; keeps HW accel.
                 ("disable-gpu-sandbox".into(), None),
                 ("disable-font-subpixel-positioning".into(), None),
                 ("enable-font-antialiasing".into(), None),
+                ("autoplay-policy".into(), Some("no-user-gesture-required".into())),
+                ("enable-features".into(), Some("SharedArrayBuffer".into())),
+                ("disable-background-timer-throttling".into(), None),
+                ("disable-renderer-backgrounding".into(), None),
+                ("disable-backgrounding-occluded-windows".into(), None),
+                ("disable-features".into(), Some(
+                    "SpareRendererForSitePerProcess,IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,AutofillActorMode,GlicActorUi,LensOverlay".into()
+                )),
             ],
             ..Default::default()
         });
