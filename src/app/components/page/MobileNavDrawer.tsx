@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
-import { useDrag } from '@use-gesture/react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '$state/hooks/settings';
@@ -18,15 +17,13 @@ import {
   SPACE_ROOM_PATH,
 } from '$pages/paths';
 import { resolveSection } from '$pages/pathUtils';
-import { haptic } from '$utils/haptics';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 import { PersistentRoomHost } from './PersistentRoomHost';
 
-const SLIDE_MS = 300;
-const SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+const SETTLE_STIFFNESS = 1000;
+const SETTLE_DAMPING = 63;
 const OPEN_FRACTION = 0.35;
-const VELOCITY_THRESHOLD = 0.4;
-const DIRECTION_DEADZONE = 10;
+const VELOCITY_THRESHOLD = 400;
 
 type MobileNavDrawerProps = {
   nav: ReactNode;
@@ -34,9 +31,6 @@ type MobileNavDrawerProps = {
   bottomNav?: ReactNode;
   children: ReactNode;
 };
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max);
 
 /** Sliding mobile drawer: the list and active room are adjacent panels; dragging
  * reveals the list and commits the route on release. */
@@ -73,12 +67,11 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const contentOpen = !listView;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const sliderRef = useRef<HTMLDivElement | null>(null);
   const navPanelRef = useRef<HTMLDivElement | null>(null);
   const contentPanelRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
   const x = useMotionValue(0);
-  const draggingRef = useRef(false);
+  const dragControls = useDragControls();
 
   const initialIntent = contentOpen ? 1 : 0;
   const [panelIntent, setPanelIntent] = useState(initialIntent);
@@ -97,35 +90,21 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     return () => cic(handle as number);
   }, [isRoomRoute, roomArmed]);
 
-  const applyTransition = useCallback((animated: boolean) => {
-    const el = sliderRef.current;
-    if (el) el.style.transition = animated ? `transform ${SLIDE_MS}ms ${SLIDE_EASE}` : 'none';
-  }, []);
-
   const settle = useCallback(
     (target: number) => {
       if (reduceMotion) {
-        applyTransition(false);
         x.jump(target);
         return;
       }
-      applyTransition(true);
-      x.set(target);
+      animate(x, target, {
+        type: 'spring',
+        stiffness: SETTLE_STIFFNESS,
+        damping: SETTLE_DAMPING,
+        velocity: 0,
+      });
     },
-    [reduceMotion, x, applyTransition]
+    [reduceMotion, x]
   );
-
-  const readX = useCallback((): number => {
-    const el = sliderRef.current;
-    if (!el) return x.get();
-    const t = getComputedStyle(el).transform;
-    if (!t || t === 'none') return 0;
-    try {
-      return new DOMMatrix(t).m41;
-    } catch {
-      return x.get();
-    }
-  }, [x]);
 
   useLayoutEffect(() => {
     const el = viewportRef.current;
@@ -143,7 +122,6 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   }, [panelIntent]);
 
   useLayoutEffect(() => {
-    if (draggingRef.current) return;
     const routePanel = contentOpen ? 1 : 0;
     if (routePanel !== panelIntentRef.current) {
       panelIntentRef.current = routePanel;
@@ -152,137 +130,26 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
       if (width > 0 && !reduceMotion) {
         settle(target);
       } else {
-        applyTransition(false);
         x.jump(target);
       }
     }
-  }, [contentOpen, width, x, settle, applyTransition, reduceMotion]);
+  }, [contentOpen, width, x, settle, reduceMotion]);
 
   useLayoutEffect(() => {
-    if (draggingRef.current) return;
     const target = panelIntentRef.current === 1 ? -width : 0;
-    applyTransition(false);
     x.jump(target);
-  }, [width, x, applyTransition]);
-
-  const bind = useDrag(
-    ({
-      first,
-      active,
-      canceled,
-      movement: [mx],
-      offset: [ox],
-      velocity: [vx],
-      direction: [dx],
-      event,
-      cancel,
-    }) => {
-      if (canceled) {
-        if (draggingRef.current) {
-          draggingRef.current = false;
-          settle(panelIntentRef.current === 1 ? -width : 0);
-        }
-        return;
-      }
-      if (!mobileGestures || width === 0) return;
-
-      const target = event?.target;
-      if (first && target instanceof HTMLElement && target.closest('[data-gestures="ignore"]')) {
-        cancel();
-        return;
-      }
-
-      if (panelIntentRef.current === 1) {
-        if (mx < -DIRECTION_DEADZONE) {
-          if (draggingRef.current) {
-            draggingRef.current = false;
-            settle(-width);
-          }
-          cancel();
-          return;
-        }
-        if (active) {
-          if (first) {
-            x.stop();
-            applyTransition(false);
-          }
-          draggingRef.current = true;
-          x.set(clamp(ox, -width, 0));
-          return;
-        }
-        draggingRef.current = false;
-        const opened = width + ox > width * OPEN_FRACTION || (vx > VELOCITY_THRESHOLD && dx > 0);
-        if (opened) {
-          haptic('light');
-          panelIntentRef.current = 0;
-          setPanelIntent(0);
-          settle(0);
-          const section = resolveSection(location.pathname);
-          if (section?.getRoomPath && matchedRoomId && isRoomRoute) {
-            setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
-          }
-          if (section) startTransition(() => navigate(section.listPath));
-        } else {
-          settle(-width);
-        }
-        return;
-      }
-
-      if (mx > DIRECTION_DEADZONE) {
-        cancel();
-        return;
-      }
-      if (!canOpenRoom && mx < -DIRECTION_DEADZONE) {
-        cancel();
-        return;
-      }
-      if (active) {
-        if (first) {
-          x.stop();
-          applyTransition(false);
-          if (!roomArmed) setRoomArmed(true);
-        }
-        draggingRef.current = true;
-        x.set(clamp(ox, -width, 0));
-        return;
-      }
-      draggingRef.current = false;
-      const wantRoom = -ox > width * OPEN_FRACTION || (vx > VELOCITY_THRESHOLD && dx < 0);
-      if (wantRoom) {
-        const section = resolveSection(location.pathname);
-        if (section?.getRoomPath) {
-          const lastRoomId = lastRoom?.[section.key];
-          if (lastRoomId) {
-            const roomPath = section.getRoomPath(lastRoomId);
-            haptic('light');
-            panelIntentRef.current = 1;
-            setPanelIntent(1);
-            settle(-width);
-            startTransition(() => navigate(roomPath));
-          } else {
-            settle(0);
-          }
-        } else {
-          settle(0);
-        }
-      } else {
-        settle(0);
-      }
-    },
-    // axis:'x' + touch-action:pan-y lets the browser keep native vertical scroll.
-    {
-      axis: 'x',
-      filterTaps: true,
-      tapsThreshold: DIRECTION_DEADZONE,
-      pointer: { capture: false },
-      eventOptions: { passive: true },
-      from: () => [readX(), 0],
-    }
-  );
+  }, [width, x]);
 
   return (
     <div
-      {...bind()}
+      onPointerDown={(event) => {
+        if (!mobileGestures || width === 0) return;
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('[data-gestures="ignore"]')) return;
+        // On the list panel, only start drag tracking when a room is available to open.
+        if (panelIntentRef.current === 0 && !canOpenRoom) return;
+        dragControls.start(event);
+      }}
       ref={viewportRef}
       style={{
         position: 'relative',
@@ -291,11 +158,64 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         flexGrow: 1,
         height: '100%',
         width: '100%',
-        touchAction: 'pan-y',
+        touchAction: 'manipulation',
       }}
     >
       <motion.div
-        ref={sliderRef}
+        drag={mobileGestures ? 'x' : false}
+        dragControls={dragControls}
+        dragListener={false}
+        dragConstraints={{ left: -width, right: 0 }}
+        dragDirectionLock
+        dragElastic={0.05}
+        dragMomentum={false}
+        onDragStart={() => {
+          x.stop();
+          if (panelIntentRef.current === 0 && !roomArmed) setRoomArmed(true);
+        }}
+        onDragEnd={(_event, info) => {
+          const { offset, velocity } = info;
+
+          if (panelIntentRef.current === 1) {
+            // Room panel → swipe right to reveal the list.
+            const opened = offset.x > width * OPEN_FRACTION || velocity.x > VELOCITY_THRESHOLD;
+            if (opened) {
+              panelIntentRef.current = 0;
+              setPanelIntent(0);
+              settle(0);
+              const section = resolveSection(location.pathname);
+              if (section?.getRoomPath && matchedRoomId && isRoomRoute) {
+                setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
+              }
+              if (section) navigate(section.listPath);
+            } else {
+              settle(-width);
+            }
+            return;
+          }
+
+          // List panel → swipe left to open the last visited room.
+          const wantRoom = -offset.x > width * OPEN_FRACTION || velocity.x < -VELOCITY_THRESHOLD;
+          if (wantRoom) {
+            const section = resolveSection(location.pathname);
+            if (section?.getRoomPath) {
+              const lastRoomId = lastRoom?.[section.key];
+              if (lastRoomId) {
+                const roomPath = section.getRoomPath(lastRoomId);
+                panelIntentRef.current = 1;
+                setPanelIntent(1);
+                settle(-width);
+                navigate(roomPath);
+              } else {
+                settle(0);
+              }
+            } else {
+              settle(0);
+            }
+          } else {
+            settle(0);
+          }
+        }}
         style={{ x, display: 'flex', height: '100%', willChange: 'transform' }}
       >
         <div

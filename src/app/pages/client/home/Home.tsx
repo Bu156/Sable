@@ -39,7 +39,7 @@ import {
   withSearchParam,
 } from '$pages/pathUtils';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
-import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
+import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { useHomeCreateSelected, useHomeSearchSelected } from '$hooks/router/useHomeSelected';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { VirtualTile } from '$components/virtualizer';
@@ -265,7 +265,7 @@ export function Home() {
 
   const [joinCallOnSingleClick] = useSetting(settingsAtom, 'joinCallOnSingleClick');
 
-  const selectedRoomId = useSelectedRoom();
+  const selectedRoomId = useSelectedOrLastRoom();
   const createRoomSelected = useHomeCreateSelected();
   const searchSelected = useHomeSearchSelected();
   const noRoomToDisplay = rooms.length === 0;

@@ -42,7 +42,7 @@ import {
 } from '$components/nav';
 import { getDirectCreatePath, getDirectRoomPath } from '$pages/pathUtils';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
-import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
+import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { VirtualTile } from '$components/virtualizer';
 import { RoomNavCategoryButton, RoomNavItem } from '$features/room-nav';
 import { makeNavCategoryId } from '$state/closedNavCategories';
@@ -213,7 +213,7 @@ export function Direct() {
 
   const createDirectSelected = useDirectCreateSelected();
 
-  const selectedRoomId = useSelectedRoom();
+  const selectedRoomId = useSelectedOrLastRoom();
   const noRoomToDisplay = directs.length === 0;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
