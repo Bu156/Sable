@@ -581,10 +581,16 @@ export function Space() {
 
   const closedCategoriesCache = useRef(new Map());
   const ancestorsCollapsedCache = useRef(new Map());
+  const prevSpaceIdRef = useRef(space.roomId);
+  if (prevSpaceIdRef.current !== space.roomId) {
+    prevSpaceIdRef.current = space.roomId;
+    closedCategoriesCache.current.clear();
+    ancestorsCollapsedCache.current.clear();
+  }
   useEffect(() => {
     closedCategoriesCache.current.clear();
     ancestorsCollapsedCache.current.clear();
-  }, [closedCategories, roomToParents, getRoom]);
+  }, [closedCategories, roomToParents, getRoom, space.roomId]);
 
   /**
    * Recursively checks if a given parentId (or all its ancestors) is in a closed category.
