@@ -82,6 +82,7 @@ import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import { stopPropagation } from '$utils/keyboard';
 import { type DragOptsProps } from '$components/message/modals/Options';
+import * as messageCss from '$features/room/message/styles.css';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
 import { BackRouteHandler } from '$components/BackRouteHandler';
@@ -213,7 +214,8 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(
     return (
       <Menu
         ref={ref}
-        style={{ maxWidth: toRem(200) }}
+        className={dragOpts ? messageCss.MessageOptionsMenu : undefined}
+        style={dragOpts ? undefined : { maxWidth: toRem(200) }}
         onTouchStart={dragOpts?.onTouchStart}
         onTouchMove={dragOpts?.onTouchMove}
         onTouchEnd={dragOpts?.onTouchEnd}

@@ -900,6 +900,7 @@ function MessageInternal(
       highlight={highlight}
       notifyHighlight={highlightMentions ? notifyHighlight : undefined}
       selected={!!menuAnchor || isEmoji || isPressing}
+      data-hover={!!menuAnchor || isEmoji || isPressing || undefined}
       isMarked={isMarked}
       mobile={mobileOrTablet()}
       {...props}

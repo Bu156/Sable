@@ -63,6 +63,7 @@ import {
 import { Copy as CopyIcon } from '@phosphor-icons/react';
 import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import { type DragOptsProps } from '$components/message/modals/Options';
+import * as messageCss from '$features/room/message/styles.css';
 import {
   RoomNotificationMode,
   roomNotificationModeChipIcon,
@@ -164,7 +165,8 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     return (
       <Menu
         ref={ref}
-        style={{ maxWidth: toRem(160), width: '100vw' }}
+        className={dragOpts ? messageCss.MessageOptionsMenu : undefined}
+        style={dragOpts ? undefined : { maxWidth: toRem(160), width: '100vw' }}
         onTouchStart={dragOpts?.onTouchStart}
         onTouchMove={dragOpts?.onTouchMove}
         onTouchEnd={dragOpts?.onTouchEnd}
