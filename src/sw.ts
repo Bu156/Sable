@@ -707,7 +707,7 @@ function fetchConfig(token: string, request?: Request): RequestInit {
 type BufferedMediaResponse = {
   status: number;
   statusText: string;
-  headers: [string, string][];
+  headers: Headers;
   body: ArrayBuffer;
 };
 
@@ -727,7 +727,7 @@ function respondWithInflightMedia(
         new Response(data.body, {
           status: data.status,
           statusText: data.statusText,
-          headers: data.headers,
+          headers: new Headers(data.headers),
         })
     );
   }
@@ -735,12 +735,14 @@ function respondWithInflightMedia(
   // mode: "no-cors", which prevents the Authorization header above from reaching the server.
   // Preserve Range header for streaming audio and video.
   const promise = fetch(request.url, { ...fetchConfig(token, request), redirect })
-    .then(async (res): Promise<BufferedMediaResponse> => ({
-      status: res.status,
-      statusText: res.statusText,
-      headers: [...res.headers],
-      body: await res.arrayBuffer(),
-    }))
+    .then(
+      async (res): Promise<BufferedMediaResponse> => ({
+        status: res.status,
+        statusText: res.statusText,
+        headers: new Headers(res.headers),
+        body: await res.arrayBuffer(),
+      })
+    )
     .finally(() => {
       inflightMediaFetches.delete(key);
     });
@@ -750,7 +752,7 @@ function respondWithInflightMedia(
       new Response(data.body, {
         status: data.status,
         statusText: data.statusText,
-        headers: data.headers,
+        headers: new Headers(data.headers),
       })
   );
 }
