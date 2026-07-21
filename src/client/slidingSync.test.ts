@@ -163,7 +163,7 @@ describe('SlidingSyncManager initial request', () => {
     };
     const manager = makeManager(
       makeMockMx({
-        getRoom: vi.fn().mockReturnValue(room),
+        getRoom: vi.fn<() => typeof room>().mockReturnValue(room),
         getStateEvent,
       })
     );

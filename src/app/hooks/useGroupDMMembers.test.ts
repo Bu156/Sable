@@ -16,8 +16,8 @@ describe('useGroupDMMembers', () => {
     const bob = makeMember('@bob:example.org', 'Bob', 'mxc://example.org/bob');
     const carol = makeMember('@carol:example.org', 'Carol');
     const members = [alice, bob, carol];
-    const loadMembersIfNeeded = vi.fn();
-    const getProfileInfo = vi.fn();
+    const loadMembersIfNeeded = vi.fn<() => Promise<void>>();
+    const getProfileInfo = vi.fn<() => Promise<unknown>>();
     const events = [
       { getSender: () => '@carol:example.org' },
       { getSender: () => '@bob:example.org' },

@@ -44,6 +44,7 @@ export default defineConfig({
       {
         allow: [
           '_fetched',
+          '_fetchedAt',
           '__dirname',
           '__filename',
           '__sableAndroidBack',

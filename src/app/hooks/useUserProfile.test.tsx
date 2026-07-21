@@ -12,7 +12,7 @@ import { useUserProfile } from './useUserProfile';
 vi.mock('$state/hooks/settings', () => ({
   useSetting: (_atom: unknown, key: string) => {
     const enabled = new Set(['renderGlobalNameColors', 'renderRoomColors', 'renderRoomFonts']);
-    return [enabled.has(key), vi.fn()];
+    return [enabled.has(key), vi.fn<() => void>()];
   },
 }));
 
@@ -23,9 +23,11 @@ vi.mock('./useTheme', () => ({
 
 const makeClient = () =>
   ({
-    getProfileInfo: vi.fn().mockResolvedValue({ displayname: 'Alice' }),
-    getUser: vi.fn(),
-    getUserId: vi.fn().mockReturnValue('@me:example.org'),
+    getProfileInfo: vi
+      .fn<() => Promise<{ displayname: string }>>()
+      .mockResolvedValue({ displayname: 'Alice' }),
+    getUser: vi.fn<() => void>(),
+    getUserId: vi.fn<() => string>().mockReturnValue('@me:example.org'),
   }) as unknown as MatrixClient;
 
 const makeWrapper = (mx: MatrixClient, inactive: boolean) => {
