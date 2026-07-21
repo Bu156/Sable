@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Share text, links, images, videos, and files from other apps directly into Sable on mobile.
+Share text, media, and files into Sable directly from other mobile apps.

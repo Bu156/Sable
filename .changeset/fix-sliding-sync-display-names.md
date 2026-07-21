@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Fix missing display names under sliding sync in search results, bookmarks, pinned messages, notifications, thread previews, replies, and state event senders.
+Fix missing user display names under sliding sync across search, notifications, threads, and replies.
