@@ -218,7 +218,7 @@ describe('fetchMediaBlob', () => {
   it('dedupes inflight requests for the same url and cache mode', async () => {
     const { fetchMediaBlob } = await import('./mediaTransport');
     const url = 'https://example.org/media.png';
-    let resolveFetch: (value: Response) => void = () => undefined;
+    let resolveFetch!: (value: Response) => void;
     const pending = new Promise<Response>((resolve) => {
       resolveFetch = resolve;
     });

@@ -8,6 +8,32 @@ import { pushSessionToSW } from './sw-session';
 
 const log = createLogger('service-worker-bootstrap');
 
+const showUpdateAvailablePrompt = (registration: ServiceWorkerRegistration) => {
+  const DONT_SHOW_PROMPT_KEY = 'cinny_dont_show_sw_update_prompt';
+  const userPreference = localStorage.getItem(DONT_SHOW_PROMPT_KEY);
+
+  if (userPreference === 'true') {
+    return;
+  }
+
+  // eslint-disable-next-line no-alert
+  if (window.confirm('A new version of the app is available. Refresh to update?')) {
+    if (registration.waiting) {
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin
+      registration.waiting.postMessage({ type: 'SKIP_WAITING_AND_CLAIM' });
+    }
+    window.location.reload();
+  }
+};
+
+const sendSessionToSW = () => {
+  const sessions = getLocalStorageItem<Sessions>(MATRIX_SESSIONS_KEY, []);
+  const activeId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
+  const active =
+    sessions.find((s) => s.userId === activeId) ?? sessions[0] ?? getFallbackSession();
+  pushSessionToSW(active?.baseUrl, active?.accessToken, active?.userId);
+};
+
 export function registerAppServiceWorker() {
   if (!hasServiceWorker()) return;
 
@@ -21,31 +47,6 @@ export function registerAppServiceWorker() {
     swRegisterOptions.type = 'module';
   }
 
-  const showUpdateAvailablePrompt = (registration: ServiceWorkerRegistration) => {
-    const DONT_SHOW_PROMPT_KEY = 'cinny_dont_show_sw_update_prompt';
-    const userPreference = localStorage.getItem(DONT_SHOW_PROMPT_KEY);
-
-    if (userPreference === 'true') {
-      return;
-    }
-
-    // eslint-disable-next-line no-alert
-    if (window.confirm('A new version of the app is available. Refresh to update?')) {
-      if (registration.waiting) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING_AND_CLAIM' });
-      }
-      window.location.reload();
-    }
-  };
-
-  const sendSessionToSW = () => {
-    const sessions = getLocalStorageItem<Sessions>(MATRIX_SESSIONS_KEY, []);
-    const activeId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
-    const active =
-      sessions.find((s) => s.userId === activeId) ?? sessions[0] ?? getFallbackSession();
-    pushSessionToSW(active?.baseUrl, active?.accessToken, active?.userId);
-  };
-
   sendSessionToSW();
 
   const registrationPromise = navigator.serviceWorker.register(swUrl, swRegisterOptions);
@@ -55,11 +56,11 @@ export function registerAppServiceWorker() {
       registration.addEventListener('updatefound', () => {
         const installingWorker = registration.installing;
         if (installingWorker) {
-          installingWorker.onstatechange = () => {
+          installingWorker.addEventListener('statechange', () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
               showUpdateAvailablePrompt(registration);
             }
-          };
+          });
         }
       });
 

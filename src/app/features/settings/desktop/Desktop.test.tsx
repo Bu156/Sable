@@ -66,13 +66,14 @@ vi.mock('folds', async () => {
   };
 });
 
+const renderDesktop = () =>
+  render(
+    <ScreenSizeProvider value={ScreenSize.Desktop}>
+      <Desktop requestClose={vi.fn<() => void>()} />
+    </ScreenSizeProvider>
+  );
+
 describe('Desktop', () => {
-  const renderDesktop = () =>
-    render(
-      <ScreenSizeProvider value={ScreenSize.Desktop}>
-        <Desktop requestClose={vi.fn<() => void>()} />
-      </ScreenSizeProvider>
-    );
 
   it('renders explicit close behavior and tray settings', () => {
     mockUseDesktopRuntimeState.mockReturnValueOnce({

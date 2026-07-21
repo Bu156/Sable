@@ -45,6 +45,9 @@ export default defineConfig({
         allow: [
           '_fetched',
           '__dirname',
+          '__filename',
+          '__sableAndroidBack',
+          '__SABLE_PRELOAD',
           '__WB_MANIFEST',
           '_unstable_sendDelayedEvent',
           '_unstable_getDelayedEvents',
