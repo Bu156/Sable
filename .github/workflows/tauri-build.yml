@@ -122,16 +122,19 @@ jobs:
             asset-platform: macos-universal
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin
+            bundle_path: src-tauri/target/universal-apple-darwin/release/bundle
           - name: Windows
             platform: windows-latest
             asset-platform: windows-x86_64
             rust-targets: ''
             args: ''
+            bundle_path: src-tauri/target/release/bundle
           - name: Linux (CEF)
             platform: ubuntu-22.04
             asset-platform: linux-x86_64
             rust-targets: ''
             cef: true
+            bundle_path: src-tauri/target/release/bundle
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
@@ -218,8 +221,10 @@ jobs:
         shell: bash
         env:
           ASSET_PLATFORM: ${{ matrix.asset-platform }}
+          BUNDLE_PATH: ${{ matrix.bundle_path }}
         run: |
-          find src-tauri/target/release/bundle -type f -print0 \
+          test -d "$BUNDLE_PATH" || { echo "Bundle directory not found: $BUNDLE_PATH" >&2; exit 1; }
+          find "$BUNDLE_PATH" -type f -print0 \
             | while IFS= read -r -d '' path; do
                 case "$path" in
                   *.app.tar.gz.sig) suffix='.app.tar.gz.sig' ;;
@@ -252,8 +257,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE_PATH: ${{ matrix.bundle_path }}
         run: |
-          find src-tauri/target/release/bundle -type f -name 'Sable-*' -print0 \
+          test -d "$BUNDLE_PATH" || { echo "Bundle directory not found: $BUNDLE_PATH" >&2; exit 1; }
+          find "$BUNDLE_PATH" -type f -name 'Sable-*' -print0 \
             | while IFS= read -r -d '' path; do
                 echo "Uploading $path"
                 gh release upload "$TAG" "$path" --clobber
@@ -294,8 +301,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE_PATH: ${{ matrix.bundle_path }}
         run: |
-          BUNDLE="src-tauri/target/release/bundle"
+          BUNDLE="$BUNDLE_PATH"
+          test -d "$BUNDLE" || { echo "Bundle directory not found: $BUNDLE" >&2; exit 1; }
           for f in "$BUNDLE"/deb/Sable-*-linux-x86_64.deb \
                    "$BUNDLE"/rpm/Sable-*-linux-x86_64.rpm \
                    "$BUNDLE"/appimage/Sable-*-linux-x86_64.AppImage \
