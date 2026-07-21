@@ -116,7 +116,11 @@ export function PollEvent({ content, mEvent, mx, room }: PollEventProps) {
   useEffect(() => {
     const handleUpdate = (event: MatrixEvent) => {
       const relation = event.getRelation();
-      if (relation?.event_id === eventId || event.getAssociatedId() === eventId) {
+      if (
+        relation?.event_id === eventId ||
+        event.getAssociatedId() === eventId ||
+        event.getId() === eventId
+      ) {
         setUpdateCounter((c) => c + 1);
       }
     };
