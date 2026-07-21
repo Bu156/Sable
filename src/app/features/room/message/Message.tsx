@@ -834,10 +834,10 @@ function MessageInternal(
   };
 
   const {
-    onPointerDown,
-    onPointerUp,
-    onPointerMove,
-    onPointerCancel,
+    onTouchStart,
+    onTouchEnd,
+    onTouchMove,
+    onTouchCancel,
     firedRef: longPressFiredRef,
     isPressing,
   } = useMobileLongPress(() => {
@@ -935,12 +935,16 @@ function MessageInternal(
       )}
 
       <div
-        style={{ width: '100%' }}
+        style={{
+          width: '100%',
+          WebkitTouchCallout: 'none',
+          WebkitTapHighlightColor: 'transparent',
+        }}
         onContextMenu={handleContextMenu}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerMove={onPointerMove}
-        onPointerCancel={onPointerCancel}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
+        onTouchCancel={onTouchCancel}
       >
         <WrappedMessage
           headerJSX={headerJSX(collapse)}

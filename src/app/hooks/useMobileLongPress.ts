@@ -19,14 +19,15 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     startX.current = null;
   }, []);
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent | PointerEvent) => {
-      if (e.pointerType !== 'touch') return;
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent | TouchEvent) => {
       firedRef.current = false;
       setIsPressing(true);
-      startY.current = e.clientY;
-      startX.current = e.clientX;
-
+      if ('touches' in e && e.touches[0]) {
+        startY.current = e.touches[0].clientY;
+        startX.current = e.touches[0].clientX;
+      }
+      
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
         callback();
@@ -36,18 +37,18 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     [callback, delay]
   );
 
-  const onPointerUp = useCallback(() => {
+  const onTouchEnd = useCallback(() => {
     clear();
   }, [clear]);
 
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent | PointerEvent) => {
-      if (startY.current === null || startX.current === null || e.pointerType !== 'touch') {
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent | TouchEvent) => {
+      if (startY.current === null || startX.current === null || !('touches' in e) || !e.touches[0]) {
         clear();
         return;
       }
-      const diffY = Math.abs(e.clientY - startY.current);
-      const diffX = Math.abs(e.clientX - startX.current);
+      const diffY = Math.abs(e.touches[0].clientY - startY.current);
+      const diffX = Math.abs(e.touches[0].clientX - startX.current);
 
       if (diffY > 10 || diffX > 10) {
         clear();
@@ -55,8 +56,8 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     },
     [clear]
   );
+  
+  const onTouchCancel = useCallback(() => clear(), [clear]);
 
-  const onPointerCancel = useCallback(() => clear(), [clear]);
-
-  return { onPointerDown, onPointerUp, onPointerMove, onPointerCancel, firedRef, isPressing };
+  return { onTouchStart, onTouchEnd, onTouchMove, onTouchCancel, firedRef, isPressing };
 }
