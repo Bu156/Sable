@@ -89,6 +89,8 @@ const buildListRequiredState = (): MSC3575RoomSubscription['required_state'] => 
   [EventType.RoomCanonicalAlias, ''],
   [EventType.RoomJoinRules, ''],
   [EventType.RoomMember, MSC3575_STATE_KEY_ME],
+  [EventType.GroupCallPrefix, ''],
+  [EventType.GroupCallMemberPrefix, MSC3575_WILDCARD],
 ];
 
 const SPACE_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
