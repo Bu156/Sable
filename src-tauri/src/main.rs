@@ -16,14 +16,14 @@ fn main() {
             ],
             deep_link_schemes: vec!["moe.sable.app".into(), "sable".into()],
             command_line_args: vec![
-                ("disable-gpu-sandbox".into(), None),
-                ("disable-font-subpixel-positioning".into(), None),
-                ("enable-font-antialiasing".into(), None),
+                ("--disable-gpu-sandbox".into(), None),
+                ("--disable-font-subpixel-positioning".into(), None),
+                ("--enable-font-antialiasing".into(), None),
                 ("autoplay-policy".into(), Some("no-user-gesture-required".into())),
                 ("enable-features".into(), Some("SharedArrayBuffer".into())),
-                ("disable-background-timer-throttling".into(), None),
-                ("disable-renderer-backgrounding".into(), None),
-                ("disable-backgrounding-occluded-windows".into(), None),
+                ("--disable-background-timer-throttling".into(), None),
+                ("--disable-renderer-backgrounding".into(), None),
+                ("--disable-backgrounding-occluded-windows".into(), None),
                 ("disable-features".into(), Some(
                     "SpareRendererForSitePerProcess,IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,AutofillActorMode,GlicActorUi,LensOverlay".into()
                 )),
@@ -146,12 +146,6 @@ fn main() {
                 std::env::set_var("GST_PLUGIN_SCANNER", scanner.as_os_str());
             }
         }
-    }
-
-    // CEF doesn't init GTK, but the Linux tray menu needs it.
-    #[cfg(all(feature = "cef", target_os = "linux"))]
-    {
-        let _ = gtk::init();
     }
 
     // Deep-link primary: hold the forwarding socket for the process lifetime.
