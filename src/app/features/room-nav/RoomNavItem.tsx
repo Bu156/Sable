@@ -470,7 +470,7 @@ export function RoomNavItem({
           radii="400"
           highlight={shouldShowUnreadIndicator}
           aria-selected={selected}
-          data-hover={!!menuAnchor || isPressing || isMobileMenuOpen}
+          data-hover={!!menuAnchor || isPressing}
           onContextMenu={handleContextMenu}
           {...hoverProps}
           {...focusWithinProps}

@@ -27,7 +27,7 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
         startY.current = e.touches[0].clientY;
         startX.current = e.touches[0].clientX;
       }
-      
+
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
         callback();
@@ -43,7 +43,12 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
 
   const onTouchMove = useCallback(
     (e: React.TouchEvent | TouchEvent) => {
-      if (startY.current === null || startX.current === null || !('touches' in e) || !e.touches[0]) {
+      if (
+        startY.current === null ||
+        startX.current === null ||
+        !('touches' in e) ||
+        !e.touches[0]
+      ) {
         clear();
         return;
       }
@@ -56,7 +61,7 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     },
     [clear]
   );
-  
+
   const onTouchCancel = useCallback(() => clear(), [clear]);
 
   return { onTouchStart, onTouchEnd, onTouchMove, onTouchCancel, firedRef, isPressing };
