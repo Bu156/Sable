@@ -1,5 +1,5 @@
 import type { MouseEventHandler } from 'react';
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RectCords } from 'folds';
 import {
@@ -287,10 +287,7 @@ export function Home() {
     return items;
   }, [mx, rooms, closedCategories, roomToUnread, selectedRoomId, isShowingAllRoomsInHome]);
 
-  const getItemKey = useCallback(
-    (index: number) => sortedRooms[index] ?? index,
-    [sortedRooms]
-  );
+  const getItemKey = useCallback((index: number) => sortedRooms[index] ?? index, [sortedRooms]);
 
   const virtualizer = useVirtualizer({
     count: sortedRooms.length,

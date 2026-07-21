@@ -38,7 +38,7 @@ import { VirtualTile } from '$components/virtualizer';
 import { spaceRoomsAtom } from '$state/spaceRooms';
 import { RoomNavCategoryButton, RoomNavItem } from '$features/room-nav';
 import { SpaceNavItem } from '$features/space-nav';
-import { makeNavCategoryId, getNavCategoryIdParts } from '$state/closedNavCategories';
+import { makeNavCategoryId } from '$state/closedNavCategories';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useCategoryHandler } from '$hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '$hooks/useNavToActivePathMapper';
@@ -580,17 +580,7 @@ export function Space() {
   );
 
   const closedCategoriesCache = useRef(new Map());
-  const ancestorsCollapsedCache = useRef(new Map());
-  const prevSpaceIdRef = useRef(space.roomId);
-  if (prevSpaceIdRef.current !== space.roomId) {
-    prevSpaceIdRef.current = space.roomId;
-    closedCategoriesCache.current.clear();
-    ancestorsCollapsedCache.current.clear();
-  }
-  useEffect(() => {
-    closedCategoriesCache.current.clear();
-    ancestorsCollapsedCache.current.clear();
-  }, [closedCategories, roomToParents, getRoom, space.roomId]);
+  closedCategoriesCache.current.clear();
 
   /**
    * Recursively checks if a given parentId (or all its ancestors) is in a closed category.
@@ -675,32 +665,6 @@ export function Space() {
     },
     [roomToUnread, selectedRoomId, roomToChildren]
   );
-
-  /**
-   * Determines whether all parent categories are collapsed.
-   *
-   * @param spaceId - The root space ID.
-   * @param roomId - The room ID to start the check from.
-   * @returns True if every parent category is collapsed; false otherwise.
-   */
-  const getAllAncestorsCollapsed = (spaceId: string, roomId: string): boolean => {
-    const categoryId = makeNavCategoryId(spaceId, roomId);
-    if (ancestorsCollapsedCache.current.has(categoryId)) {
-      return ancestorsCollapsedCache.current.get(categoryId);
-    }
-
-    const parentIds = roomToParents.get(roomId);
-    if (!parentIds || parentIds.size === 0) {
-      ancestorsCollapsedCache.current.set(categoryId, false);
-      return false;
-    }
-
-    const allCollapsed = !Array.from(parentIds).some(
-      (id) => !getInClosedCategories(spaceId, id, roomId)
-    );
-    ancestorsCollapsedCache.current.set(categoryId, allCollapsed);
-    return allCollapsed;
-  };
 
   /**
    * Determines the depth limit for the joined space hierarchy and the SpaceNavItems to start appearing
@@ -866,18 +830,9 @@ export function Space() {
 
   const virtualizedItems = virtualizer.getVirtualItems();
 
-  const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) => {
-    const collapsed = closedCategories.has(categoryId);
-    const [spaceId, roomId] = getNavCategoryIdParts(categoryId);
-
-    // Only prevent collapsing if all parents are collapsed
-    const toggleable = !getAllAncestorsCollapsed(spaceId, roomId);
-
-    if (toggleable) {
-      return collapsed;
-    }
-    return !collapsed;
-  });
+  const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
+    closedCategories.has(categoryId)
+  );
 
   const getToLink = (roomId: string) =>
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
@@ -1024,11 +979,7 @@ export function Space() {
                 }
 
                 return (
-                  <VirtualTile
-                    virtualItem={vItem}
-                    key={vItem.key}
-                    ref={virtualizer.measureElement}
-                  >
+                  <VirtualTile virtualItem={vItem} key={vItem.key} ref={virtualizer.measureElement}>
                     <div
                       style={
                         hideText

@@ -189,9 +189,8 @@ describe('useRenderableMediaUrl', () => {
     platform.hasServiceWorker.mockReturnValue(false);
     platform.hasControllingServiceWorker.mockReturnValue(false);
     mediaTransport.fetchMediaBlob.mockResolvedValue(new Blob(['media'], { type: 'image/png' }));
-    const { useRenderableMediaUrl, clearRenderableMediaUrlCache } = await import(
-      './useRenderableMediaUrl'
-    );
+    const { useRenderableMediaUrl, clearRenderableMediaUrlCache } =
+      await import('./useRenderableMediaUrl');
 
     const first = renderHook(() => useRenderableMediaUrl('https://example.org/media.png'));
     const second = renderHook(() => useRenderableMediaUrl('https://example.org/media.png'));
