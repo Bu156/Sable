@@ -11,6 +11,7 @@ const platform = vi.hoisted(() => ({
 const mediaTransport = vi.hoisted(() => ({
   fetchMediaBlob: vi.fn<(url: string) => Promise<Blob>>(),
   getCurrentMediaSessionScope: vi.fn<() => string>(() => 'anonymous'),
+  getStableMediaCacheKeyFragment: vi.fn<(url: string) => string>((url) => url),
 }));
 
 const tauriApi = vi.hoisted(() => ({

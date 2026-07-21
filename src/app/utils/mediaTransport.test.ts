@@ -99,6 +99,7 @@ describe('fetchMediaBlob', () => {
         ])
       );
       localStorage.setItem('matrixActiveSession', '@bob:example.org');
+      window.dispatchEvent(new Event('sable-session-changed'));
 
       const bobBlob = new Blob(['bob'], { type: 'image/png' });
       vi.mocked(fetch).mockResolvedValueOnce(new Response(bobBlob, { status: 200 }));
