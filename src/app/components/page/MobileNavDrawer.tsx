@@ -187,7 +187,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
       if (!mobileGestures || width === 0) return;
 
       const target = event?.target;
-      if (target instanceof HTMLElement && target.closest('[data-gestures="ignore"]')) {
+      if (first && target instanceof HTMLElement && target.closest('[data-gestures="ignore"]')) {
         cancel();
         return;
       }

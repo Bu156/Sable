@@ -20,9 +20,10 @@ export function SwipeableOverlayWrapper({
   const x = useMotionValue(0);
 
   const bind = useDrag(
-    ({ first, active, offset: [ox], velocity: [vx], direction: [dx], event }) => {
-      if (event && 'target' in event && event.target instanceof HTMLElement) {
+    ({ first, active, offset: [ox], velocity: [vx], direction: [dx], event, cancel }) => {
+      if (first && event && 'target' in event && event.target instanceof HTMLElement) {
         if (event.target.closest('[data-gestures="ignore"]')) {
+          cancel();
           return;
         }
       }
