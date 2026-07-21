@@ -692,15 +692,26 @@ function validMediaRequest(url: string, baseUrl: string): boolean {
 }
 
 function fetchConfig(token: string, request?: Request): RequestInit {
-  const headers = new Headers(request?.headers);
+  const headers = new Headers();
   headers.set('Authorization', `Bearer ${token}`);
+  const range = request?.headers.get('Range');
+  if (range) {
+    headers.set('Range', range);
+  }
   return {
     headers,
     cache: 'default',
   };
 }
 
-const inflightMediaFetches = new Map<string, Promise<Response>>();
+type BufferedMediaResponse = {
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  body: ArrayBuffer;
+};
+
+const inflightMediaFetches = new Map<string, Promise<BufferedMediaResponse>>();
 
 function respondWithInflightMedia(
   request: Request,
@@ -711,16 +722,37 @@ function respondWithInflightMedia(
   const key = `${token}\x00${request.url}\x00${redirect}\x00${range}`;
   const existing = inflightMediaFetches.get(key);
   if (existing) {
-    return existing.then((res) => res.clone());
+    return existing.then(
+      (data) =>
+        new Response(data.body, {
+          status: data.status,
+          statusText: data.statusText,
+          headers: data.headers,
+        })
+    );
   }
   // Fetch by URL instead of reusing the subresource Request. Image requests commonly carry
   // mode: "no-cors", which prevents the Authorization header above from reaching the server.
-  // The copied headers still preserve Range for streaming audio and video.
-  const promise = fetch(request.url, { ...fetchConfig(token, request), redirect }).finally(() => {
-    inflightMediaFetches.delete(key);
-  });
+  // Preserve Range header for streaming audio and video.
+  const promise = fetch(request.url, { ...fetchConfig(token, request), redirect })
+    .then(async (res): Promise<BufferedMediaResponse> => ({
+      status: res.status,
+      statusText: res.statusText,
+      headers: [...res.headers],
+      body: await res.arrayBuffer(),
+    }))
+    .finally(() => {
+      inflightMediaFetches.delete(key);
+    });
   inflightMediaFetches.set(key, promise);
-  return promise;
+  return promise.then(
+    (data) =>
+      new Response(data.body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers,
+      })
+  );
 }
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
