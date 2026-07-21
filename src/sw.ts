@@ -700,6 +700,25 @@ function fetchConfig(token: string): RequestInit {
   };
 }
 
+const inflightMediaFetches = new Map<string, Promise<Response>>();
+
+function respondWithInflightMedia(
+  url: string,
+  token: string,
+  redirect: RequestRedirect
+): Promise<Response> {
+  const key = `${token}\x00${url}\x00${redirect}`;
+  const existing = inflightMediaFetches.get(key);
+  if (existing) {
+    return existing.then((res) => res.clone());
+  }
+  const promise = fetch(url, { ...fetchConfig(token), redirect }).finally(() => {
+    inflightMediaFetches.delete(key);
+  });
+  inflightMediaFetches.set(key, promise);
+  return promise;
+}
+
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (event.data.type === 'togglePush') {
     const token = event.data?.token;
@@ -749,7 +768,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const session = clientId ? sessions.get(clientId) : undefined;
   if (session && validMediaRequest(url, session.baseUrl)) {
-    event.respondWith(fetch(url, { ...fetchConfig(session.accessToken), redirect }));
+    event.respondWith(respondWithInflightMedia(url, session.accessToken, redirect));
     return;
   }
 
@@ -769,7 +788,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       ? preloadedSession
       : undefined);
   if (byBaseUrl) {
-    event.respondWith(fetch(url, { ...fetchConfig(byBaseUrl.accessToken), redirect }));
+    event.respondWith(respondWithInflightMedia(url, byBaseUrl.accessToken, redirect));
     return;
   }
 
@@ -779,10 +798,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       loadPersistedSession().then((persisted) => {
         if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-          return fetch(url, {
-            ...fetchConfig(persisted.accessToken),
-            redirect,
-          });
+          return respondWithInflightMedia(url, persisted.accessToken, redirect);
         }
         return fetch(event.request);
       })
@@ -794,13 +810,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     requestSessionWithTimeout(clientId).then(async (s) => {
       // Primary: session received from the live client window.
       if (s && validMediaRequest(url, s.baseUrl)) {
-        return fetch(url, { ...fetchConfig(s.accessToken), redirect });
+        return respondWithInflightMedia(url, s.accessToken, redirect);
       }
       // Fallback: try the persisted session (helps when SW restarts on iOS and
       // the client window hasn't responded to requestSession yet).
       const persisted = await loadPersistedSession();
       if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-        return fetch(url, { ...fetchConfig(persisted.accessToken), redirect });
+        return respondWithInflightMedia(url, persisted.accessToken, redirect);
       }
       console.warn(
         '[SW fetch] No valid session for media request',
