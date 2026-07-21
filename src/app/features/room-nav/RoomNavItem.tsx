@@ -351,7 +351,13 @@ export function RoomNavItem({
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const { onTouchStart, onTouchEnd, onTouchMove, firedRef: longPressFiredRef } = useMobileLongPress(() => {
+  const {
+    onTouchStart,
+    onTouchEnd,
+    onTouchMove,
+    firedRef: longPressFiredRef,
+    isPressing,
+  } = useMobileLongPress(() => {
     setIsMobileMenuOpen(true);
   });
 
@@ -458,7 +464,7 @@ export function RoomNavItem({
           radii="400"
           highlight={shouldShowUnreadIndicator}
           aria-selected={selected}
-          data-hover={!!menuAnchor}
+          data-hover={!!menuAnchor || isPressing || isMobileMenuOpen}
           onContextMenu={handleContextMenu}
           {...hoverProps}
           {...focusWithinProps}

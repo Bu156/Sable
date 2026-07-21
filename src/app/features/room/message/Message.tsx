@@ -838,6 +838,7 @@ function MessageInternal(
     onTouchEnd,
     onTouchMove,
     firedRef: longPressFiredRef,
+    isPressing,
   } = useMobileLongPress(() => {
     if (!edit) openMobileOptions();
   });
@@ -898,7 +899,7 @@ function MessageInternal(
       collapse={collapse}
       highlight={highlight}
       notifyHighlight={highlightMentions ? notifyHighlight : undefined}
-      selected={!!menuAnchor || isEmoji}
+      selected={!!menuAnchor || isEmoji || isPressing}
       isMarked={isMarked}
       mobile={mobileOrTablet()}
       {...props}
