@@ -7,19 +7,19 @@
 
 @media (hover: none) {
   html body button:active,
-  html body [role="button"]:active,
-  html body [class*="Button"]:active,
-  html body [class*="Chip"]:active,
-  html body [class*="MenuItem"]:active {
+  html body [role='button']:active,
+  html body [class*='Button']:active,
+  html body [class*='Chip']:active,
+  html body [class*='MenuItem']:active {
     transform: none !important;
     background-color: inherit !important;
   }
 
   html body button:hover,
-  html body [role="button"]:hover,
-  html body [class*="Button"]:hover,
-  html body [class*="Chip"]:hover,
-  html body [class*="MenuItem"]:hover {
+  html body [role='button']:hover,
+  html body [class*='Button']:hover,
+  html body [class*='Chip']:hover,
+  html body [class*='MenuItem']:hover {
     transform: none !important;
     background-color: inherit !important;
   }
