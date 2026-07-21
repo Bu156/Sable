@@ -38,7 +38,7 @@ import { VirtualTile } from '$components/virtualizer';
 import { spaceRoomsAtom } from '$state/spaceRooms';
 import { RoomNavCategoryButton, RoomNavItem } from '$features/room-nav';
 import { SpaceNavItem } from '$features/space-nav';
-import { makeNavCategoryId, getNavCategoryIdParts } from '$state/closedNavCategories';
+import { makeNavCategoryId } from '$state/closedNavCategories';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useCategoryHandler } from '$hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '$hooks/useNavToActivePathMapper';
@@ -580,11 +580,7 @@ export function Space() {
   );
 
   const closedCategoriesCache = useRef(new Map());
-  const ancestorsCollapsedCache = useRef(new Map());
-  useEffect(() => {
-    closedCategoriesCache.current.clear();
-    ancestorsCollapsedCache.current.clear();
-  }, [closedCategories, roomToParents, getRoom]);
+  closedCategoriesCache.current.clear();
 
   /**
    * Recursively checks if a given parentId (or all its ancestors) is in a closed category.
@@ -669,32 +665,6 @@ export function Space() {
     },
     [roomToUnread, selectedRoomId, roomToChildren]
   );
-
-  /**
-   * Determines whether all parent categories are collapsed.
-   *
-   * @param spaceId - The root space ID.
-   * @param roomId - The room ID to start the check from.
-   * @returns True if every parent category is collapsed; false otherwise.
-   */
-  const getAllAncestorsCollapsed = (spaceId: string, roomId: string): boolean => {
-    const categoryId = makeNavCategoryId(spaceId, roomId);
-    if (ancestorsCollapsedCache.current.has(categoryId)) {
-      return ancestorsCollapsedCache.current.get(categoryId);
-    }
-
-    const parentIds = roomToParents.get(roomId);
-    if (!parentIds || parentIds.size === 0) {
-      ancestorsCollapsedCache.current.set(categoryId, false);
-      return false;
-    }
-
-    const allCollapsed = !Array.from(parentIds).some(
-      (id) => !getInClosedCategories(spaceId, id, roomId)
-    );
-    ancestorsCollapsedCache.current.set(categoryId, allCollapsed);
-    return allCollapsed;
-  };
 
   /**
    * Determines the depth limit for the joined space hierarchy and the SpaceNavItems to start appearing
@@ -841,27 +811,28 @@ export function Space() {
     )
   );
 
+  const getItemKey = useCallback(
+    (index: number) => {
+      const item = hierarchy[index];
+      if (!item) return index;
+      return `${space.roomId}:${item.roomId}:${item.depth}`;
+    },
+    [hierarchy, space.roomId]
+  );
+
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 32,
     overscan: 10,
+    getItemKey,
   });
 
   const virtualizedItems = virtualizer.getVirtualItems();
 
-  const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) => {
-    const collapsed = closedCategories.has(categoryId);
-    const [spaceId, roomId] = getNavCategoryIdParts(categoryId);
-
-    // Only prevent collapsing if all parents are collapsed
-    const toggleable = !getAllAncestorsCollapsed(spaceId, roomId);
-
-    if (toggleable) {
-      return collapsed;
-    }
-    return !collapsed;
-  });
+  const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
+    closedCategories.has(categoryId)
+  );
 
   const getToLink = (roomId: string) =>
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
@@ -956,7 +927,7 @@ export function Space() {
                   return (
                     <VirtualTile
                       virtualItem={vItem}
-                      key={vItem.index}
+                      key={vItem.key}
                       ref={virtualizer.measureElement}
                     >
                       <div
@@ -989,7 +960,7 @@ export function Space() {
                   return (
                     <VirtualTile
                       virtualItem={vItem}
-                      key={vItem.index}
+                      key={vItem.key}
                       ref={virtualizer.measureElement}
                     >
                       <div style={hideText ? { paddingTop: '0' } : { paddingTop, paddingLeft }}>
@@ -1008,11 +979,7 @@ export function Space() {
                 }
 
                 return (
-                  <VirtualTile
-                    virtualItem={vItem}
-                    key={vItem.index}
-                    ref={virtualizer.measureElement}
-                  >
+                  <VirtualTile virtualItem={vItem} key={vItem.key} ref={virtualizer.measureElement}>
                     <div
                       style={
                         hideText

@@ -24,6 +24,22 @@ type ResolvedMediaUrlState = {
 
 const objectUrlCache = new Map<string, ObjectUrlEntry>();
 const inflightRequests = new Map<string, Promise<string>>();
+const unreferencedCacheKeys: string[] = [];
+const MAX_UNREFERENCED_CACHE_SIZE = 200;
+
+function pruneUnreferencedCache(): void {
+  while (unreferencedCacheKeys.length > MAX_UNREFERENCED_CACHE_SIZE) {
+    const oldestKey = unreferencedCacheKeys.shift();
+    if (!oldestKey) break;
+    const entry = objectUrlCache.get(oldestKey);
+    if (entry && entry.refs === 0 && entry.settled) {
+      if (entry.objectUrl) {
+        URL.revokeObjectURL(entry.objectUrl);
+      }
+      objectUrlCache.delete(oldestKey);
+    }
+  }
+}
 
 function getObjectUrlCacheKey(sessionScope: string, url: string): string {
   return `${sessionScope}\x00${getStableMediaCacheKeyFragment(url)}`;
@@ -63,8 +79,10 @@ function createObjectUrlEntry(cacheKey: string, url: string): ObjectUrlEntry {
       entry.settled = true;
       inflightRequests.delete(cacheKey);
       if (entry.refs === 0 && entry.objectUrl) {
-        URL.revokeObjectURL(entry.objectUrl);
-        objectUrlCache.delete(cacheKey);
+        if (!unreferencedCacheKeys.includes(cacheKey)) {
+          unreferencedCacheKeys.push(cacheKey);
+        }
+        pruneUnreferencedCache();
       }
     });
 
@@ -77,6 +95,10 @@ function createObjectUrlEntry(cacheKey: string, url: string): ObjectUrlEntry {
 function retainObjectUrlEntry(cacheKey: string, url: string): ObjectUrlEntry {
   const entry = objectUrlCache.get(cacheKey) ?? createObjectUrlEntry(cacheKey, url);
   entry.refs += 1;
+  const unrefIndex = unreferencedCacheKeys.indexOf(cacheKey);
+  if (unrefIndex !== -1) {
+    unreferencedCacheKeys.splice(unrefIndex, 1);
+  }
   return entry;
 }
 
@@ -86,10 +108,21 @@ function releaseObjectUrlEntry(cacheKey: string): void {
 
   entry.refs -= 1;
   if (entry.refs > 0 || !entry.settled) return;
-  if (entry.objectUrl) {
-    URL.revokeObjectURL(entry.objectUrl);
+
+  if (!unreferencedCacheKeys.includes(cacheKey)) {
+    unreferencedCacheKeys.push(cacheKey);
   }
-  objectUrlCache.delete(cacheKey);
+  pruneUnreferencedCache();
+}
+
+export function clearRenderableMediaUrlCache(): void {
+  for (const [cacheKey, entry] of Array.from(objectUrlCache.entries())) {
+    if (entry.refs === 0 && entry.settled && entry.objectUrl) {
+      URL.revokeObjectURL(entry.objectUrl);
+      objectUrlCache.delete(cacheKey);
+    }
+  }
+  unreferencedCacheKeys.length = 0;
 }
 
 export function getRenderableMediaUrlStats(): { cacheSize: number; inflightCount: number } {
@@ -110,10 +143,13 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
   );
   const needsBlob = !usesControlledServiceWorker;
   const usesExistingObjectUrl = renderableUrl?.startsWith('blob:') ?? false;
-  const [resolvedState, setResolvedState] = useState<ResolvedMediaUrlState>(() => ({
-    cacheKey: objectUrlCacheKey,
-    url: needsBlob && !usesExistingObjectUrl ? undefined : renderableUrl,
-  }));
+  const [resolvedState, setResolvedState] = useState<ResolvedMediaUrlState>(() => {
+    const cachedEntry = objectUrlCacheKey ? objectUrlCache.get(objectUrlCacheKey) : undefined;
+    return {
+      cacheKey: objectUrlCacheKey,
+      url: needsBlob && !usesExistingObjectUrl ? cachedEntry?.objectUrl : renderableUrl,
+    };
+  });
 
   useEffect(() => {
     if (tauri) return undefined;

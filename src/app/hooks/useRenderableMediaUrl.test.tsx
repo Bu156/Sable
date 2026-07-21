@@ -185,11 +185,12 @@ describe('useRenderableMediaUrl', () => {
     );
   });
 
-  it('revokes the object url when the last consumer unmounts', async () => {
+  it('retains the object url in LRU cache when consumers unmount and revokes on cache clear', async () => {
     platform.hasServiceWorker.mockReturnValue(false);
     platform.hasControllingServiceWorker.mockReturnValue(false);
     mediaTransport.fetchMediaBlob.mockResolvedValue(new Blob(['media'], { type: 'image/png' }));
-    const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
+    const { useRenderableMediaUrl, clearRenderableMediaUrlCache } =
+      await import('./useRenderableMediaUrl');
 
     const first = renderHook(() => useRenderableMediaUrl('https://example.org/media.png'));
     const second = renderHook(() => useRenderableMediaUrl('https://example.org/media.png'));
@@ -203,6 +204,9 @@ describe('useRenderableMediaUrl', () => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
 
     second.unmount();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    clearRenderableMediaUrlCache();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:rendered-media');
   });
 
