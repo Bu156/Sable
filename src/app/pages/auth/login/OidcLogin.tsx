@@ -26,6 +26,8 @@ const oidcErrorMessage = (error: unknown): string => {
       return 'Sign-in could not be completed. Please try again.';
     case OidcLoginError.MissingDeviceId:
       return 'The homeserver did not grant a device for this session.';
+    case OidcLoginError.MissingRefreshToken:
+      return 'The authorization server did not issue the required refresh token.';
     default:
       return 'Failed to sign in with single sign-on.';
   }

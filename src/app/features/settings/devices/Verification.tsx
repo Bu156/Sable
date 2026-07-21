@@ -35,8 +35,7 @@ import {
 } from '$components/DeviceVerificationSetup';
 import { stopPropagation } from '$utils/keyboard';
 import { useAuthMetadata } from '$hooks/useAuthMetadata';
-import { withSearchParam } from '$pages/pathUtils';
-import { useAccountManagementActions } from '$hooks/useAccountManagement';
+import { getAccountManagementUrl, useAccountManagementActions } from '$hooks/useAccountManagement';
 
 type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
@@ -273,11 +272,8 @@ export function DeviceVerificationOptions() {
   const handleReset = () => {
     setMenuCords(undefined);
 
-    if (authMetadata) {
-      const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
-      const url = withSearchParam(authUrl, {
-        action: accountManagementActions.crossSigningReset,
-      });
+    const url = getAccountManagementUrl(authMetadata, accountManagementActions.crossSigningReset);
+    if (url) {
       if (isTauri()) {
         import('@tauri-apps/plugin-opener')
           .then(({ openUrl }) => openUrl(url))

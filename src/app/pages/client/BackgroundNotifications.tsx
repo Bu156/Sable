@@ -91,7 +91,7 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
     userId: session.userId,
     deviceId: session.deviceId,
   });
-  const tokenRefresher = await createSessionTokenRefresher(session, tempClient);
+  const tokenRefresher = createSessionTokenRefresher(session, tempClient);
 
   const mx = createClient({
     baseUrl: session.baseUrl,

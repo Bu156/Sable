@@ -10,21 +10,20 @@ import {
   IndexedDBStore,
   IndexedDBCryptoStore,
   KnownMembership,
-  OAuth2,
   SyncState,
 } from '$types/matrix-sdk';
 import { fetch } from '$utils/fetch';
 import { clearMediaCache } from '$utils/mediaCache';
-import { getAppOrigin } from '$utils/platform';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
 import type { Session, SessionStoreName } from '$state/sessions';
-import { getSessionStoreName } from '$state/sessions';
+import { getSessionStoreName, getStoredSessionRefreshToken } from '$state/sessions';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
-import { createSessionTokenRefresher } from './oidcTokenRefresher';
+import { assertAuthMetadataIssuer, createSessionTokenRefresher } from './oidcTokenRefresher';
+import { revokeOAuthToken } from './oauthTokenRevocation';
 import { cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
@@ -252,7 +251,7 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
     userId: session.userId,
     deviceId: session.deviceId,
   });
-  const tokenRefresher = await createSessionTokenRefresher(session, tempClient);
+  const tokenRefresher = createSessionTokenRefresher(session, tempClient);
 
   const mx = createClient({
     baseUrl: session.baseUrl,
@@ -553,24 +552,23 @@ export const getClientSyncDiagnostics = (mx: MatrixClient): ClientSyncDiagnostic
 };
 
 const revokeOidcSession = async (mx: MatrixClient, session: Session): Promise<void> => {
-  const clientId = session.oidc?.clientId;
-  if (!clientId) return;
+  const oidc = session.oidc;
+  if (!oidc) return;
   const metadata = await mx.getAuthMetadata();
+  assertAuthMetadataIssuer(oidc.issuer, metadata);
 
-  const oauth2 = new OAuth2(metadata, {
-    clientId,
-    redirectUri: getAppOrigin(),
-    deviceId: session.deviceId,
-  });
+  const refreshToken = getStoredSessionRefreshToken(session.userId) ?? session.refreshToken;
+  const token = refreshToken ?? mx.getAccessToken() ?? undefined;
+  if (!token) return;
 
-  const accessToken = mx.getAccessToken() ?? undefined;
-  const results = await Promise.allSettled([
-    session.refreshToken
-      ? oauth2.revokeToken(session.refreshToken, 'refresh_token')
-      : Promise.resolve(),
-    accessToken ? oauth2.revokeToken(accessToken, 'access_token') : Promise.resolve(),
-  ]);
-  if (results.some((r) => r.status === 'rejected')) {
+  try {
+    await revokeOAuthToken(
+      metadata,
+      oidc.clientId,
+      token,
+      refreshToken ? 'refresh_token' : 'access_token'
+    );
+  } catch {
     debugLog.warn('general', 'OIDC token revocation had failures', { userId: session.userId });
   }
 };

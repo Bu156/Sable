@@ -11,19 +11,25 @@ import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { pushSessionToSW } from '../sw-session';
 import { getAppOrigin } from '$utils/platform';
 
-export const createSessionTokenRefresher = async (
+export const assertAuthMetadataIssuer = (
+  expectedIssuer: string,
+  metadata: ValidatedAuthMetadata
+): void => {
+  if (metadata.issuer !== expectedIssuer) {
+    throw new Error(
+      `OAuth issuer changed for the stored session: expected ${expectedIssuer}, received ${metadata.issuer}`
+    );
+  }
+};
+
+export type SessionTokenRefresher = Pick<TokenRefresher, 'tokenRefreshFunction'>;
+
+export const createSessionTokenRefresher = (
   session: Session,
   mx: MatrixClient
-): Promise<TokenRefresher | undefined> => {
-  if (!session.oidc || !session.refreshToken) return undefined;
-
-  const metadata: ValidatedAuthMetadata = await mx.getAuthMetadata();
-
-  const oauth2 = new OAuth2(metadata, {
-    clientId: session.oidc.clientId,
-    redirectUri: getAppOrigin(),
-    deviceId: session.deviceId,
-  });
+): SessionTokenRefresher | undefined => {
+  const { oidc } = session;
+  if (!oidc || !session.refreshToken) return undefined;
 
   const onRefresh = async (tokens: AccessTokens): Promise<void> => {
     updateSessionTokens(session.userId, {
@@ -38,10 +44,39 @@ export const createSessionTokenRefresher = async (
     }
   };
 
-  const tokenRefresher = new TokenRefresher(oauth2, onRefresh);
-  const refresh = tokenRefresher.tokenRefreshFunction;
-  // Another tab may have rotated the token; reusing a consumed one revokes the session.
-  tokenRefresher.tokenRefreshFunction = (refreshToken) =>
-    refresh(getStoredSessionRefreshToken(session.userId) ?? refreshToken);
-  return tokenRefresher;
+  let tokenRefresherPromise: Promise<TokenRefresher> | undefined;
+  const getTokenRefresher = (): Promise<TokenRefresher> => {
+    if (!tokenRefresherPromise) {
+      tokenRefresherPromise = mx
+        .getAuthMetadata()
+        .then((metadata: ValidatedAuthMetadata) => {
+          assertAuthMetadataIssuer(oidc.issuer, metadata);
+          const oauth2 = new OAuth2(metadata, {
+            clientId: oidc.clientId,
+            redirectUri: getAppOrigin(),
+            deviceId: session.deviceId,
+          });
+          return new TokenRefresher(oauth2, onRefresh);
+        })
+        .catch((error: unknown) => {
+          tokenRefresherPromise = undefined;
+          throw error;
+        });
+    }
+    return tokenRefresherPromise;
+  };
+
+  return {
+    tokenRefreshFunction: async (refreshToken) => {
+      const tokenRefresher = await getTokenRefresher();
+      // Another tab may have rotated the token; reusing a consumed one revokes the session.
+      const latestRefreshToken = getStoredSessionRefreshToken(session.userId) ?? refreshToken;
+      const tokens = await tokenRefresher.tokenRefreshFunction(latestRefreshToken);
+      return {
+        ...tokens,
+        // OAuth servers may omit a replacement refresh token, in which case the old one remains valid.
+        refreshToken: tokens.refreshToken ?? latestRefreshToken,
+      };
+    },
+  };
 };

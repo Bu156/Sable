@@ -10,11 +10,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { createLogger } from '$utils/debug';
 import { fetch } from '$utils/fetch';
 import type { Session } from '$state/sessions';
-import {
-  TAURI_OIDC_CLIENT_URI,
-  buildTauriOidcRedirectUrl,
-  rememberTauriOidcServer,
-} from '$pages/auth/SSOTauri';
+import { TAURI_OIDC_CLIENT_URI, buildTauriOidcRedirectUrl } from '$pages/auth/SSOTauri';
 
 const log = createLogger('oidcLogin');
 
@@ -22,9 +18,9 @@ const CLIENT_NAME = 'Sable';
 
 export enum OidcLoginError {
   RegistrationFailed = 'RegistrationFailed',
-  UserCancelled = 'UserCancelled',
   CodeExchangeFailed = 'CodeExchangeFailed',
   MissingDeviceId = 'MissingDeviceId',
+  MissingRefreshToken = 'MissingRefreshToken',
   MissingOauthContext = 'MissingOauthContext',
   Unknown = 'Unknown',
 }
@@ -36,32 +32,45 @@ export class OidcLoginFailure extends Error {
   }
 }
 
-const OAUTH_CONTEXT_KEY = 'oauth_login_context';
+const OAUTH_CONTEXT_KEY_PREFIX = 'oauth_login_context:';
 
 type OauthLoginContext = {
-  metadata: ValidatedAuthMetadata;
+  issuer: string;
   clientId: string;
   redirectUri: string;
   deviceId?: string;
   codeVerifier?: string;
   homeserverUrl: string;
+  server?: string;
 };
 
-const persistOauthContext = (state: string, ctx: OauthLoginContext): void => {
-  sessionStorage.setItem(OAUTH_CONTEXT_KEY, JSON.stringify({ state, ...ctx }));
+const oauthContextKey = (state: string): string => `${OAUTH_CONTEXT_KEY_PREFIX}${state}`;
+
+export const persistOauthContext = (state: string, ctx: OauthLoginContext): void => {
+  // A public OAuth client must retain its one-time PKCE verifier across the full-page redirect.
+  // This per-tab context contains no access token, refresh token, or user credentials and is
+  // removed before code exchange. Encrypting it with a key available to the same origin would
+  // not protect against an attacker capable of reading sessionStorage.
+  sessionStorage.setItem(oauthContextKey(state), JSON.stringify(ctx));
 };
 
-const consumeOauthContext = (state: string): OauthLoginContext | undefined => {
-  const raw = sessionStorage.getItem(OAUTH_CONTEXT_KEY);
+export const consumeOauthContext = (state: string): OauthLoginContext | undefined => {
+  const key = oauthContextKey(state);
+  const raw = sessionStorage.getItem(key);
   if (!raw) return undefined;
+  sessionStorage.removeItem(key);
   try {
-    const stored = JSON.parse(raw) as OauthLoginContext & { state: string };
-    if (stored.state !== state) return undefined;
-    sessionStorage.removeItem(OAUTH_CONTEXT_KEY);
-    const { state: _state, ...ctx } = stored;
-    return ctx;
+    return JSON.parse(raw) as OauthLoginContext;
   } catch {
-    sessionStorage.removeItem(OAUTH_CONTEXT_KEY);
+    return undefined;
+  }
+};
+
+export const getOauthContextServer = (state: string): string | undefined => {
+  try {
+    const raw = sessionStorage.getItem(oauthContextKey(state));
+    return raw ? (JSON.parse(raw) as OauthLoginContext).server : undefined;
+  } catch {
     return undefined;
   }
 };
@@ -91,19 +100,23 @@ export const startOidcLogin = async (
   const state = crypto.randomUUID();
   const oauth2 = new OAuth2(authMetadata, { clientId, redirectUri: effectiveRedirectUri });
 
+  const authUrl = await oauth2.generateAuthorizationCodeGrantUrl(
+    state,
+    tauri ? 'query' : 'fragment',
+    opts?.prompt
+  );
+
   persistOauthContext(state, {
-    metadata: authMetadata,
+    issuer: authMetadata.issuer,
     clientId,
     redirectUri: effectiveRedirectUri,
     deviceId: oauth2.context.deviceId,
     codeVerifier: oauth2.context.codeVerifier,
     homeserverUrl,
+    server: opts?.server,
   });
 
-  const authUrl = await oauth2.generateAuthorizationCodeGrantUrl(state, 'query', opts?.prompt);
-
   if (tauri) {
-    rememberTauriOidcServer(opts?.server);
     await openUrl(authUrl);
     return;
   }
@@ -121,6 +134,13 @@ export const expiresInMsFromToken = (token: BearerTokenResponse): number | undef
   return undefined;
 };
 
+export const requireRefreshToken = (token: BearerTokenResponse): string => {
+  if (!token.refresh_token) {
+    throw new OidcLoginFailure(OidcLoginError.MissingRefreshToken);
+  }
+  return token.refresh_token;
+};
+
 export type OidcLoginResult = {
   baseUrl: string;
   session: Session;
@@ -133,7 +153,14 @@ export const completeOidcLogin = async (code: string, state: string): Promise<Oi
     throw new OidcLoginFailure(OidcLoginError.MissingOauthContext);
   }
 
-  const oauth2 = new OAuth2(ctx.metadata, {
+  const mx = createClient({ baseUrl: ctx.homeserverUrl, fetchFn: fetch });
+  const [metadataErr, metadata] = await to(mx.getAuthMetadata());
+  if (metadataErr || !metadata || metadata.issuer !== ctx.issuer) {
+    log.error('OAuth2 auth metadata changed during login', metadataErr);
+    throw new OidcLoginFailure(OidcLoginError.CodeExchangeFailed);
+  }
+
+  const oauth2 = new OAuth2(metadata, {
     clientId: ctx.clientId,
     redirectUri: ctx.redirectUri,
     deviceId: ctx.deviceId,
@@ -146,11 +173,7 @@ export const completeOidcLogin = async (code: string, state: string): Promise<Oi
     throw new OidcLoginFailure(OidcLoginError.CodeExchangeFailed);
   }
 
-  const mx = createClient({
-    baseUrl: ctx.homeserverUrl,
-    fetchFn: fetch,
-    accessToken: tokenResponse.access_token,
-  });
+  mx.setAccessToken(tokenResponse.access_token);
   const [whoamiErr, whoami] = await to(mx.whoami());
   if (whoamiErr || !whoami?.user_id) {
     log.error('OAuth2 whoami failed', whoamiErr);
@@ -168,10 +191,10 @@ export const completeOidcLogin = async (code: string, state: string): Promise<Oi
     userId: whoami.user_id,
     deviceId,
     accessToken: tokenResponse.access_token,
-    refreshToken: tokenResponse.refresh_token,
+    refreshToken: requireRefreshToken(tokenResponse),
     expiresInMs: expiresInMsFromToken(tokenResponse),
     oidc: {
-      issuer: ctx.metadata.issuer,
+      issuer: ctx.issuer,
       clientId: ctx.clientId,
     },
   };

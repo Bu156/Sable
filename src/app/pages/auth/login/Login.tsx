@@ -125,8 +125,10 @@ export function Login() {
 
   const oidcCode = searchParams.get('code') ?? undefined;
   const oidcState = searchParams.get('state') ?? undefined;
-  const oidcNotice = external.error
-    ? (external.errorDescription ?? `Sign-in was not completed (${external.error}).`)
+  const oidcError = searchParams.get('error') ?? external.error;
+  const oidcErrorDescription = searchParams.get('error_description') ?? external.errorDescription;
+  const oidcNotice = oidcError
+    ? (oidcErrorDescription ?? `Sign-in was not completed (${oidcError}).`)
     : undefined;
 
   const showOidc = authMetadata !== undefined;

@@ -63,32 +63,15 @@ export const TAURI_OIDC_CLIENT_URI = 'https://app.sable.moe';
 
 const TAURI_OIDC_PROTOCOL = 'moe.sable.app:';
 const TAURI_OIDC_PATH = '/login';
-const TAURI_OIDC_SERVER_KEY = 'sable:tauri-oidc:server';
 
 export const buildTauriOidcRedirectUrl = (): string => `${TAURI_OIDC_PROTOCOL}${TAURI_OIDC_PATH}`;
 
-export const rememberTauriOidcServer = (server?: string): void => {
-  try {
-    if (server) localStorage.setItem(TAURI_OIDC_SERVER_KEY, server);
-    else localStorage.removeItem(TAURI_OIDC_SERVER_KEY);
-  } catch {
-    // ignore storage failures
-  }
-};
-
-export const takeTauriOidcServer = (): string | undefined => {
-  try {
-    const server = localStorage.getItem(TAURI_OIDC_SERVER_KEY) ?? undefined;
-    localStorage.removeItem(TAURI_OIDC_SERVER_KEY);
-    return server;
-  } catch {
-    return undefined;
-  }
-};
-
 export const parseTauriOidcCallback = (
   rawUrl: string
-): { code: string; state: string } | undefined => {
+):
+  | { code: string; state: string }
+  | { error: string; errorDescription?: string; errorUri?: string; state: string }
+  | undefined => {
   try {
     const callbackUrl = new URL(rawUrl);
     if (callbackUrl.protocol !== TAURI_OIDC_PROTOCOL) return undefined;
@@ -96,9 +79,19 @@ export const parseTauriOidcCallback = (
 
     const code = callbackUrl.searchParams.get('code');
     const state = callbackUrl.searchParams.get('state');
-    if (!code || !state) return undefined;
+    if (!state) return undefined;
 
-    return { code, state };
+    if (code) return { code, state };
+
+    const error = callbackUrl.searchParams.get('error');
+    if (!error) return undefined;
+
+    return {
+      error,
+      errorDescription: callbackUrl.searchParams.get('error_description') ?? undefined,
+      errorUri: callbackUrl.searchParams.get('error_uri') ?? undefined,
+      state,
+    };
   } catch {
     return undefined;
   }
