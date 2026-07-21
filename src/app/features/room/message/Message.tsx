@@ -938,7 +938,9 @@ function MessageInternal(
         style={{
           width: '100%',
           WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
           WebkitTapHighlightColor: 'transparent',
+          userSelect: 'none',
         }}
         onContextMenu={handleContextMenu}
         onTouchStart={onTouchStart}

@@ -457,13 +457,7 @@ export function RoomNavItem({
           marginTop: hideText ? toRem(5) : '0',
           userSelect: 'none',
           WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent',
         }}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchMove={onTouchMove}
-        onTouchCancel={onTouchCancel}
       >
         <NavItem
           variant="Background"
@@ -491,9 +485,17 @@ export function RoomNavItem({
               <NavButton
                 onClick={handleNavItemClick}
                 onPointerDown={() => warmupRoomDecryption(mx, room.roomId)}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+                onTouchMove={onTouchMove}
+                onTouchCancel={onTouchCancel}
                 aria-label={ariaLabel}
                 ref={triggerRef}
-                style={hideTextStyling(hideText)}
+                style={{
+                  ...hideTextStyling(hideText),
+                  WebkitTouchCallout: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
               >
                 <NavItemContent style={hideTextStyling(hideText)}>
                   <Box

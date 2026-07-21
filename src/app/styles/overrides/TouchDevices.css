@@ -27,9 +27,4 @@
   html body [data-message-id][data-message-item]:hover {
     background-color: transparent !important;
   }
-
-  * {
-    -webkit-tap-highlight-color: transparent !important;
-    -webkit-touch-callout: none !important;
-  }
 }
