@@ -29,6 +29,7 @@ import { useRevokeObjectURL } from '$hooks/useObjectURL';
 import { validBlurHash } from '$utils/blurHash';
 import * as css from './style.css';
 import { MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME } from '../../../../unstable/prefixes';
+import { hasControllingServiceWorker } from '$utils/platform';
 
 type RenderVideoProps = {
   title: string;
@@ -83,8 +84,8 @@ export const VideoContent = as<'div', VideoContentProps>(
 
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
-        // Stream via the sable-media:// protocol (Range) instead of buffering a blob.
-        if (!encInfo && isTauri()) return mediaUrl;
+        // Native media and service-worker-authenticated browser media can stream with Range requests.
+        if (!encInfo && (isTauri() || hasControllingServiceWorker())) return mediaUrl;
         const fileContent = encInfo
           ? await downloadEncryptedMedia(mediaUrl, (encBuf) =>
               decryptFile(encBuf, mimeType, encInfo)

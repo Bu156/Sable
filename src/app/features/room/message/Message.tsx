@@ -13,7 +13,15 @@ import {
   toRem,
 } from 'folds';
 import type { KeyboardEventHandler, MouseEventHandler, MouseEvent, ReactNode } from 'react';
-import { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react';
+import {
+  memo,
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useImperativeHandle,
+} from 'react';
 import { useHover, useFocusWithin } from 'react-aria';
 import type { MatrixEvent, Room, Relations } from '$types/matrix-sdk';
 import { EventStatus, MatrixEventEvent, RoomEvent } from '$types/matrix-sdk';
@@ -32,7 +40,7 @@ import {
   UsernameBold,
 } from '$components/message';
 import { getEditedEvent, getMemberAvatarMxc } from '$utils/room';
-import { mxcUrlToHttp } from '$utils/matrix';
+import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import type { MessageSpacing } from '$state/settings';
 import { getSettings, MessageLayout, settingsAtom } from '$state/settings';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -348,6 +356,23 @@ function MessageInternal(
 ) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const messageRef = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => messageRef.current as HTMLDivElement);
+  const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+
+  useEffect(() => {
+    const element = messageRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsVisible(entry?.isIntersecting === true);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const [isEmoji, setIsEmoji] = useState(false);
 
@@ -423,8 +448,18 @@ function MessageInternal(
    */
   const showPmPInfo = parsedPMPContent?.name && parsedPMPContent.name?.trim() !== '';
   // Profiles and Colors
-  const profile = useUserProfile(senderId, room);
-  const { color: usernameColor, font: usernameFont } = useSableCosmetics(senderId, room);
+  const profile = useUserProfile(senderId, room, undefined, true, isVisible);
+  const { color: usernameColor, font: usernameFont } = useSableCosmetics(
+    senderId,
+    room,
+    false,
+    isVisible
+  );
+  const senderFallbackName = getMxIdLocalPart(senderId) ?? senderId;
+  const resolvedSenderDisplayName =
+    senderDisplayName === senderFallbackName || senderDisplayName === senderId
+      ? (profile.displayName ?? senderDisplayName)
+      : senderDisplayName;
 
   /**
    * If there is a per-message profile, we want to use the per message pronouns,
@@ -438,8 +473,8 @@ function MessageInternal(
   // Avatars
   // Prefer the room-scoped member avatar (m.room.member) over the global profile
   // avatar so per-room avatar overrides are respected in the timeline.
-  useRoomMemberHydration(room, senderId);
-  const memberAvatarMxc = getMemberAvatarMxc(room, senderId);
+  useRoomMemberHydration(room, senderId, mEvent.sender !== null);
+  const memberAvatarMxc = mEvent.sender?.getMxcAvatarUrl() ?? getMemberAvatarMxc(room, senderId);
   const avatarUrl = useMemo(() => {
     const mxc = pmp?.avatar_url || memberAvatarMxc || profile.avatarUrl;
     return mxc ? mxcUrlToHttp(mx, mxc, useAuthentication, 48, 48, 'crop') : undefined;
@@ -473,9 +508,9 @@ function MessageInternal(
 
   const [useRightBubbles] = useSetting(settingsAtom, 'useRightBubbles');
   const { cleanedDisplayName, inlinePronoun } = useMemo(() => {
-    const rawName = pmp?.displayname || senderDisplayName || '';
+    const rawName = pmp?.displayname || resolvedSenderDisplayName || '';
     return getParsedPronouns(rawName, parsePronouns);
-  }, [pmp, senderDisplayName, parsePronouns]);
+  }, [pmp, resolvedSenderDisplayName, parsePronouns]);
 
   const mergedPronouns = useMemo(() => {
     const existing = pronouns ? [...pronouns] : [];
@@ -563,7 +598,7 @@ function MessageInternal(
                     style={{ fontSize: 11 }}
                     truncate
                   >
-                    <UsernameBold>{senderDisplayName}</UsernameBold>
+                    <UsernameBold>{resolvedSenderDisplayName}</UsernameBold>
                   </Text>
                 </Text>
               </Box>
@@ -908,7 +943,7 @@ function MessageInternal(
       {...props}
       {...hoverProps}
       {...focusWithinProps}
-      ref={ref}
+      ref={messageRef}
     >
       {!edit && (isDesktopHover || !!menuAnchor || isEmoji) && (
         <div className={css.MessageOptionsBase} ref={optionsRef}>

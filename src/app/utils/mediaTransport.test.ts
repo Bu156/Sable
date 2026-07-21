@@ -40,6 +40,9 @@ describe('fetchMediaBlob', () => {
     mediaCache.cache.clear();
     mediaCache.getFromMediaCache.mockClear();
     mediaCache.putInMediaCache.mockClear();
+    mediaCache.putInMediaCache.mockImplementation(async (url: string, blob: Blob) => {
+      mediaCache.cache.set(url, blob);
+    });
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>());
   });
@@ -200,6 +203,17 @@ describe('fetchMediaBlob', () => {
     expect(mediaCache.getFromMediaCache).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(mediaCache.putInMediaCache).toHaveBeenCalledWith(scopedUrl, freshBlob);
+  });
+
+  it('does not wait for persistent cache writes before returning media', async () => {
+    const { fetchMediaBlob } = await import('./mediaTransport');
+    const url = 'https://example.org/media.png';
+    const freshBlob = new Blob(['fresh'], { type: 'image/png' });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(freshBlob, { status: 200 }));
+    mediaCache.putInMediaCache.mockReturnValueOnce(new Promise(() => {}));
+
+    await expect(fetchMediaBlob(url)).resolves.toEqual(freshBlob);
+    expect(mediaCache.putInMediaCache).toHaveBeenCalledOnce();
   });
 
   it('skips cache reads and writes for bypass requests', async () => {

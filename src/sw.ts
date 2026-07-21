@@ -691,11 +691,11 @@ function validMediaRequest(url: string, baseUrl: string): boolean {
   });
 }
 
-function fetchConfig(token: string): RequestInit {
+function fetchConfig(token: string, request?: Request): RequestInit {
+  const headers = new Headers(request?.headers);
+  headers.set('Authorization', `Bearer ${token}`);
   return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     cache: 'default',
   };
 }
@@ -703,16 +703,20 @@ function fetchConfig(token: string): RequestInit {
 const inflightMediaFetches = new Map<string, Promise<Response>>();
 
 function respondWithInflightMedia(
-  url: string,
+  request: Request,
   token: string,
   redirect: RequestRedirect
 ): Promise<Response> {
-  const key = `${token}\x00${url}\x00${redirect}`;
+  const range = request.headers.get('Range') ?? '';
+  const key = `${token}\x00${request.url}\x00${redirect}\x00${range}`;
   const existing = inflightMediaFetches.get(key);
   if (existing) {
     return existing.then((res) => res.clone());
   }
-  const promise = fetch(url, { ...fetchConfig(token), redirect }).finally(() => {
+  // Fetch by URL instead of reusing the subresource Request. Image requests commonly carry
+  // mode: "no-cors", which prevents the Authorization header above from reaching the server.
+  // The copied headers still preserve Range for streaming audio and video.
+  const promise = fetch(request.url, { ...fetchConfig(token, request), redirect }).finally(() => {
     inflightMediaFetches.delete(key);
   });
   inflightMediaFetches.set(key, promise);
@@ -768,7 +772,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const session = clientId ? sessions.get(clientId) : undefined;
   if (session && validMediaRequest(url, session.baseUrl)) {
-    event.respondWith(respondWithInflightMedia(url, session.accessToken, redirect));
+    event.respondWith(respondWithInflightMedia(event.request, session.accessToken, redirect));
     return;
   }
 
@@ -788,7 +792,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       ? preloadedSession
       : undefined);
   if (byBaseUrl) {
-    event.respondWith(respondWithInflightMedia(url, byBaseUrl.accessToken, redirect));
+    event.respondWith(respondWithInflightMedia(event.request, byBaseUrl.accessToken, redirect));
     return;
   }
 
@@ -798,7 +802,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       loadPersistedSession().then((persisted) => {
         if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-          return respondWithInflightMedia(url, persisted.accessToken, redirect);
+          return respondWithInflightMedia(event.request, persisted.accessToken, redirect);
         }
         return fetch(event.request);
       })
@@ -810,13 +814,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     requestSessionWithTimeout(clientId).then(async (s) => {
       // Primary: session received from the live client window.
       if (s && validMediaRequest(url, s.baseUrl)) {
-        return respondWithInflightMedia(url, s.accessToken, redirect);
+        return respondWithInflightMedia(event.request, s.accessToken, redirect);
       }
       // Fallback: try the persisted session (helps when SW restarts on iOS and
       // the client window hasn't responded to requestSession yet).
       const persisted = await loadPersistedSession();
       if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-        return respondWithInflightMedia(url, persisted.accessToken, redirect);
+        return respondWithInflightMedia(event.request, persisted.accessToken, redirect);
       }
       console.warn(
         '[SW fetch] No valid session for media request',

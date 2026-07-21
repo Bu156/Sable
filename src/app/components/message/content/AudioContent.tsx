@@ -23,6 +23,7 @@ import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRevokeObjectURL } from '$hooks/useObjectURL';
 import { MEDIA_VOLUME_KEY } from '$components/media';
+import { hasControllingServiceWorker } from '$utils/platform';
 
 const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
@@ -56,8 +57,8 @@ export function AudioContent({
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
-      // Stream via the sable-media:// protocol (Range) instead of buffering a blob.
-      if (!encInfo && isTauri()) return mediaUrl;
+      // Native media and service-worker-authenticated browser media can stream with Range requests.
+      if (!encInfo && (isTauri() || hasControllingServiceWorker())) return mediaUrl;
       const fileContent = encInfo
         ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
         : await downloadMedia(mediaUrl);

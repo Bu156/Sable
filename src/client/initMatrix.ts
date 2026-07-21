@@ -29,6 +29,7 @@ import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 import { hydrateRoomMember } from './roomMemberHydration';
+import { clearCachedUserProfiles } from './userProfileCache';
 import {
   primeVersionsFromCache,
   revalidateVersionsCache,
@@ -530,6 +531,7 @@ export const clearCacheAndReload = async (mx: MatrixClient) => {
   stopClient(mx);
   clearNavToActivePathStore(mx.getSafeUserId());
   SlidingSyncSidebarCache.clear(mx.getSafeUserId());
+  clearCachedUserProfiles(mx.getSafeUserId());
   await mx.store.deleteAllData();
   window.location.reload();
 };
@@ -607,6 +609,7 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
   if (session) {
     SlidingSyncSidebarCache.clear(session.userId);
     clearCachedVersions(session.baseUrl, session.userId);
+    clearCachedUserProfiles(session.userId);
     const storeName: SessionStoreName = getSessionStoreName(session);
     await mx.clearStores({ cryptoDatabasePrefix: storeName.rustCryptoPrefix });
     await deleteDatabase(storeName.sync);

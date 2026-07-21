@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Share content from Sable using your device's native share menu. On desktop, copies the link instead.
+Share content via native system share menu or copy links on desktop.

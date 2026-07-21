@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Fixed leaving a room not reflecting immediately in the UI.
+Fix room leaving state not updating immediately in UI.

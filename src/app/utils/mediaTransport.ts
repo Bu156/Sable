@@ -289,7 +289,8 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
 
     const blob = await response.blob();
     if (cacheMode !== 'bypass') {
-      await putInMediaCache(scopedCacheKey, blob);
+      // Persistence is best-effort and must not delay first paint/playback.
+      void putInMediaCache(scopedCacheKey, blob).catch(() => undefined);
     }
     return blob;
   };

@@ -44,8 +44,7 @@ function DMItem({ room, selected }: DMItemProps) {
   // Check if this is a group DM (more than 2 members)
   const isGroupDM = room.getJoinedMemberCount() > 2;
 
-  // Get member info for group DMs using m.direct and profile API (doesn't require full room state)
-  // Members are sorted by who last sent messages (most recent first)
+  // Use already-synced room state only; sidebar rendering must not trigger member/profile requests.
   const groupMembers = useGroupDMMembers(mx, room, MAX_GROUP_MEMBERS);
 
   // Get unread info for badge

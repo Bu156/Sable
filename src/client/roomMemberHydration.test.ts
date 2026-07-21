@@ -126,4 +126,25 @@ describe('hydrateRoomMembers', () => {
     expect(getStateEvent).toHaveBeenCalledWith(ROOM_ID, EventType.RoomMember, USER_ID);
     expect(getStateEvent).toHaveBeenCalledWith(ROOM_ID, EventType.RoomMember, '@other:server');
   });
+
+  it('limits concurrent member requests', async () => {
+    const { mx, getStateEvent } = makeFakes();
+    const resolveRequests: Array<() => void> = [];
+    getStateEvent.mockImplementation(
+      () =>
+        new Promise<object>((resolve) => {
+          resolveRequests.push(() => resolve({ membership: 'join' }));
+        })
+    );
+
+    const requests = Array.from({ length: 6 }, (_, index) =>
+      hydrateRoomMember(mx, ROOM_ID, `@user-${index}:server`)
+    );
+
+    expect(getStateEvent).toHaveBeenCalledTimes(4);
+    resolveRequests.splice(0).forEach((resolve) => resolve());
+    await vi.waitFor(() => expect(getStateEvent).toHaveBeenCalledTimes(6));
+    resolveRequests.splice(0).forEach((resolve) => resolve());
+    await Promise.all(requests);
+  });
 });

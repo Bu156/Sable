@@ -2,4 +2,4 @@
 default: minor
 ---
 
-Keyboard shortcuts on desktop: quickly open settings, hide or show the window, and quit the app.
+Add desktop keyboard shortcuts to open settings, toggle window visibility, and quit.

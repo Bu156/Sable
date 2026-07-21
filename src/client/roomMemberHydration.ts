@@ -6,7 +6,34 @@ const inFlight = new WeakMap<MatrixClient, Map<string, Promise<void>>>();
 // Members whose state event could not be fetched (e.g. defunct bridge ghosts)
 // are skipped for a while so virtualized-timeline remounts don't refetch them.
 const FAILURE_TTL_MS = 5 * 60_000;
+const MAX_CONCURRENT_REQUESTS = 4;
 const failedAt = new WeakMap<MatrixClient, Map<string, number>>();
+const activeRequests = new WeakMap<MatrixClient, number>();
+const requestQueues = new WeakMap<MatrixClient, Array<() => void>>();
+
+const scheduleRequest = <T>(mx: MatrixClient, task: () => Promise<T>): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeRequests.set(mx, (activeRequests.get(mx) ?? 0) + 1);
+      void task()
+        .then(resolve, reject)
+        .finally(() => {
+          const active = Math.max(0, (activeRequests.get(mx) ?? 1) - 1);
+          activeRequests.set(mx, active);
+          const queue = requestQueues.get(mx);
+          if (active < MAX_CONCURRENT_REQUESTS) queue?.shift()?.();
+        });
+    };
+
+    if ((activeRequests.get(mx) ?? 0) < MAX_CONCURRENT_REQUESTS) {
+      run();
+      return;
+    }
+
+    const queue = requestQueues.get(mx) ?? [];
+    requestQueues.set(mx, queue);
+    queue.push(run);
+  });
 
 export const hydrateRoomMember = (
   mx: MatrixClient,
@@ -25,21 +52,26 @@ export const hydrateRoomMember = (
   const existing = pending.get(key);
   if (existing) return existing;
 
-  const request = mx
-    .getStateEvent(roomId, EventType.RoomMember, userId)
-    .then((content) => {
+  const request = scheduleRequest(mx, async () => {
+    // A request may have waited in the queue while another event supplied the
+    // member state. Avoid issuing a redundant network request in that case.
+    const requestRoom = mx.getRoom(roomId);
+    if (!requestRoom || requestRoom.getMember(userId)) return;
+    const content = await mx.getStateEvent(roomId, EventType.RoomMember, userId);
+    const currentRoom = mx.getRoom(roomId);
+    if (!currentRoom || currentRoom.getMember(userId)) return;
+    currentRoom.currentState.setStateEvents([
+      new MatrixEvent({
+        type: EventType.RoomMember,
+        state_key: userId,
+        room_id: roomId,
+        sender: userId,
+        content,
+      }),
+    ]);
+  })
+    .then(() => {
       failedAt.get(mx)?.delete(key);
-      const currentRoom = mx.getRoom(roomId);
-      if (!currentRoom || currentRoom.getMember(userId)) return;
-      currentRoom.currentState.setStateEvents([
-        new MatrixEvent({
-          type: EventType.RoomMember,
-          state_key: userId,
-          room_id: roomId,
-          sender: userId,
-          content,
-        }),
-      ]);
     })
     .catch(() => {
       const failures = failedAt.get(mx) ?? new Map<string, number>();

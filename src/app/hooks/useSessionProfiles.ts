@@ -50,7 +50,7 @@ const fetchAvatarBlobUrl = async (
   }
 };
 
-export const useSessionProfiles = (sessions: Session[]): SessionProfiles => {
+export const useSessionProfiles = (sessions: Session[], enabled = true): SessionProfiles => {
   const [profiles, setProfiles] = useState<SessionProfiles>({});
 
   const sessionsRef = useRef(sessions);
@@ -63,6 +63,7 @@ export const useSessionProfiles = (sessions: Session[]): SessionProfiles => {
     .join('\x00');
 
   useEffect(() => {
+    if (!enabled) return undefined;
     let cancelled = false;
     const newBlobUrls: string[] = [];
 
@@ -103,7 +104,7 @@ export const useSessionProfiles = (sessions: Session[]): SessionProfiles => {
       cancelled = true;
       newBlobUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [sessionIdentityKey]);
+  }, [enabled, sessionIdentityKey]);
 
   return profiles;
 };

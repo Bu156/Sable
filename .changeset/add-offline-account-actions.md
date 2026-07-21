@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Add account switching and logout actions to the homeserver offline screen.
+Add account switching and logout actions to the offline screen.

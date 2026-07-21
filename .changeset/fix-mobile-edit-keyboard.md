@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Fix editing messages on mobile where tapping the edit field flickered the keyboard shut.
+Fix keyboard flickering when editing messages on mobile.

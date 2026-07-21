@@ -24,7 +24,6 @@ import { createDebugLogger } from '$utils/debugLogger';
 import { CustomStateEvent } from '$types/matrix/room';
 import * as Sentry from '@sentry/react';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
-import { hydrateRoomMembers } from './roomMemberHydration';
 
 const log = createLogger('slidingSync');
 const debugLog = createDebugLogger('slidingSync');
@@ -400,7 +399,6 @@ export class SlidingSyncManager {
       if (err || !resp || state !== SlidingSyncState.Complete) return;
 
       this.recordServerMembershipRooms(resp);
-      this.hydrateReferencedMembers(resp);
 
       this.roomDataAwaitingSyncCompletion.forEach((roomId) =>
         this.notifyRoomSubscriptionStatus(roomId, false)
@@ -621,42 +619,6 @@ export class SlidingSyncManager {
       } else {
         this.serverMembershipRoomIds.add(roomId);
       }
-    });
-  }
-
-  private hydrateReferencedMembers(response: MSC3575SlidingSyncResponse): void {
-    const userIdsByRoom = new Map<string, Set<string>>();
-    const add = (roomId: string, userId: unknown) => {
-      if (!this.serverMembershipRoomIds.has(roomId) || typeof userId !== 'string') return;
-      const userIds = userIdsByRoom.get(roomId) ?? new Set<string>();
-      userIds.add(userId);
-      userIdsByRoom.set(roomId, userIds);
-    };
-
-    Object.entries(response.rooms ?? {}).forEach(([roomId, roomData]) => {
-      [...(roomData.timeline ?? []), ...(roomData.required_state ?? [])].forEach((event) => {
-        add(roomId, event.sender);
-      });
-    });
-
-    const receipts = response.extensions?.receipts as
-      | {
-          rooms?: Record<
-            string,
-            { content?: Record<string, Record<string, Record<string, unknown>>> }
-          >;
-        }
-      | undefined;
-    Object.entries(receipts?.rooms ?? {}).forEach(([roomId, event]) => {
-      Object.values(event.content ?? {}).forEach((receiptTypes) => {
-        Object.values(receiptTypes).forEach((users) => {
-          Object.keys(users).forEach((userId) => add(roomId, userId));
-        });
-      });
-    });
-
-    userIdsByRoom.forEach((userIds, roomId) => {
-      void hydrateRoomMembers(this.mx, roomId, userIds);
     });
   }
 

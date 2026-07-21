@@ -294,7 +294,7 @@ export interface TimelineEventRendererOptions {
   mx: MatrixClient;
   pushProcessor: PushProcessor;
   nicknames: Record<string, string>;
-  profiles: Record<string, { displayName?: string }>;
+  getProfile: (userId: string) => { displayName?: string } | undefined;
   imagePackRooms: Room[];
   settings: {
     messageLayout: MessageLayout;
@@ -353,7 +353,7 @@ export function useTimelineEventRenderer({
   mx,
   pushProcessor,
   nicknames,
-  profiles,
+  getProfile,
   imagePackRooms,
   settings: {
     messageLayout,
@@ -402,7 +402,7 @@ export function useTimelineEventRenderer({
   const useAuthentication = useMediaAuthentication();
 
   const getSenderDisplayName = (userId: string): string =>
-    getTimelineSenderDisplayName(room, userId, nicknames, profiles[userId]?.displayName);
+    getTimelineSenderDisplayName(room, userId, nicknames, getProfile(userId)?.displayName);
 
   const renderEditTimelineEvent = (
     mEventId: string,

@@ -76,6 +76,23 @@ describe('useSessionProfiles', () => {
     expect(URL.createObjectURL).toHaveBeenCalledWith(avatarBlob);
   });
 
+  it('does not fetch profiles until the account switcher is opened', async () => {
+    const sessions: Session[] = [
+      {
+        baseUrl: 'https://matrix.example.org',
+        userId: '@alice:example.org',
+        deviceId: 'DEVICE',
+        accessToken: 'alice-token',
+      },
+    ];
+    const { useSessionProfiles } = await import('./useSessionProfiles');
+    const { result } = renderHook(() => useSessionProfiles(sessions, false));
+
+    expect(result.current).toEqual({});
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mediaTransport.fetchMediaBlob).not.toHaveBeenCalled();
+  });
+
   it('refetches profiles when the same user session is reauthenticated', async () => {
     mediaTransport.fetchMediaBlob
       .mockResolvedValueOnce(new Blob(['avatar-1'], { type: 'image/png' }))

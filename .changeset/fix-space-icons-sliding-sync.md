@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Fix space icons staying blank on first open with sliding sync until the sidebar was remounted.
+Fix space icons staying blank on first open with sliding sync.
