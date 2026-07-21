@@ -153,6 +153,53 @@ describe('SlidingSyncManager initial request', () => {
     expect(settled).toHaveBeenCalledOnce();
   });
 
+  it('does not fan out member requests for users referenced by startup sync', async () => {
+    const getStateEvent = vi.fn<() => Promise<Record<string, unknown>>>().mockResolvedValue({
+      membership: KnownMembership.Join,
+    });
+    const room = {
+      getMember: vi.fn<() => undefined>(),
+      currentState: { setStateEvents: vi.fn<() => void>() },
+    };
+    const manager = makeManager(
+      makeMockMx({
+        getRoom: vi.fn().mockReturnValue(room),
+        getStateEvent,
+      })
+    );
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.Complete, {
+      rooms: {
+        '!room:example.com': {
+          required_state: [
+            {
+              type: EventType.RoomMember,
+              state_key: '@user:example.com',
+              sender: '@user:example.com',
+              content: { membership: KnownMembership.Join },
+            },
+          ],
+          timeline: [{ sender: '@timeline-user:example.com' }],
+        },
+      },
+      extensions: {
+        receipts: {
+          rooms: {
+            '!room:example.com': {
+              content: {
+                $event: { 'm.read': { '@receipt-user:example.com': { ts: 1 } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    await Promise.resolve();
+
+    expect(getStateEvent).not.toHaveBeenCalled();
+  });
+
   it('includes the selected room subscription before the first request', () => {
     const manager = new SlidingSyncManager(makeMockMx(), 'https://sliding.example.com', {
       initialRoomIds: ['!selected:example.com'],

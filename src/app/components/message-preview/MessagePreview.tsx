@@ -32,7 +32,6 @@ import { EncryptedContent, Pronouns } from '$features/room/message';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMatrixEventRenderer } from '$hooks/useMatrixEventRenderer';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { usePowerLevels } from '$hooks/usePowerLevels';
@@ -388,9 +387,8 @@ export function MessagePreview({
     };
   }, [event]);
 
-  useRoomMemberHydration(room, sender);
-  const userProfile = useUserProfile(sender, room, profile);
-  const { color, font } = useSableCosmetics(sender, room);
+  const userProfile = useUserProfile(sender, room, profile, false, false);
+  const { color, font } = useSableCosmetics(sender, room, false, false);
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
   const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);

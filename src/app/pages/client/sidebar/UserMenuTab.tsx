@@ -197,7 +197,7 @@ export function AccountMenuOption({ isMobile, isRight }: { isMobile: boolean; is
     : undefined;
   const activeDisplayName = activeProfile.displayName;
 
-  const sessionProfiles = useSessionProfiles(sessions);
+  const sessionProfiles = useSessionProfiles(sessions, isOpen);
 
   const { disableAccountSwitcher } = useClientConfig();
 

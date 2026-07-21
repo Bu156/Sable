@@ -14,7 +14,7 @@ import {
   ThreadEvent,
   EventType,
 } from '$types/matrix-sdk';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { ReactEditor } from 'slate-react';
 import type { HTMLReactParserOptions } from 'html-react-parser';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
@@ -132,7 +132,11 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
   const autoFillInProgressRef = useRef(false);
   const { editId, handleEdit } = useMessageEdit(editor);
   const nicknames = useAtomValue(nicknamesAtom);
-  const globalProfiles = useAtomValue(profilesCacheAtom);
+  const jotaiStore = useStore();
+  const getGlobalProfile = useCallback(
+    (userId: string) => jotaiStore.get(profilesCacheAtom)[userId],
+    [jotaiStore]
+  );
   const pushProcessor = useMemo(() => new PushProcessor(mx), [mx]);
   const useAuthentication = useMediaAuthentication();
   const mentionClickHandler = useMentionClickHandler(room.roomId);
@@ -750,7 +754,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
     mx,
     pushProcessor,
     nicknames,
-    profiles: globalProfiles,
+    getProfile: getGlobalProfile,
     imagePackRooms,
     settings: {
       messageLayout,
