@@ -847,11 +847,21 @@ export function Space() {
     )
   );
 
+  const getItemKey = useCallback(
+    (index: number) => {
+      const item = hierarchy[index];
+      if (!item) return index;
+      return `${space.roomId}:${item.roomId}:${item.depth}`;
+    },
+    [hierarchy, space.roomId]
+  );
+
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 32,
     overscan: 10,
+    getItemKey,
   });
 
   const virtualizedItems = virtualizer.getVirtualItems();
@@ -962,7 +972,7 @@ export function Space() {
                   return (
                     <VirtualTile
                       virtualItem={vItem}
-                      key={vItem.index}
+                      key={vItem.key}
                       ref={virtualizer.measureElement}
                     >
                       <div
@@ -995,7 +1005,7 @@ export function Space() {
                   return (
                     <VirtualTile
                       virtualItem={vItem}
-                      key={vItem.index}
+                      key={vItem.key}
                       ref={virtualizer.measureElement}
                     >
                       <div style={hideText ? { paddingTop: '0' } : { paddingTop, paddingLeft }}>
@@ -1016,7 +1026,7 @@ export function Space() {
                 return (
                   <VirtualTile
                     virtualItem={vItem}
-                    key={vItem.index}
+                    key={vItem.key}
                     ref={virtualizer.measureElement}
                   >
                     <div

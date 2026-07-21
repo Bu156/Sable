@@ -257,11 +257,17 @@ export function Direct() {
     return items;
   }, [mx, directs, closedCategories, roomToUnread, selectedRoomId, activityCounter]);
 
+  const getItemKey = useCallback(
+    (index: number) => sortedDirects[index] ?? index,
+    [sortedDirects]
+  );
+
   const virtualizer = useVirtualizer({
     count: sortedDirects.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 38,
     overscan: 10,
+    getItemKey,
   });
 
   const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
@@ -341,7 +347,7 @@ export function Direct() {
                     return (
                       <VirtualTile
                         virtualItem={vItem}
-                        key={vItem.index}
+                        key={vItem.key}
                         ref={virtualizer.measureElement}
                       >
                         <div

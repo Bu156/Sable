@@ -299,12 +299,22 @@ export function Lobby() {
     )
   );
 
+  const getItemKey = useCallback(
+    (index: number) => {
+      const item = hierarchy[index];
+      if (!item) return index;
+      return `${space.roomId}:${item.space.roomId}:${item.space.depth}`;
+    },
+    [hierarchy, space.roomId]
+  );
+
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 72,
     overscan: 6,
     paddingStart: heroSectionHeight ?? 258,
+    getItemKey,
   });
   const vItems = virtualizer.getVirtualItems();
 
@@ -673,7 +683,7 @@ export function Lobby() {
                             paddingLeft,
                           }}
                           ref={virtualizer.measureElement}
-                          key={vItem.index}
+                          key={vItem.key}
                         >
                           {item.space.depth !== subspaceHierarchyLimit ? (
                             <SpaceHierarchyItem
