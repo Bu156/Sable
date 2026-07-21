@@ -174,10 +174,11 @@ export const useSpaceHierarchy = (
 
   const [hierarchyKey, setHierarchyKey] = useState(0);
 
-  const hierarchy = useMemo(() => {
-    hierarchyKey;
-    return getSpaceHierarchy(spaceId, spaceRooms, getRoom, excludeRoom, closedCategory);
-  }, [spaceId, spaceRooms, getRoom, closedCategory, excludeRoom, hierarchyKey]);
+  // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
+  const hierarchy = useMemo(
+    () => getSpaceHierarchy(spaceId, spaceRooms, getRoom, excludeRoom, closedCategory),
+    [spaceId, spaceRooms, getRoom, closedCategory, excludeRoom, hierarchyKey]
+  );
 
   useStateEventCallback(
     mx,
@@ -301,10 +302,11 @@ export const useSpaceJoinedHierarchy = (
 
   const [hierarchyKey, setHierarchyKey] = useState(0);
 
-  const hierarchy = useMemo(() => {
-    hierarchyKey;
-    return getSpaceJoinedHierarchy(spaceId, getRoom, excludeRoom, sortRoomItems);
-  }, [spaceId, getRoom, excludeRoom, sortRoomItems, hierarchyKey]);
+  // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
+  const hierarchy = useMemo(
+    () => getSpaceJoinedHierarchy(spaceId, getRoom, excludeRoom, sortRoomItems),
+    [spaceId, getRoom, excludeRoom, sortRoomItems, hierarchyKey]
+  );
 
   useStateEventCallback(
     mx,
