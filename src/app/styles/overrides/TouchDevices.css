@@ -6,14 +6,14 @@
 
 @media (hover: none) {
   html body button:active,
-  html body [role="button"]:active,
-  html body [class*="Button"]:active,
-  html body [class*="Chip"]:active {
+  html body [role='button']:active,
+  html body [class*='Button']:active,
+  html body [class*='Chip']:active {
     transform: none !important;
   }
 
   html body button:hover,
-  html body [role="button"]:hover {
+  html body [role='button']:hover {
     transform: none !important;
   }
 
