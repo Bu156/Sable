@@ -23,10 +23,16 @@ STAGE="$ROOT/src-tauri/target/release"
 OUT="$STAGE/bundle"
 WORK="$STAGE/cef-pkg"
 
-[ -x "$STAGE/sable" ] || {
-  echo "missing $STAGE/sable; build it first (pnpm tauri:cef build)" >&2
+if [ -x "$STAGE/Sable Nightly" ]; then
+  BIN_NAME="Sable Nightly"
+elif [ -x "$STAGE/Sable" ]; then
+  BIN_NAME="Sable"
+elif [ -x "$STAGE/sable" ]; then
+  BIN_NAME="sable"
+else
+  echo "missing $STAGE/Sable or sable; build it first (pnpm tauri:cef build)" >&2
   exit 1
-}
+fi
 
 rm -rf "$WORK"
 mkdir -p "$WORK" "$OUT/deb" "$OUT/rpm" "$OUT/appimage"
@@ -34,7 +40,7 @@ mkdir -p "$WORK" "$OUT/deb" "$OUT/rpm" "$OUT/appimage"
 stage_runtime() {
   local dest="$1"
   mkdir -p "$dest"
-  cp "$STAGE/sable" "$dest/"
+  cp "$STAGE/$BIN_NAME" "$dest/sable"
   bash scripts/cef-copy-libs.sh release "$dest"
 }
 
