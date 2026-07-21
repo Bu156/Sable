@@ -195,6 +195,7 @@ import { PollDialog } from './poll-modals';
 import { LocationDialog } from './location-modal';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { GifIcon } from '@phosphor-icons/react';
+import { PersonaPicker } from './persona-picker/PersonaPicker.tsx';
 
 // Returns the event ID of the most recent non-reaction/non-edit event in a thread,
 // falling back to the thread root if no replies exist yet.
@@ -319,6 +320,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [pkCompatEnable] = useSetting(settingsAtom, 'pkCompat');
     const [pmpProxyingEnable] = useSetting(settingsAtom, 'pmpProxying');
+    const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
+
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
     const micBtnRef = useRef<HTMLButtonElement>(null);
     // Preserve stable list keys across metadata/description replacements without
@@ -1768,6 +1771,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 {composerIcon(PlusCircle)}
               </IconButton>
+              {pmpPickerEnable && (
+                <PersonaPicker
+                  mx={mx}
+                  roomId={roomId}
+                  suppressEditorRefocus={suppressEditorRefocus}
+                />
+              )}
             </>
           }
           after={

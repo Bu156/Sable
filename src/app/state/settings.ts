@@ -224,6 +224,7 @@ export interface Settings {
   highlightMentions: boolean;
   pkCompat: boolean;
   pmpProxying: boolean;
+  pmpPicker: boolean;
   mentionInReplies: boolean;
   profileChangePropagation: ProfileChangePropagation;
   showPersonaSetting: boolean;
@@ -395,6 +396,7 @@ export const defaultSettings: Settings = {
   highlightMentions: true,
   pkCompat: false,
   pmpProxying: false,
+  pmpPicker: false,
   mentionInReplies: true,
   profileChangePropagation: 'unchanged',
   showPersonaSetting: false,
