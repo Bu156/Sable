@@ -12,7 +12,9 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    setIsPressing(false);
+    if (!firedRef.current) {
+      setIsPressing(false);
+    }
     startY.current = null;
     startX.current = null;
   }, []);
@@ -27,8 +29,8 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
 
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
-        setIsPressing(false);
         callback();
+        setTimeout(() => setIsPressing(false), 300);
       }, delay);
     },
     [callback, delay]
