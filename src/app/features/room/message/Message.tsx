@@ -225,7 +225,7 @@ function MorePronounsPill({ pronouns, tagColor, maxPillLength }: MorePronounsPil
  * Component to render pronouns in the chat timeline.
  * It also filters them.
  */
-const Pronouns = as<
+export const Pronouns = as<
   'span',
   {
     pronouns?: PronounSet[];

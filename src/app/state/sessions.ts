@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
 import { atom } from 'jotai';
-import type { IdTokenClaims } from '$types/matrix-sdk';
+import type { IdTokenClaims, MatrixEvent, Room } from '$types/matrix-sdk';
 import { createLogger } from '$utils/debug';
 import {
   atomWithLocalStorage,
@@ -232,11 +231,9 @@ export type InAppBannerNotification = {
   /** Display name of the sender. */
   senderName?: string;
   body?: string;
-  /**
-   * Pre-rendered rich body with mxc/mention transforms (built in ClientNonUIFeatures).
-   * When present, takes precedence over the plain-text `body` fallback.
-   */
-  bodyNode?: ReactNode;
+  /** Full event context for rendering the same rich preview used elsewhere. */
+  room?: Room;
+  event?: MatrixEvent;
   /** URL of an avatar or room icon to display inside the banner. */
   icon?: string;
   onClick: () => void;
