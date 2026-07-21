@@ -140,7 +140,10 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.decorations(false);
 
-    let _webview_window = builder.build()?;
+    let webview_window = builder.build()?;
+
+    #[cfg(desktop)]
+    desktop::tray::setup_close_to_background(&webview_window);
 
     // WebKitGTK only (wry). Under CEF, permissions go through set_permission_policy.
     #[cfg(all(
