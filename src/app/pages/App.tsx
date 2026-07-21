@@ -18,6 +18,7 @@ import { createRouter } from './Router';
 import { isReactQueryDevtoolsEnabled } from './reactQueryDevtoolsGate';
 import { bootstrapSettingsStore } from '$state/settings';
 import { AppShell } from '$components/app-shell';
+import { normalizeOAuthCallbackUrl } from '$utils/oauthCallback';
 
 const queryClient = new QueryClient();
 const ReactQueryDevtools = lazy(async () => {
@@ -32,6 +33,7 @@ type BootstrappedAppShellProps = {
 };
 
 function BootstrappedAppShell({ clientConfig, screenSize }: BootstrappedAppShellProps) {
+  normalizeOAuthCallbackUrl(clientConfig.hashRouter);
   const jotaiStoreRef = useRef<ReturnType<typeof createStore>>();
   if (!jotaiStoreRef.current) {
     jotaiStoreRef.current = createStore();

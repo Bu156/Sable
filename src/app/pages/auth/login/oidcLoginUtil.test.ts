@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { BearerTokenResponse } from '$types/matrix-sdk';
 import { deviceIdFromScope, expiresInMsFromToken } from './oidcLoginUtil';
 
@@ -20,23 +20,18 @@ describe('deviceIdFromScope', () => {
 });
 
 describe('expiresInMsFromToken', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('prefers expires_in (seconds → ms)', () => {
-    const token = { expires_in: 299 } as BearerTokenResponse;
+  it('converts expires_in (seconds → ms)', () => {
+    const token = {
+      access_token: 'x',
+      token_type: 'Bearer',
+      expires_in: 299,
+    } as BearerTokenResponse;
     expect(expiresInMsFromToken(token)).toBe(299_000);
   });
 
-  it('derives ms from expires_at relative to now', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(1_000_000_000_000));
-    const token = { expires_at: 1_000_000_000 + 300 } as BearerTokenResponse;
-    expect(expiresInMsFromToken(token)).toBe(300_000);
-  });
-
-  it('returns undefined when neither field is present', () => {
-    expect(expiresInMsFromToken({} as BearerTokenResponse)).toBeUndefined();
+  it('returns undefined when expires_in is absent', () => {
+    expect(
+      expiresInMsFromToken({ access_token: 'x', token_type: 'Bearer' } as BearerTokenResponse)
+    ).toBeUndefined();
   });
 });

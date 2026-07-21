@@ -11,8 +11,7 @@ import { useUIAMatrixError } from '$hooks/useUIAFlows';
 import { DeviceVerificationStatus } from '$components/DeviceVerificationStatus';
 import { VerificationStatus } from '$hooks/useDeviceVerificationStatus';
 import { useAuthMetadata } from '$hooks/useAuthMetadata';
-import { withSearchParam } from '$pages/pathUtils';
-import { useAccountManagementActions } from '$hooks/useAccountManagement';
+import { getAccountManagementUrl, useAccountManagementActions } from '$hooks/useAccountManagement';
 import { SettingTile } from '$components/setting-tile';
 import { SequenceCardStyle } from '$features/settings/styles.css';
 import { VerifyOtherDeviceTile } from './Verification';
@@ -63,12 +62,8 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const [deleted, setDeleted] = useState(new Set());
 
   const handleDashboardOIDC = useCallback(() => {
-    const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
-    if (!authUrl) return;
-
-    const url = withSearchParam(authUrl, {
-      action: accountManagementActions.sessionsList,
-    });
+    const url = getAccountManagementUrl(authMetadata, accountManagementActions.sessionsList);
+    if (!url) return;
     if (isTauri()) {
       import('@tauri-apps/plugin-opener')
         .then(({ openUrl }) => openUrl(url))
@@ -80,13 +75,12 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
 
   const handleDeleteOIDC = useCallback(
     (deviceId: string) => {
-      const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
-      if (!authUrl) return;
-
-      const url = withSearchParam(authUrl, {
-        action: accountManagementActions.sessionEnd,
-        device_id: deviceId,
-      });
+      const url = getAccountManagementUrl(
+        authMetadata,
+        accountManagementActions.sessionEnd,
+        deviceId
+      );
+      if (!url) return;
       if (isTauri()) {
         import('@tauri-apps/plugin-opener')
           .then(({ openUrl }) => openUrl(url))
@@ -159,7 +153,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     <>
       <Box direction="Column" gap="100">
         <Text size="L400">Others</Text>
-        {authMetadata && (
+        {authMetadata?.account_management_uri && (
           <SequenceCard
             className={SequenceCardStyle}
             variant="SurfaceVariant"
@@ -204,13 +198,13 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 refreshDeviceList={refreshDeviceList}
                 disabled={deleting}
                 options={
-                  authMetadata ? (
+                  authMetadata?.account_management_uri ? (
                     <DeviceDeleteBtn
                       deviceId={device.device_id}
                       deleted={false}
                       onDeleteToggle={handleDeleteOIDC}
                     />
-                  ) : (
+                  ) : authMetadata ? undefined : (
                     <DeviceDeleteBtn
                       deviceId={device.device_id}
                       deleted={deleted.has(device.device_id)}

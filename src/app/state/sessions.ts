@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import type { IdTokenClaims, MatrixEvent, Room } from '$types/matrix-sdk';
+import type { MatrixEvent, Room } from '$types/matrix-sdk';
 import { createLogger } from '$utils/debug';
 import {
   atomWithLocalStorage,
@@ -17,7 +17,6 @@ const notifySessionChanged = (): void => {
 export type OidcSessionInfo = {
   issuer: string;
   clientId: string;
-  idTokenClaims?: IdTokenClaims;
 };
 
 export type Session = {

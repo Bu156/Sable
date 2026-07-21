@@ -176,6 +176,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           if (url.searchParams.get('addAccount') === '1') return null;
           if (url.searchParams.has('loginToken')) return null;
           if (url.searchParams.has('code') && url.searchParams.has('state')) return null;
+          if (url.searchParams.has('error') && url.searchParams.has('state')) return null;
           if (hasStoredSession()) return redirect(getHomePath());
           return null;
         }}

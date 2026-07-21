@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [react(), vanillaExtractPlugin()],
   resolve: {
     alias: {
+      'matrix-js-sdk/lib': path.resolve(__dirname, 'node_modules/matrix-js-sdk/lib'),
+      'matrix-js-sdk': path.resolve(__dirname, 'node_modules/matrix-js-sdk/lib/matrix.js'),
       $hooks: path.resolve(__dirname, 'src/app/hooks'),
       $plugins: path.resolve(__dirname, 'src/app/plugins'),
       $components: path.resolve(__dirname, 'src/app/components'),
@@ -38,6 +40,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    server: {
+      deps: {
+        inline: [/matrix-js-sdk\/lib\//],
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

@@ -5,9 +5,9 @@ import { createLogger } from '$utils/debug';
 import {
   parseTauriOidcCallback,
   parseTauriSsoCallback,
-  takeTauriOidcServer,
   takeTauriSsoNonce,
 } from '$pages/auth/SSOTauri';
+import { getOauthContextServer } from '$pages/auth/login/oidcLoginUtil';
 import { getLoginPath, withSearchParam } from './pathUtils';
 
 const log = createLogger('TauriDeepLinkBridge');
@@ -27,10 +27,20 @@ export const mapDeepLinkToLoginPath = (rawUrl: string): string | undefined => {
 
   const oidcCallback = parseTauriOidcCallback(rawUrl);
   if (oidcCallback) {
-    return withSearchParam(getLoginPath(takeTauriOidcServer()), {
-      code: oidcCallback.code,
-      state: oidcCallback.state,
-    });
+    const loginPath = getLoginPath(getOauthContextServer(oidcCallback.state));
+    return 'code' in oidcCallback
+      ? withSearchParam(loginPath, {
+          code: oidcCallback.code,
+          state: oidcCallback.state,
+        })
+      : withSearchParam(loginPath, {
+          error: oidcCallback.error,
+          ...(oidcCallback.errorDescription
+            ? { error_description: oidcCallback.errorDescription }
+            : {}),
+          ...(oidcCallback.errorUri ? { error_uri: oidcCallback.errorUri } : {}),
+          state: oidcCallback.state,
+        });
   }
 
   return undefined;

@@ -1,7 +1,7 @@
 import { Box, Button, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text } from 'folds';
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { OidcClientConfig } from '$types/matrix-sdk';
+import type { ValidatedAuthMetadata } from '$types/matrix-sdk';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAuthServer } from '$hooks/useAuthServer';
 import { InfoCard } from '$components/info-card';
@@ -26,13 +26,15 @@ const oidcErrorMessage = (error: unknown): string => {
       return 'Sign-in could not be completed. Please try again.';
     case OidcLoginError.MissingDeviceId:
       return 'The homeserver did not grant a device for this session.';
+    case OidcLoginError.MissingRefreshToken:
+      return 'The authorization server did not issue the required refresh token.';
     default:
       return 'Failed to sign in with single sign-on.';
   }
 };
 
 type OidcLoginButtonProps = {
-  authMetadata: OidcClientConfig;
+  authMetadata: ValidatedAuthMetadata;
   homeserverUrl: string;
   redirectUri: string;
   label: string;

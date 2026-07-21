@@ -46,7 +46,7 @@ export function Register() {
     ? withSearchParam(getLoginPath(server), { addAccount: '1' })
     : getLoginPath(server);
 
-  const showOidc = authMetadata !== undefined;
+  const showOidc = authMetadata?.prompt_values_supported?.includes('create') === true;
 
   if (showOidc) {
     return (
