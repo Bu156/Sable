@@ -15,13 +15,13 @@ type SSOLoginProps = {
   action?: SSOAction;
   saveScreenSpace?: boolean;
 };
-  const openSso = async (event: MouseEvent, url: string) => {
-    if (!isTauri()) return;
-    event.preventDefault();
-    const os = osType();
-    const urlProgram = os === 'ios' || os === 'android' ? 'inAppBrowser' : undefined;
-    await openUrl(url, urlProgram);
-  };
+const openSso = async (event: MouseEvent, url: string) => {
+  if (!isTauri()) return;
+  event.preventDefault();
+  const os = osType();
+  const urlProgram = os === 'ios' || os === 'android' ? 'inAppBrowser' : undefined;
+  await openUrl(url, urlProgram);
+};
 
 export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SSOLoginProps) {
   const discovery = useAutoDiscoveryInfo();

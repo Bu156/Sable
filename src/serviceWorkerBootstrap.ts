@@ -29,8 +29,7 @@ const showUpdateAvailablePrompt = (registration: ServiceWorkerRegistration) => {
 const sendSessionToSW = () => {
   const sessions = getLocalStorageItem<Sessions>(MATRIX_SESSIONS_KEY, []);
   const activeId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
-  const active =
-    sessions.find((s) => s.userId === activeId) ?? sessions[0] ?? getFallbackSession();
+  const active = sessions.find((s) => s.userId === activeId) ?? sessions[0] ?? getFallbackSession();
   pushSessionToSW(active?.baseUrl, active?.accessToken, active?.userId);
 };
 

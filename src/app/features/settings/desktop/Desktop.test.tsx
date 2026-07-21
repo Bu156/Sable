@@ -74,7 +74,6 @@ const renderDesktop = () =>
   );
 
 describe('Desktop', () => {
-
   it('renders explicit close behavior and tray settings', () => {
     mockUseDesktopRuntimeState.mockReturnValueOnce({
       trayAvailable: true,
