@@ -17,9 +17,6 @@ import {
   SyncState,
   EventType,
 } from '$types/matrix-sdk';
-import parse from 'html-react-parser';
-import { getReactCustomHtmlParser, LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
-import { sanitizeCustomHtml } from '$utils/sanitize';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import LogoSVG from '$public/res/svg/logo.svg';
 import LogoUnreadSVG from '$public/res/svg/unread.svg';
@@ -54,7 +51,6 @@ import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '$hooks/router/useInbox';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { ShareTargetFeature } from '$features/share-target/ShareTargetFeature';
 import { registrationAtom } from '$state/serviceWorkerRegistration';
 import { pendingNotificationAtom, inAppBannerAtom, activeSessionIdAtom } from '$state/sessions';
@@ -312,7 +308,6 @@ function MessageNotifications() {
   const clientStartTimeRef = useRef(Date.now());
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const appBaseUrl = useSettingsLinkBaseUrl();
   const [showNotifications] = useSetting(settingsAtom, 'useInAppNotifications');
   const [showSystemNotifications] = useSetting(settingsAtom, 'useSystemNotifications');
   const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
@@ -556,7 +551,6 @@ function MessageNotifications() {
           getMemberDisplayName(room, sender, nicknamesRef.current) ??
           getMxIdLocalPart(sender) ??
           sender;
-        const content = mEvent.getContent();
         // Events reaching here are already decrypted (m.room.encrypted is skipped
         // above). Pass isEncryptedRoom:false so the preview always shows the actual
         // message body when showMessageContent is enabled.
@@ -567,23 +561,6 @@ function MessageNotifications() {
           showMessageContent,
           showEncryptedMessageContent,
         });
-
-        // Build a rich ReactNode body using the same HTML parser as the room
-        // timeline — mxc images, mention pills, linkify, spoilers, code blocks.
-        let bodyNode: ReactNode;
-        if (
-          showMessageContent &&
-          content.format === 'org.matrix.custom.html' &&
-          content.formatted_body
-        ) {
-          const htmlParserOpts = getReactCustomHtmlParser(mx, room.roomId, {
-            settingsLinkBaseUrl: appBaseUrl,
-            linkifyOpts: LINKIFY_OPTS,
-            useAuthentication,
-            nicknames: nicknamesRef.current,
-          });
-          bodyNode = parse(sanitizeCustomHtml(content.formatted_body), htmlParserOpts) as ReactNode;
-        }
 
         const payload = buildRoomMessageNotification({
           roomName: room.name ?? 'Unknown',
@@ -605,7 +582,8 @@ function MessageNotifications() {
           serverName,
           senderName: resolvedSenderName,
           body: previewText,
-          bodyNode,
+          room,
+          event: mEvent,
           icon: roomAvatar,
           onClick: () => {
             window.focus();
@@ -636,7 +614,6 @@ function MessageNotifications() {
     setInAppBanner,
     setPending,
     selectedRoomId,
-    appBaseUrl,
     useAuthentication,
   ]);
 

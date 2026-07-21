@@ -534,6 +534,8 @@ export function BackgroundNotifications() {
                 roomName: room.name ?? room.getCanonicalAlias() ?? undefined,
                 senderName,
                 body: notificationPayload.options.body,
+                room,
+                event: mEvent,
                 icon: notificationPayload.options.icon,
                 onClick: notifOnClick,
               });
