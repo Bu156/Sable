@@ -44,8 +44,7 @@ export const isResolvedHiddenEventSettingsEqual = (
 
 export const useHiddenEventSettings = (settingsAtom: typeof sAtom): ResolvedHiddenEventSettings => {
   const hiddenSettingsAtom = useMemo(
-    () =>
-      selectAtom(settingsAtom, resolveHiddenEventSettings, isResolvedHiddenEventSettingsEqual),
+    () => selectAtom(settingsAtom, resolveHiddenEventSettings, isResolvedHiddenEventSettingsEqual),
     [settingsAtom]
   );
   return useAtomValue(hiddenSettingsAtom);
