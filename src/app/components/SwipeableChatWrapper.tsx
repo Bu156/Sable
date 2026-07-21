@@ -66,6 +66,7 @@ export function SwipeableChatWrapper({
       rubberband: true,
       filterTaps: true,
       pointer: { capture: false },
+      eventOptions: { passive: true },
       from: () => [x.get(), 0],
     }
   );

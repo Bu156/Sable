@@ -63,6 +63,7 @@ export function SwipeableOverlayWrapper({
       rubberband: true,
       filterTaps: true,
       pointer: { capture: true },
+      eventOptions: { passive: true },
       from: () => [x.get(), 0],
     }
   );

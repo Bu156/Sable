@@ -275,6 +275,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
       filterTaps: true,
       tapsThreshold: DIRECTION_DEADZONE,
       pointer: { capture: false },
+      eventOptions: { passive: true },
       from: () => [readX(), 0],
     }
   );
