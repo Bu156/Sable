@@ -119,14 +119,17 @@ jobs:
         include:
           - name: macOS
             platform: macos-latest
+            asset-platform: macos-universal
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin
           - name: Windows
             platform: windows-latest
+            asset-platform: windows-x86_64
             rust-targets: ''
             args: ''
           - name: Linux (CEF)
             platform: ubuntu-22.04
+            asset-platform: linux-x86_64
             rust-targets: ''
             cef: true
     env:
@@ -185,8 +188,7 @@ jobs:
         run: node .github/scripts/set-tauri-version.mjs "$VERSION" "$UPDATER_ENDPOINT"
 
       # --- macOS / Windows: standard wry build via tauri-action ---
-      - name: Configure desktop bundles
-        if: ${{ !matrix.cef }}
+      - name: Configure desktop build
         shell: bash
         env:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
@@ -199,6 +201,9 @@ jobs:
           if [ "$IS_NIGHTLY" = "true" ] && [ "$MATRIX_NAME" = "Windows" ]; then
             ARGS="$ARGS --bundles nsis"
           fi
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            ARGS="$ARGS --config src-tauri/tauri.nightly.conf.json"
+          fi
           echo "TAURI_BUILD_ARGS=${ARGS# }" >> "$GITHUB_ENV"
 
       - name: Build desktop bundles
@@ -207,6 +212,30 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         with:
           args: ${{ matrix.args }} ${{ env.TAURI_BUILD_ARGS }}
+
+      - name: Normalize desktop artifact names
+        if: ${{ !matrix.cef }}
+        shell: bash
+        env:
+          ASSET_PLATFORM: ${{ matrix.asset-platform }}
+        run: |
+          find src-tauri/target/release/bundle -type f -print0 \
+            | while IFS= read -r -d '' path; do
+                case "$path" in
+                  *.app.tar.gz.sig) suffix='.app.tar.gz.sig' ;;
+                  *.app.tar.gz) suffix='.app.tar.gz' ;;
+                  *.nsis.zip.sig) suffix='.nsis.zip.sig' ;;
+                  *.nsis.zip) suffix='.nsis.zip' ;;
+                  *-setup.exe.sig) suffix='-setup.exe.sig' ;;
+                  *-setup.exe) suffix='-setup.exe' ;;
+                  *.msi.sig) suffix='.msi.sig' ;;
+                  *.msi) suffix='.msi' ;;
+                  *.dmg) suffix='.dmg' ;;
+                  *) continue ;;
+                esac
+                target="$(dirname "$path")/Sable-${VERSION}-${ASSET_PLATFORM}${suffix}"
+                [ "$path" = "$target" ] || mv "$path" "$target"
+              done
 
       - name: Attest Windows bundles
         if: ${{ matrix.name == 'Windows' }}
@@ -223,24 +252,18 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACTS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
-          echo "$ARTIFACTS" | jq -r '.[]' | while read -r path; do
-            path="${path%$'\r'}"
-            [ -n "$path" ] || continue
-            if [ -d "$path" ]; then
-              echo "Skipping directory artifact: $path"
-              continue
-            fi
-            echo "Uploading $path"
-            gh release upload "$TAG" "$path" --clobber
+          find src-tauri/target/release/bundle -type f -name 'Sable-*' -print0 \
+            | while IFS= read -r -d '' path; do
+                echo "Uploading $path"
+                gh release upload "$TAG" "$path" --clobber
           done
 
       # --- Linux: CEF runtime, packaged as deb / rpm / AppImage ---
       - name: Build CEF binary
         if: matrix.cef
         shell: bash
-        run: pnpm tauri:cef build
+        run: pnpm tauri:cef build $TAURI_BUILD_ARGS
 
       - name: Build native packages
         if: matrix.cef
@@ -251,7 +274,7 @@ jobs:
         if: ${{ matrix.cef && env.TAURI_SIGNING_PRIVATE_KEY != '' }}
         shell: bash
         run: |
-          for f in src-tauri/target/release/bundle/appimage/Sable_*_amd64.AppImage; do
+          for f in src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage; do
             [ -e "$f" ] || continue
             pnpm tauri signer sign "$f"
           done
@@ -273,9 +296,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           BUNDLE="src-tauri/target/release/bundle"
-          for f in "$BUNDLE"/deb/sable_*.deb "$BUNDLE"/rpm/sable-*.rpm \
-                   "$BUNDLE"/appimage/Sable_*_amd64.AppImage \
-                   "$BUNDLE"/appimage/Sable_*_amd64.AppImage.sig; do
+          for f in "$BUNDLE"/deb/Sable-*-linux-x86_64.deb \
+                   "$BUNDLE"/rpm/Sable-*-linux-x86_64.rpm \
+                   "$BUNDLE"/appimage/Sable-*-linux-x86_64.AppImage \
+                   "$BUNDLE"/appimage/Sable-*-linux-x86_64.AppImage.sig; do
             [ -e "$f" ] || continue
             echo "Uploading $f"
             gh release upload "$TAG" "$f" --clobber
@@ -351,7 +375,21 @@ jobs:
 
       - name: Build Android bundles
         shell: bash
-        run: pnpm tauri android build --apk --aab
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+        run: |
+          ARGS=()
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            ARGS+=(--config src-tauri/tauri.nightly.conf.json)
+          fi
+          pnpm tauri android build --apk --aab "${ARGS[@]}"
+          OUT='src-tauri/gen/android/app/build/outputs'
+          APK=$(find "$OUT/apk/universal/release" -name '*.apk' -type f | head -1)
+          AAB=$(find "$OUT/bundle/universalRelease" -name '*.aab' -type f | head -1)
+          [ -n "$APK" ] || { echo 'APK not found' >&2; exit 1; }
+          [ -n "$AAB" ] || { echo 'AAB not found' >&2; exit 1; }
+          mv "$APK" "$OUT/apk/universal/release/Sable-${VERSION}-android-universal.apk"
+          mv "$AAB" "$OUT/bundle/universalRelease/Sable-${VERSION}-android-universal.aab"
 
       - name: Attest Android bundles
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
@@ -425,10 +463,19 @@ jobs:
       - name: Build unsigned IPA
         id: ipa
         shell: bash
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
-          pnpm tauri ios build --no-sign --ci
+          ARGS=()
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            ARGS+=(--config src-tauri/tauri.nightly.conf.json)
+          fi
+          pnpm tauri ios build --no-sign --ci "${ARGS[@]}"
           IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
           [ -n "$IPA" ] || { echo "IPA not found"; ls -R src-tauri/gen/apple/build 2>/dev/null || true; exit 1; }
+          NORMALIZED_IPA="$(dirname "$IPA")/Sable-${VERSION}-ios-arm64.ipa"
+          [ "$IPA" = "$NORMALIZED_IPA" ] || mv "$IPA" "$NORMALIZED_IPA"
+          IPA="$NORMALIZED_IPA"
           echo "size=$(stat -f%z "$IPA")" >> "$GITHUB_OUTPUT"
           echo "path=$IPA" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$IPA")" >> "$GITHUB_OUTPUT"

@@ -493,7 +493,6 @@ export function RoomNavItem({
                 ref={triggerRef}
                 style={{
                   ...hideTextStyling(hideText),
-                  WebkitTouchCallout: 'none',
                   WebkitTapHighlightColor: 'transparent',
                 }}
               >

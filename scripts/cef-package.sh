@@ -25,12 +25,15 @@ WORK="$STAGE/cef-pkg"
 
 if [ -x "$STAGE/Sable Nightly" ]; then
   BIN_NAME="Sable Nightly"
+  DISPLAY_NAME="Sable Nightly"
 elif [ -x "$STAGE/Sable" ]; then
   BIN_NAME="Sable"
+  DISPLAY_NAME="Sable"
 elif [ -x "$STAGE/sable" ]; then
   BIN_NAME="sable"
+  DISPLAY_NAME="Sable"
 else
-  echo "missing $STAGE/Sable or sable; build it first (pnpm tauri:cef build)" >&2
+  echo "missing $STAGE/Sable Nightly, Sable, or sable; build it first (pnpm tauri:cef build)" >&2
   exit 1
 fi
 
@@ -69,10 +72,10 @@ stage_appindicator() {
 }
 
 write_desktop() {
-  cat > "$1" <<'EOF'
+  cat > "$1" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Sable
+Name=$DISPLAY_NAME
 Comment=A Matrix client
 Exec=sable %U
 Icon=sable
@@ -114,7 +117,7 @@ EOF
     --depends libasound2 --depends libcups2 --depends xdg-utils
     --depends xwayland --depends libayatana-appindicator3-1)
   (cd "$OUT/deb" && fpm "${COMMON[@]}" -v "$DEB_VERSION" --iteration 1 \
-    -t deb -a amd64 "${DEB_DEPS[@]}" -C "$PKGROOT" .)
+    -t deb -a amd64 -p "Sable-${VERSION}-linux-x86_64.deb" "${DEB_DEPS[@]}" -C "$PKGROOT" .)
 
   RPM_DEPS=(--depends gtk3 --depends nss --depends nspr
     --depends mesa-libgbm --depends libdrm --depends libxkbcommon
@@ -122,7 +125,7 @@ EOF
     --depends xorg-x11-server-Xwayland
     --depends 'libayatana-appindicator3.so.1()(64bit)')
   (cd "$OUT/rpm" && fpm "${COMMON[@]}" -v "$RPM_VERSION" --iteration "$RPM_ITERATION" \
-    -t rpm -a x86_64 "${RPM_DEPS[@]}" -C "$PKGROOT" .)
+    -t rpm -a x86_64 -p "Sable-${VERSION}-linux-x86_64.rpm" "${RPM_DEPS[@]}" -C "$PKGROOT" .)
 else
   echo "fpm not found; skipping deb/rpm (building AppImage only)"
 fi
@@ -149,6 +152,6 @@ curl -fsSL -o "$APPIMAGETOOL" \
 echo "${APPIMAGETOOL_SHA256}  $APPIMAGETOOL" | sha256sum -c -
 chmod +x "$APPIMAGETOOL"
 APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" \
-  "$OUT/appimage/Sable_${VERSION}_amd64.AppImage"
+  "$OUT/appimage/Sable-${VERSION}-linux-x86_64.AppImage"
 
 echo "Packages in: $OUT"
