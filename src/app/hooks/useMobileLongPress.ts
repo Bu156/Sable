@@ -1,12 +1,11 @@
 import { useRef, useCallback, useState } from 'react';
-import { mobileOrTablet } from '$utils/user-agent';
 
 export function useMobileLongPress(callback: () => void, delay = 500) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedRef = useRef(false);
   const [isPressing, setIsPressing] = useState(false);
-  const touchStartY = useRef<number | null>(null);
-  const touchStartX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const startX = useRef<number | null>(null);
 
   const clear = useCallback(() => {
     if (timerRef.current !== null) {
@@ -14,19 +13,18 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
       timerRef.current = null;
     }
     setIsPressing(false);
-    touchStartY.current = null;
-    touchStartX.current = null;
+    startY.current = null;
+    startX.current = null;
   }, []);
 
-  const onTouchStart = useCallback(
-    (e: React.TouchEvent | TouchEvent) => {
-      if (!mobileOrTablet()) return;
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent | PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
       firedRef.current = false;
       setIsPressing(true);
-      if (e.touches && e.touches[0]) {
-        touchStartY.current = e.touches[0].clientY;
-        touchStartX.current = e.touches[0].clientX;
-      }
+      startY.current = e.clientY;
+      startX.current = e.clientX;
+
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
         setIsPressing(false);
@@ -36,20 +34,18 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     [callback, delay]
   );
 
-  const onTouchEnd = useCallback(() => {
+  const onPointerUp = useCallback(() => {
     clear();
   }, [clear]);
 
-  const onTouchMove = useCallback(
-    (e: React.TouchEvent | TouchEvent) => {
-      if (touchStartY.current === null || touchStartX.current === null || !e.touches || !e.touches[0]) {
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent | PointerEvent) => {
+      if (startY.current === null || startX.current === null || e.pointerType !== 'touch') {
         clear();
         return;
       }
-      const currentY = e.touches[0].clientY;
-      const currentX = e.touches[0].clientX;
-      const diffY = Math.abs(currentY - touchStartY.current);
-      const diffX = Math.abs(currentX - touchStartX.current);
+      const diffY = Math.abs(e.clientY - startY.current);
+      const diffX = Math.abs(e.clientX - startX.current);
 
       if (diffY > 10 || diffX > 10) {
         clear();
@@ -58,5 +54,7 @@ export function useMobileLongPress(callback: () => void, delay = 500) {
     [clear]
   );
 
-  return { onTouchStart, onTouchEnd, onTouchMove, firedRef, isPressing };
+  const onPointerCancel = useCallback(() => clear(), [clear]);
+
+  return { onPointerDown, onPointerUp, onPointerMove, onPointerCancel, firedRef, isPressing };
 }

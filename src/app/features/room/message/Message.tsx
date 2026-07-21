@@ -834,9 +834,10 @@ function MessageInternal(
   };
 
   const {
-    onTouchStart,
-    onTouchEnd,
-    onTouchMove,
+    onPointerDown,
+    onPointerUp,
+    onPointerMove,
+    onPointerCancel,
     firedRef: longPressFiredRef,
     isPressing,
   } = useMobileLongPress(() => {
@@ -893,6 +894,7 @@ function MessageInternal(
     <MessageBase
       className={classNames(css.MessageBase, className, {
         [css.MessageBaseBubbleCollapsed]: messageLayout === MessageLayout.Bubble && collapse,
+        [css.MessageForceHover]: isPressing || isEmoji || !!menuAnchor,
       })}
       tabIndex={0}
       space={messageSpacing}
@@ -935,9 +937,10 @@ function MessageInternal(
       <div
         style={{ width: '100%' }}
         onContextMenu={handleContextMenu}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchMove={onTouchMove}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerMove={onPointerMove}
+        onPointerCancel={onPointerCancel}
       >
         <WrappedMessage
           headerJSX={headerJSX(collapse)}

@@ -354,9 +354,10 @@ export function RoomNavItem({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const {
-    onTouchStart,
-    onTouchEnd,
-    onTouchMove,
+    onPointerDown,
+    onPointerUp,
+    onPointerMove,
+    onPointerCancel,
     firedRef: longPressFiredRef,
     isPressing,
   } = useMobileLongPress(() => {
@@ -457,9 +458,10 @@ export function RoomNavItem({
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchMove={onTouchMove}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerMove={onPointerMove}
+        onPointerCancel={onPointerCancel}
       >
         <NavItem
           variant="Background"
