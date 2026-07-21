@@ -44,6 +44,7 @@ jobs:
       - name: Compute nightly version
         id: version
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
           VERSION="$(node .github/scripts/nightly-version.mjs "${{ github.run_number }}" "${{ github.run_attempt }}")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
