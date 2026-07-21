@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Box } from 'folds';
 import * as css from '$features/room/message/styles.css';
 
@@ -19,6 +20,11 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
   const [touchYDiff, setTouchYDiff] = useState(0);
   const date = new Date();
   const startTime = useRef(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0]?.clientY ?? null;
@@ -58,7 +64,9 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
     </div>
   );
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <Box
       className={css.MessageMobileOptionsWrapped}
       data-gestures="ignore"
@@ -77,6 +85,7 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
       >
         {children(dragHandleJSX, dragHandlers)}
       </Box>
-    </Box>
+    </Box>,
+    document.body
   );
 }

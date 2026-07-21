@@ -121,36 +121,7 @@ export type MessageProps = {
   msc2723ForwardedMessageProps?: MSC2723ForwardedMessageProps;
 };
 
-function useMobileLongPress(callback: () => void, delay = 500) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firedRef = useRef(false);
-
-  const clear = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const onTouchStart = useCallback(() => {
-    if (!mobileOrTablet()) return;
-    firedRef.current = false;
-    timerRef.current = setTimeout(() => {
-      firedRef.current = true;
-      callback();
-    }, delay);
-  }, [callback, delay]);
-
-  const onTouchEnd = useCallback(() => {
-    clear();
-  }, [clear]);
-
-  const onTouchMove = useCallback(() => {
-    clear();
-  }, [clear]);
-
-  return { onTouchStart, onTouchEnd, onTouchMove, firedRef };
-}
+import { useMobileLongPress } from '$hooks/useMobileLongPress';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 

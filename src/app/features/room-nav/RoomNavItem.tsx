@@ -36,6 +36,7 @@ import { copyToClipboard } from '$utils/dom';
 import { markAsRead } from '$utils/notifications';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { LeaveRoomPrompt } from '$components/leave-room-prompt';
+import { useMobileLongPress } from '$hooks/useMobileLongPress';
 import { useRoomTypingMember } from '$hooks/useRoomTypingMembers';
 import { TypingIndicator } from '$components/typing-indicator';
 import { stopPropagation } from '$utils/keyboard';
@@ -350,18 +351,29 @@ export function RoomNavItem({
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const { onTouchStart, onTouchEnd, onTouchMove, firedRef: longPressFiredRef } = useMobileLongPress(() => {
+    setIsMobileMenuOpen(true);
+  });
+
   const handleContextMenu: MouseEventHandler<HTMLElement> = (evt) => {
-    evt.preventDefault();
     if (isMobile) {
+      if (longPressFiredRef.current) {
+        evt.preventDefault();
+        longPressFiredRef.current = false;
+        return;
+      }
+      evt.preventDefault();
       setIsMobileMenuOpen(true);
-    } else {
-      setMenuAnchor({
-        x: evt.clientX,
-        y: evt.clientY,
-        width: 0,
-        height: 0,
-      });
+      return;
     }
+
+    evt.preventDefault();
+    setMenuAnchor({
+      x: evt.clientX,
+      y: evt.clientY,
+      width: 0,
+      height: 0,
+    });
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -437,6 +449,9 @@ export function RoomNavItem({
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
       >
         <NavItem
           variant="Background"
