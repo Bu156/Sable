@@ -44,6 +44,7 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     return (
       <Box
         as={names.length > 0 ? 'button' : 'div'}
+        data-no-button-motion={names.length > 0 || undefined}
         onClick={
           names.length > 0
             ? () => {
