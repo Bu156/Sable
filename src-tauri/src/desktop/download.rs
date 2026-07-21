@@ -2,7 +2,7 @@ use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
-pub async fn save_download(
+pub fn save_download(
     app: AppHandle<crate::BrowserEngine>,
     filename: String,
     bytes: Vec<u8>,

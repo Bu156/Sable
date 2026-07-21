@@ -188,11 +188,15 @@ async fn run_upload(
     let progress_stream = async_stream::stream! {
         let mut reader = FramedRead::new(file, BytesCodec::new());
         let mut loaded: u64 = 0;
+        let mut last_emitted_loaded: u64 = 0;
         while let Some(item) = reader.next().await {
             match item {
                 Ok(chunk) => {
                     loaded += chunk.len() as u64;
-                    let _ = on_progress.send(ProgressPayload { loaded, total });
+                    if loaded - last_emitted_loaded >= 256 * 1024 || loaded == total {
+                        let _ = on_progress.send(ProgressPayload { loaded, total });
+                        last_emitted_loaded = loaded;
+                    }
                     yield Ok::<_, std::io::Error>(chunk.freeze());
                 }
                 Err(err) => yield Err(err),
