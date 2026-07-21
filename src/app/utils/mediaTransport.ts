@@ -133,23 +133,38 @@ export function getActiveMediaSession(): { baseUrl: string; accessToken: string 
   return undefined;
 }
 
+let cachedSessionScope: string | undefined;
+
+export const invalidateMediaSessionScope = (): void => {
+  cachedSessionScope = undefined;
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('sable-session-changed', invalidateMediaSessionScope);
+  window.addEventListener('storage', invalidateMediaSessionScope);
+}
+
 export function getCurrentMediaSessionScope(): string {
   if (typeof localStorage === 'undefined') return 'anonymous';
+  if (cachedSessionScope !== undefined) return cachedSessionScope;
 
   const activeSession = getActiveStoredSession();
 
   if (activeSession) {
-    return activeSession.userId;
+    cachedSessionScope = activeSession.userId;
+    return cachedSessionScope;
   }
 
   const fallbackBaseUrl = localStorage.getItem(FALLBACK_BASE_URL_KEY);
   const fallbackUserId = localStorage.getItem(FALLBACK_USER_ID_KEY);
 
   if (fallbackBaseUrl && fallbackUserId) {
-    return fallbackUserId;
+    cachedSessionScope = fallbackUserId;
+    return cachedSessionScope;
   }
 
-  return 'anonymous';
+  cachedSessionScope = 'anonymous';
+  return cachedSessionScope;
 }
 
 function getFetchCacheMode(cacheMode: MediaFetchCacheMode): RequestCache {
@@ -159,11 +174,44 @@ function getFetchCacheMode(cacheMode: MediaFetchCacheMode): RequestCache {
 }
 
 function getRequestKey(url: string, cacheMode: MediaFetchCacheMode): string {
-  return `${cacheMode}:${url}`;
+  return `${cacheMode}:${getStableMediaCacheKeyFragment(url)}`;
 }
 
+type MatrixMediaInfo = {
+  mxcUrl: string;
+  query: string;
+};
+
+function getMatrixMediaInfo(url: string): MatrixMediaInfo | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+
+  const match = parsed.pathname.match(
+    /^\/_matrix\/(?:media\/[^/]+|client\/v1\/media)\/(?:download|thumbnail)\/([^/]+)\/([^/?#]+)/
+  );
+  if (!match) return undefined;
+
+  const [, serverName, mediaId] = match;
+  return {
+    mxcUrl: `mxc://${serverName}/${mediaId}`,
+    query: parsed.search,
+  };
+}
+
+function getStableMediaCacheKeyFragment(url: string): string {
+  const info = getMatrixMediaInfo(url);
+  if (info) return `${info.mxcUrl}${info.query}`;
+  return url;
+}
+
+export { getStableMediaCacheKeyFragment };
+
 function getScopedMediaCacheKey(url: string, sessionScope?: string): string {
-  return `${sessionScope ?? getCurrentMediaSessionScope()}:${url}`;
+  return `${sessionScope ?? getCurrentMediaSessionScope()}:${getStableMediaCacheKeyFragment(url)}`;
 }
 
 function resolveAccessToken(url: string, options?: MediaTransportOptions): string | undefined {

@@ -132,6 +132,8 @@ jobs:
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
       NODE_OPTIONS: --max-old-space-size=8192
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -292,6 +294,8 @@ jobs:
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
       NODE_OPTIONS: --max-old-space-size=8192
       ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -382,6 +386,8 @@ jobs:
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout repository
@@ -468,6 +474,8 @@ jobs:
     env:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
+      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
       REPO: ${{ github.repository }}
       STARTED_AT: ${{ needs.setup-release.outputs.started_at }}
     steps:

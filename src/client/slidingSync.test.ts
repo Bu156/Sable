@@ -120,7 +120,7 @@ describe('SlidingSyncManager initial request', () => {
 
     expect(joined?.ranges).toEqual([[0, 29]]);
     expect(joined?.timeline_limit).toBe(1);
-    expect(joined?.required_state).toHaveLength(8);
+    expect(joined?.required_state).toHaveLength(10);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
     expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
     expect(updates).toMatchObject({

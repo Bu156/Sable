@@ -47,7 +47,7 @@ const resolveBuildHash = (): string | undefined => {
   }
 };
 
-const appVersion = packageJson.version;
+const appVersion = process.env.VITE_APP_VERSION || packageJson.version;
 const buildHash = resolveBuildHash();
 const tauriDevHost = process.env.TAURI_DEV_HOST;
 const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);

@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { isTauri } from '@tauri-apps/api/core';
 import { activeSessionIdAtom } from '$state/sessions';
-import { fetchMediaBlob, getCurrentMediaSessionScope } from '$utils/mediaTransport';
+import {
+  fetchMediaBlob,
+  getCurrentMediaSessionScope,
+  getStableMediaCacheKeyFragment,
+} from '$utils/mediaTransport';
 import { hasControllingServiceWorker, hasServiceWorker } from '$utils/platform';
 import { rewriteAuthenticatedMediaUrl } from '$utils/matrix';
 
@@ -22,7 +26,7 @@ const objectUrlCache = new Map<string, ObjectUrlEntry>();
 const inflightRequests = new Map<string, Promise<string>>();
 
 function getObjectUrlCacheKey(sessionScope: string, url: string): string {
-  return `${sessionScope}\x00${url}`;
+  return `${sessionScope}\x00${getStableMediaCacheKeyFragment(url)}`;
 }
 
 function normalizeRenderableMediaUrl(url: string | undefined): string | undefined {

@@ -22,9 +22,10 @@ export function SwipeableChatWrapper({
   const x = useMotionValue(0);
 
   const bind = useDrag(
-    ({ first, active, offset: [ox], velocity: [vx], direction: [dx], event: e }) => {
-      if (e && 'target' in e && e.target instanceof HTMLElement) {
+    ({ first, active, offset: [ox], velocity: [vx], direction: [dx], event: e, cancel }) => {
+      if (first && e && 'target' in e && e.target instanceof HTMLElement) {
         if (e.target.closest('[data-gestures="ignore"]')) {
+          cancel();
           return;
         }
       }
@@ -65,6 +66,7 @@ export function SwipeableChatWrapper({
       rubberband: true,
       filterTaps: true,
       pointer: { capture: false },
+      eventOptions: { passive: true },
       from: () => [x.get(), 0],
     }
   );

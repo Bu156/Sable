@@ -121,36 +121,7 @@ export type MessageProps = {
   msc2723ForwardedMessageProps?: MSC2723ForwardedMessageProps;
 };
 
-function useMobileLongPress(callback: () => void, delay = 500) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firedRef = useRef(false);
-
-  const clear = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const onTouchStart = useCallback(() => {
-    if (!mobileOrTablet()) return;
-    firedRef.current = false;
-    timerRef.current = setTimeout(() => {
-      firedRef.current = true;
-      callback();
-    }, delay);
-  }, [callback, delay]);
-
-  const onTouchEnd = useCallback(() => {
-    clear();
-  }, [clear]);
-
-  const onTouchMove = useCallback(() => {
-    clear();
-  }, [clear]);
-
-  return { onTouchStart, onTouchEnd, onTouchMove, firedRef };
-}
+import { useMobileLongPress } from '$hooks/useMobileLongPress';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -866,7 +837,9 @@ function MessageInternal(
     onTouchStart,
     onTouchEnd,
     onTouchMove,
+    onTouchCancel,
     firedRef: longPressFiredRef,
+    isPressing,
   } = useMobileLongPress(() => {
     if (!edit) openMobileOptions();
   });
@@ -921,13 +894,15 @@ function MessageInternal(
     <MessageBase
       className={classNames(css.MessageBase, className, {
         [css.MessageBaseBubbleCollapsed]: messageLayout === MessageLayout.Bubble && collapse,
+        [css.MessageForceHover]: isPressing || isEmoji || !!menuAnchor,
       })}
       tabIndex={0}
       space={messageSpacing}
       collapse={collapse}
       highlight={highlight}
       notifyHighlight={highlightMentions ? notifyHighlight : undefined}
-      selected={!!menuAnchor || isEmoji}
+      selected={!!menuAnchor || isEmoji || isPressing}
+      data-hover={!!menuAnchor || isEmoji || isPressing || undefined}
       isMarked={isMarked}
       mobile={mobileOrTablet()}
       {...props}
@@ -960,11 +935,18 @@ function MessageInternal(
       )}
 
       <div
-        style={{ width: '100%' }}
+        style={{
+          width: '100%',
+          WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          userSelect: 'none',
+        }}
         onContextMenu={handleContextMenu}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onTouchMove={onTouchMove}
+        onTouchCancel={onTouchCancel}
       >
         <WrappedMessage
           headerJSX={headerJSX(collapse)}

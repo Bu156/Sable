@@ -17,6 +17,7 @@ import './app/styles/themes.css';
 import './app/styles/overrides/General.css';
 import './app/styles/overrides/Privacy.css';
 import './app/styles/overrides/TauriDesktop.css';
+import './app/styles/overrides/TouchDevices.css';
 import { createLogger } from './app/utils/debug';
 import { installConsolePasteScamWarning } from './app/utils/consolePasteScamWarning';
 import { registerMatrixUriProtocol } from './app/plugins/matrix-uri';

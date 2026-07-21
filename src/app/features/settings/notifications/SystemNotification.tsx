@@ -428,8 +428,7 @@ function labelUnifiedPushDistributorOption(distributor: string): string {
   const lastSegment = distributor
     .split(/[./]/)
     .map((segment) => segment.trim())
-    .filter(Boolean)
-    .at(-1);
+    .findLast(Boolean);
 
   return lastSegment ?? distributor;
 }

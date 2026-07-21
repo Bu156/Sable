@@ -15,6 +15,14 @@ type SSOLoginProps = {
   action?: SSOAction;
   saveScreenSpace?: boolean;
 };
+const openSso = async (event: MouseEvent, url: string) => {
+  if (!isTauri()) return;
+  event.preventDefault();
+  const os = osType();
+  const urlProgram = os === 'ios' || os === 'android' ? 'inAppBrowser' : undefined;
+  await openUrl(url, urlProgram);
+};
+
 export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SSOLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
@@ -30,14 +38,6 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
     : true;
 
   const renderAsIcons = withoutIcon ? false : saveScreenSpace && providers && providers.length > 2;
-
-  const openSso = async (event: MouseEvent, url: string) => {
-    if (!isTauri()) return;
-    event.preventDefault();
-    const os = osType();
-    const urlProgram = os === 'ios' || os === 'android' ? 'inAppBrowser' : undefined;
-    await openUrl(url, urlProgram);
-  };
 
   return (
     <Box justifyContent="Center" gap="600" wrap="Wrap">

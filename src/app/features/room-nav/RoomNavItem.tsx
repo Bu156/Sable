@@ -36,6 +36,7 @@ import { copyToClipboard } from '$utils/dom';
 import { markAsRead } from '$utils/notifications';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { LeaveRoomPrompt } from '$components/leave-room-prompt';
+import { useMobileLongPress } from '$hooks/useMobileLongPress';
 import { useRoomTypingMember } from '$hooks/useRoomTypingMembers';
 import { TypingIndicator } from '$components/typing-indicator';
 import { stopPropagation } from '$utils/keyboard';
@@ -59,6 +60,10 @@ import {
   SignOut,
   UserPlus,
 } from '$components/icons/phosphor';
+import { Copy as CopyIcon } from '@phosphor-icons/react';
+import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
+import { type DragOptsProps } from '$components/message/modals/Options';
+import * as messageCss from '$features/room/message/styles.css';
 import {
   RoomNotificationMode,
   roomNotificationModeChipIcon,
@@ -112,10 +117,11 @@ type RoomNavItemMenuProps = {
   room: Room;
   requestClose: () => void;
   notificationMode?: RoomNotificationMode;
+  dragOpts?: DragOptsProps;
 };
 
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
-  ({ room, requestClose, notificationMode }, ref) => {
+  ({ room, requestClose, notificationMode, dragOpts }, ref) => {
     const mx = useMatrixClient();
     const [hideReads] = useSetting(settingsAtom, 'hideReads');
     const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -138,6 +144,12 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       setInvitePrompt(true);
     };
 
+    const handleCopyName = () => {
+      const roomName = mx.getRoom(room.roomId)?.name || 'Room';
+      copyToClipboard(roomName);
+      requestClose();
+    };
+
     const handleCopyLink = () => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
       const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
@@ -151,7 +163,15 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     };
 
     return (
-      <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
+      <Menu
+        ref={ref}
+        className={dragOpts ? messageCss.MessageOptionsMenu : undefined}
+        style={dragOpts ? undefined : { maxWidth: toRem(160), width: '100vw' }}
+        onTouchStart={dragOpts?.onTouchStart}
+        onTouchMove={dragOpts?.onTouchMove}
+        onTouchEnd={dragOpts?.onTouchEnd}
+      >
+        {dragOpts?.dragHandle}
         {invitePrompt && room && (
           <InviteUserPrompt
             room={room}
@@ -214,6 +234,11 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
           <MenuItem onClick={handleCopyLink} size="300" after={menuIcon(Link)} radii="300">
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Copy Link
+            </Text>
+          </MenuItem>
+          <MenuItem onClick={handleCopyName} size="300" after={menuIcon(CopyIcon)} radii="300">
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              Copy Room Name
             </Text>
           </MenuItem>
           <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">
@@ -326,7 +351,31 @@ export function RoomNavItem({
 
   const isActiveCall = callEmbed?.roomId === room.roomId;
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const {
+    onTouchStart,
+    onTouchEnd,
+    onTouchMove,
+    onTouchCancel,
+    firedRef: longPressFiredRef,
+    isPressing,
+  } = useMobileLongPress(() => {
+    setIsMobileMenuOpen(true);
+  });
+
   const handleContextMenu: MouseEventHandler<HTMLElement> = (evt) => {
+    if (isMobile) {
+      if (longPressFiredRef.current) {
+        evt.preventDefault();
+        longPressFiredRef.current = false;
+        return;
+      }
+      evt.preventDefault();
+      setIsMobileMenuOpen(true);
+      return;
+    }
+
     evt.preventDefault();
     setMenuAnchor({
       x: evt.clientX,
@@ -337,7 +386,11 @@ export function RoomNavItem({
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuAnchor(evt.currentTarget.getBoundingClientRect());
+    if (isMobile) {
+      setIsMobileMenuOpen(true);
+    } else {
+      setMenuAnchor(evt.currentTarget.getBoundingClientRect());
+    }
   };
 
   const handleNavItemClick: MouseEventHandler<HTMLElement> = (evt) => {
@@ -399,14 +452,19 @@ export function RoomNavItem({
       <Box
         direction="Column"
         grow="Yes"
-        style={{ ...hideTextStyling(hideText), marginTop: hideText ? toRem(5) : '0' }}
+        style={{
+          ...hideTextStyling(hideText),
+          marginTop: hideText ? toRem(5) : '0',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
       >
         <NavItem
           variant="Background"
           radii="400"
           highlight={shouldShowUnreadIndicator}
           aria-selected={selected}
-          data-hover={!!menuAnchor}
+          data-hover={!!menuAnchor || isPressing}
           onContextMenu={handleContextMenu}
           {...hoverProps}
           {...focusWithinProps}
@@ -427,9 +485,17 @@ export function RoomNavItem({
               <NavButton
                 onClick={handleNavItemClick}
                 onPointerDown={() => warmupRoomDecryption(mx, room.roomId)}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+                onTouchMove={onTouchMove}
+                onTouchCancel={onTouchCancel}
                 aria-label={ariaLabel}
                 ref={triggerRef}
-                style={hideTextStyling(hideText)}
+                style={{
+                  ...hideTextStyling(hideText),
+                  WebkitTouchCallout: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
               >
                 <NavItemContent style={hideTextStyling(hideText)}>
                   <Box
@@ -584,6 +650,21 @@ export function RoomNavItem({
                     </IconButton>
                   )}
                 </TooltipProvider>
+              )}
+              {isMobileMenuOpen && (
+                <MobileSwipeDownModal requestClose={() => setIsMobileMenuOpen(false)}>
+                  {(dragHandleJSX, dragHandlers) => (
+                    <RoomNavItemMenu
+                      room={room}
+                      requestClose={() => setIsMobileMenuOpen(false)}
+                      notificationMode={notificationMode}
+                      dragOpts={{
+                        dragHandle: dragHandleJSX,
+                        ...dragHandlers,
+                      }}
+                    />
+                  )}
+                </MobileSwipeDownModal>
               )}
               <PopOut
                 id={`menu-${room.roomId}`}

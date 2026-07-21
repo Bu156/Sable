@@ -9,6 +9,11 @@ import {
 
 const log = createLogger('sessions');
 
+const notifySessionChanged = (): void => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('sable-session-changed'));
+};
+
 export type OidcSessionInfo = {
   issuer: string;
   clientId: string;
@@ -54,12 +59,14 @@ export function setFallbackSession(
   localStorage.setItem('cinny_device_id', deviceId);
   localStorage.setItem('cinny_user_id', userId);
   localStorage.setItem('cinny_hs_base_url', baseUrl);
+  notifySessionChanged();
 }
 export const removeFallbackSession = () => {
   localStorage.removeItem('cinny_hs_base_url');
   localStorage.removeItem('cinny_user_id');
   localStorage.removeItem('cinny_device_id');
   localStorage.removeItem('cinny_access_token');
+  notifySessionChanged();
 };
 export const getFallbackSession = (): Session | undefined => {
   const baseUrl = localStorage.getItem('cinny_hs_base_url');
@@ -166,6 +173,7 @@ export const sessionsAtom = atom<Sessions, [SessionsAction], void>(
         (session) => session.userId !== action.session.userId
       );
       set(baseSessionsAtom, sessions);
+      notifySessionChanged();
     }
   }
 );
@@ -187,6 +195,7 @@ export const updateSessionTokens = (
   };
   setLocalStorageItem(MATRIX_SESSIONS_KEY, sessions);
   window.dispatchEvent(new StorageEvent('storage', { key: MATRIX_SESSIONS_KEY }));
+  notifySessionChanged();
 };
 
 export const getStoredSessionRefreshToken = (userId: string): string | undefined =>
@@ -205,7 +214,9 @@ const baseActiveSessionAtom = atomWithLocalStorage<string | undefined>(
 export const activeSessionIdAtom = atom<string | undefined, [string | undefined], void>(
   (get) => get(baseActiveSessionAtom),
   (_get, set, value) => {
+    const previous = _get(baseActiveSessionAtom);
     set(baseActiveSessionAtom, value);
+    if (previous !== value) notifySessionChanged();
   }
 );
 

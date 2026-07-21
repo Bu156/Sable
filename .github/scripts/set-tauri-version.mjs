@@ -24,6 +24,9 @@ if (updaterEndpoint && !updaterEndpoint.startsWith('https://')) {
 const file = 'src-tauri/tauri.conf.json';
 const config = JSON.parse(readFileSync(file, 'utf8'));
 config.version = version;
+if (version.includes('nightly')) {
+  config.productName = 'Sable Nightly';
+}
 if (updaterEndpoint) {
   config.plugins.updater.endpoints = [updaterEndpoint];
 }

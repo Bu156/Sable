@@ -302,8 +302,8 @@ export function Lobby() {
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 1,
-    overscan: 2,
+    estimateSize: () => 72,
+    overscan: 6,
     paddingStart: heroSectionHeight ?? 258,
   });
   const vItems = virtualizer.getVirtualItems();
