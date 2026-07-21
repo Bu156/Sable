@@ -280,6 +280,11 @@ pub fn run() {
             network::media_protocol::respond,
         )
         .setup(|app| {
+            // CEF is initialized during runtime construction; initialize GTK afterward
+            // on the main thread for the Linux tray menu.
+            #[cfg(all(feature = "cef", target_os = "linux"))]
+            gtk::init()?;
+
             network::native_upload::cleanup_uploads(app.handle());
 
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
