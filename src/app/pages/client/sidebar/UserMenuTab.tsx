@@ -66,6 +66,7 @@ import {
 } from '@phosphor-icons/react';
 import * as css from './UserMenuTab.css';
 import { getMxIdServer } from '$utils/mxIdHelper';
+import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 
 const log = createLogger('AccountSwitcherTab');
 
@@ -681,6 +682,9 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
   };
 
   const handleCloseMenu = () => setMenuAnchor(undefined);
+  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, () => {
+    navigate(getProfilePath());
+  });
 
   const isActive = (!!menuAnchor || profileSelected) && !isMobile;
 
@@ -690,6 +694,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
         direction="Column"
         alignItems="Center"
         onClick={handleToggle}
+        {...mobileTapActivation}
         style={
           isMobile
             ? {
@@ -702,7 +707,7 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
         }
       >
         <AvatarPresence badge={<PresenceBadge presence={currentPresence} size="200" />}>
-          <SidebarAvatar size={isMobile ? '300' : '400'} as="button" onClick={handleToggle}>
+          <SidebarAvatar size={isMobile ? '300' : '400'} as="button">
             <UserAvatar
               userId={userId}
               src={avatarUrl}

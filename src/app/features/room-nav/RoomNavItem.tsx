@@ -1,5 +1,5 @@
-import type { MouseEventHandler, MouseEvent, PointerEventHandler } from 'react';
-import { forwardRef, startTransition, useState, useEffect, useRef } from 'react';
+import type { MouseEventHandler, MouseEvent } from 'react';
+import { forwardRef, startTransition, useState, useEffect } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { RoomEvent as RoomEventEnum } from '$types/matrix-sdk';
 import type { RectCords } from 'folds';
@@ -78,6 +78,7 @@ import { useRoomName, useRoomTopic } from '$hooks/useRoomMeta';
 import { nicknamesAtom } from '$state/nicknames';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { warmupRoomDecryption } from '$utils/decryptScheduler';
+import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 
 // Call Hooks & Plugins
 import { useCallMembers, useCallSession } from '$hooks/useCall';
@@ -418,27 +419,9 @@ export function RoomNavItem({
     }
   };
 
-  // Android WebView suppresses click synthesis after a drag gesture, so the
-  // first tap on a room row after swiping produces no click event. Navigate
-  // directly on pointerup when the touch had minimal movement (i.e. a tap).
-  const navPointerDownRef = useRef<{ x: number; y: number } | null>(null);
-  const handleNavPointerDown: PointerEventHandler<HTMLElement> = (evt) => {
-    warmupRoomDecryption(mx, room.roomId);
-    if (isMobile && evt.pointerType === 'touch') {
-      navPointerDownRef.current = { x: evt.clientX, y: evt.clientY };
-    }
-  };
-  const handleNavPointerUp: PointerEventHandler<HTMLElement> = (evt) => {
-    if (!isMobile || evt.pointerType !== 'touch' || !navPointerDownRef.current) return;
-    const down = navPointerDownRef.current;
-    navPointerDownRef.current = null;
-    const dx = Math.abs(evt.clientX - down.x);
-    const dy = Math.abs(evt.clientY - down.y);
-    if (dx > 10 || dy > 10) return; // was a drag, not a tap
-    if (room.isCallRoom()) return; // call rooms use onClick
-    evt.preventDefault();
-    startTransition(() => navigate(linkPath));
-  };
+  const mobileTapActivation = useMobileTapActivation(isMobile && !room.isCallRoom(), () => {
+    navigate(linkPath);
+  });
 
   const handleChatButtonClick = (evt: MouseEvent<HTMLButtonElement>) => {
     evt.stopPropagation();
@@ -506,8 +489,13 @@ export function RoomNavItem({
             {(triggerRef) => (
               <NavButton
                 onClick={handleNavItemClick}
-                onPointerDown={handleNavPointerDown}
-                onPointerUp={handleNavPointerUp}
+                onPointerDown={(evt) => {
+                  warmupRoomDecryption(mx, room.roomId);
+                  mobileTapActivation.onPointerDown(evt);
+                }}
+                onPointerMove={mobileTapActivation.onPointerMove}
+                onPointerUp={mobileTapActivation.onPointerUp}
+                onPointerCancel={mobileTapActivation.onPointerCancel}
                 onTouchStart={onTouchStart}
                 onTouchEnd={onTouchEnd}
                 onTouchMove={onTouchMove}
