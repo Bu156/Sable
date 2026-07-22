@@ -434,22 +434,12 @@ function Editor() {
   return (
     <Box direction="Column" gap="100">
       <Text size="L400">Editor</Text>
-      <SequenceCard
-        className={SequenceCardStyle}
-        variant="SurfaceVariant"
-        direction="Column"
-      >
+      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
           title="ENTER for Newline"
           focusId="enter-for-newline"
           description={`Use ${isMacOS() ? KeySymbol.Command : 'Ctrl'} + ENTER to send message.`}
-          after={
-            <Switch
-              variant="Primary"
-              value={enterForNewline}
-              onChange={setEnterForNewline}
-            />
-          }
+          after={<Switch variant="Primary" value={enterForNewline} onChange={setEnterForNewline} />}
         />
       </SequenceCard>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
