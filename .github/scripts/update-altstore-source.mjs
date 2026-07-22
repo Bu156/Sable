@@ -32,12 +32,22 @@ if (!app) {
   process.exit(1);
 }
 
-// Strip marketplaceID: SideStore rejects PAL-marked sources.
-delete app.marketplaceID;
+// Clean version string for AltStore/SideStore compatibility:
+// Apple Info.plist CFBundleShortVersionString / CFBundleVersion replaces hyphens/prereleases (e.g. -nightly.) with numeric/dot delimiters.
+const normalizedVersion = version
+  .replace(/-nightly\./g, '.')
+  .replace(/[^0-9.]/g, '.')
+  .replace(/\.+/g, '.')
+  .replace(/^\.|\.$/g, '');
+const normalizedBuild = build
+  .replace(/-nightly\./g, '.')
+  .replace(/[^0-9.]/g, '.')
+  .replace(/\.+/g, '.')
+  .replace(/^\.|\.$/g, '');
 
 const entry = {
-  version,
-  buildVersion: build,
+  version: normalizedVersion,
+  buildVersion: normalizedBuild,
   date,
   size,
   downloadURL,
