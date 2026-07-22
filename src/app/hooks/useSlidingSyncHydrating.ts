@@ -8,10 +8,12 @@ export const useSlidingSyncHydrating = (
   mx: MatrixClient
 ): { isHydrating: boolean; progress?: HydrationProgress } => {
   const [manager, setManager] = useState(() => getSlidingSyncManager(mx));
-  const [state, setState] = useState<{ isHydrating: boolean; progress?: HydrationProgress }>(() => ({
-    isHydrating: manager?.isSyncingRoomData() ?? false,
-    progress: manager?.isSyncingRoomData() ? manager.getHydrationProgress() : undefined,
-  }));
+  const [state, setState] = useState<{ isHydrating: boolean; progress?: HydrationProgress }>(
+    () => ({
+      isHydrating: manager?.isSyncingRoomData() ?? false,
+      progress: manager?.isSyncingRoomData() ? manager.getHydrationProgress() : undefined,
+    })
+  );
 
   useEffect(() => {
     if (manager) return undefined;

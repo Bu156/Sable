@@ -834,7 +834,9 @@ export class SlidingSyncManager {
       if (this.listsFullyLoaded) {
         this.listsFullyLoaded = false;
       }
-      this.hydrationStatusListeners.forEach((listener) => listener(true, this.getHydrationProgress()));
+      this.hydrationStatusListeners.forEach((listener) =>
+        listener(true, this.getHydrationProgress())
+      );
       log.log(`Sliding Sync lists expanding... for ${this.mx.getUserId()}`);
     }
 
@@ -950,7 +952,7 @@ export class SlidingSyncManager {
       const existing = this.slidingSync.getListData(key);
       const knownCount = existing?.joinedCount ?? 0;
       const currentEnd = this.confirmedListRangeEnds.get(key) ?? -1;
-      
+
       if (knownCount > 0) {
         totalRooms += knownCount;
         loadedRooms += Math.min(knownCount, currentEnd + 1);

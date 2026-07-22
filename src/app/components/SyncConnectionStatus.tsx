@@ -93,20 +93,28 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
                 borderRadius: '9999px',
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
                 border: `1px solid color-mix(in srgb, ${
-                  status.variant === 'Primary' ? 'var(--sable-primary-main)' :
-                  status.variant === 'Success' ? 'var(--sable-success-main)' :
-                  status.variant === 'Warning' ? 'var(--sable-warn-main)' :
-                  status.variant === 'Critical' ? 'var(--sable-crit-main)' :
-                  'currentColor'
+                  status.variant === 'Primary'
+                    ? 'var(--sable-primary-main)'
+                    : status.variant === 'Success'
+                      ? 'var(--sable-success-main)'
+                      : status.variant === 'Warning'
+                        ? 'var(--sable-warn-main)'
+                        : status.variant === 'Critical'
+                          ? 'var(--sable-crit-main)'
+                          : 'currentColor'
                 } 30%, transparent)`,
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
                 backgroundColor: `color-mix(in srgb, ${
-                  status.variant === 'Primary' ? 'var(--sable-primary-main)' :
-                  status.variant === 'Success' ? 'var(--sable-success-main)' :
-                  status.variant === 'Warning' ? 'var(--sable-warn-main)' :
-                  status.variant === 'Critical' ? 'var(--sable-crit-main)' :
-                  'currentColor'
+                  status.variant === 'Primary'
+                    ? 'var(--sable-primary-main)'
+                    : status.variant === 'Success'
+                      ? 'var(--sable-success-main)'
+                      : status.variant === 'Warning'
+                        ? 'var(--sable-warn-main)'
+                        : status.variant === 'Critical'
+                          ? 'var(--sable-crit-main)'
+                          : 'currentColor'
                 } 18%, transparent)`,
                 position: 'relative',
                 overflow: 'hidden',
@@ -115,7 +123,7 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
               justifyContent="Center"
             >
               <Text size="L400">{status.text}</Text>
-              
+
               {status.progress !== undefined && (
                 <div
                   style={{
@@ -123,11 +131,16 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
                     bottom: 0,
                     left: 0,
                     height: '2px',
-                    backgroundColor: status.variant === 'Primary' ? 'var(--sable-primary-main)' :
-                                     status.variant === 'Success' ? 'var(--sable-success-main)' :
-                                     status.variant === 'Warning' ? 'var(--sable-warn-main)' :
-                                     status.variant === 'Critical' ? 'var(--sable-crit-main)' :
-                                     'currentColor',
+                    backgroundColor:
+                      status.variant === 'Primary'
+                        ? 'var(--sable-primary-main)'
+                        : status.variant === 'Success'
+                          ? 'var(--sable-success-main)'
+                          : status.variant === 'Warning'
+                            ? 'var(--sable-warn-main)'
+                            : status.variant === 'Critical'
+                              ? 'var(--sable-crit-main)'
+                              : 'currentColor',
                     width: `${status.progress}%`,
                     transition: 'width 0.3s ease-out',
                   }}
@@ -252,11 +265,16 @@ export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusPro
                 bottom: 0,
                 left: 0,
                 height: '2px',
-                backgroundColor: status.variant === 'Primary' ? 'var(--sable-primary-main)' :
-                                 status.variant === 'Success' ? 'var(--sable-success-main)' :
-                                 status.variant === 'Warning' ? 'var(--sable-warn-main)' :
-                                 status.variant === 'Critical' ? 'var(--sable-crit-main)' :
-                                 'currentColor',
+                backgroundColor:
+                  status.variant === 'Primary'
+                    ? 'var(--sable-primary-main)'
+                    : status.variant === 'Success'
+                      ? 'var(--sable-success-main)'
+                      : status.variant === 'Warning'
+                        ? 'var(--sable-warn-main)'
+                        : status.variant === 'Critical'
+                          ? 'var(--sable-crit-main)'
+                          : 'currentColor',
                 width: `${status.progress}%`,
                 transition: 'width 0.3s ease-out',
               }}

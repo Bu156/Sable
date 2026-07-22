@@ -75,6 +75,7 @@ import { BackgroundNotifications } from './BackgroundNotifications';
 import { DesktopUpdater } from './DesktopUpdater';
 import { NotificationTransportRuntimeFeature } from '$features/settings/notifications/NotificationTransportRuntimeFeature';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
+import { GlobalBannerRenderer } from '$components/global-banner/GlobalBannerRenderer';
 import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
@@ -1020,6 +1021,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <NotificationBanner />
       <TelemetryConsentBanner />
       <UnverifiedNoticeBanner />
+      <GlobalBannerRenderer />
       <ThemeMigrationBanner />
       <SlidingSyncActiveRoomSubscriber />
       <PresenceFeature />
