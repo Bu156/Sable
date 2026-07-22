@@ -275,7 +275,7 @@ describe('useSettingsSyncEffect — debounced upload', () => {
   });
 
   it('cancels a stale deferred backfill when settings change', async () => {
-    let resolveCache: (css: string | undefined) => void = () => undefined;
+    let resolveCache: ((css: string | undefined) => void) | undefined;
     getCachedThemeCss.mockImplementationOnce(
       () => new Promise<string | undefined>((resolve) => (resolveCache = resolve))
     );
@@ -292,13 +292,13 @@ describe('useSettingsSyncEffect — debounced upload', () => {
     renderHook(() => useSettingsSyncEffect(), { wrapper: makeWrapper(store) });
     act(() => vi.advanceTimersByTime(2000));
     act(() => store.set(settingsAtom, { ...store.get(settingsAtom), twitterEmoji: false }));
-    resolveCache('body {}');
+    resolveCache?.('body {}');
     await act(async () => await Promise.resolve());
     expect(mockMx.setAccountData).not.toHaveBeenCalled();
   });
 
   it('cancels a deferred backfill when settings sync is disabled', async () => {
-    let resolveCache: (css: string | undefined) => void = () => undefined;
+    let resolveCache: ((css: string | undefined) => void) | undefined;
     getCachedThemeCss.mockImplementationOnce(
       () => new Promise<string | undefined>((resolve) => (resolveCache = resolve))
     );
@@ -315,7 +315,7 @@ describe('useSettingsSyncEffect — debounced upload', () => {
     renderHook(() => useSettingsSyncEffect(), { wrapper: makeWrapper(store) });
     act(() => vi.advanceTimersByTime(2000));
     act(() => store.set(settingsAtom, { ...store.get(settingsAtom), settingsSyncEnabled: false }));
-    resolveCache('body {}');
+    resolveCache?.('body {}');
     await act(async () => await Promise.resolve());
     expect(mockMx.setAccountData).not.toHaveBeenCalled();
   });
@@ -347,7 +347,7 @@ describe('useSettingsSyncEffect — debounced upload', () => {
   });
 
   it('keeps idle state after disabling sync during an in-flight request and ignores its late failure', async () => {
-    let rejectUpload: (error: Error) => void = () => undefined;
+    let rejectUpload: ((error: Error) => void) | undefined;
     mockMx.setAccountData.mockImplementationOnce(
       () => new Promise<void>((_resolve, reject) => (rejectUpload = reject))
     );
@@ -360,7 +360,7 @@ describe('useSettingsSyncEffect — debounced upload', () => {
     expect(store.get(settingsSyncStatusAtom)).toBe('syncing');
     act(() => store.set(settingsAtom, { ...store.get(settingsAtom), settingsSyncEnabled: false }));
     expect(store.get(settingsSyncStatusAtom)).toBe('idle');
-    rejectUpload(new Error('late failure'));
+    rejectUpload?.(new Error('late failure'));
     await act(async () => await Promise.resolve());
     expect(store.get(settingsSyncStatusAtom)).toBe('idle');
     expect(store.get(settingsAtom).twitterEmoji).toBe(true);

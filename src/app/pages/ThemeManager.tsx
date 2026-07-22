@@ -216,7 +216,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
 
     const applyTweakCss = async () => {
       const texts = await Promise.all(
-        urls.map((url) => {
+        urls.map(async (url) => {
           const trimmedUrl = url.trim();
           const embeddedCss = getEmbeddedLocalTweakCss(
             tweakFavorites?.find((favorite) => favorite.fullUrl === trimmedUrl)

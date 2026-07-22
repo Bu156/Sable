@@ -37,7 +37,10 @@ const settings = {
 };
 
 vi.mock('$state/hooks/settings', () => ({
-  useSetting: (_atom: unknown, key: keyof typeof settings) => [settings[key], vi.fn()],
+  useSetting: (_atom: unknown, key: keyof typeof settings) => [
+    settings[key],
+    vi.fn<(value: unknown) => void>(),
+  ],
 }));
 vi.mock('$state/settings', () => ({
   settingsAtom: {},
@@ -49,7 +52,9 @@ vi.mock('$state/settings', () => ({
   }),
 }));
 vi.mock('$hooks/useClientConfig', () => ({ useClientConfig: () => ({}) }));
-vi.mock('$utils/share', () => ({ shareText: vi.fn() }));
+vi.mock('$utils/share', () => ({
+  shareText: vi.fn<(text: string) => Promise<boolean>>().mockResolvedValue(false),
+}));
 vi.mock('../../../theme/cache', () => ({
   getCachedThemeCss,
   putCachedThemeCss,
