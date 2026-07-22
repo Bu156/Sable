@@ -84,6 +84,21 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
             exit="exit"
             style={{
               willChange: shouldReduceMotion ? 'opacity' : 'transform, opacity',
+              borderRadius: '9999px',
+              overflow: 'hidden',
+              backdropFilter: 'blur(64px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(64px) saturate(160%)',
+              backgroundColor: `color-mix(in srgb, ${
+                status.variant === 'Primary'
+                  ? 'var(--sable-primary-main)'
+                  : status.variant === 'Success'
+                    ? 'var(--sable-success-main)'
+                    : status.variant === 'Warning'
+                      ? 'var(--sable-warn-main)'
+                      : status.variant === 'Critical'
+                        ? 'var(--sable-crit-main)'
+                        : 'currentColor'
+              } 32%, transparent)`,
             }}
           >
             <Box
@@ -103,19 +118,7 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
                           ? 'var(--sable-crit-main)'
                           : 'currentColor'
                 } 30%, transparent)`,
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                backgroundColor: `color-mix(in srgb, ${
-                  status.variant === 'Primary'
-                    ? 'var(--sable-primary-main)'
-                    : status.variant === 'Success'
-                      ? 'var(--sable-success-main)'
-                      : status.variant === 'Warning'
-                        ? 'var(--sable-warn-main)'
-                        : status.variant === 'Critical'
-                          ? 'var(--sable-crit-main)'
-                          : 'currentColor'
-                } 18%, transparent)`,
+                backgroundColor: 'transparent',
                 position: 'relative',
                 overflow: 'hidden',
               }}
