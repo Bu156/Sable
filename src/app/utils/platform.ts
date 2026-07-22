@@ -18,6 +18,12 @@ export function hasControllingServiceWorker(): boolean {
 
 // window.location.origin is "null" on Tauri (tauri:// is opaque per WHATWG).
 export function getAppOrigin(): string {
+  if (
+    isTauri() ||
+    (typeof window !== 'undefined' && window.location.hostname === 'tauri.localhost')
+  ) {
+    return 'https://app.sable.moe';
+  }
   return window.location.origin === 'null'
     ? `${window.location.protocol}//${window.location.host}`
     : window.location.origin;

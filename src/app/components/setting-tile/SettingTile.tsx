@@ -3,7 +3,7 @@ import { Box, IconButton, Text } from 'folds';
 import { Check, Link, sizedIcon } from '$components/icons/phosphor';
 import { BreakWord } from '$styles/Text.css';
 import { buildSettingsLink } from '$features/settings/settingsLink';
-import { shareText } from '$utils/share';
+import { copyToClipboard } from '$utils/dom';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useTimeoutToggle } from '$hooks/useTimeoutToggle';
 import { useSettingsLinkContext } from '$features/settings/SettingsLinkContext';
@@ -52,7 +52,7 @@ function SettingTileSettingLinkAction({
           : settingTileSettingLinkActionMobileVisible,
       ].join(' ')}
       onClick={async () => {
-        if (await shareText(copyPath)) setCopied();
+        if (await copyToClipboard(copyPath)) setCopied();
       }}
       size="300"
       variant="Surface"
