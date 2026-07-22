@@ -7,6 +7,7 @@ import { useSyncState } from '$hooks/useSyncState';
 import { useSlidingSyncHydrating } from '$hooks/useSlidingSyncHydrating';
 import { type TitlebarStatusView, titlebarStatusAtom } from '$state/titlebarStatus';
 import { SyncConnectionStatusBanner } from '$components/SyncConnectionStatus';
+import { useDesktopSetting } from '$state/hooks/desktopSettings';
 import { hasCustomDesktopTitlebar } from '$utils/tauriTitlebar';
 
 const DISCONNECTED_GRACE_MS = 2000;
@@ -28,11 +29,15 @@ export const shouldShowConnecting = (
     current === SyncState.Catchup) &&
   previous !== SyncState.Syncing;
 
+export const shouldShowInlineSyncStatus = (hasCustomTitleBar: boolean): boolean =>
+  !hasCustomTitleBar;
+
 type SyncStatusProps = {
   mx: MatrixClient;
 };
 export function SyncStatus({ mx }: SyncStatusProps) {
   const setTitlebarStatus = useSetAtom(titlebarStatusAtom);
+  const [useCustomTitleBar] = useDesktopSetting('useCustomTitleBar');
   const hasConnectedRef = useRef(false);
   const [stateData, setStateData] = useState<StateData>({
     current: null,
@@ -115,7 +120,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   }, [setTitlebarStatus, view]);
 
   // Where a custom titlebar renders the pill, skip the inline banner.
-  if (hasCustomDesktopTitlebar()) return null;
+  if (!shouldShowInlineSyncStatus(hasCustomDesktopTitlebar(useCustomTitleBar))) return null;
 
   return <SyncConnectionStatusBanner status={view} />;
 }

@@ -1,10 +1,19 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
 
-// Windows and Linux draw their own titlebar with a slot for the sync pill; macOS
-// keeps native decorations and uses the inline banner like web/mobile.
-export function hasCustomDesktopTitlebar(): boolean {
+export type CustomTitlebarKind = 'desktop' | 'mac' | null;
+
+export function getCustomTitlebarKind(
+  useCustomTitleBar: boolean,
+  platform: string | undefined
+): CustomTitlebarKind {
+  if (!useCustomTitleBar) return null;
+  if (platform === 'windows' || platform === 'linux') return 'desktop';
+  if (platform === 'macos') return 'mac';
+  return null;
+}
+
+export function hasCustomDesktopTitlebar(useCustomTitleBar: boolean): boolean {
   if (!isTauri()) return false;
-  const os = osType();
-  return os === 'windows' || os === 'linux';
+  return getCustomTitlebarKind(useCustomTitleBar, osType()) !== null;
 }

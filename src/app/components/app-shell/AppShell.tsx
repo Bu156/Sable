@@ -13,6 +13,8 @@ import { Toast } from '$components/toast/Toast';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider } from '$hooks/useScreenSize';
 import { isReactQueryDevtoolsEnabled } from '$pages/reactQueryDevtoolsGate';
+import { useDesktopSetting } from '$state/hooks/desktopSettings';
+import { getCustomTitlebarKind } from '$utils/tauriTitlebar';
 import { SystemBarShell } from './SystemBarShell';
 
 const ReactQueryDevtools = lazy(async () => {
@@ -29,12 +31,7 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppShellProps) {
-  const tauriOs = isTauri() ? osType() : undefined;
-  const useDesktopTitleBar = tauriOs === 'windows' || tauriOs === 'linux';
-  const useMacTitleBar = tauriOs === 'macos';
-  const hasCustomTitleBar = useDesktopTitleBar || useMacTitleBar;
   const reactQueryDevtoolsEnabled = isReactQueryDevtoolsEnabled();
-  const contentHeight = hasCustomTitleBar ? 'calc(100% - var(--tauri-titlebar-height))' : '100%';
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
 
   return (
@@ -44,34 +41,12 @@ export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppS
           <ScreenSizeProvider value={screenSize}>
             <QueryClientProvider client={queryClient}>
               <JotaiProvider store={jotaiStore}>
-                <TauriFrontendReady />
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    width: '100%',
-                    minHeight: 0,
-                    overflow: 'hidden',
-                    height: '100%',
-                  }}
+                <AppShellFrame
+                  portalContainer={portalContainer}
+                  onPortalContainerChange={setPortalContainer}
                 >
-                  {useDesktopTitleBar && <DesktopTitleBar />}
-                  {useMacTitleBar && <MacTitleBar />}
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      width: '100%',
-                      minHeight: 0,
-                      height: contentHeight,
-                    }}
-                  >
-                    <SystemBarShell onPortalContainerChange={setPortalContainer}>
-                      {children}
-                    </SystemBarShell>
-                    <Toast container={portalContainer} />
-                  </div>
-                </div>
+                  {children}
+                </AppShellFrame>
               </JotaiProvider>
               {reactQueryDevtoolsEnabled && (
                 <Suspense fallback={null}>
@@ -83,5 +58,51 @@ export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppS
         </OverlayContainerProvider>
       </PopOutContainerProvider>
     </TooltipContainerProvider>
+  );
+}
+
+type AppShellFrameProps = {
+  children: ReactNode;
+  portalContainer: HTMLDivElement | null;
+  onPortalContainerChange: (node: HTMLDivElement | null) => void;
+};
+
+function AppShellFrame({ children, portalContainer, onPortalContainerChange }: AppShellFrameProps) {
+  const [useCustomTitleBar] = useDesktopSetting('useCustomTitleBar');
+  const tauriOs = isTauri() ? osType() : undefined;
+  const titlebarKind = getCustomTitlebarKind(useCustomTitleBar, tauriOs);
+  const contentHeight = titlebarKind ? 'calc(100% - var(--tauri-titlebar-height))' : '100%';
+
+  return (
+    <>
+      <TauriFrontendReady />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          minHeight: 0,
+          overflow: 'hidden',
+          height: '100%',
+        }}
+      >
+        {titlebarKind === 'desktop' && <DesktopTitleBar />}
+        {titlebarKind === 'mac' && <MacTitleBar />}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: '100%',
+            minHeight: 0,
+            height: contentHeight,
+          }}
+        >
+          <SystemBarShell onPortalContainerChange={onPortalContainerChange}>
+            {children}
+          </SystemBarShell>
+          <Toast container={portalContainer} />
+        </div>
+      </div>
+    </>
   );
 }

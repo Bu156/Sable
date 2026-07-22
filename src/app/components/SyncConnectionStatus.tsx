@@ -159,6 +159,7 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
 
 export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusProps) {
   const shouldReduceMotion = useReducedMotion();
+  const progress = status?.progress;
   const pillVariants = shouldReduceMotion
     ? {
         hidden: { opacity: 0 },
@@ -261,7 +262,7 @@ export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusPro
           >
             {status.text}
           </motion.span>
-          {status.progress !== undefined && (
+          {progress !== undefined && (
             <div
               style={{
                 position: 'absolute',
@@ -278,7 +279,7 @@ export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusPro
                         : status.variant === 'Critical'
                           ? 'var(--sable-crit-main)'
                           : 'currentColor',
-                width: `${status.progress}%`,
+                width: `${progress}%`,
                 transition: 'width 0.3s ease-out',
               }}
             />

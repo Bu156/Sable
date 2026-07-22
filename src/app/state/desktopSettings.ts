@@ -22,15 +22,29 @@ export type { DesktopRuntimeState };
 const DESKTOP_SETTINGS_STORE_PATH = 'desktop-preferences.json' as const;
 const LEGACY_KEEP_BACKGROUND_RUNNING_KEY = 'keepBackgroundRunning' as const;
 
-export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
-  closeToBackgroundOnClose: true,
-  showSystemTrayIcon: true,
-};
+type DesktopPlatform = 'windows' | 'linux' | 'macos' | undefined;
+
+export function desktopSettingsDefaultsForPlatform(platform: DesktopPlatform): DesktopSettings {
+  return {
+    closeToBackgroundOnClose: true,
+    showSystemTrayIcon: true,
+    useCustomTitleBar: platform === 'windows',
+  };
+}
 export type DesktopSettingKey = keyof DesktopSettings;
 
 export const DEFAULT_DESKTOP_RUNTIME_STATE: DesktopRuntimeState = {
   trayAvailable: true,
 };
+
+function getDesktopPlatform(): DesktopPlatform {
+  if (!isTauri()) return undefined;
+
+  const os = osType();
+  return os === 'windows' || os === 'linux' || os === 'macos' ? os : undefined;
+}
+
+export const DEFAULT_DESKTOP_SETTINGS = desktopSettingsDefaultsForPlatform(getDesktopPlatform());
 
 const DESKTOP_SETTING_KEYS = Object.keys(DEFAULT_DESKTOP_SETTINGS) as DesktopSettingKey[];
 
@@ -42,10 +56,7 @@ let currentDesktopSettings = DEFAULT_DESKTOP_SETTINGS;
 let currentDesktopRuntimeState = DEFAULT_DESKTOP_RUNTIME_STATE;
 
 function isDesktopTauri(): boolean {
-  if (!isTauri()) return false;
-
-  const os = osType();
-  return os === 'windows' || os === 'linux' || os === 'macos';
+  return getDesktopPlatform() !== undefined;
 }
 
 function readBoolean(value: boolean | undefined, fallback: boolean): boolean {
@@ -72,16 +83,18 @@ async function persistDesktopSettings(
 export function desktopSettingsFromStoreValues(
   closeToBackgroundOnClose: boolean | undefined,
   showSystemTrayIcon: boolean | undefined,
-  legacyKeepBackgroundRunning: boolean | undefined
+  legacyKeepBackgroundRunning: boolean | undefined,
+  useCustomTitleBar: boolean | undefined,
+  platform = getDesktopPlatform()
 ): DesktopSettings {
+  const defaults = desktopSettingsDefaultsForPlatform(platform);
+
   return {
     closeToBackgroundOnClose:
-      readBoolean(closeToBackgroundOnClose, DEFAULT_DESKTOP_SETTINGS.closeToBackgroundOnClose) ||
+      readBoolean(closeToBackgroundOnClose, defaults.closeToBackgroundOnClose) ||
       readBoolean(legacyKeepBackgroundRunning, false),
-    showSystemTrayIcon: readBoolean(
-      showSystemTrayIcon,
-      DEFAULT_DESKTOP_SETTINGS.showSystemTrayIcon
-    ),
+    showSystemTrayIcon: readBoolean(showSystemTrayIcon, defaults.showSystemTrayIcon),
+    useCustomTitleBar: readBoolean(useCustomTitleBar, defaults.useCustomTitleBar),
   };
 }
 
@@ -105,17 +118,23 @@ async function applyDesktopSettings(
 export async function getDesktopSettings(): Promise<DesktopSettings> {
   if (!isDesktopTauri()) return DEFAULT_DESKTOP_SETTINGS;
 
-  const [closeToBackgroundOnClose, showSystemTrayIcon, legacyKeepBackgroundRunning] =
-    await Promise.all([
-      desktopSettingsStore.get<boolean>('closeToBackgroundOnClose'),
-      desktopSettingsStore.get<boolean>('showSystemTrayIcon'),
-      desktopSettingsStore.get<boolean>(LEGACY_KEEP_BACKGROUND_RUNNING_KEY),
-    ]);
+  const [
+    closeToBackgroundOnClose,
+    showSystemTrayIcon,
+    legacyKeepBackgroundRunning,
+    useCustomTitleBar,
+  ] = await Promise.all([
+    desktopSettingsStore.get<boolean>('closeToBackgroundOnClose'),
+    desktopSettingsStore.get<boolean>('showSystemTrayIcon'),
+    desktopSettingsStore.get<boolean>(LEGACY_KEEP_BACKGROUND_RUNNING_KEY),
+    desktopSettingsStore.get<boolean>('useCustomTitleBar'),
+  ]);
 
   currentDesktopSettings = desktopSettingsFromStoreValues(
     closeToBackgroundOnClose,
     showSystemTrayIcon,
-    legacyKeepBackgroundRunning
+    legacyKeepBackgroundRunning,
+    useCustomTitleBar
   );
 
   return currentDesktopSettings;
