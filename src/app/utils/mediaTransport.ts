@@ -296,10 +296,6 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
   };
 
   if (useServiceWorker) {
-    const response = await fetchMediaResponse(url, undefined, cacheMode);
-    if (response.ok || !isRetryableAuthError(response)) {
-      return fetchAndCache(response);
-    }
     return fetchAndCache(await fetchMediaResponse(url, undefined, cacheMode));
   }
 

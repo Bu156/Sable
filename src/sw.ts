@@ -128,8 +128,11 @@ const sessions = new Map<string, SessionInfo>();
  */
 let preloadedSession: SessionInfo | undefined;
 
-const clientToResolve = new Map<string, (value: SessionInfo | undefined) => void>();
-const clientToSessionPromise = new Map<string, Promise<SessionInfo | undefined>>();
+type PendingSessionRequest = {
+  promise: Promise<SessionInfo | undefined>;
+  resolve: (value: SessionInfo | undefined) => void;
+};
+const pendingSessionRequests = new Map<string, PendingSessionRequest>();
 
 async function cleanupDeadClients() {
   const activeClients = await self.clients.matchAll();
@@ -138,8 +141,7 @@ async function cleanupDeadClients() {
   Array.from(sessions.keys()).forEach((id) => {
     if (!activeIds.has(id)) {
       sessions.delete(id);
-      clientToResolve.delete(id);
-      clientToSessionPromise.delete(id);
+      pendingSessionRequests.delete(id);
     }
   });
 }
@@ -165,26 +167,23 @@ function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, us
     clearPersistedSession().catch(() => undefined);
   }
 
-  const resolveSession = clientToResolve.get(clientId);
-  if (resolveSession) {
-    resolveSession(sessions.get(clientId));
-    clientToResolve.delete(clientId);
-    clientToSessionPromise.delete(clientId);
+  const pending = pendingSessionRequests.get(clientId);
+  if (pending) {
+    pending.resolve(sessions.get(clientId));
+    pendingSessionRequests.delete(clientId);
   }
 }
 
 function requestSession(client: Client): Promise<SessionInfo | undefined> {
-  const promise =
-    clientToSessionPromise.get(client.id) ??
-    new Promise((resolve) => {
-      clientToResolve.set(client.id, resolve);
-      client.postMessage({ type: 'requestSession' });
-    });
+  const existing = pendingSessionRequests.get(client.id);
+  if (existing) return existing.promise;
 
-  if (!clientToSessionPromise.has(client.id)) {
-    clientToSessionPromise.set(client.id, promise);
-  }
-
+  let resolveSession!: (value: SessionInfo | undefined) => void;
+  const promise = new Promise<SessionInfo | undefined>((resolve) => {
+    resolveSession = resolve;
+  });
+  pendingSessionRequests.set(client.id, { promise, resolve: resolveSession });
+  client.postMessage({ type: 'requestSession' });
   return promise;
 }
 
@@ -199,15 +198,20 @@ async function requestSessionWithTimeout(
   }
 
   const sessionPromise = requestSession(client);
-
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<undefined>((resolve) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       console.warn('[SW] requestSessionWithTimeout: timed out after', timeoutMs, 'ms', clientId);
       resolve(undefined);
     }, timeoutMs);
   });
 
-  return Promise.race([sessionPromise, timeout]);
+  return Promise.race([sessionPromise, timeout]).finally(() => {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    if (pendingSessionRequests.get(clientId)?.promise === sessionPromise) {
+      pendingSessionRequests.delete(clientId);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -684,11 +688,26 @@ function mediaPath(url: string): boolean {
   }
 }
 
+function authenticatedMediaPath(url: string): boolean {
+  try {
+    return new URL(url).pathname.startsWith('/_matrix/client/v1/media/');
+  } catch {
+    return false;
+  }
+}
+
 function validMediaRequest(url: string, baseUrl: string): boolean {
-  return MEDIA_PATHS.some((p) => {
-    const validUrl = new URL(p, baseUrl);
-    return url.startsWith(validUrl.href);
-  });
+  try {
+    const requestUrl = new URL(url);
+    return MEDIA_PATHS.some((p) => {
+      const mediaUrl = new URL(p, baseUrl);
+      return (
+        requestUrl.origin === mediaUrl.origin && requestUrl.pathname.startsWith(mediaUrl.pathname)
+      );
+    });
+  } catch {
+    return false;
+  }
 }
 
 function fetchConfig(token: string, request?: Request): RequestInit {
@@ -757,6 +776,42 @@ function respondWithInflightMedia(
   );
 }
 
+async function respondWithMediaAuthRecovery(
+  request: Request,
+  session: SessionInfo,
+  redirect: RequestRedirect,
+  clientId?: string
+): Promise<Response> {
+  const response = await respondWithInflightMedia(request, session.accessToken, redirect);
+  if ((response.status !== 401 && response.status !== 403) || !clientId) return response;
+
+  // One exact-client retry; concurrent recoveries share this request.
+  const refreshed = await requestSessionWithTimeout(clientId);
+  if (
+    !refreshed ||
+    refreshed.accessToken === session.accessToken ||
+    !validMediaRequest(request.url, refreshed.baseUrl)
+  ) {
+    return response;
+  }
+
+  return respondWithInflightMedia(request, refreshed.accessToken, redirect);
+}
+
+function unavailableAuthenticatedMediaResponse(): Response {
+  return new Response('Media session unavailable', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Cache-Control': 'no-store' },
+  });
+}
+
+export const swTestHooks = {
+  requestSessionWithTimeout,
+  respondWithMediaAuthRecovery,
+  setSession,
+};
+
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (event.data.type === 'togglePush') {
     const token = event.data?.token;
@@ -806,7 +861,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const session = clientId ? sessions.get(clientId) : undefined;
   if (session && validMediaRequest(url, session.baseUrl)) {
-    event.respondWith(respondWithInflightMedia(event.request, session.accessToken, redirect));
+    event.respondWith(respondWithMediaAuthRecovery(event.request, session, redirect, clientId));
     return;
   }
 
@@ -826,7 +881,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       ? preloadedSession
       : undefined);
   if (byBaseUrl) {
-    event.respondWith(respondWithInflightMedia(event.request, byBaseUrl.accessToken, redirect));
+    event.respondWith(respondWithMediaAuthRecovery(event.request, byBaseUrl, redirect, clientId));
     return;
   }
 
@@ -836,8 +891,9 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       loadPersistedSession().then((persisted) => {
         if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-          return respondWithInflightMedia(event.request, persisted.accessToken, redirect);
+          return respondWithMediaAuthRecovery(event.request, persisted, redirect);
         }
+        if (authenticatedMediaPath(url)) return unavailableAuthenticatedMediaResponse();
         return fetch(event.request);
       })
     );
@@ -848,19 +904,15 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     requestSessionWithTimeout(clientId).then(async (s) => {
       // Primary: session received from the live client window.
       if (s && validMediaRequest(url, s.baseUrl)) {
-        return respondWithInflightMedia(event.request, s.accessToken, redirect);
+        return respondWithMediaAuthRecovery(event.request, s, redirect, clientId);
       }
       // Fallback: try the persisted session (helps when SW restarts on iOS and
       // the client window hasn't responded to requestSession yet).
       const persisted = await loadPersistedSession();
       if (persisted && validMediaRequest(url, persisted.baseUrl)) {
-        return respondWithInflightMedia(event.request, persisted.accessToken, redirect);
+        return respondWithMediaAuthRecovery(event.request, persisted, redirect, clientId);
       }
-      console.warn(
-        '[SW fetch] No valid session for media request',
-        { url, clientId, hasSession: !!s },
-        'falling back to unauthenticated fetch'
-      );
+      if (authenticatedMediaPath(url)) return unavailableAuthenticatedMediaResponse();
       return fetch(event.request);
     })
   );

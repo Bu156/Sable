@@ -36,6 +36,13 @@ import {
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 const TAURI_MEDIA_CACHE_VERSION = '__sable_media_cache=2';
+const TAURI_MEDIA_PATH_PREFIXES = [
+  '/_matrix/client/v1/media/',
+  '/_matrix/media/v3/download/',
+  '/_matrix/media/v3/thumbnail/',
+  '/_matrix/media/r0/download/',
+  '/_matrix/media/r0/thumbnail/',
+];
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
 
@@ -478,7 +485,22 @@ export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string):
 export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | null => {
   if (!httpUrl) return null;
   if (!isTauri()) return httpUrl;
-  if (!httpUrl.includes('/_matrix/client/v1/media/')) return httpUrl;
+  const sourceUrl = httpUrl.startsWith('sable-media://')
+    ? httpUrl.slice('sable-media://'.length)
+    : httpUrl;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(sourceUrl);
+  } catch {
+    return httpUrl;
+  }
+  if (
+    (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') ||
+    parsedUrl.origin === 'null' ||
+    !TAURI_MEDIA_PATH_PREFIXES.some((path) => parsedUrl.pathname.startsWith(path))
+  ) {
+    return httpUrl;
+  }
   if (httpUrl.includes(TAURI_MEDIA_CACHE_VERSION)) return httpUrl;
   const mediaUrl = httpUrl.startsWith('sable-media://')
     ? httpUrl
@@ -508,9 +530,7 @@ export const mxcUrlToHttp = (
     useAuthentication
   );
 
-  // Authenticated media has no service worker under Tauri to attach the token, so route it
-  // through the native sable-media:// protocol which injects the token in Rust.
-  if (httpUrl && useAuthentication) {
+  if (httpUrl && isTauri()) {
     return rewriteAuthenticatedMediaUrl(httpUrl);
   }
   return httpUrl;
