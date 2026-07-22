@@ -359,7 +359,7 @@ export function OptionsEmojiBoard({
       anchor={emojiBoardAnchor}
       style={isModal ? { width: '100%' } : {}}
       content={
-        <Menu>
+        <Menu className={isModal ? css.MessageOptionsMenu : undefined}>
           {dragOpts?.dragHandle}
           {ActualMessage}
           <EmojiBoard
