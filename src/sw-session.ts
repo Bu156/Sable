@@ -1,19 +1,19 @@
 import { isTauri } from '@tauri-apps/api/core';
-import { clearMediaSession, setMediaSession } from '$generated/tauri/commands';
+import { updateTauriMediaSession } from './app/utils/tauriMediaAuth';
 
-export function pushSessionToSW(baseUrl?: string, accessToken?: string, userId?: string) {
+export function pushSessionToSW(
+  baseUrl?: string,
+  accessToken?: string,
+  userId?: string
+): Promise<void> {
   if (isTauri()) {
-    // No service worker under Tauri; hand the token to the native sable-media protocol instead.
-    if (baseUrl && accessToken) {
-      void setMediaSession({ baseUrl, token: accessToken }).catch(() => undefined);
-    } else {
-      void clearMediaSession().catch(() => undefined);
-    }
-    return;
+    // Tauri has no service worker.
+    return updateTauriMediaSession(baseUrl, accessToken);
   }
 
-  if (!('serviceWorker' in navigator)) return;
-  if (!navigator.serviceWorker.controller) return;
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+    return Promise.resolve();
+  }
 
   navigator.serviceWorker.controller.postMessage({
     type: 'setSession',
@@ -22,4 +22,5 @@ export function pushSessionToSW(baseUrl?: string, accessToken?: string, userId?:
     userId,
     // oxlint-disable-next-line unicorn/require-post-message-target-origin
   });
+  return Promise.resolve();
 }

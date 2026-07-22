@@ -40,8 +40,6 @@ installAndroidBackBridge();
 
 registerAppServiceWorker();
 
-initTauriMediaSession();
-
 if (hasServiceWorker()) {
   const controllerRefreshed = localStorage.getItem('controllerRefreshed') === 'true';
 
@@ -121,4 +119,5 @@ const mountApp = () => {
   root.render(<App />);
 };
 
+await initTauriMediaSession();
 mountApp();

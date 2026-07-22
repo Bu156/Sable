@@ -1,8 +1,9 @@
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{OnceLock, RwLock},
+    sync::{Arc, Mutex, OnceLock, RwLock, Weak},
     time::Duration,
 };
 
@@ -15,7 +16,7 @@ use tauri_plugin_http::reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client, Url,
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
 
@@ -23,14 +24,20 @@ const MEDIA_PATH_PREFIXES: [&str; 2] = ["/_matrix/media/", "/_matrix/client/v1/m
 const CACHE_SUBDIR: &str = "sable-media";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_CONCURRENT_REQUESTS: usize = 8;
+const MAX_CONCURRENT_REQUESTS: usize = 4;
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
+
+const TEMP_CACHE_SUBDIR: &str = "sable-media-temp";
+const MAX_TEMP_CACHE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
+
+type FetchResult = Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode>;
 
 pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
     client: OnceLock<Client>,
     semaphore: Semaphore,
+    cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
 }
 
 impl Default for MediaSessionState {
@@ -39,6 +46,7 @@ impl Default for MediaSessionState {
             inner: RwLock::new(None),
             client: OnceLock::new(),
             semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            cache_miss_gates: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -55,6 +63,24 @@ impl MediaSessionState {
                     .unwrap_or_else(|_| Client::new())
             })
             .clone()
+    }
+
+    fn cache_miss_gate(
+        &self,
+        key: &str,
+    ) -> Result<Arc<AsyncMutex<Option<FetchResult>>>, StatusCode> {
+        let mut gates = self
+            .cache_miss_gates
+            .lock()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        gates.retain(|_, gate| gate.strong_count() > 0);
+        if let Some(gate) = gates.get(key).and_then(Weak::upgrade) {
+            return Ok(gate);
+        }
+
+        let gate = Arc::new(AsyncMutex::new(None));
+        gates.insert(key.to_owned(), Arc::downgrade(&gate));
+        Ok(gate)
     }
 }
 
@@ -93,6 +119,9 @@ pub fn clear_media_session<R: Runtime>(
     }
     if let Ok(dir) = cache_dir(&app) {
         let _ = fs::remove_dir_all(dir);
+    }
+    if let Ok(temp_dir) = temp_cache_dir(&app) {
+        let _ = fs::remove_dir_all(temp_dir);
     }
 }
 
@@ -151,54 +180,151 @@ async fn handle_request<R: Runtime>(
 
     let key = cache_key(&session.token, &target);
     let dir = cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let body_path = dir.join(&key);
-    let content_type_path = dir.join(format!("{key}.ct"));
+    let temp_dir = temp_cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let state = app.state::<MediaSessionState>();
+
+    let (content_type, in_memory_body, disk_path) =
+        ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
+
+    match (range, in_memory_body) {
+        (Some(range_header), Some(body)) => {
+            Ok(serve_range_memory(&body, &content_type, &range_header))
+        }
+        (Some(range_header), None) => serve_range(disk_path, content_type, range_header).await,
+        (None, Some(body)) => {
+            let vec_body = Arc::try_unwrap(body).unwrap_or_else(|b| (*b).clone());
+            Ok(ok_response(vec_body, &content_type))
+        }
+        (None, None) => Ok(ok_response(read_full(disk_path).await?, &content_type)),
+    }
+}
+
+// Ensure the body + content type are on disk (persistent or temporary), fetching from the homeserver on a miss.
+async fn ensure_cached(
+    state: &MediaSessionState,
+    session: &MediaSession,
+    key: &str,
+    media_url: Url,
+    dir: PathBuf,
+    temp_dir: PathBuf,
+) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
+    ensure_cached_with_limits(
+        state,
+        session,
+        key,
+        media_url,
+        dir,
+        temp_dir,
+        MAX_CACHE_BYTES,
+        MAX_TEMP_CACHE_BYTES,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn ensure_cached_with_limits(
+    state: &MediaSessionState,
+    session: &MediaSession,
+    key: &str,
+    media_url: Url,
+    dir: PathBuf,
+    temp_dir: PathBuf,
+    max_persistent_cache_bytes: u64,
+    max_temp_cache_bytes: u64,
+) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
+    let body_path = dir.join(key);
+    let content_type_path = dir.join(format!("{key}.ct"));
+    let temp_body_path = temp_dir.join(key);
+    let temp_content_type_path = temp_dir.join(format!("{key}.ct"));
+
+    // Fast path 1: Persistent cache hit
+    if let Some(content_type) =
+        read_content_type(body_path.clone(), content_type_path.clone()).await
+    {
+        return Ok((content_type, None, body_path));
+    }
+
+    // Fast path 2: Temporary cache hit (sequential range requests for oversized media)
+    if let Some(content_type) =
+        read_content_type(temp_body_path.clone(), temp_content_type_path.clone()).await
+    {
+        return Ok((content_type, None, temp_body_path));
+    }
+
+    let gate = state.cache_miss_gate(key)?;
+    let mut gate_guard = gate.lock().await;
+
+    // Double-check persistent cache inside gate lock
+    if let Some(content_type) =
+        read_content_type(body_path.clone(), content_type_path.clone()).await
+    {
+        return Ok((content_type, None, body_path));
+    }
+
+    // Double-check temporary cache inside gate lock
+    if let Some(content_type) =
+        read_content_type(temp_body_path.clone(), temp_content_type_path.clone()).await
+    {
+        return Ok((content_type, None, temp_body_path));
+    }
+
+    // Double-check in-flight results
+    if let Some(res) = &*gate_guard {
+        return match res {
+            Ok((content_type, body_opt, path)) => {
+                Ok((content_type.clone(), body_opt.clone(), path.clone()))
+            }
+            Err(status) => Err(*status),
+        };
+    }
+
+    let fetch_res = fetch_and_cache(
+        state,
+        session,
+        media_url,
+        dir,
+        temp_dir,
+        body_path,
+        content_type_path,
+        temp_body_path,
+        temp_content_type_path,
+        max_persistent_cache_bytes,
+        max_temp_cache_bytes,
+    )
+    .await;
+
+    match &fetch_res {
+        Ok((content_type, body_opt, path)) => {
+            *gate_guard = Some(Ok((content_type.clone(), body_opt.clone(), path.clone())));
+            fetch_res
+        }
+        Err(status) => {
+            *gate_guard = Some(Err(*status));
+            Err(*status)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fetch_and_cache(
+    state: &MediaSessionState,
+    session: &MediaSession,
+    media_url: Url,
+    dir: PathBuf,
+    temp_dir: PathBuf,
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+    temp_body_path: PathBuf,
+    temp_content_type_path: PathBuf,
+    max_persistent_cache_bytes: u64,
+    max_temp_cache_bytes: u64,
+) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
     let _permit = state
         .semaphore
         .acquire()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Cache to disk first, then serve from there so Range works regardless of
-    // homeserver support. Files larger than the cache budget are served from
-    // memory for this request and never persisted, so evict_if_needed can't
-    // drop them on write.
-    let (content_type, in_memory_body) = ensure_cached(
-        &state,
-        &session,
-        media_url,
-        dir,
-        body_path.clone(),
-        content_type_path,
-    )
-    .await?;
-
-    match (range, in_memory_body) {
-        (Some(range_header), Some(body)) => {
-            Ok(serve_range_memory(body, &content_type, &range_header))
-        }
-        (Some(range_header), None) => serve_range(body_path, content_type, range_header).await,
-        (None, Some(body)) => Ok(ok_response(body, &content_type)),
-        (None, None) => Ok(ok_response(read_full(body_path).await?, &content_type)),
-    }
-}
-
-// Ensure the body + content type are on disk, fetching from the homeserver on a miss.
-async fn ensure_cached(
-    state: &MediaSessionState,
-    session: &MediaSession,
-    media_url: Url,
-    dir: PathBuf,
-    body_path: PathBuf,
-    content_type_path: PathBuf,
-) -> Result<(String, Option<Vec<u8>>), StatusCode> {
-    if let Some(content_type) =
-        read_content_type(body_path.clone(), content_type_path.clone()).await
-    {
-        return Ok((content_type, None));
-    }
 
     let upstream = state
         .client()
@@ -220,27 +346,72 @@ async fn ensure_cached(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("application/octet-stream")
         .to_owned();
+
     let body = upstream
         .bytes()
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?
         .to_vec();
 
-    if fits_in_cache(body.len() as u64) {
+    if body.len() as u64 > max_temp_cache_bytes {
+        return Ok((content_type, Some(Arc::new(body)), temp_body_path));
+    }
+
+    if body.len() as u64 <= max_persistent_cache_bytes {
         write_cache(
-            dir,
-            body_path,
+            dir.clone(),
+            body_path.clone(),
             content_type_path,
             body,
             content_type.clone(),
+            max_persistent_cache_bytes,
         )
         .await;
-        Ok((content_type, None))
+        Ok((content_type, None, body_path))
     } else {
-        Ok((content_type, Some(body)))
+        // Oversized media: write to temporary session cache for sequential range requests
+        let written = write_cache(
+            temp_dir.clone(),
+            temp_body_path.clone(),
+            temp_content_type_path,
+            body.clone(),
+            content_type.clone(),
+            max_temp_cache_bytes,
+        )
+        .await;
+
+        if written {
+            Ok((content_type, None, temp_body_path))
+        } else {
+            // Storage write failed or evicted; serve from memory fallback
+            Ok((content_type, Some(Arc::new(body)), temp_body_path))
+        }
     }
 }
 
+async fn write_cache(
+    dir: PathBuf,
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+    body: Vec<u8>,
+    content_type: String,
+    max_bytes: u64,
+) -> bool {
+    tokio::task::spawn_blocking(move || {
+        if fs::create_dir_all(&dir).is_ok() {
+            let res_body = fs::write(&body_path, &body);
+            let res_ct = fs::write(&content_type_path, &content_type);
+            evict_directory_if_needed(&dir, max_bytes);
+            res_body.is_ok() && res_ct.is_ok() && body_path.is_file()
+        } else {
+            false
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
+#[allow(dead_code)]
 fn fits_in_cache(len: u64) -> bool {
     len <= MAX_CACHE_BYTES
 }
@@ -297,7 +468,7 @@ async fn serve_range(
 
 // Serve a Range request from an in-memory body. Mirrors serve_range but slices
 // the buffer instead of seeking.
-fn serve_range_memory(body: Vec<u8>, content_type: &str, range_header: &str) -> Response<Vec<u8>> {
+fn serve_range_memory(body: &[u8], content_type: &str, range_header: &str) -> Response<Vec<u8>> {
     let total = body.len() as u64;
     let Some((start, end)) = parse_range(range_header, total) else {
         return range_not_satisfiable(total);
@@ -338,25 +509,8 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
     Some((start, end))
 }
 
-async fn write_cache(
-    dir: PathBuf,
-    body_path: PathBuf,
-    content_type_path: PathBuf,
-    body: Vec<u8>,
-    content_type: String,
-) {
-    let _ = tokio::task::spawn_blocking(move || {
-        if fs::create_dir_all(&dir).is_ok() {
-            let _ = fs::write(&body_path, &body);
-            let _ = fs::write(&content_type_path, &content_type);
-            evict_if_needed(&dir);
-        }
-    })
-    .await;
-}
-
 // Trim oldest-first when the cache exceeds its byte budget.
-fn evict_if_needed(dir: &Path) {
+fn evict_directory_if_needed(dir: &Path, max_bytes: u64) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -375,13 +529,13 @@ fn evict_if_needed(dir: &Path) {
         .collect();
 
     let mut total: u64 = files.iter().map(|(_, len, _)| *len).sum();
-    if total <= MAX_CACHE_BYTES {
+    if total <= max_bytes {
         return;
     }
 
     files.sort_by_key(|(_, _, modified)| *modified);
     for (path, len, _) in files {
-        if total <= MAX_CACHE_BYTES {
+        if total <= max_bytes {
             break;
         }
         if fs::remove_file(&path).is_ok() {
@@ -410,7 +564,9 @@ fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBui
 }
 
 fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
+    let content_length = body.len();
     media_response_builder(StatusCode::OK, content_type)
+        .header(header::CONTENT_LENGTH, content_length)
         .body(body)
         .expect("failed to build media response")
 }
@@ -422,7 +578,9 @@ fn partial_response(
     end: u64,
     total: u64,
 ) -> Response<Vec<u8>> {
+    let content_length = body.len();
     media_response_builder(StatusCode::PARTIAL_CONTENT, content_type)
+        .header(header::CONTENT_LENGTH, content_length)
         .header(
             header::CONTENT_RANGE,
             format!("bytes {start}-{end}/{total}"),
@@ -455,6 +613,13 @@ fn cache_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
         .map_err(|err| err.to_string())
 }
 
+fn temp_cache_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    app.path()
+        .app_cache_dir()
+        .map(|dir| dir.join(TEMP_CACHE_SUBDIR))
+        .map_err(|err| err.to_string())
+}
+
 fn cache_key(session_token: &str, url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(session_token.as_bytes());
@@ -466,11 +631,33 @@ fn cache_key(session_token: &str, url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use tauri::http::{header, StatusCode};
 
     use super::{
         cache_key, fits_in_cache, ok_response, parse_range, partial_response, serve_range_memory,
+        MediaSessionState,
     };
+
+    #[test]
+    fn cache_miss_gates_are_reused_and_expired_entries_are_cleaned() {
+        let state = MediaSessionState::default();
+        let first = state.cache_miss_gate("first").unwrap();
+        let same = state.cache_miss_gate("first").unwrap();
+        let different = state.cache_miss_gate("different").unwrap();
+
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &different));
+
+        drop(first);
+        drop(same);
+        let _third = state.cache_miss_gate("third").unwrap();
+        let gates = state.cache_miss_gates.lock().unwrap();
+        assert!(!gates.contains_key("first"));
+        assert!(gates.contains_key("different"));
+        assert!(gates.contains_key("third"));
+    }
 
     #[test]
     fn cache_key_is_stable_and_hex() {
@@ -491,8 +678,13 @@ mod tests {
     }
 
     #[test]
-    fn protocol_responses_are_privately_cacheable_by_the_webview() {
-        let response = ok_response(Vec::new(), "image/png");
+    fn ok_response_has_content_length_and_cache_headers() {
+        let response = ok_response(vec![0_u8; 42], "image/png");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_LENGTH).unwrap(),
+            "42"
+        );
         assert_eq!(
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "private, max-age=31536000, immutable"
@@ -528,6 +720,10 @@ mod tests {
         let response = partial_response(vec![0_u8; 100], "video/mp4", 0, 99, 5000);
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(
+            response.headers().get(header::CONTENT_LENGTH).unwrap(),
+            "100"
+        );
+        assert_eq!(
             response.headers().get(header::CONTENT_RANGE).unwrap(),
             "bytes 0-99/5000"
         );
@@ -547,7 +743,7 @@ mod tests {
     #[test]
     fn serve_range_memory_slices_the_in_memory_body() {
         let body: Vec<u8> = (0..200u8).collect();
-        let response = serve_range_memory(body.clone(), "application/octet-stream", "bytes=10-19");
+        let response = serve_range_memory(&body, "application/octet-stream", "bytes=10-19");
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), &body[10..=19]);
         assert_eq!(
@@ -559,7 +755,7 @@ mod tests {
     #[test]
     fn serve_range_memory_caps_at_max_range_chunk() {
         let body = vec![7_u8; (super::MAX_RANGE_CHUNK * 2) as usize];
-        let response = serve_range_memory(body, "application/octet-stream", "bytes=0-");
+        let response = serve_range_memory(&body, "application/octet-stream", "bytes=0-");
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body().len() as u64, super::MAX_RANGE_CHUNK);
         let total = super::MAX_RANGE_CHUNK * 2;
@@ -571,7 +767,7 @@ mod tests {
 
     #[test]
     fn serve_range_memory_rejects_unsatisfiable_range() {
-        let response = serve_range_memory(Vec::new(), "application/octet-stream", "bytes=0-0");
+        let response = serve_range_memory(&[], "application/octet-stream", "bytes=0-0");
         assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
     }
 }

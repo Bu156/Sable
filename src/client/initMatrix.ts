@@ -16,8 +16,14 @@ import { fetch } from '$utils/fetch';
 import { clearMediaCache } from '$utils/mediaCache';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
-import type { Session, SessionStoreName } from '$state/sessions';
-import { getSessionStoreName, getStoredSessionRefreshToken } from '$state/sessions';
+import type { Session, Sessions, SessionStoreName } from '$state/sessions';
+import {
+  ACTIVE_SESSION_KEY,
+  getSessionStoreName,
+  getStoredSessionRefreshToken,
+  MATRIX_SESSIONS_KEY,
+} from '$state/sessions';
+import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import * as Sentry from '@sentry/react';
@@ -43,6 +49,14 @@ const debugLog = createDebugLogger('initMatrix');
 const slidingSyncByClient = new WeakMap<MatrixClient, SlidingSyncManager>();
 const membershipActionCleanupByClient = new WeakMap<MatrixClient, () => void>();
 const presenceSyncByClient = new WeakMap<MatrixClient, PresenceSyncManager>();
+
+export const ownsActiveMediaSession = (session?: Session): boolean => {
+  if (!session) return true;
+  const sessions = getLocalStorageItem<Sessions>(MATRIX_SESSIONS_KEY, []);
+  const activeSessionId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
+  const activeSession = sessions.find((item) => item.userId === activeSessionId) ?? sessions[0];
+  return activeSession?.userId === session.userId;
+};
 const presenceStartCleanupByClient = new WeakMap<MatrixClient, () => void>();
 const SLIDING_SYNC_POLL_TIMEOUT_MS = 45000;
 
@@ -584,7 +598,6 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
     sessionUserId: session?.userId,
   });
   debugLog.info('general', 'Logging out client', { userId: mx.getUserId() });
-  pushSessionToSW();
   stopClient(mx);
   try {
     if (session?.oidc) {
@@ -611,7 +624,14 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
     window.localStorage.clear();
   }
 
-  await clearMediaCache();
+  try {
+    await clearMediaCache();
+  } finally {
+    if (ownsActiveMediaSession(session)) {
+      // Queue the final clear after any in-flight refresh.
+      await pushSessionToSW();
+    }
+  }
 };
 
 export const clearLoginData = async () => {

@@ -356,7 +356,7 @@ describe('fetchMediaBlob', () => {
     expect(headersSeen).toEqual([null]);
   });
 
-  it('retries once on the service worker path without direct auth headers', async () => {
+  it('fetches once on the service worker path when it returns an auth error', async () => {
     platform.hasControllingServiceWorker.mockReturnValue(true);
     const { fetchMediaBlob } = await import('./mediaTransport');
     const url = 'https://example.org/auth-media.png';
@@ -365,17 +365,13 @@ describe('fetchMediaBlob', () => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const headers = new Headers(init?.headers);
       headersSeen.push(headers.get('authorization'));
-      if (headersSeen.length === 1) {
-        return new Response('denied', { status: 403 });
-      }
-      return new Response('ok', { status: 200 });
+      return new Response('denied', { status: 403 });
     });
 
-    const blob = await fetchMediaBlob(url);
+    await expect(fetchMediaBlob(url)).rejects.toThrow('Failed to fetch media: 403');
 
-    expect(await blob.text()).toBe('ok');
-    expect(headersSeen).toEqual([null, null]);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(headersSeen).toEqual([null]);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('bypasses the service worker path when explicit auth overrides are provided', async () => {

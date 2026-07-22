@@ -40,7 +40,7 @@ export const createSessionTokenRefresher = (
     // Only the active session owns the single service-worker session.
     const activeSessionId = getLocalStorageItem<string | undefined>(ACTIVE_SESSION_KEY, undefined);
     if (activeSessionId === session.userId) {
-      pushSessionToSW(session.baseUrl, tokens.accessToken, session.userId);
+      await pushSessionToSW(session.baseUrl, tokens.accessToken, session.userId);
     }
   };
 
