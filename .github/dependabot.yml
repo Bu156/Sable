@@ -66,18 +66,6 @@ updates:
     commit-message:
       prefix: chore
     groups:
-      # tauri core + build + plugins are version-coupled; bump together so a
-      # core major bump lands with matching plugin updates in the same PR
-      # rather than as broken intermediate states.
-      tauri-family:
+      docker:
         patterns:
-          - tauri
-          - tauri-build
-          - tauri-plugin-*
-      cargo-major:
-        update-types:
-          - major
-      cargo-non-major:
-        update-types:
-          - minor
-          - patch
+          - '*'
