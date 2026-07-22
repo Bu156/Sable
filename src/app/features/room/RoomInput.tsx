@@ -400,12 +400,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setUploadBoard(true);
         const safeFiles = files.map(safeFile);
         // Eager-read to avoid Android content URI expiry after SAF picker
-        const blobbedFiles = await Promise.all(
-          safeFiles.map(async (f) => {
-            const buf = await f.arrayBuffer();
-            return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
-          })
-        );
+        const blobbedFiles = mobileOrTablet()
+          ? await Promise.all(
+              safeFiles.map(async (f) => {
+                try {
+                  const buf = await f.arrayBuffer();
+                  return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+                } catch {
+                  return f;
+                }
+              })
+            )
+          : safeFiles;
         const makeMetadata = () => ({
           markedAsSpoiler: false,
           waveform: audioMeta?.waveform,
@@ -1903,7 +1909,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       : 'Record audio message'
                 }
                 style={{ backgroundColor: 'transparent' }}
-                aria-pressed={showAudioRecorder}
+                aria-pressed={!hasContent ? showAudioRecorder : undefined}
                 onClick={() => {
                   if (showAudioRecorder) {
                     audioRecorderRef.current?.stop();
