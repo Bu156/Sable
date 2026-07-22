@@ -65,7 +65,10 @@ impl MediaSessionState {
             .clone()
     }
 
-    fn cache_miss_gate(&self, key: &str) -> Result<Arc<AsyncMutex<Option<FetchResult>>>, StatusCode> {
+    fn cache_miss_gate(
+        &self,
+        key: &str,
+    ) -> Result<Arc<AsyncMutex<Option<FetchResult>>>, StatusCode> {
         let mut gates = self
             .cache_miss_gates
             .lock()
@@ -181,15 +184,8 @@ async fn handle_request<R: Runtime>(
 
     let state = app.state::<MediaSessionState>();
 
-    let (content_type, in_memory_body, disk_path) = ensure_cached(
-        &state,
-        &session,
-        &key,
-        media_url,
-        dir,
-        temp_dir,
-    )
-    .await?;
+    let (content_type, in_memory_body, disk_path) =
+        ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
 
     match (range, in_memory_body) {
         (Some(range_header), Some(body)) => {
@@ -338,7 +334,7 @@ async fn fetch_and_cache(
 
     if !upstream.status().is_success() {
         return Err(
-            StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY)
         );
     }
 
