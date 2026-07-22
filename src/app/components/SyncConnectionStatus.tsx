@@ -65,7 +65,7 @@ export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps
     <Box
       style={{
         position: 'fixed',
-        top: config.space.S300,
+        top: `calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + ${config.space.S300})`,
         left: 0,
         right: 0,
         zIndex: 1000,
