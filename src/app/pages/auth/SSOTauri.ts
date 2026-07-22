@@ -16,7 +16,7 @@ const getAppBaseUrl = (): string => {
     return `${TAURI_SSO_PROTOCOL}//${TAURI_SSO_HOST}`;
   }
 
-  return 'https://app.sable.moe';
+  return `${TAURI_SSO_PROTOCOL}//${TAURI_SSO_HOST}`;
 };
 
 type TauriSsoCallback = {
