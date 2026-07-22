@@ -24,7 +24,7 @@ const MEDIA_PATH_PREFIXES: [&str; 2] = ["/_matrix/media/", "/_matrix/client/v1/m
 const CACHE_SUBDIR: &str = "sable-media";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_CONCURRENT_REQUESTS: usize = 8;
+const MAX_CONCURRENT_REQUESTS: usize = 4;
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
 
@@ -439,7 +439,9 @@ fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBui
 }
 
 fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
+    let content_length = body.len();
     media_response_builder(StatusCode::OK, content_type)
+        .header(header::CONTENT_LENGTH, content_length)
         .body(body)
         .expect("failed to build media response")
 }
@@ -451,7 +453,9 @@ fn partial_response(
     end: u64,
     total: u64,
 ) -> Response<Vec<u8>> {
+    let content_length = body.len();
     media_response_builder(StatusCode::PARTIAL_CONTENT, content_type)
+        .header(header::CONTENT_LENGTH, content_length)
         .header(
             header::CONTENT_RANGE,
             format!("bytes {start}-{end}/{total}"),
@@ -542,8 +546,13 @@ mod tests {
     }
 
     #[test]
-    fn protocol_responses_are_privately_cacheable_by_the_webview() {
-        let response = ok_response(Vec::new(), "image/png");
+    fn ok_response_has_content_length_and_cache_headers() {
+        let response = ok_response(vec![0_u8; 42], "image/png");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_LENGTH).unwrap(),
+            "42"
+        );
         assert_eq!(
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "private, max-age=31536000, immutable"
@@ -578,6 +587,10 @@ mod tests {
     fn partial_response_reports_the_served_range() {
         let response = partial_response(vec![0_u8; 100], "video/mp4", 0, 99, 5000);
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(header::CONTENT_LENGTH).unwrap(),
+            "100"
+        );
         assert_eq!(
             response.headers().get(header::CONTENT_RANGE).unwrap(),
             "bytes 0-99/5000"
