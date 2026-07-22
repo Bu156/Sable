@@ -10,7 +10,7 @@ use serde_json::json;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, RunEvent,
+    AppHandle, Manager, RunEvent, WebviewWindow,
 };
 use tauri_plugin_store::StoreExt;
 
@@ -37,12 +37,18 @@ impl Default for DesktopSettingsState {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TrayDoubleClickAction {
-    Ignore,
-    ShowOrCreateMainWindow,
-    CloseMainWindow,
+pub fn setup_close_to_background(webview_window: &WebviewWindow<crate::BrowserEngine>) {
+    let window = webview_window.clone();
+    webview_window.on_window_event(move |event| {
+        let tauri::WindowEvent::CloseRequested { api, .. } = event else {
+            return;
+        };
+        let state = window.state::<DesktopSettingsState>();
+        if state.close_to_background_on_close.load(Ordering::Relaxed) {
+            api.prevent_close();
+            let _ = window.hide();
+        }
+    });
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,28 +57,11 @@ enum ExitRequestAction {
     CloseWindowsToBackground,
 }
 
-#[cfg(not(target_os = "linux"))]
-fn tray_double_click_action(window_exists: bool, event: &TrayIconEvent) -> TrayDoubleClickAction {
-    match event {
-        TrayIconEvent::DoubleClick {
-            button: MouseButton::Left,
-            ..
-        } => {
-            if window_exists {
-                TrayDoubleClickAction::CloseMainWindow
-            } else {
-                TrayDoubleClickAction::ShowOrCreateMainWindow
-            }
-        }
-        _ => TrayDoubleClickAction::Ignore,
-    }
-}
-
 fn exit_request_action(settings: DesktopSettings, code: Option<i32>) -> ExitRequestAction {
-    match (settings.close_to_background_on_close, code) {
-        (_, Some(_)) => ExitRequestAction::AllowExit,
-        (true, None) => ExitRequestAction::CloseWindowsToBackground,
-        (false, None) => ExitRequestAction::AllowExit,
+    if code.is_some() || !settings.close_to_background_on_close {
+        ExitRequestAction::AllowExit
+    } else {
+        ExitRequestAction::CloseWindowsToBackground
     }
 }
 
@@ -178,18 +167,6 @@ fn apply_desktop_settings(
     Ok(desktop_runtime_state(app))
 }
 
-#[cfg(not(target_os = "linux"))]
-fn main_window_exists(app: &AppHandle<crate::BrowserEngine>) -> bool {
-    app.get_webview_window(crate::MAIN_WINDOW_LABEL).is_some()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn close_main_window(app: &AppHandle<crate::BrowserEngine>) {
-    if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) {
-        let _ = window.close();
-    }
-}
-
 fn close_all_windows(app: &AppHandle<crate::BrowserEngine>) {
     for (_label, window) in app.webview_windows() {
         let _ = window.close();
@@ -210,14 +187,21 @@ fn handle_exit_request(
 
 #[cfg(not(target_os = "linux"))]
 fn handle_tray_double_click(app: &AppHandle<crate::BrowserEngine>, event: &TrayIconEvent) {
-    match tray_double_click_action(main_window_exists(app), event) {
-        TrayDoubleClickAction::ShowOrCreateMainWindow => {
+    if let TrayIconEvent::DoubleClick {
+        button: MouseButton::Left,
+        ..
+    } = event
+    {
+        if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) {
+            if window.is_visible().unwrap_or(false) {
+                let _ = window.close();
+            } else {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        } else {
             let _ = crate::show_or_create_main_window(app);
         }
-        TrayDoubleClickAction::CloseMainWindow => {
-            close_main_window(app);
-        }
-        TrayDoubleClickAction::Ignore => {}
     }
 }
 
