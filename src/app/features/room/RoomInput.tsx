@@ -170,6 +170,7 @@ import {
 import { ImageUsage } from '$plugins/custom-emoji';
 import { SerializableMap } from '$types/wrapper/SerializableMap';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
+import { AttachmentSheet } from '$components/attachment-sheet/AttachmentSheet';
 import { SchedulePickerDialog } from './schedule-send';
 import * as css from './schedule-send/SchedulePickerDialog.css';
 import {
@@ -474,6 +475,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       roomIdToEditingScheduledDelayIdAtomFamily(roomId)
     );
     const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
+    const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
     const [showPollPicker, setShowPollPicker] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [scheduleMenuAnchor, setScheduleMenuAnchor] = useState<RectCords>();
@@ -1711,87 +1713,127 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           before={
             <>
-              <PopOut
-                anchor={AddMenuAnchor}
-                position="Top"
-                align="Start"
-                offset={5}
-                content={
-                  <FocusTrap
-                    focusTrapOptions={{
-                      initialFocus: false,
-                      onDeactivate: () => setAddMenuAnchor(undefined),
-                      clickOutsideDeactivates: true,
-                      escapeDeactivates: stopPropagation,
-                    }}
+              {mobileOrTablet() ? (
+                <>
+                  <IconButton
+                    onClick={() => setShowAttachmentSheet(true)}
+                    onPointerDown={suppressEditorRefocus}
+                    variant="SurfaceVariant"
+                    size="300"
+                    radii="300"
+                    style={{ backgroundColor: 'transparent' }}
+                    title="Add"
+                    aria-label="Add new Item"
                   >
-                    <Menu>
-                      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                        <MenuItem
-                          size="300"
-                          radii="300"
-                          onClick={() => {
-                            setAddMenuAnchor(undefined);
-                            setShowPollPicker(true);
-                          }}
-                          before={menuIcon(ListBullets)}
-                        >
-                          <Text size="B300">Create Poll</Text>
-                        </MenuItem>
-                        <MenuItem
-                          size="300"
-                          radii="300"
-                          onClick={() => {
-                            setAddMenuAnchor(undefined);
-                            setShowLocationPicker(true);
-                          }}
-                          before={menuIcon(MapPinPlusIcon)}
-                        >
-                          <Text size="B300">Add Location</Text>
-                        </MenuItem>
-                        <MenuItem
-                          size="300"
-                          radii="300"
-                          onClick={() => {
-                            pickFile('image/*');
-                            setAddMenuAnchor(undefined);
-                          }}
-                          before={menuIcon(ImageIcon)}
-                        >
-                          <Text size="B300">Photos</Text>
-                        </MenuItem>
-                        <MenuItem
-                          size="300"
-                          radii="300"
-                          onClick={() => {
-                            pickFile('*');
-                            setAddMenuAnchor(undefined);
-                          }}
-                          before={menuIcon(PlusCircle)}
-                        >
-                          <Text size="B300">Add File</Text>
-                        </MenuItem>
-                      </Box>
-                    </Menu>
-                  </FocusTrap>
-                }
-              />
-              <IconButton
-                onClick={(evt) =>
-                  editorOldAddFile
-                    ? pickFile('*')
-                    : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
-                }
-                onPointerDown={suppressEditorRefocus}
-                variant="SurfaceVariant"
-                size="300"
-                radii="300"
-                style={{ backgroundColor: 'transparent' }}
-                title={editorOldAddFile ? 'Upload File' : 'Add'}
-                aria-label={editorOldAddFile ? 'Upload and attach a File' : 'Add new Item'}
-              >
-                {composerIcon(PlusCircle)}
-              </IconButton>
+                    {composerIcon(PlusCircle)}
+                  </IconButton>
+                  <AttachmentSheet
+                    open={showAttachmentSheet}
+                    onClose={() => setShowAttachmentSheet(false)}
+                    onPickPhotos={() => {
+                      pickFile('image/*');
+                      setShowAttachmentSheet(false);
+                    }}
+                    onPickFile={() => {
+                      pickFile('*');
+                      setShowAttachmentSheet(false);
+                    }}
+                    onPickPoll={() => {
+                      setShowAttachmentSheet(false);
+                      setShowPollPicker(true);
+                    }}
+                    onPickLocation={() => {
+                      setShowAttachmentSheet(false);
+                      setShowLocationPicker(true);
+                    }}
+                    containerRef={fileDropContainerRef}
+                  />
+                </>
+              ) : (
+                <>
+                  <PopOut
+                    anchor={AddMenuAnchor}
+                    position="Top"
+                    align="Start"
+                    offset={5}
+                    content={
+                      <FocusTrap
+                        focusTrapOptions={{
+                          initialFocus: false,
+                          onDeactivate: () => setAddMenuAnchor(undefined),
+                          clickOutsideDeactivates: true,
+                          escapeDeactivates: stopPropagation,
+                        }}
+                      >
+                        <Menu>
+                          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                setAddMenuAnchor(undefined);
+                                setShowPollPicker(true);
+                              }}
+                              before={menuIcon(ListBullets)}
+                            >
+                              <Text size="B300">Create Poll</Text>
+                            </MenuItem>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                setAddMenuAnchor(undefined);
+                                setShowLocationPicker(true);
+                              }}
+                              before={menuIcon(MapPinPlusIcon)}
+                            >
+                              <Text size="B300">Add Location</Text>
+                            </MenuItem>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                pickFile('image/*');
+                                setAddMenuAnchor(undefined);
+                              }}
+                              before={menuIcon(ImageIcon)}
+                            >
+                              <Text size="B300">Photos</Text>
+                            </MenuItem>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                pickFile('*');
+                                setAddMenuAnchor(undefined);
+                              }}
+                              before={menuIcon(PlusCircle)}
+                            >
+                              <Text size="B300">Add File</Text>
+                            </MenuItem>
+                          </Box>
+                        </Menu>
+                      </FocusTrap>
+                    }
+                  />
+                  <IconButton
+                    onClick={(evt) =>
+                      editorOldAddFile
+                        ? pickFile('*')
+                        : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
+                    }
+                    onPointerDown={suppressEditorRefocus}
+                    variant="SurfaceVariant"
+                    size="300"
+                    radii="300"
+                    style={{ backgroundColor: 'transparent' }}
+                    title={editorOldAddFile ? 'Upload File' : 'Add'}
+                    aria-label={editorOldAddFile ? 'Upload and attach a File' : 'Add new Item'}
+                  >
+                    {composerIcon(PlusCircle)}
+                  </IconButton>
+                </>
+              )}
               {pmpPickerEnable && (
                 <PersonaPicker
                   mx={mx}
