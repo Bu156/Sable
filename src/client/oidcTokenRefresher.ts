@@ -4,6 +4,7 @@ import type { MatrixClient } from '$types/matrix-sdk';
 import type { Session } from '$state/sessions';
 import {
   ACTIVE_SESSION_KEY,
+  MATRIX_SESSIONS_KEY,
   getStoredSessionRefreshToken,
   updateSessionTokens,
 } from '$state/sessions';
@@ -23,6 +24,24 @@ export const assertAuthMetadataIssuer = (
 };
 
 export type SessionTokenRefresher = Pick<TokenRefresher, 'tokenRefreshFunction'>;
+
+const refreshQueues = new Map<string, Promise<unknown>>();
+
+const getStoredSession = (userId: string): Session | undefined =>
+  getLocalStorageItem<Session[]>(MATRIX_SESSIONS_KEY, []).find(
+    (stored) => stored.userId === userId
+  );
+
+const withRefreshQueue = async <T>(userId: string, operation: () => Promise<T>): Promise<T> => {
+  const previous = refreshQueues.get(userId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(operation);
+  const settled = run.then(
+    () => undefined,
+    () => undefined
+  );
+  refreshQueues.set(userId, settled);
+  return run;
+};
 
 export const createSessionTokenRefresher = (
   session: Session,
@@ -68,15 +87,25 @@ export const createSessionTokenRefresher = (
 
   return {
     tokenRefreshFunction: async (refreshToken) => {
-      const tokenRefresher = await getTokenRefresher();
-      // Another tab may have rotated the token; reusing a consumed one revokes the session.
-      const latestRefreshToken = getStoredSessionRefreshToken(session.userId) ?? refreshToken;
-      const tokens = await tokenRefresher.tokenRefreshFunction(latestRefreshToken);
-      return {
-        ...tokens,
-        // OAuth servers may omit a replacement refresh token, in which case the old one remains valid.
-        refreshToken: tokens.refreshToken ?? latestRefreshToken,
-      };
+      return withRefreshQueue(session.userId, async () => {
+        const tokenRefresher = await getTokenRefresher();
+        // Another tab may have rotated the token; reusing a consumed one revokes the session.
+        const storedSession = getStoredSession(session.userId);
+        const latestRefreshToken =
+          storedSession?.refreshToken ?? getStoredSessionRefreshToken(session.userId) ?? refreshToken;
+        if (storedSession && latestRefreshToken !== refreshToken) {
+          return {
+            accessToken: storedSession.accessToken,
+            refreshToken: latestRefreshToken,
+          };
+        }
+        const tokens = await tokenRefresher.tokenRefreshFunction(latestRefreshToken);
+        return {
+          ...tokens,
+          // OAuth servers may omit a replacement refresh token, in which case the old one remains valid.
+          refreshToken: tokens.refreshToken ?? latestRefreshToken,
+        };
+      });
     },
   };
 };
