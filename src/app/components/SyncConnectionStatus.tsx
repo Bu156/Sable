@@ -1,6 +1,6 @@
 import classNames from 'classnames';
 import { Box, config, Text } from 'folds';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import { SyncState } from '$types/matrix-sdk';
 import { type TitlebarStatusView } from '$state/titlebarStatus';
 import { ContainerColor } from '$styles/ContainerColor.css';
@@ -39,7 +39,7 @@ export function getSyncConnectionStatusView(
 export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps) {
   const shouldReduceMotion = useReducedMotion();
 
-  const bannerVariants = shouldReduceMotion
+  const bannerVariants: Variants = shouldReduceMotion
     ? {
         hidden: { opacity: 0 },
         visible: { opacity: 1, transition: { duration: 0.2 } },
