@@ -485,9 +485,11 @@ jobs:
           NORMALIZED_IPA="$(dirname "$IPA")/Sable-${VERSION}-ios-arm64.ipa"
           [ "$IPA" = "$NORMALIZED_IPA" ] || mv "$IPA" "$NORMALIZED_IPA"
           IPA="$NORMALIZED_IPA"
+          IPA_VERSION="$(unzip -p "$IPA" 'Payload/*.app/Info.plist' 2>/dev/null | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null || true)"
           echo "size=$(stat -f%z "$IPA")" >> "$GITHUB_OUTPUT"
           echo "path=$IPA" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$IPA")" >> "$GITHUB_OUTPUT"
+          echo "ipa_version=${IPA_VERSION:-$VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Attest iOS bundle
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
@@ -505,6 +507,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          ALTSTORE_VERSION: ${{ steps.ipa.outputs.ipa_version }}
         run: |
           DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.ipa.outputs.name }}"
           DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -514,7 +517,7 @@ jobs:
             echo "Using repo altstore-source.json"
           fi
           node .github/scripts/update-altstore-source.mjs \
-            altstore-source.json "$VERSION" "$VERSION" "${{ steps.ipa.outputs.size }}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
+            altstore-source.json "${ALTSTORE_VERSION:-$VERSION}" "${ALTSTORE_VERSION:-$VERSION}" "${{ steps.ipa.outputs.size }}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
           gh release upload "$TAG" altstore-source.json --clobber
 
   updater-manifest:
