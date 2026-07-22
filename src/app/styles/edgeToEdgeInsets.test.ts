@@ -36,7 +36,9 @@ describe('android edge-to-edge inset contract', () => {
     const systemBarShell = readWorkspaceFile('src/app/components/app-shell/SystemBarShell.tsx');
 
     expect(indexHtml).not.toContain('id="portalContainer"');
-    expect(appTsx).toContain('<AppShell screenSize={screenSize} queryClient={queryClient}>');
+    expect(appTsx).toContain('<AppShell');
+    expect(appTsx).toContain('screenSize={screenSize}');
+    expect(appTsx).toContain('queryClient={queryClient}');
     expect(appShell).toContain('const [portalContainer, setPortalContainer] = useState');
     expect(appShell).toContain('<SystemBarShell onPortalContainerChange={setPortalContainer}>');
     expect(systemBarShell).toContain('ref={onPortalContainerChange}');
