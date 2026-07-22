@@ -485,7 +485,7 @@ jobs:
           NORMALIZED_IPA="$(dirname "$IPA")/Sable-${VERSION}-ios-arm64.ipa"
           [ "$IPA" = "$NORMALIZED_IPA" ] || mv "$IPA" "$NORMALIZED_IPA"
           IPA="$NORMALIZED_IPA"
-          IPA_VERSION="$(unzip -p "$IPA" 'Payload/*.app/Info.plist' 2>/dev/null | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null || true)"
+          IPA_VERSION="$(unzip -p "$IPA" 'Payload/*.app/Info.plist' 2>/dev/null | plutil -extract CFBundleVersion raw -o - - 2>/dev/null || true)"
           echo "size=$(stat -f%z "$IPA")" >> "$GITHUB_OUTPUT"
           echo "path=$IPA" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$IPA")" >> "$GITHUB_OUTPUT"
