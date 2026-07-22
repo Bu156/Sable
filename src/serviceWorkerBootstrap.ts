@@ -16,14 +16,11 @@ const showUpdateAvailablePrompt = (registration: ServiceWorkerRegistration) => {
     return;
   }
 
-  // eslint-disable-next-line no-alert
-  if (window.confirm('A new version of the app is available. Refresh to update?')) {
-    if (registration.waiting) {
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin
-      registration.waiting.postMessage({ type: 'SKIP_WAITING_AND_CLAIM' });
-    }
-    window.location.reload();
-  }
+  window.dispatchEvent(
+    new CustomEvent<{ registration: ServiceWorkerRegistration }>('sable-sw-update-available', {
+      detail: { registration },
+    })
+  );
 };
 
 const sendSessionToSW = () => {
