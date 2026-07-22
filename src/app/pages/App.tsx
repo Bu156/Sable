@@ -30,21 +30,18 @@ const ReactQueryDevtools = lazy(async () => {
 type BootstrappedAppShellProps = {
   clientConfig: ClientConfig;
   screenSize: ScreenSize;
+  jotaiStore: ReturnType<typeof createStore>;
 };
 
-function BootstrappedAppShell({ clientConfig, screenSize }: BootstrappedAppShellProps) {
+function BootstrappedAppShell({ clientConfig, screenSize, jotaiStore }: BootstrappedAppShellProps) {
   normalizeOAuthCallbackUrl(clientConfig.hashRouter);
-  const jotaiStoreRef = useRef<ReturnType<typeof createStore>>();
-  if (!jotaiStoreRef.current) {
-    jotaiStoreRef.current = createStore();
-    bootstrapSettingsStore(jotaiStoreRef.current, clientConfig.settingsDefaults);
-  }
+  bootstrapSettingsStore(jotaiStore, clientConfig.settingsDefaults);
   const router = useMemo(() => createRouter(clientConfig, screenSize), [clientConfig, screenSize]);
   const reactQueryDevtoolsEnabled = isReactQueryDevtoolsEnabled();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <JotaiProvider store={jotaiStoreRef.current}>
+      <JotaiProvider store={jotaiStore}>
         <RouterProvider router={router} />
       </JotaiProvider>
       {reactQueryDevtoolsEnabled && (
@@ -68,13 +65,21 @@ function renderSentryErrorFallback({ error, eventId }: { error: unknown; eventId
 function App() {
   const screenSize = useScreenSize();
   useCompositionEndTracking();
+  const jotaiStoreRef = useRef<ReturnType<typeof createStore>>();
+  if (!jotaiStoreRef.current) {
+    jotaiStoreRef.current = createStore();
+  }
 
   const renderConfiguredApp = useCallback(
     (clientConfig: ClientConfig) => {
       setMatrixToBase(clientConfig.matrixToBaseUrl);
       return (
         <ClientConfigProvider value={clientConfig}>
-          <BootstrappedAppShell clientConfig={clientConfig} screenSize={screenSize} />
+          <BootstrappedAppShell
+            clientConfig={clientConfig}
+            screenSize={screenSize}
+            jotaiStore={jotaiStoreRef.current!}
+          />
         </ClientConfigProvider>
       );
     },
@@ -83,7 +88,11 @@ function App() {
 
   return (
     <Sentry.ErrorBoundary fallback={renderSentryErrorFallback}>
-      <AppShell screenSize={screenSize} queryClient={queryClient}>
+      <AppShell
+        screenSize={screenSize}
+        queryClient={queryClient}
+        jotaiStore={jotaiStoreRef.current}
+      >
         <FeatureCheck>
           <ClientConfigLoader>{renderConfiguredApp}</ClientConfigLoader>
         </FeatureCheck>

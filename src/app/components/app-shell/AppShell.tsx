@@ -1,5 +1,6 @@
 import { type ReactNode, Suspense, lazy, useState } from 'react';
 import { Provider as JotaiProvider } from 'jotai';
+import type { createStore } from 'jotai/vanilla';
 import { OverlayContainerProvider, PopOutContainerProvider, TooltipContainerProvider } from 'folds';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { isTauri } from '@tauri-apps/api/core';
@@ -24,9 +25,10 @@ type AppShellProps = {
   children: ReactNode;
   queryClient: Parameters<typeof QueryClientProvider>[0]['client'];
   screenSize: ScreenSize;
+  jotaiStore?: ReturnType<typeof createStore>;
 };
 
-export function AppShell({ children, queryClient, screenSize }: AppShellProps) {
+export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppShellProps) {
   const tauriOs = isTauri() ? osType() : undefined;
   const useDesktopTitleBar = tauriOs === 'windows' || tauriOs === 'linux';
   const useMacTitleBar = tauriOs === 'macos';
@@ -41,7 +43,7 @@ export function AppShell({ children, queryClient, screenSize }: AppShellProps) {
         <OverlayContainerProvider value={portalContainer ?? undefined}>
           <ScreenSizeProvider value={screenSize}>
             <QueryClientProvider client={queryClient}>
-              <JotaiProvider>
+              <JotaiProvider store={jotaiStore}>
                 <TauriFrontendReady />
                 <div
                   style={{
