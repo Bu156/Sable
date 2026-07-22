@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type as osType } from '@tauri-apps/plugin-os';
 import {
   buildTauriSsoRedirectUrl,
   parseTauriOidcCallback,
@@ -12,10 +13,28 @@ vi.mock('@tauri-apps/plugin-os', () => ({
 }));
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
+  vi.mocked(osType).mockReturnValue('android');
   localStorage.clear();
 });
 
 describe('buildTauriSsoRedirectUrl', () => {
+  it('uses the registered deep-link callback in production desktop builds', () => {
+    vi.stubEnv('DEV', false);
+    vi.mocked(osType).mockReturnValue('linux');
+
+    const url = new URL(buildTauriSsoRedirectUrl('https://hs.example'));
+
+    expect(url.protocol).toBe('sable:');
+    expect(url.hostname).toBe('login');
+    expect(url.pathname).toBe('/lp/sso-callback');
+    expect(url.searchParams.get('server')).toBe('https://hs.example');
+    const nonce = url.searchParams.get('sso_nonce');
+    expect(nonce).toBeTruthy();
+    expect(takeTauriSsoNonce()).toBe(nonce);
+    expect(takeTauriSsoNonce()).toBeUndefined();
+  });
+
   it('embeds the server and stores the same nonce it puts in the url', () => {
     const url = new URL(buildTauriSsoRedirectUrl('https://hs.example'));
     expect(url.searchParams.get('server')).toBe('https://hs.example');
