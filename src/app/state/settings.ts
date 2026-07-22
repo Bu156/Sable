@@ -350,7 +350,7 @@ export const defaultSettings: Settings = {
   privacyBlurEmotes: false,
   showPronouns: true,
   parsePronouns: true,
-  pronounPillMaxCount: 3,
+  pronounPillMaxCount: mobileOrTablet() ? 1 : 3,
   pronounPillMaxLength: 16,
   renderGlobalNameColors: true,
   renderUserCards: 'both',
