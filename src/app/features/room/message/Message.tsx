@@ -232,7 +232,7 @@ export const Pronouns = as<
     selectedLanguages
   );
 
-  const limit = getSettings().pronounPillMaxCount ?? 3;
+  const limit = getSettings().pronounPillMaxCount ?? (mobileOrTablet() ? 1 : 3);
   const maxPillLength = getSettings().pronounPillMaxLength ?? 16;
 
   // if language specific pronouns can't be found matching the filter return unfiltered

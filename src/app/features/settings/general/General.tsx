@@ -418,7 +418,7 @@ function DateAndTime() {
   );
 }
 
-function Editor({ isMobile }: Readonly<{ isMobile: boolean }>) {
+function Editor() {
   const [enterForNewline, setEnterForNewline] = useSetting(settingsAtom, 'enterForNewline');
   const [editorToolbar, setEditorToolbar] = useSetting(settingsAtom, 'editorToolbar');
   const [editorOldAddFile, setEditorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
@@ -434,24 +434,12 @@ function Editor({ isMobile }: Readonly<{ isMobile: boolean }>) {
   return (
     <Box direction="Column" gap="100">
       <Text size="L400">Editor</Text>
-      <SequenceCard
-        className={SequenceCardStyle}
-        variant="SurfaceVariant"
-        direction="Column"
-        style={{ opacity: isMobile ? 0.5 : 1 }}
-      >
+      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
           title="ENTER for Newline"
           focusId="enter-for-newline"
-          description={`Use ${isMacOS() ? KeySymbol.Command : 'Ctrl'} + ENTER to send message. ${isMobile ? '(Disabled on Mobile)' : ''}`}
-          after={
-            <Switch
-              variant="Primary"
-              value={enterForNewline}
-              onChange={setEnterForNewline}
-              disabled={isMobile}
-            />
-          }
+          description={`Use ${isMacOS() ? KeySymbol.Command : 'Ctrl'} + ENTER to send message.`}
+          after={<Switch variant="Primary" value={enterForNewline} onChange={setEnterForNewline} />}
         />
       </SequenceCard>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
@@ -1611,7 +1599,7 @@ export function General({ requestBack, requestClose }: Readonly<GeneralProps>) {
             <Box direction="Column" gap="700">
               <DateAndTime />
               <Gestures isMobile={mobileOrTablet()} />
-              <Editor isMobile={mobileOrTablet()} />
+              <Editor />
               <Messages />
               <Embeds />
               <Calls />

@@ -108,7 +108,9 @@ describe('android edge-to-edge inset contract', () => {
     );
 
     expect(notificationBannerStyles).toContain("position: 'fixed'");
-    expect(notificationBannerStyles).toContain("top: 'env(safe-area-inset-top, 0)'");
+    expect(notificationBannerStyles).toContain(
+      "top: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))'"
+    );
     expect(telemetryBannerStyles).toContain("position: 'fixed'");
   });
 });

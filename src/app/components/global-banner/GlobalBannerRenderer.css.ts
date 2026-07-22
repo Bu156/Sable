@@ -3,7 +3,7 @@ import { color, config, toRem } from 'folds';
 
 export const Container = style({
   position: 'fixed',
-  top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+  top: 'calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px)',
   left: '50%',
   transform: 'translateX(-50%)',
   zIndex: 9998,
