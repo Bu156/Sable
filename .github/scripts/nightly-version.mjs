@@ -38,4 +38,3 @@ const timeIdentifier = `${year}-${month}-${day}-${hours}${minutes}`;
 
 const [, major, minor, patch] = match;
 console.log(`${major}.${minor}.${Number(patch) + 1}-nightly.${timeIdentifier}`);
-

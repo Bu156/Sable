@@ -34,8 +34,16 @@ if (!app) {
 
 // Clean version string for AltStore/SideStore compatibility:
 // Apple Info.plist CFBundleShortVersionString / CFBundleVersion replaces hyphens/prereleases (e.g. -nightly.) with numeric/dot delimiters.
-const normalizedVersion = version.replace(/-nightly\./g, '.').replace(/[^0-9.]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
-const normalizedBuild = build.replace(/-nightly\./g, '.').replace(/[^0-9.]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
+const normalizedVersion = version
+  .replace(/-nightly\./g, '.')
+  .replace(/[^0-9.]/g, '.')
+  .replace(/\.+/g, '.')
+  .replace(/^\.|\.$/g, '');
+const normalizedBuild = build
+  .replace(/-nightly\./g, '.')
+  .replace(/[^0-9.]/g, '.')
+  .replace(/\.+/g, '.')
+  .replace(/^\.|\.$/g, '');
 
 const entry = {
   version: normalizedVersion,
