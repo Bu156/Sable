@@ -79,8 +79,15 @@ describe('parseTauriSsoCallback', () => {
 });
 
 describe('parseTauriOidcCallback', () => {
-  it('parses code and state', () => {
+  it('parses code and state from single-slash format', () => {
     expect(parseTauriOidcCallback('moe.sable.app:/login?code=c1&state=s1')).toEqual({
+      code: 'c1',
+      state: 's1',
+    });
+  });
+
+  it('parses code and state from authority/hostname format (moe.sable.app://login)', () => {
+    expect(parseTauriOidcCallback('moe.sable.app://login?code=c1&state=s1')).toEqual({
       code: 'c1',
       state: 's1',
     });
@@ -88,5 +95,11 @@ describe('parseTauriOidcCallback', () => {
 
   it('rejects the wrong path', () => {
     expect(parseTauriOidcCallback('moe.sable.app:/other?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('moe.sable.app://other?code=c1&state=s1')).toBeUndefined();
+  });
+
+  it('rejects a different protocol', () => {
+    expect(parseTauriOidcCallback('sable://login?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('https://login?code=c1&state=s1')).toBeUndefined();
   });
 });

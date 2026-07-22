@@ -75,7 +75,17 @@ export const parseTauriOidcCallback = (
   try {
     const callbackUrl = new URL(rawUrl);
     if (callbackUrl.protocol !== TAURI_OIDC_PROTOCOL) return undefined;
-    if (callbackUrl.pathname !== TAURI_OIDC_PATH) return undefined;
+
+    // `moe.sable.app:/login?...`  → pathname === '/login'
+    // `moe.sable.app://login?...` → hostname === 'login', pathname === '/' or ''
+    // Some platforms may also deliver a trailing slash variant.
+    const isValidTarget =
+      callbackUrl.pathname === TAURI_OIDC_PATH ||
+      callbackUrl.pathname === `${TAURI_OIDC_PATH}/` ||
+      (callbackUrl.hostname === 'login' &&
+        (callbackUrl.pathname === '/' || callbackUrl.pathname === ''));
+
+    if (!isValidTarget) return undefined;
 
     const code = callbackUrl.searchParams.get('code');
     const state = callbackUrl.searchParams.get('state');

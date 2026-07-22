@@ -156,7 +156,14 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
   const mobile = screenSize === ScreenSize.Mobile;
 
   const routes = createRoutesFromElements(
-    <Route>
+    <Route
+      element={
+        <>
+          <TauriDeepLinkBridge />
+          <Outlet />
+        </>
+      }
+    >
       <Route
         index
         loader={() => {
@@ -192,7 +199,6 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           >
             <Suspense fallback={<SplashScreen>{null}</SplashScreen>}>
               <>
-                <TauriDeepLinkBridge />
                 <AuthLayout />
                 <UnAuthRouteThemeManager />
               </>

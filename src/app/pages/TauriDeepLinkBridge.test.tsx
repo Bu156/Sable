@@ -38,6 +38,12 @@ describe('mapDeepLinkToLoginPath', () => {
     expect(path).toContain('state=s1');
   });
 
+  it('passes normalized moe.sable.app://login OIDC callback through', () => {
+    const path = mapDeepLinkToLoginPath('moe.sable.app://login?code=c1&state=s1');
+    expect(path).toContain('code=c1');
+    expect(path).toContain('state=s1');
+  });
+
   it('returns undefined for an unrelated url', () => {
     expect(mapDeepLinkToLoginPath('https://example.com/whatever')).toBeUndefined();
   });
