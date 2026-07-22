@@ -1,10 +1,10 @@
 import { atom } from 'jotai';
-import { isTauri } from '@tauri-apps/api/core';
-import { type as osType } from '@tauri-apps/plugin-os';
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { getDesktopRuntimeState, syncDesktopSettings } from '$generated/tauri/commands';
 import type { DesktopSettings as GeneratedDesktopSettings } from '$generated/tauri/desktop/DesktopSettings';
 import type { DesktopRuntimeState } from '$generated/tauri/desktop/DesktopRuntimeState';
+import { getDesktopTauriPlatform, isDesktopTauri } from '$utils/platform';
+import type { DesktopTauriPlatform } from '$utils/platform';
 
 type DesktopSettingsState = {
   ready: boolean;
@@ -22,7 +22,7 @@ export type { DesktopRuntimeState };
 const DESKTOP_SETTINGS_STORE_PATH = 'desktop-preferences.json' as const;
 const LEGACY_KEEP_BACKGROUND_RUNNING_KEY = 'keepBackgroundRunning' as const;
 
-type DesktopPlatform = 'windows' | 'linux' | 'macos' | undefined;
+type DesktopPlatform = DesktopTauriPlatform | undefined;
 
 export function desktopSettingsDefaultsForPlatform(platform: DesktopPlatform): DesktopSettings {
   return {
@@ -37,14 +37,8 @@ export const DEFAULT_DESKTOP_RUNTIME_STATE: DesktopRuntimeState = {
   trayAvailable: true,
 };
 
-function getDesktopPlatform(): DesktopPlatform {
-  if (!isTauri()) return undefined;
-
-  const os = osType();
-  return os === 'windows' || os === 'linux' || os === 'macos' ? os : undefined;
-}
-
-export const DEFAULT_DESKTOP_SETTINGS = desktopSettingsDefaultsForPlatform(getDesktopPlatform());
+export const DEFAULT_DESKTOP_SETTINGS =
+  desktopSettingsDefaultsForPlatform(getDesktopTauriPlatform());
 
 const DESKTOP_SETTING_KEYS = Object.keys(DEFAULT_DESKTOP_SETTINGS) as DesktopSettingKey[];
 
@@ -54,10 +48,6 @@ const desktopSettingsStore = new LazyStore(DESKTOP_SETTINGS_STORE_PATH, {
 
 let currentDesktopSettings = DEFAULT_DESKTOP_SETTINGS;
 let currentDesktopRuntimeState = DEFAULT_DESKTOP_RUNTIME_STATE;
-
-function isDesktopTauri(): boolean {
-  return getDesktopPlatform() !== undefined;
-}
 
 function readBoolean(value: boolean | undefined, fallback: boolean): boolean {
   return value === undefined ? fallback : value;
@@ -85,7 +75,7 @@ export function desktopSettingsFromStoreValues(
   showSystemTrayIcon: boolean | undefined,
   legacyKeepBackgroundRunning: boolean | undefined,
   useCustomTitleBar: boolean | undefined,
-  platform = getDesktopPlatform()
+  platform = getDesktopTauriPlatform()
 ): DesktopSettings {
   const defaults = desktopSettingsDefaultsForPlatform(platform);
 
