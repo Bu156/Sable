@@ -79,8 +79,7 @@ export const parseTauriOidcCallback = (
     // `moe.sable.app:/login?...`  → hostname === '', pathname === '/login'
     // `moe.sable.app://login?...` → hostname === 'login', pathname === '/' or ''
     const hasLoginPath =
-      callbackUrl.pathname === TAURI_OIDC_PATH ||
-      callbackUrl.pathname === `${TAURI_OIDC_PATH}/`;
+      callbackUrl.pathname === TAURI_OIDC_PATH || callbackUrl.pathname === `${TAURI_OIDC_PATH}/`;
 
     const isSingleSlashFormat = callbackUrl.hostname === '' && hasLoginPath;
 
