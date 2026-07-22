@@ -34,7 +34,7 @@ const day = String(timestamp.getUTCDate()).padStart(2, '0');
 const hours = String(timestamp.getUTCHours()).padStart(2, '0');
 const minutes = String(timestamp.getUTCMinutes()).padStart(2, '0');
 
-const timeIdentifier = `${year}-${month}-${day}-${hours}${minutes}`;
+const timeIdentifier = `${year}${month}${day}.${hours}${minutes}`;
 
 const [, major, minor, patch] = match;
 console.log(`${major}.${minor}.${Number(patch) + 1}-nightly.${timeIdentifier}`);

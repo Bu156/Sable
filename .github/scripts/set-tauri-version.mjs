@@ -23,7 +23,13 @@ if (updaterEndpoint && !updaterEndpoint.startsWith('https://')) {
 
 const file = 'src-tauri/tauri.conf.json';
 const config = JSON.parse(readFileSync(file, 'utf8'));
-config.version = version;
+
+// Sanitize hyphens in prerelease portion for Apple iOS bundle-version compatibility (requires numbers separated by '.')
+const sanitizedVersion = version.replace(/^(\d+\.\d+\.\d+-nightly)\.(.+)$/, (_, prefix, build) => {
+  return `${prefix}.${build.replace(/-/g, '.')}`;
+});
+
+config.version = sanitizedVersion;
 if (updaterEndpoint) {
   config.plugins.updater.endpoints = [updaterEndpoint];
 }
