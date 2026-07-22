@@ -1,5 +1,5 @@
 import classNames from 'classnames';
-import { Box, config, Line, Text } from 'folds';
+import { Box, config, Text } from 'folds';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { SyncState } from '$types/matrix-sdk';
 import { type TitlebarStatusView } from '$state/titlebarStatus';
@@ -37,19 +37,106 @@ export function getSyncConnectionStatusView(
 }
 
 export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps) {
-  if (!status) return null;
+  const shouldReduceMotion = useReducedMotion();
+
+  const bannerVariants = shouldReduceMotion
+    ? {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1, transition: { duration: 0.2 } },
+        exit: { opacity: 0, transition: { duration: 0.15 } },
+      }
+    : {
+        hidden: { y: -30, opacity: 0, scale: 0.95 },
+        visible: {
+          y: 0,
+          opacity: 1,
+          scale: 1,
+          transition: { type: 'spring', damping: 20, stiffness: 300 },
+        },
+        exit: {
+          y: -20,
+          opacity: 0,
+          scale: 0.95,
+          transition: { duration: 0.15, ease: TITLEBAR_EASE_OUT },
+        },
+      };
 
   return (
-    <Box direction="Column" shrink="No">
-      <Box
-        className={ContainerColor({ variant: status.variant })}
-        style={{ padding: `${config.space.S100} 0` }}
-        alignItems="Center"
-        justifyContent="Center"
-      >
-        <Text size="L400">{status.text}</Text>
-      </Box>
-      <Line variant={status.variant} size="300" />
+    <Box
+      style={{
+        position: 'fixed',
+        top: config.space.S300,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        pointerEvents: 'none',
+      }}
+      alignItems="Center"
+      justifyContent="Center"
+    >
+      <AnimatePresence mode="wait">
+        {status && (
+          <motion.div
+            key={status.variant}
+            variants={bannerVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{
+              willChange: shouldReduceMotion ? 'opacity' : 'transform, opacity',
+            }}
+          >
+            <Box
+              className={ContainerColor({ variant: status.variant })}
+              style={{
+                padding: `${config.space.S100} ${config.space.S400}`,
+                borderRadius: '9999px',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                border: `1px solid color-mix(in srgb, ${
+                  status.variant === 'Primary' ? 'var(--sable-primary-main)' :
+                  status.variant === 'Success' ? 'var(--sable-success-main)' :
+                  status.variant === 'Warning' ? 'var(--sable-warn-main)' :
+                  status.variant === 'Critical' ? 'var(--sable-crit-main)' :
+                  'currentColor'
+                } 30%, transparent)`,
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                backgroundColor: `color-mix(in srgb, ${
+                  status.variant === 'Primary' ? 'var(--sable-primary-main)' :
+                  status.variant === 'Success' ? 'var(--sable-success-main)' :
+                  status.variant === 'Warning' ? 'var(--sable-warn-main)' :
+                  status.variant === 'Critical' ? 'var(--sable-crit-main)' :
+                  'currentColor'
+                } 18%, transparent)`,
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+              alignItems="Center"
+              justifyContent="Center"
+            >
+              <Text size="L400">{status.text}</Text>
+              
+              {status.progress !== undefined && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    height: '2px',
+                    backgroundColor: status.variant === 'Primary' ? 'var(--sable-primary-main)' :
+                                     status.variant === 'Success' ? 'var(--sable-success-main)' :
+                                     status.variant === 'Warning' ? 'var(--sable-warn-main)' :
+                                     status.variant === 'Critical' ? 'var(--sable-crit-main)' :
+                                     'currentColor',
+                    width: `${status.progress}%`,
+                    transition: 'width 0.3s ease-out',
+                  }}
+                />
+              )}
+            </Box>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Box>
   );
 }
@@ -132,15 +219,18 @@ export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusPro
     <AnimatePresence mode="sync" initial={false}>
       {status && (
         <motion.span
-          key={`${status.variant}-${status.text}`}
+          key={status.variant}
           className={classNames(
             'tauri-titlebar-status__label',
             status.variant === 'Success' && 'tauri-titlebar-status__label--success',
             status.variant === 'Warning' && 'tauri-titlebar-status__label--warning',
-            status.variant === 'Critical' && 'tauri-titlebar-status__label--critical'
+            status.variant === 'Critical' && 'tauri-titlebar-status__label--critical',
+            status.variant === 'Primary' && 'tauri-titlebar-status__label--primary'
           )}
           style={{
             transformOrigin: 'center top',
+            position: 'relative',
+            overflow: 'hidden',
             willChange: shouldReduceMotion ? 'opacity' : 'transform, opacity, clip-path',
           }}
           variants={pillVariants}
@@ -155,6 +245,23 @@ export function SyncConnectionStatusTitlebar({ status }: SyncConnectionStatusPro
           >
             {status.text}
           </motion.span>
+          {status.progress !== undefined && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                height: '2px',
+                backgroundColor: status.variant === 'Primary' ? 'var(--sable-primary-main)' :
+                                 status.variant === 'Success' ? 'var(--sable-success-main)' :
+                                 status.variant === 'Warning' ? 'var(--sable-warn-main)' :
+                                 status.variant === 'Critical' ? 'var(--sable-crit-main)' :
+                                 'currentColor',
+                width: `${status.progress}%`,
+                transition: 'width 0.3s ease-out',
+              }}
+            />
+          )}
         </motion.span>
       )}
     </AnimatePresence>

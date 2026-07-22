@@ -73,6 +73,8 @@ export type SlidingSyncDiagnostics = {
   lists: SlidingSyncListDiagnostics[];
 };
 
+export type HydrationProgress = { loadedRooms: number; totalRooms: number };
+
 const clampPositive = (value: number | undefined, fallback: number): number => {
   if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return fallback;
   return Math.round(value);
@@ -313,6 +315,10 @@ export class SlidingSyncManager {
   private readonly roomSubscriptionStatusListeners = new Map<
     string,
     Set<(loading: boolean) => void>
+  >();
+
+  private readonly hydrationStatusListeners = new Set<
+    (isHydrating: boolean, progress?: HydrationProgress) => void
   >();
 
   private readonly roomDataAwaitingSyncCompletion = new Set<string>();
@@ -576,6 +582,8 @@ export class SlidingSyncManager {
       listeners.forEach((listener) => listener(false))
     );
     this.roomSubscriptionStatusListeners.clear();
+    this.hydrationStatusListeners.forEach((listener) => listener(false));
+    this.hydrationStatusListeners.clear();
 
     this.disposed = true;
     this.slidingSync.stop();
@@ -805,6 +813,7 @@ export class SlidingSyncManager {
       if (!this.listsFullyLoaded) {
         this.listsFullyLoaded = true;
         this.initialListHydrationCompleted = true;
+        this.hydrationStatusListeners.forEach((listener) => listener(false));
         this.reconcileSidebarCacheMembership();
         globalThis.setTimeout(() => this.flushDeferredSubscriptions(), 0);
         this.applySteadyStateListRanges();
@@ -822,7 +831,10 @@ export class SlidingSyncManager {
         });
       }
     } else if (expandedAny) {
-      this.listsFullyLoaded = false;
+      if (this.listsFullyLoaded) {
+        this.listsFullyLoaded = false;
+      }
+      this.hydrationStatusListeners.forEach((listener) => listener(true, this.getHydrationProgress()));
       log.log(`Sliding Sync lists expanding... for ${this.mx.getUserId()}`);
     }
 
@@ -929,6 +941,39 @@ export class SlidingSyncManager {
 
   public isRoomActive(roomId: string): boolean {
     return this.activeRoomSubscriptions.has(roomId);
+  }
+
+  public getHydrationProgress(): HydrationProgress {
+    let loadedRooms = 0;
+    let totalRooms = 0;
+    this.listKeys.forEach((key) => {
+      const existing = this.slidingSync.getListData(key);
+      const knownCount = existing?.joinedCount ?? 0;
+      const currentEnd = this.confirmedListRangeEnds.get(key) ?? -1;
+      
+      if (knownCount > 0) {
+        totalRooms += knownCount;
+        loadedRooms += Math.min(knownCount, currentEnd + 1);
+      }
+    });
+    return { loadedRooms, totalRooms };
+  }
+
+  public isSyncingRoomData(): boolean {
+    return !this.listsFullyLoaded;
+  }
+
+  public onHydrationStatusChange(
+    listener: (isHydrating: boolean, progress?: HydrationProgress) => void
+  ): () => void {
+    this.hydrationStatusListeners.add(listener);
+    listener(
+      this.isSyncingRoomData(),
+      this.isSyncingRoomData() ? this.getHydrationProgress() : undefined
+    );
+    return () => {
+      this.hydrationStatusListeners.delete(listener);
+    };
   }
 
   public isResponseProcessing(): boolean {
