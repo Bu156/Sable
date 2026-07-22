@@ -19,7 +19,7 @@ import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '$utils/room';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { nameInitials } from '$utils/common';
 import { getCanonicalAliasOrRoomId, mxcUrlToHttp } from '$utils/matrix';
-import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
+import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { useGroupDMMembers } from '$hooks/useGroupDMMembers';
 import { useSidebarDirectRoomIds } from './useSidebarDirectRoomIds';
 import * as css from './DirectDMsList.css';
@@ -152,7 +152,7 @@ function DMItem({ room, selected }: DMItemProps) {
 
 export function DirectDMsList() {
   const mx = useMatrixClient();
-  const selectedRoomId = useSelectedRoom();
+  const selectedRoomId = useSelectedOrLastRoom();
   const sidebarRoomIds = useSidebarDirectRoomIds();
 
   const mountTimeRef = useRef(performance.now());

@@ -1,5 +1,5 @@
-import type { MouseEventHandler, MouseEvent } from 'react';
-import { forwardRef, startTransition, useState, useEffect } from 'react';
+import type { MouseEventHandler, MouseEvent, PointerEventHandler } from 'react';
+import { forwardRef, startTransition, useState, useEffect, useRef } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { RoomEvent as RoomEventEnum } from '$types/matrix-sdk';
 import type { RectCords } from 'folds';
@@ -413,9 +413,35 @@ export function RoomNavItem({
         navigateRoom(room.roomId);
       }
     } else {
-      // Render the room off the urgent path so the tap doesn't freeze the UI on mount.
-      startTransition(() => navigate(linkPath));
+      if (isMobile) {
+        navigate(linkPath);
+      } else {
+        // Keep heavy room mounts off the urgent path on desktop.
+        startTransition(() => navigate(linkPath));
+      }
     }
+  };
+
+  // Android WebView suppresses click synthesis after a drag gesture, so the
+  // first tap on a room row after swiping produces no click event. Navigate
+  // directly on pointerup when the touch had minimal movement (i.e. a tap).
+  const navPointerDownRef = useRef<{ x: number; y: number } | null>(null);
+  const handleNavPointerDown: PointerEventHandler<HTMLElement> = (evt) => {
+    warmupRoomDecryption(mx, room.roomId);
+    if (isMobile && evt.pointerType === 'touch') {
+      navPointerDownRef.current = { x: evt.clientX, y: evt.clientY };
+    }
+  };
+  const handleNavPointerUp: PointerEventHandler<HTMLElement> = (evt) => {
+    if (!isMobile || evt.pointerType !== 'touch' || !navPointerDownRef.current) return;
+    const down = navPointerDownRef.current;
+    navPointerDownRef.current = null;
+    const dx = Math.abs(evt.clientX - down.x);
+    const dy = Math.abs(evt.clientY - down.y);
+    if (dx > 10 || dy > 10) return; // was a drag, not a tap
+    if (room.isCallRoom()) return; // call rooms use onClick
+    evt.preventDefault();
+    navigate(linkPath);
   };
 
   const handleChatButtonClick = (evt: MouseEvent<HTMLButtonElement>) => {
@@ -484,7 +510,8 @@ export function RoomNavItem({
             {(triggerRef) => (
               <NavButton
                 onClick={handleNavItemClick}
-                onPointerDown={() => warmupRoomDecryption(mx, room.roomId)}
+                onPointerDown={handleNavPointerDown}
+                onPointerUp={handleNavPointerUp}
                 onTouchStart={onTouchStart}
                 onTouchEnd={onTouchEnd}
                 onTouchMove={onTouchMove}

@@ -31,7 +31,7 @@ import { mDirectAtom } from '$state/mDirectList';
 import { NavCategory, NavCategoryHeader, NavItem, NavItemContent, NavLink } from '$components/nav';
 import { getSpaceLobbyPath, getSpaceRoomPath, getSpaceSearchPath } from '$pages/pathUtils';
 import { getCanonicalAliasOrRoomId, isRoomAlias, mxcUrlToHttp } from '$utils/matrix';
-import { useSelectedRoom } from '$hooks/router/useSelectedRoom';
+import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { useSpaceLobbySelected, useSpaceSearchSelected } from '$hooks/router/useSelectedSpace';
 import { useSpace } from '$hooks/useSpace';
 import { VirtualTile } from '$components/virtualizer';
@@ -562,7 +562,7 @@ export function Space() {
   const [joinCallOnSingleClick] = useSetting(settingsAtom, 'joinCallOnSingleClick');
 
   const tombstoneEvent = useStateEvent(space, EventType.RoomTombstone);
-  const selectedRoomId = useSelectedRoom();
+  const selectedRoomId = useSelectedOrLastRoom();
   const lobbySelected = useSpaceLobbySelected(spaceIdOrAlias);
   const searchSelected = useSpaceSearchSelected(spaceIdOrAlias);
   const callEmbed = useCallEmbed();
