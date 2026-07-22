@@ -418,7 +418,7 @@ function DateAndTime() {
   );
 }
 
-function Editor({ isMobile }: Readonly<{ isMobile: boolean }>) {
+function Editor() {
   const [enterForNewline, setEnterForNewline] = useSetting(settingsAtom, 'enterForNewline');
   const [editorToolbar, setEditorToolbar] = useSetting(settingsAtom, 'editorToolbar');
   const [editorOldAddFile, setEditorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
@@ -438,18 +438,16 @@ function Editor({ isMobile }: Readonly<{ isMobile: boolean }>) {
         className={SequenceCardStyle}
         variant="SurfaceVariant"
         direction="Column"
-        style={{ opacity: isMobile ? 0.5 : 1 }}
       >
         <SettingTile
           title="ENTER for Newline"
           focusId="enter-for-newline"
-          description={`Use ${isMacOS() ? KeySymbol.Command : 'Ctrl'} + ENTER to send message. ${isMobile ? '(Disabled on Mobile)' : ''}`}
+          description={`Use ${isMacOS() ? KeySymbol.Command : 'Ctrl'} + ENTER to send message.`}
           after={
             <Switch
               variant="Primary"
               value={enterForNewline}
               onChange={setEnterForNewline}
-              disabled={isMobile}
             />
           }
         />
@@ -1611,7 +1609,7 @@ export function General({ requestBack, requestClose }: Readonly<GeneralProps>) {
             <Box direction="Column" gap="700">
               <DateAndTime />
               <Gestures isMobile={mobileOrTablet()} />
-              <Editor isMobile={mobileOrTablet()} />
+              <Editor />
               <Messages />
               <Embeds />
               <Calls />

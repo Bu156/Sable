@@ -284,7 +284,7 @@ export const defaultSettings: Settings = {
   isPeopleDrawer: true,
   isWidgetDrawer: false,
   memberSortFilterIndex: 0,
-  enterForNewline: false,
+  enterForNewline: mobileOrTablet(),
   editorToolbar: false,
   editorOldAddFile: false,
   composerToolbarOpen: false,

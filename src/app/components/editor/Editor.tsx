@@ -390,11 +390,6 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
 
     const handleKeydown: KeyboardEventHandler = useCallback(
       (evt) => {
-        // mobile ignores config option
-        if (mobileOrTablet() && evt.key === 'Enter' && !evt.shiftKey) {
-          return;
-        }
-
         onKeyDown?.(evt);
 
         const shortcutToggled = toggleKeyboardShortcut(editor, evt, shortcutOverrides);
