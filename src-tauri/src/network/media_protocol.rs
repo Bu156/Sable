@@ -1,8 +1,9 @@
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{OnceLock, RwLock},
+    sync::{Arc, Mutex, OnceLock, RwLock, Weak},
     time::Duration,
 };
 
@@ -15,7 +16,7 @@ use tauri_plugin_http::reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client, Url,
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
 
@@ -31,6 +32,7 @@ pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
     client: OnceLock<Client>,
     semaphore: Semaphore,
+    cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
 }
 
 impl Default for MediaSessionState {
@@ -39,6 +41,7 @@ impl Default for MediaSessionState {
             inner: RwLock::new(None),
             client: OnceLock::new(),
             semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            cache_miss_gates: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -55,6 +58,21 @@ impl MediaSessionState {
                     .unwrap_or_else(|_| Client::new())
             })
             .clone()
+    }
+
+    fn cache_miss_gate(&self, key: &str) -> Result<Arc<AsyncMutex<()>>, StatusCode> {
+        let mut gates = self
+            .cache_miss_gates
+            .lock()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        gates.retain(|_, gate| gate.strong_count() > 0);
+        if let Some(gate) = gates.get(key).and_then(Weak::upgrade) {
+            return Ok(gate);
+        }
+
+        let gate = Arc::new(AsyncMutex::new(()));
+        gates.insert(key.to_owned(), Arc::downgrade(&gate));
+        Ok(gate)
     }
 }
 
@@ -155,11 +173,6 @@ async fn handle_request<R: Runtime>(
     let content_type_path = dir.join(format!("{key}.ct"));
 
     let state = app.state::<MediaSessionState>();
-    let _permit = state
-        .semaphore
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Cache to disk first, then serve from there so Range works regardless of
     // homeserver support. Files larger than the cache budget are served from
@@ -168,6 +181,7 @@ async fn handle_request<R: Runtime>(
     let (content_type, in_memory_body) = ensure_cached(
         &state,
         &session,
+        &key,
         media_url,
         dir,
         body_path.clone(),
@@ -189,6 +203,7 @@ async fn handle_request<R: Runtime>(
 async fn ensure_cached(
     state: &MediaSessionState,
     session: &MediaSession,
+    key: &str,
     media_url: Url,
     dir: PathBuf,
     body_path: PathBuf,
@@ -199,6 +214,20 @@ async fn ensure_cached(
     {
         return Ok((content_type, None));
     }
+
+    let gate = state.cache_miss_gate(key)?;
+    let _gate_guard = gate.lock().await;
+    if let Some(content_type) =
+        read_content_type(body_path.clone(), content_type_path.clone()).await
+    {
+        return Ok((content_type, None));
+    }
+
+    let _permit = state
+        .semaphore
+        .acquire()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let upstream = state
         .client()
@@ -466,11 +495,33 @@ fn cache_key(session_token: &str, url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use tauri::http::{header, StatusCode};
 
     use super::{
         cache_key, fits_in_cache, ok_response, parse_range, partial_response, serve_range_memory,
+        MediaSessionState,
     };
+
+    #[test]
+    fn cache_miss_gates_are_reused_and_expired_entries_are_cleaned() {
+        let state = MediaSessionState::default();
+        let first = state.cache_miss_gate("first").unwrap();
+        let same = state.cache_miss_gate("first").unwrap();
+        let different = state.cache_miss_gate("different").unwrap();
+
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &different));
+
+        drop(first);
+        drop(same);
+        let _third = state.cache_miss_gate("third").unwrap();
+        let gates = state.cache_miss_gates.lock().unwrap();
+        assert!(!gates.contains_key("first"));
+        assert!(gates.contains_key("different"));
+        assert!(gates.contains_key("third"));
+    }
 
     #[test]
     fn cache_key_is_stable_and_hex() {
