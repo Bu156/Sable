@@ -102,4 +102,10 @@ describe('parseTauriOidcCallback', () => {
     expect(parseTauriOidcCallback('sable://login?code=c1&state=s1')).toBeUndefined();
     expect(parseTauriOidcCallback('https://login?code=c1&state=s1')).toBeUndefined();
   });
+
+  it('rejects an unrelated hostname with a login path', () => {
+    expect(
+      parseTauriOidcCallback('moe.sable.app://evil/login?code=c1&state=s1')
+    ).toBeUndefined();
+  });
 });
