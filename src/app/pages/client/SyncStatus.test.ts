@@ -19,7 +19,7 @@ vi.mock('$hooks/useSyncState', () => ({
 }));
 
 vi.mock('$state/hooks/desktopSettings', () => ({
-  useDesktopSetting: () => [false, vi.fn()] as const,
+  useDesktopSetting: () => [false, vi.fn<() => void>()] as const,
 }));
 
 import { SyncState } from '$types/matrix-sdk';

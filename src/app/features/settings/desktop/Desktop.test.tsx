@@ -13,7 +13,7 @@ const {
   mockUseDesktopSettingsSyncing,
   mockSetUseCustomTitleBar,
 } = vi.hoisted(() => {
-  const mockSetUseCustomTitleBar = vi.fn<(value: boolean) => void>();
+  const setUseCustomTitleBarMock = vi.fn<(value: boolean) => void>();
 
   return {
     mockUseDesktopSetting: vi.fn<
@@ -21,11 +21,11 @@ const {
         key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon' | 'useCustomTitleBar'
       ) => readonly [boolean, (value: boolean) => void]
     >((key) => {
-      if (key === 'useCustomTitleBar') return [true, mockSetUseCustomTitleBar] as const;
+      if (key === 'useCustomTitleBar') return [true, setUseCustomTitleBarMock] as const;
       if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
       return [true, vi.fn<() => void>()] as const;
     }),
-    mockSetUseCustomTitleBar,
+    mockSetUseCustomTitleBar: setUseCustomTitleBarMock,
     mockUseDesktopSettingsReady: vi.fn<() => boolean>(() => true),
     mockUseDesktopSettingsSyncing: vi.fn<() => boolean>(() => false),
     mockUseDesktopRuntimeState: vi.fn<() => { trayAvailable: boolean }>(() => ({
