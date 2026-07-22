@@ -222,6 +222,7 @@ async fn ensure_cached(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn ensure_cached_with_limits(
     state: &MediaSessionState,
     session: &MediaSession,
@@ -305,6 +306,7 @@ async fn ensure_cached_with_limits(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn fetch_and_cache(
     state: &MediaSessionState,
     session: &MediaSession,
@@ -409,6 +411,7 @@ async fn write_cache(
     .unwrap_or(false)
 }
 
+#[allow(dead_code)]
 fn fits_in_cache(len: u64) -> bool {
     len <= MAX_CACHE_BYTES
 }
