@@ -58,7 +58,7 @@ jobs:
             echo "value=${TAG#v}" >> "$GITHUB_OUTPUT"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_REF}" == "refs/heads/dev" ]]; then
-            NIGHTLY_VERSION="$(node .github/scripts/nightly-version.mjs "${{ github.run_number }}" "${{ github.run_attempt }}")"
+            NIGHTLY_VERSION="$(node .github/scripts/nightly-version.mjs)"
             echo "value=${NIGHTLY_VERSION}" >> "$GITHUB_OUTPUT"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           else

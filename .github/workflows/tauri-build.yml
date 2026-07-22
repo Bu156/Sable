@@ -57,7 +57,7 @@ jobs:
             VERSION="${TAG#v}"
           elif [ "$GIT_REF" = "refs/heads/dev" ]; then
             TAG="nightly"; REF="$GIT_SHA"; NIGHTLY=true
-            VERSION="$(node .github/scripts/nightly-version.mjs "$RUN_NUMBER" "$RUN_ATTEMPT")"
+            VERSION="$(node .github/scripts/nightly-version.mjs)"
           else
             TAG="$GIT_REF_NAME"; REF="$GIT_REF"; NIGHTLY=false
             VERSION="${TAG#v}"

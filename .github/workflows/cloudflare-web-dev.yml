@@ -46,7 +46,7 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
         run: |
-          VERSION="$(node .github/scripts/nightly-version.mjs "${{ github.run_number }}" "${{ github.run_attempt }}")"
+          VERSION="$(node .github/scripts/nightly-version.mjs)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Prepare OpenTofu deployment
