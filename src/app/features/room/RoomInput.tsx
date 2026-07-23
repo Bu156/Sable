@@ -145,6 +145,7 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { AutocompleteNotice } from '$components/editor/autocomplete/AutocompleteNotice';
 import {
   convertPerMessageProfileToBeeperFormat,
+  getCurrentlyUsedPerMessageProfileForAccount,
   getCurrentlyUsedPerMessageProfileForRoom,
 } from '$hooks/usePerMessageProfile';
 import {
@@ -206,7 +207,7 @@ import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { PersonaPicker } from './persona-picker/PersonaPicker.tsx';
+import { PersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -517,6 +518,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
     // Android back closes the mobile emoji board instead of navigating away.
     useDismissOnBack(() => setEmojiBoardTab(undefined), emojiBoardTab !== undefined);
+    const [personaPickerTab, setPersonaPickerTab] = useState<PersonaPickerTab | undefined>(
+      undefined
+    );
+
     const [enableMediaGalleries] = useSetting(settingsAtom, 'enableMediaGalleries');
     const [sendIndividualAttachmentAsCaption] = useSetting(
       settingsAtom,
@@ -665,7 +670,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      const perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
 
       if (perMessageProfile) {
         contents.forEach((c) => {
@@ -1102,7 +1109,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      let perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      let perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
+
       if (pmpProxyingEnable) {
         if (proxiedPerMessageProfile) perMessageProfile = proxiedPerMessageProfile;
       }
@@ -1452,7 +1462,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      const perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
 
       if (perMessageProfile) {
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
@@ -1867,9 +1879,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               )}
               {pmpPickerEnable && (
                 <PersonaPicker
+                  tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}
                   suppressEditorRefocus={suppressEditorRefocus}
+                  onTabChange={setPersonaPickerTab}
                 />
               )}
             </>
