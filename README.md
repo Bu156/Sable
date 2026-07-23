@@ -45,6 +45,37 @@ Sable iOS builds are distributed as unsigned IPAs through [AltStore](https://alt
 
 iOS builds are produced by the `ios` job in [`tauri-build.yml`](.github/workflows/tauri-build.yml) and track the same `dev`/`v*` triggers as desktop builds.
 
+## Android (Obtainium)
+
+### Nightly Source
+
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22moe.sable.client%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FSableClient%2FSable%22%2C%22author%22%3A%22SableClient%22%2C%22name%22%3A%22Sable%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Afalse%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Afalse%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Atrue%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Atrue%2C%5C%22releaseDateAsVersion%5C%22%3Atrue%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22Sable%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22An%20almost%20stable%20Matrix%20client%5C%22%2C%5C%22appAuthor%5C%22%3A%5C%22SableClient%5C%22%7D%22%7D"><img alt="Add to Obtainium" src="https://github.com/ImranR98/Obtainium/blob/main/assets/graphics/badge_obtainium.png?raw=true" style="max-width:256px;width:100%"></a>
+&nbsp;
+
+### Stable Source
+
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22moe.sable.client%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FSableClient%2FSable%22%2C%22author%22%3A%22SableClient%22%2C%22name%22%3A%22Sable%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Afalse%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Atrue%2C%5C%22releaseDateAsVersion%5C%22%3Afalse%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22Sable%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22An%20almost%20stable%20Matrix%20client%5C%22%2C%5C%22appAuthor%5C%22%3A%5C%22SableClient%5C%22%7D%22%7D"><img alt="Add to Obtainium" src="https://github.com/ImranR98/Obtainium/blob/main/assets/graphics/badge_obtainium.png?raw=true" style="max-width:256px;width:100%"></a>
+&nbsp;
+
+### Setup and install
+
+1. Set up [Obtainium](https://wiki.obtainium.imranr.dev/) on your device.
+2. Add the Sable source by either:
+    - Tapping one of the buttons above.
+    - Importing one of the JSON files:
+      - [Nightly](https://raw.githubusercontent.com/SableClient/Sable/refs/heads/dev/obtainium-source-nightly.json)
+      - [Stable](https://raw.githubusercontent.com/SableClient/Sable/refs/heads/dev/obtainium-source-stable.json)
+    - Adding it manually - use <https://github.com/SableClient/Sable> as the GitHub link and follow the section below with regards to setting app variables
+3. Install Sable from the source.
+
+### Relevant variables and switching between Nightly and Stable
+
+Relevant variable differences between Nightly and Stable:
+- *Include prereleases* - `true` for Nightly, `false` for Stable
+- *Fallback to older releases* - `false` for Nightly, `true` for Stable
+- *Use latest asset upload as release date* - `true` for Nightly, `false` for Stable (this is due to Nightly builds being uploaded to one release instead of creating new ones)
+- *Use release date as version string (pseudo-version)* - `true` for Nightly, `false` for Stable (this is due to Nightly builds being uploaded to one release instead of creating new ones)
+
 ## Self-hosting
 You have a few options for self hosting, you can:
 1. Run the prebuilt docker container.
