@@ -305,7 +305,9 @@ export class SlidingSyncManager {
 
   private responseProcessing = false;
 
-  private readonly responseSettledListeners = new Set<(dirtyRoomIds: ReadonlySet<string>) => void>();
+  private readonly responseSettledListeners = new Set<
+    (dirtyRoomIds: ReadonlySet<string>) => void
+  >();
 
   private previousListCounts: Map<string, number> = new Map();
 
