@@ -86,7 +86,8 @@ You have a few options for self hosting, you can:
 
 Prebuilt images are published to `ghcr.io/sableclient/sable`.
 
-- `latest` tracks the current `dev` branch image.
+- `latest` tracks the current latest version release.
+- `dev` tracks the current `dev` branch image.
 - `X.Y.Z` tags are versioned releases.
 - `X.Y` tags float within a release line.
 - Pushes to `dev` also publish a short commit SHA tag.
