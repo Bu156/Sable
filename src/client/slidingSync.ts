@@ -1006,7 +1006,7 @@ export class SlidingSyncManager {
    */
   private reassertOptimisticJoins(): void {
     if (this.optimisticallyJoinedRoomIds.size === 0) return;
-    for (const roomId of [...this.optimisticallyJoinedRoomIds]) {
+    for (const roomId of this.optimisticallyJoinedRoomIds) {
       const room = this.mx.getRoom(roomId);
       if (!room) {
         this.optimisticallyJoinedRoomIds.delete(roomId);
