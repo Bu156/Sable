@@ -10,7 +10,7 @@ import {
 } from 'matrix-widget-api';
 import { CallWidgetDriver } from './CallWidgetDriver';
 import { trimTrailingSlash } from '../../utils/common';
-import { getAppOrigin } from '../../utils/platform';
+import { getWindowOrigin } from '../../utils/platform';
 import type { ElementCallThemeKind, ElementMediaStateDetail } from './types';
 import { color, config } from 'folds';
 import { ElementCallIntent, ElementWidgetActions } from './types';
@@ -97,7 +97,7 @@ export class CallEmbed {
   ): Widget {
     const userId = mx.getSafeUserId();
     const deviceId = mx.getDeviceId() ?? '';
-    const clientOrigin = getAppOrigin();
+    const clientOrigin = getWindowOrigin();
     const widgetId = 'call-embed';
 
     const params = new URLSearchParams({
