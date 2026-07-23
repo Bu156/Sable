@@ -44,6 +44,7 @@ import 'leaflet/dist/leaflet.css';
 
 import * as css from './MsgTypeRenderers.css';
 import { markerIcon } from '$features/room/location-modal/LocationDialog';
+import { isNumber } from 'matrix-js-sdk/lib/utils';
 
 export interface BundleContent extends IPreviewUrlResponse {
   matched_url: string;
@@ -705,6 +706,7 @@ export function MLocation({ content, showMaps }: MLocationProps) {
   }
   const location = parseGeoUri(geoUri);
   if (!location) return <BrokenContent />;
+  const isValid = isNumber(Number(location.latitude)) && isNumber(Number(location.longitude));
   const coords: LatLngExpression = [Number(location.latitude), Number(location.longitude)];
 
   return (
@@ -733,18 +735,23 @@ export function MLocation({ content, showMaps }: MLocationProps) {
         <Chip
           as="a"
           size="400"
-          href={`https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=16/${location.latitude}/${location.longitude}`}
+          href={
+            isValid
+              ? `https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=16/${location.latitude}/${location.longitude}`
+              : undefined
+          }
           target="_blank"
           rel="noreferrer noopener"
           variant="Primary"
           radii="Pill"
           className={css.LocationExternalChip}
           before={sizedIcon(ArrowSquareOut, '50')}
+          aria-disabled={!isValid}
         >
           <Text size="B300">Open Location</Text>
         </Chip>
       </Box>
-      {showMaps && (
+      {showMaps && isValid && (
         <MapContainer
           center={coords}
           zoom={16}
