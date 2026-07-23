@@ -7,7 +7,6 @@ import {
   Direction,
   MatrixEvent,
   MatrixEventEvent,
-  PushProcessor,
   ReceiptType,
   RelationType,
   RoomEvent,
@@ -137,7 +136,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
     (userId: string) => jotaiStore.get(profilesCacheAtom)[userId],
     [jotaiStore]
   );
-  const pushProcessor = useMemo(() => new PushProcessor(mx), [mx]);
+  const pushProcessor = mx.pushProcessor;
   const useAuthentication = useMediaAuthentication();
   const mentionClickHandler = useMentionClickHandler(room.roomId);
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();

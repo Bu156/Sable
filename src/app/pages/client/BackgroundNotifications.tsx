@@ -7,7 +7,6 @@ import {
   MatrixEventEvent,
   RoomEvent,
   SyncState,
-  PushProcessor,
   EventType,
 } from '$types/matrix-sdk';
 
@@ -327,7 +326,7 @@ export function BackgroundNotifications() {
             });
           }
 
-          const pushProcessor = new PushProcessor(mx);
+          const pushProcessor = mx.pushProcessor;
 
           const handleAccountData = (event: MatrixEvent) => {
             if (event.getType() === (EventType.Direct as string)) {

@@ -12,7 +12,7 @@ import {
 import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import type { Room } from '$types/matrix-sdk';
-import { PushProcessor, Direction, EventType } from '$types/matrix-sdk';
+import { Direction, EventType } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import type { VListHandle } from 'virtua';
 import { VList } from 'virtua';
@@ -428,7 +428,7 @@ export function RoomTimeline({
   const optionalSpace = useSpaceOptionally();
   const roomParents = useAtomValue(roomToParentsAtom);
   const imagePackRooms = useImagePackRooms(room.roomId, roomParents);
-  const pushProcessor = useMemo(() => new PushProcessor(mx), [mx]);
+  const pushProcessor = mx.pushProcessor;
   const parseMemberEvent = useMemberEventParser();
 
   const replyDraftAtom = useMemo(() => roomIdToReplyDraftAtomFamily(room.roomId), [room.roomId]);

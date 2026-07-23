@@ -16,7 +16,6 @@ import {
   EventTimeline,
   EventType,
   NotificationCountType,
-  PushProcessor,
   PushRuleActionName,
   RelationType,
   MsgType,
@@ -427,7 +426,7 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
     const liveEvents = room.getLiveTimeline().getEvents();
     let fallbackTotal = 0;
     let fallbackHighlight = 0;
-    const pushProcessor = new PushProcessor(room.client);
+    const pushProcessor = room.client.pushProcessor;
     for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
       const event = liveEvents[i];
       if (!event) break;
