@@ -868,7 +868,7 @@ export const getReactCustomHtmlParser = (
           const title = attrString(props.title);
           const isEmoticon = 'data-mx-emoticon' in props;
           const htmlSrc = isEmoticon
-            ? (mxcUrlToHttp(mx, src, params.useAuthentication, 32, 32, 'crop') ?? undefined)
+            ? (mxcUrlToHttp(mx, src, params.useAuthentication) ?? undefined)
             : (mxcUrlToHttp(mx, src, params.useAuthentication, 640, 480, 'scale') ?? undefined);
           const fallbackLabel = alt || title || '[media]';
           const failedToResolveMxc = src.startsWith('mxc://') && !htmlSrc;
