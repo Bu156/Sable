@@ -1,6 +1,6 @@
 import { addPluginListener, invoke, isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
-
+import { isDesktopTauri } from '$utils/platform';
 export type NotificationPluginListener = {
   unregister: () => Promise<void> | void;
 };
@@ -135,10 +135,6 @@ export async function ensureTauriNotificationPermission(): Promise<boolean> {
   return permissionPromise;
 }
 
-// Desktop webviews can't show web notifications (WKWebView lacks the API; the
-// Linux CEF runtime never grants it), so desktop routes through the native plugin.
-const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
-export const isDesktopTauri = (): boolean => isTauri() && DESKTOP_TAURI_OS.has(osType());
 export const isIosTauri = (): boolean => isTauri() && osType() === 'ios';
 export const isAndroidTauri = (): boolean => isTauri() && osType() === 'android';
 // Platforms where OS notifications go through the native plugin instead of web APIs.
@@ -183,3 +179,5 @@ export async function sendNativeTauriNotification({
     ...(icon ? { icon } : {}),
   });
 }
+
+export { isDesktopTauri };
