@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { AnimationPlaybackControls } from 'framer-motion';
 import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
@@ -72,6 +73,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const [width, setWidth] = useState(0);
   const x = useMotionValue(0);
   const dragControls = useDragControls();
+  const settleAnimRef = useRef<AnimationPlaybackControls | null>(null);
 
   const initialIntent = contentOpen ? 1 : 0;
   const [panelIntent, setPanelIntent] = useState(initialIntent);
@@ -92,11 +94,14 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
 
   const settle = useCallback(
     (target: number) => {
+      settleAnimRef.current?.stop();
+      settleAnimRef.current = null;
+
       if (reduceMotion) {
         x.jump(target);
         return;
       }
-      animate(x, target, {
+      settleAnimRef.current = animate(x, target, {
         type: 'spring',
         stiffness: SETTLE_STIFFNESS,
         damping: SETTLE_DAMPING,
@@ -130,12 +135,16 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
       if (width > 0 && !reduceMotion) {
         settle(target);
       } else {
+        settleAnimRef.current?.stop();
+        settleAnimRef.current = null;
         x.jump(target);
       }
     }
   }, [contentOpen, width, x, settle, reduceMotion]);
 
   useLayoutEffect(() => {
+    settleAnimRef.current?.stop();
+    settleAnimRef.current = null;
     const target = panelIntentRef.current === 1 ? -width : 0;
     x.jump(target);
   }, [width, x]);
@@ -171,6 +180,8 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         dragMomentum={false}
         onDragStart={() => {
           x.stop();
+          settleAnimRef.current?.stop();
+          settleAnimRef.current = null;
           if (panelIntentRef.current === 0 && !roomArmed) setRoomArmed(true);
         }}
         onDragEnd={(_event, info) => {
@@ -187,7 +198,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
               if (section?.getRoomPath && matchedRoomId && isRoomRoute) {
                 setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
               }
-              if (section) navigate(section.listPath);
+              if (section) startTransition(() => navigate(section.listPath));
             } else {
               settle(-width);
             }
@@ -205,7 +216,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
                 panelIntentRef.current = 1;
                 setPanelIntent(1);
                 settle(-width);
-                navigate(roomPath);
+                startTransition(() => navigate(roomPath));
               } else {
                 settle(0);
               }
