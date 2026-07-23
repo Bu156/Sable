@@ -298,6 +298,14 @@ jobs:
             gh release upload "$TAG" "$f" --clobber
           done
 
+      - name: Upload .deb as workflow artifact
+        if: matrix.cef
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sable-linux-deb
+          path: ${{ matrix.bundle_path }}/deb/Sable-*-linux-x86_64.deb
+          retention-days: 1
+
   android:
     name: Build Android
     needs: setup-release
@@ -735,11 +743,13 @@ jobs:
         uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
         with:
           cache: true
+          env: tauri
 
-      - name: Install Flatpak build deps (for flatpak builder)
+      - name: Install system packages (including Flatpak build deps)
+        run: mise bootstrap packages apply --yes
+
+      - name: Add Flathub runtime + SDK
         run: |
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
           flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install -y org.gnome.Platform//50 org.gnome.Sdk//50
 
@@ -753,7 +763,7 @@ jobs:
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: latest
           args: release --clean
@@ -779,10 +789,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download nightly .deb and compute checksum
+      - name: Download .deb artifact and compute checksum
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sable-linux-deb
+          path: deb-artifact
+
+      - name: Compute checksum
         shell: bash
         run: |
-          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${TAG}/Sable-${VERSION}-linux-x86_64.deb" -o sable.deb
+          cp deb-artifact/Sable-*-linux-x86_64.deb sable.deb
           SHA256=$(sha256sum sable.deb | awk '{print $1}')
           echo "SHA256=$SHA256" >> "$GITHUB_ENV"
 

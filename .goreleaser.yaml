@@ -201,7 +201,7 @@ winget:
     short_description: Sable, a Matrix client
     package_identifier: SableClient.Sable
     repository:
-      owner: microsoft
+      owner: SableClient
       name: winget-pkgs
       branch: master
 
@@ -213,16 +213,6 @@ scoops:
     repository:
       owner: SableClient
       name: scoop-sable
-      branch: main
-
-nix:
-  - name: sable
-    homepage: https://sable.moe
-    description: Sable, a Matrix client
-    license: agpl3Plus
-    repository:
-      owner: SableClient
-      name: nixpkgs-sable
       branch: main
 
 checksum:
