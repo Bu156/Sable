@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { rememberTauriSsoNonce } from '$pages/auth/SSOTauri';
+import { persistOauthContext } from '$pages/auth/login/oidcLoginUtil';
 import { mapDeepLinkToLoginPath } from './TauriDeepLinkBridge';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -8,7 +9,17 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
+
+const rememberOidcState = (state: string) => {
+  persistOauthContext(state, {
+    issuer: 'https://issuer.example',
+    clientId: 'client',
+    redirectUri: 'moe.sable.app:/login',
+    homeserverUrl: 'https://hs.example',
+  });
+};
 
 describe('mapDeepLinkToLoginPath', () => {
   it('accepts an SSO callback whose nonce matches the stored one', () => {
@@ -33,15 +44,23 @@ describe('mapDeepLinkToLoginPath', () => {
   });
 
   it('passes an OIDC callback through unchanged', () => {
+    rememberOidcState('s1');
     const path = mapDeepLinkToLoginPath('moe.sable.app:/login?code=c1&state=s1');
     expect(path).toContain('code=c1');
     expect(path).toContain('state=s1');
   });
 
   it('passes normalized moe.sable.app://login OIDC callback through', () => {
+    rememberOidcState('s1');
     const path = mapDeepLinkToLoginPath('moe.sable.app://login?code=c1&state=s1');
     expect(path).toContain('code=c1');
     expect(path).toContain('state=s1');
+  });
+
+  it('rejects a stale OIDC callback after its pending context was consumed', () => {
+    expect(
+      mapDeepLinkToLoginPath('moe.sable.app:/login?code=already-used&state=old-state')
+    ).toBeUndefined();
   });
 
   it('returns undefined for an unrelated url', () => {
