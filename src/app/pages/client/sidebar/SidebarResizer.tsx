@@ -62,12 +62,18 @@ export function SidebarResizer({
     setAnnouncement?.(false);
     releaseResizeListeners();
   }, []);
+  const onPointerCancel = useCallback(() => {
+    setIsPointerDown(false);
+    setAnnouncement?.(false);
+    releaseResizeListeners();
+  }, []);
 
   const releaseResizeListeners = useCallback(() => {
     resizeReleaseRef.current = null;
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointermove', onPointerMove);
-  }, [onPointerUp, onPointerMove]);
+    window.removeEventListener('pointercancel', onPointerCancel);
+  }, [onPointerUp, onPointerMove, onPointerCancel]);
 
   const resizeReleaseRef = useRef<(() => void) | null>(null);
 
@@ -87,9 +93,10 @@ export function SidebarResizer({
       setAnnouncement?.(true);
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointercancel', onPointerCancel);
       resizeReleaseRef.current = releaseResizeListeners;
     },
-    [onPointerUp, onPointerMove, releaseResizeListeners]
+    [onPointerUp, onPointerMove, onPointerCancel, releaseResizeListeners]
   );
 
   const dockClass = topSided
