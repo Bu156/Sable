@@ -28,6 +28,7 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
     'closeToBackgroundOnClose'
   );
   const [showSystemTrayIcon, setShowSystemTrayIcon] = useDesktopSetting('showSystemTrayIcon');
+  const [useCustomTitleBar, setUseCustomTitleBar] = useDesktopSetting('useCustomTitleBar');
   const [autoUpdateCheck, setAutoUpdateCheck] = useAtom(autoUpdateCheckAtom);
 
   if (!isTauri() || !ready) return null;
@@ -51,6 +52,18 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                   direction="Column"
                   gap="400"
                 >
+                  <SettingTile
+                    title="Use custom title bar"
+                    focusId="use-custom-title-bar"
+                    description="Use Sable-drawn window controls and connection status instead of the native window chrome."
+                    after={
+                      <Switch
+                        aria-label="use-custom-title-bar"
+                        value={useCustomTitleBar}
+                        onChange={setUseCustomTitleBar}
+                      />
+                    }
+                  />
                   <SettingTile
                     title="Close button keeps Sable running"
                     focusId="close-to-background-on-close"

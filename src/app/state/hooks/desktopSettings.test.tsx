@@ -93,6 +93,7 @@ describe('useDesktopSetting', () => {
       settings: {
         closeToBackgroundOnClose: true,
         showSystemTrayIcon: false,
+        useCustomTitleBar: true,
       },
     });
 
@@ -126,6 +127,7 @@ describe('useDesktopSetting', () => {
       settings: {
         closeToBackgroundOnClose: false,
         showSystemTrayIcon: true,
+        useCustomTitleBar: true,
       },
     });
 

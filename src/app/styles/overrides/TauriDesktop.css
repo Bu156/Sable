@@ -93,7 +93,6 @@
 .tauri-titlebar-status__label--primary {
   background: color-mix(in srgb, var(--sable-primary-main) 16%, transparent);
 }
-
 .tauri-titlebar__control {
   appearance: none;
   -webkit-appearance: none;

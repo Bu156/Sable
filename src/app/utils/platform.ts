@@ -6,10 +6,20 @@ export function hasServiceWorker(): boolean {
   return 'serviceWorker' in navigator && !isTauri();
 }
 
-const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
+export type DesktopTauriPlatform = 'linux' | 'macos' | 'windows';
+
+const DESKTOP_TAURI_OS = new Set<DesktopTauriPlatform>(['linux', 'macos', 'windows']);
+
+export function getDesktopTauriPlatform(): DesktopTauriPlatform | undefined {
+  if (!isTauri()) return undefined;
+  const os = osType() as string;
+  return DESKTOP_TAURI_OS.has(os as DesktopTauriPlatform)
+    ? (os as DesktopTauriPlatform)
+    : undefined;
+}
 
 export function isDesktopTauri(): boolean {
-  return isTauri() && DESKTOP_TAURI_OS.has(osType());
+  return getDesktopTauriPlatform() !== undefined;
 }
 
 export function hasControllingServiceWorker(): boolean {

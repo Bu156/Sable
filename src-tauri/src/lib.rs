@@ -24,6 +24,11 @@ use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
+#[cfg(desktop)]
+pub(crate) fn main_window_title(app: &AppHandle<crate::BrowserEngine>) -> &str {
+    app.config().product_name.as_deref().unwrap_or("Sable")
+}
+
 #[cfg(all(
     not(feature = "cef"),
     any(
@@ -89,6 +94,29 @@ fn resolve_webview_permission(
     allowed
 }
 
+#[cfg(all(feature = "cef", target_os = "linux"))]
+fn setup_cef_resize_workaround(
+    webview_window: &tauri::WebviewWindow<BrowserEngine>,
+) -> tauri::Result<()> {
+    let webview = webview_window.as_ref().clone();
+    webview.set_auto_resize(false)?;
+    webview_window.on_window_event(move |event| {
+        let size = match event {
+            tauri::WindowEvent::Resized(size) => *size,
+            tauri::WindowEvent::ScaleFactorChanged { new_inner_size, .. } => *new_inner_size,
+            _ => return,
+        };
+
+        if let Err(error) = webview.set_bounds(tauri::Rect {
+            position: tauri::Position::Physical(tauri::PhysicalPosition::new(0, 0)),
+            size: tauri::Size::Physical(size),
+        }) {
+            log::warn!("failed to resize CEF webview: {error}");
+        }
+    });
+    Ok(())
+}
+
 pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
     if let Some(_window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         #[cfg(desktop)]
@@ -103,6 +131,9 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
 
     log::info!("Main window not found, creating a new one.");
 
+    #[cfg(desktop)]
+    let desktop_settings = desktop::tray::load_desktop_settings(app)?;
+
     let builder =
         tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default())
             .disable_drag_drop_handler()
@@ -110,17 +141,7 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
             .background_color(tauri::window::Color(0x1A, 0x1C, 0x28, 0xFF));
 
     #[cfg(desktop)]
-    let title = if app
-        .package_info()
-        .version
-        .pre
-        .as_str()
-        .starts_with("nightly.")
-    {
-        "Sable Nightly"
-    } else {
-        "Sable"
-    };
+    let title = main_window_title(app);
 
     #[cfg(desktop)]
     let builder = builder
@@ -130,17 +151,22 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
         .inner_size(1280.0, 720.0)
         .visible(false);
 
-    // Float the native traffic lights over the content for a unified look.
     #[cfg(target_os = "macos")]
-    let builder = builder
-        .hidden_title(true)
-        .title_bar_style(tauri::TitleBarStyle::Transparent);
+    let builder = if desktop_settings.use_custom_title_bar {
+        builder
+            .title("")
+            .title_bar_style(tauri::TitleBarStyle::Transparent)
+    } else {
+        builder.title_bar_style(tauri::TitleBarStyle::Visible)
+    };
 
-    // Windows and Linux draw their own titlebar (DesktopTitleBar).
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    let builder = builder.decorations(false);
+    let builder = builder.decorations(!desktop_settings.use_custom_title_bar);
 
     let webview_window = builder.build()?;
+
+    #[cfg(all(feature = "cef", target_os = "linux"))]
+    setup_cef_resize_workaround(&webview_window)?;
 
     #[cfg(desktop)]
     desktop::tray::setup_close_to_background(&webview_window);
@@ -407,6 +433,7 @@ mod tests {
         let _ = crate::desktop::settings::DesktopSettings {
             close_to_background_on_close: true,
             show_system_tray_icon: true,
+            use_custom_title_bar: false,
         };
         let _ = crate::desktop::runtime_state::DesktopRuntimeState {
             tray_available: true,

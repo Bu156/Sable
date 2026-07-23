@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopRuntimeState, SyncDesktopSettingsParams } from '$generated/tauri/types';
 import {
   DEFAULT_DESKTOP_SETTINGS,
+  desktopSettingsDefaultsForPlatform,
   desktopRuntimeStateAtom,
   desktopSettingsSyncingAtom,
   desktopSettingsFromStoreValues,
@@ -80,6 +81,13 @@ describe('desktop settings state', () => {
     await expect(getDesktopSettings()).resolves.toEqual(DEFAULT_DESKTOP_SETTINGS);
   });
 
+  it('enables the custom title bar by default only on Windows', () => {
+    expect(desktopSettingsDefaultsForPlatform('windows').useCustomTitleBar).toBe(true);
+    expect(desktopSettingsDefaultsForPlatform('linux').useCustomTitleBar).toBe(false);
+    expect(desktopSettingsDefaultsForPlatform('macos').useCustomTitleBar).toBe(false);
+    expect(desktopSettingsDefaultsForPlatform(undefined).useCustomTitleBar).toBe(false);
+  });
+
   it('loads a single desktop setting by key', async () => {
     mockEntries.mockResolvedValue([
       ['closeToBackgroundOnClose', false],
@@ -89,17 +97,36 @@ describe('desktop settings state', () => {
     await expect(getDesktopSetting('showSystemTrayIcon')).resolves.toBe(false);
   });
 
+  it('loads an explicit persisted custom title bar value', async () => {
+    mockEntries.mockResolvedValue([['useCustomTitleBar', false]]);
+
+    await expect(getDesktopSetting('useCustomTitleBar')).resolves.toBe(false);
+  });
+
   it('migrates the legacy background-running flag into close behavior', () => {
-    expect(desktopSettingsFromStoreValues(false, false, true)).toEqual({
+    expect(desktopSettingsFromStoreValues(false, false, true, undefined)).toEqual({
       closeToBackgroundOnClose: true,
       showSystemTrayIcon: false,
+      useCustomTitleBar: true,
     });
   });
 
   it('preserves an explicit close-off setting when the legacy flag is off', () => {
-    expect(desktopSettingsFromStoreValues(false, true, false)).toEqual({
+    expect(desktopSettingsFromStoreValues(false, true, false, undefined)).toEqual({
       closeToBackgroundOnClose: false,
       showSystemTrayIcon: true,
+      useCustomTitleBar: true,
+    });
+  });
+
+  it('preserves an explicit custom title bar value over platform defaults', () => {
+    expect(
+      desktopSettingsFromStoreValues(undefined, undefined, undefined, false, 'windows')
+    ).toMatchObject({ useCustomTitleBar: false });
+    expect(
+      desktopSettingsFromStoreValues(undefined, undefined, undefined, true, 'macos')
+    ).toMatchObject({
+      useCustomTitleBar: true,
     });
   });
 
@@ -114,6 +141,7 @@ describe('desktop settings state', () => {
     await store.set(desktopSettingsAtom, {
       closeToBackgroundOnClose: true,
       showSystemTrayIcon: true,
+      useCustomTitleBar: true,
     });
 
     expect(mockSet).not.toHaveBeenCalled();
@@ -121,6 +149,7 @@ describe('desktop settings state', () => {
       settings: {
         closeToBackgroundOnClose: true,
         showSystemTrayIcon: true,
+        useCustomTitleBar: true,
       },
     });
     expect(store.get(desktopRuntimeStateAtom)).toEqual({ trayAvailable: false });
@@ -146,6 +175,7 @@ describe('desktop settings state', () => {
     const writePromise = store.set(desktopSettingsAtom, {
       closeToBackgroundOnClose: true,
       showSystemTrayIcon: true,
+      useCustomTitleBar: true,
     });
 
     await vi.waitFor(() => {
@@ -165,17 +195,20 @@ describe('desktop settings state', () => {
       saveDesktopSettings({
         closeToBackgroundOnClose: false,
         showSystemTrayIcon: false,
+        useCustomTitleBar: false,
       })
     ).resolves.toEqual({ trayAvailable: false });
 
-    expect(mockSet).toHaveBeenCalledTimes(3);
+    expect(mockSet).toHaveBeenCalledTimes(4);
     expect(mockSet).toHaveBeenCalledWith('closeToBackgroundOnClose', false);
     expect(mockSet).toHaveBeenCalledWith('showSystemTrayIcon', false);
     expect(mockSet).toHaveBeenCalledWith('keepBackgroundRunning', false);
+    expect(mockSet).toHaveBeenCalledWith('useCustomTitleBar', false);
     expect(mockSyncDesktopSettings).toHaveBeenCalledWith({
       settings: {
         closeToBackgroundOnClose: false,
         showSystemTrayIcon: false,
+        useCustomTitleBar: false,
       },
     });
   });
@@ -197,6 +230,7 @@ describe('desktop settings state', () => {
       settings: {
         closeToBackgroundOnClose: true,
         showSystemTrayIcon: false,
+        useCustomTitleBar: true,
       },
     });
   });
@@ -218,6 +252,7 @@ describe('desktop settings state', () => {
       settings: {
         closeToBackgroundOnClose: false,
         showSystemTrayIcon: true,
+        useCustomTitleBar: true,
       },
     });
   });
@@ -239,6 +274,7 @@ describe('desktop settings state', () => {
       settings: {
         closeToBackgroundOnClose: true,
         showSystemTrayIcon: false,
+        useCustomTitleBar: true,
       },
     });
   });

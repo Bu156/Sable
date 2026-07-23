@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type * as Folds from 'folds';
 import { SequenceCardStyle } from '$features/settings/styles.css';
@@ -10,19 +11,28 @@ const {
   mockUseDesktopSettingsReady,
   mockUseDesktopRuntimeState,
   mockUseDesktopSettingsSyncing,
-} = vi.hoisted(() => ({
-  mockUseDesktopSetting: vi.fn<
-    (key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon') => readonly [boolean, () => void]
-  >((key) => {
-    if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
-    return [true, vi.fn<() => void>()] as const;
-  }),
-  mockUseDesktopSettingsReady: vi.fn<() => boolean>(() => true),
-  mockUseDesktopSettingsSyncing: vi.fn<() => boolean>(() => false),
-  mockUseDesktopRuntimeState: vi.fn<() => { trayAvailable: boolean }>(() => ({
-    trayAvailable: false,
-  })),
-}));
+  mockSetUseCustomTitleBar,
+} = vi.hoisted(() => {
+  const setUseCustomTitleBarMock = vi.fn<(value: boolean) => void>();
+
+  return {
+    mockUseDesktopSetting: vi.fn<
+      (
+        key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon' | 'useCustomTitleBar'
+      ) => readonly [boolean, (value: boolean) => void]
+    >((key) => {
+      if (key === 'useCustomTitleBar') return [true, setUseCustomTitleBarMock] as const;
+      if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
+      return [true, vi.fn<() => void>()] as const;
+    }),
+    mockSetUseCustomTitleBar: setUseCustomTitleBarMock,
+    mockUseDesktopSettingsReady: vi.fn<() => boolean>(() => true),
+    mockUseDesktopSettingsSyncing: vi.fn<() => boolean>(() => false),
+    mockUseDesktopRuntimeState: vi.fn<() => { trayAvailable: boolean }>(() => ({
+      trayAvailable: false,
+    })),
+  };
+});
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true,
@@ -37,6 +47,11 @@ vi.mock('$state/hooks/desktopSettings', () => ({
   useDesktopSettingsReady: mockUseDesktopSettingsReady,
   useDesktopSettingsSyncing: mockUseDesktopSettingsSyncing,
   useDesktopRuntimeState: mockUseDesktopRuntimeState,
+}));
+
+vi.mock('$components/page', () => ({
+  PageContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SettingsSectionPage: ({ children }: { children: ReactNode }) => <section>{children}</section>,
 }));
 
 vi.mock('folds', async () => {
@@ -82,6 +97,12 @@ describe('Desktop', () => {
     const { container } = renderDesktop();
 
     expect(screen.getByText('Close button keeps Sable running')).toBeInTheDocument();
+    expect(screen.getByText('Use custom title bar')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Use Sable-drawn window controls and connection status instead of the native window chrome.'
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         'When enabled, closing the window keeps Sable running instead of exiting. If the tray icon is enabled and available, Sable stays in the system tray. Otherwise it continues running in the background.'
@@ -94,6 +115,14 @@ describe('Desktop', () => {
       )
     ).toBeInTheDocument();
     expect(container.getElementsByClassName(SequenceCardStyle)).toHaveLength(3);
+  });
+
+  it('updates the custom title bar setting from the Window switch', () => {
+    renderDesktop();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'use-custom-title-bar' }));
+
+    expect(mockSetUseCustomTitleBar).toHaveBeenCalledWith(false);
   });
 
   it('shows fallback copy while the tray icon is enabled but unavailable', () => {

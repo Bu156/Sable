@@ -1,10 +1,10 @@
 import { atom } from 'jotai';
-import { isTauri } from '@tauri-apps/api/core';
-import { type as osType } from '@tauri-apps/plugin-os';
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { getDesktopRuntimeState, syncDesktopSettings } from '$generated/tauri/commands';
 import type { DesktopSettings as GeneratedDesktopSettings } from '$generated/tauri/desktop/DesktopSettings';
 import type { DesktopRuntimeState } from '$generated/tauri/desktop/DesktopRuntimeState';
+import { getDesktopTauriPlatform, isDesktopTauri } from '$utils/platform';
+import type { DesktopTauriPlatform } from '$utils/platform';
 
 type DesktopSettingsState = {
   ready: boolean;
@@ -22,15 +22,23 @@ export type { DesktopRuntimeState };
 const DESKTOP_SETTINGS_STORE_PATH = 'desktop-preferences.json' as const;
 const LEGACY_KEEP_BACKGROUND_RUNNING_KEY = 'keepBackgroundRunning' as const;
 
-export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
-  closeToBackgroundOnClose: true,
-  showSystemTrayIcon: true,
-};
+type DesktopPlatform = DesktopTauriPlatform | undefined;
+
+export function desktopSettingsDefaultsForPlatform(platform: DesktopPlatform): DesktopSettings {
+  return {
+    closeToBackgroundOnClose: true,
+    showSystemTrayIcon: true,
+    useCustomTitleBar: platform === 'windows',
+  };
+}
 export type DesktopSettingKey = keyof DesktopSettings;
 
 export const DEFAULT_DESKTOP_RUNTIME_STATE: DesktopRuntimeState = {
   trayAvailable: true,
 };
+
+export const DEFAULT_DESKTOP_SETTINGS =
+  desktopSettingsDefaultsForPlatform(getDesktopTauriPlatform());
 
 const DESKTOP_SETTING_KEYS = Object.keys(DEFAULT_DESKTOP_SETTINGS) as DesktopSettingKey[];
 
@@ -40,13 +48,6 @@ const desktopSettingsStore = new LazyStore(DESKTOP_SETTINGS_STORE_PATH, {
 
 let currentDesktopSettings = DEFAULT_DESKTOP_SETTINGS;
 let currentDesktopRuntimeState = DEFAULT_DESKTOP_RUNTIME_STATE;
-
-function isDesktopTauri(): boolean {
-  if (!isTauri()) return false;
-
-  const os = osType();
-  return os === 'windows' || os === 'linux' || os === 'macos';
-}
 
 function readBoolean(value: boolean | undefined, fallback: boolean): boolean {
   return value === undefined ? fallback : value;
@@ -72,16 +73,18 @@ async function persistDesktopSettings(
 export function desktopSettingsFromStoreValues(
   closeToBackgroundOnClose: boolean | undefined,
   showSystemTrayIcon: boolean | undefined,
-  legacyKeepBackgroundRunning: boolean | undefined
+  legacyKeepBackgroundRunning: boolean | undefined,
+  useCustomTitleBar: boolean | undefined,
+  platform = getDesktopTauriPlatform()
 ): DesktopSettings {
+  const defaults = desktopSettingsDefaultsForPlatform(platform);
+
   return {
     closeToBackgroundOnClose:
-      readBoolean(closeToBackgroundOnClose, DEFAULT_DESKTOP_SETTINGS.closeToBackgroundOnClose) ||
+      readBoolean(closeToBackgroundOnClose, defaults.closeToBackgroundOnClose) ||
       readBoolean(legacyKeepBackgroundRunning, false),
-    showSystemTrayIcon: readBoolean(
-      showSystemTrayIcon,
-      DEFAULT_DESKTOP_SETTINGS.showSystemTrayIcon
-    ),
+    showSystemTrayIcon: readBoolean(showSystemTrayIcon, defaults.showSystemTrayIcon),
+    useCustomTitleBar: readBoolean(useCustomTitleBar, defaults.useCustomTitleBar),
   };
 }
 
@@ -105,17 +108,23 @@ async function applyDesktopSettings(
 export async function getDesktopSettings(): Promise<DesktopSettings> {
   if (!isDesktopTauri()) return DEFAULT_DESKTOP_SETTINGS;
 
-  const [closeToBackgroundOnClose, showSystemTrayIcon, legacyKeepBackgroundRunning] =
-    await Promise.all([
-      desktopSettingsStore.get<boolean>('closeToBackgroundOnClose'),
-      desktopSettingsStore.get<boolean>('showSystemTrayIcon'),
-      desktopSettingsStore.get<boolean>(LEGACY_KEEP_BACKGROUND_RUNNING_KEY),
-    ]);
+  const [
+    closeToBackgroundOnClose,
+    showSystemTrayIcon,
+    legacyKeepBackgroundRunning,
+    useCustomTitleBar,
+  ] = await Promise.all([
+    desktopSettingsStore.get<boolean>('closeToBackgroundOnClose'),
+    desktopSettingsStore.get<boolean>('showSystemTrayIcon'),
+    desktopSettingsStore.get<boolean>(LEGACY_KEEP_BACKGROUND_RUNNING_KEY),
+    desktopSettingsStore.get<boolean>('useCustomTitleBar'),
+  ]);
 
   currentDesktopSettings = desktopSettingsFromStoreValues(
     closeToBackgroundOnClose,
     showSystemTrayIcon,
-    legacyKeepBackgroundRunning
+    legacyKeepBackgroundRunning,
+    useCustomTitleBar
   );
 
   return currentDesktopSettings;
