@@ -23,7 +23,7 @@ export function ReactionKeyInline({
   const [imgError, setImgError] = useState(false);
   const rawReactionUrl =
     reactionKey && reactionKey.startsWith('mxc://')
-      ? (mxcUrlToHttp(mx, reactionKey, useAuthentication, 32, 32, 'crop') ?? undefined)
+      ? (mxcUrlToHttp(mx, reactionKey, useAuthentication) ?? undefined)
       : undefined;
   const renderableReactionUrl = useRenderableMediaUrl(rawReactionUrl);
 
