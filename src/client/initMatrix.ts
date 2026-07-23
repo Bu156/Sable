@@ -260,10 +260,6 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
   const tempClient = createClient({
     baseUrl: session.baseUrl,
     fetchFn: fetch,
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-    userId: session.userId,
-    deviceId: session.deviceId,
   });
   const tokenRefresher = createSessionTokenRefresher(session, tempClient);
 

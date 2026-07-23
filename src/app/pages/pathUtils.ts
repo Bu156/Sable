@@ -64,16 +64,23 @@ export const getAppPathFromHref = (baseUrl: string, href: string): string => {
   const baseHashIndex = baseUrl.indexOf('#');
   if (baseHashIndex > -1) {
     const hrefHashIndex = href.indexOf('#');
+    if (hrefHashIndex === -1) return '';
+
     // href may/not have "/" around "#"
     // we need to take care of this when extracting app path
     const trimmedBaseUrl = trimLeadingSlash(baseUrl.slice(baseHashIndex + 1));
     const trimmedHref = trimLeadingSlash(href.slice(hrefHashIndex + 1));
 
-    const appPath = trimmedHref.slice(trimmedBaseUrl.length);
+    const appPath = trimmedHref.startsWith(trimmedBaseUrl)
+      ? trimmedHref.slice(trimmedBaseUrl.length)
+      : '';
     return `/${trimLeadingSlash(appPath)}`;
   }
 
-  return href.slice(trimTrailingSlash(baseUrl).length);
+  const trimmedBaseUrl = trimTrailingSlash(baseUrl);
+  if (href.startsWith(trimmedBaseUrl)) return href.slice(trimmedBaseUrl.length);
+  const { pathname, search } = new URL(href);
+  return pathname + search;
 };
 
 export const getRootPath = (): string => ROOT_PATH;
