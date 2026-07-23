@@ -48,7 +48,10 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
 
   const handleTouchEnd = () => {
     const endTime = Date.now();
-    if (touchYDiff.current > 100 || (endTime - startTime.current < 600 && touchYDiff.current > 20)) {
+    if (
+      touchYDiff.current > 100 ||
+      (endTime - startTime.current < 600 && touchYDiff.current > 20)
+    ) {
       requestClose();
     } else {
       touchYDiff.current = 0;

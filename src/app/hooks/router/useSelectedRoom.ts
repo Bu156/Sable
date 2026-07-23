@@ -39,4 +39,3 @@ export const useSelectedOrLastRoom = (): string | undefined => {
 
   return listMatch ? lastRoomId : undefined;
 };
-

@@ -70,7 +70,9 @@ function ActiveSwipeWrapper({ children, onReply }: { children: ReactNode; onRepl
           />
         </motion.div>
       </div>
-      <motion.div style={{ x, position: 'relative', zIndex: 1, willChange: 'transform' }}>{children}</motion.div>
+      <motion.div style={{ x, position: 'relative', zIndex: 1, willChange: 'transform' }}>
+        {children}
+      </motion.div>
     </div>
   );
 }

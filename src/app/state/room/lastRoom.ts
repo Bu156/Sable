@@ -18,4 +18,3 @@ export const lastVisitedRoomAtom = lastVisitedRoomBaseAtom;
 /** Returns a read-only derived atom for a single section's last-visited room. */
 export const lastVisitedRoomSectionAtom = (sectionKey: string) =>
   atom((get) => get(lastVisitedRoomAtom)[sectionKey]);
-
