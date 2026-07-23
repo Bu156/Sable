@@ -103,6 +103,7 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import { lastVisitedSpaceIdAtom } from '$state/room/lastSpace';
+import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 
 type SpaceMenuProps = {
   room: Room;
@@ -537,7 +538,7 @@ function SpaceAvatar({ space, renderFallback }: Readonly<SpaceAvatarProps>) {
 type SpaceTabProps = {
   space: Room;
   selected: boolean;
-  onClick: MouseEventHandler<HTMLButtonElement>;
+  onSelect: (spaceId: string) => void;
   folder?: ISidebarFolder;
   onDragging: (dragItem?: SidebarDraggable) => void;
   disabled?: boolean;
@@ -546,7 +547,7 @@ type SpaceTabProps = {
 function SpaceTab({
   space,
   selected,
-  onClick,
+  onSelect,
   folder,
   onDragging,
   disabled,
@@ -554,6 +555,7 @@ function SpaceTab({
 }: Readonly<SpaceTabProps>) {
   const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const targetRef = useRef<HTMLDivElement>(null);
+  const mobileTapActivation = useMobileTapActivation(isMobile, () => onSelect(space.roomId));
 
   const spaceDraggable: SidebarDraggable = useMemo(
     () =>
@@ -600,8 +602,9 @@ function SpaceTab({
                 data-id={space.roomId}
                 ref={triggerRef}
                 size={folder ? '300' : '400'}
-                onClick={onClick}
+                onClick={() => onSelect(space.roomId)}
                 onContextMenu={handleContextMenu}
+                {...mobileTapActivation}
               >
                 <SpaceAvatar
                   space={space}
@@ -958,25 +961,21 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
 
   const selectedSpaceId = useSelectedSpace();
 
-  const handleSpaceClick: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    const target = evt.currentTarget;
-    const targetSpaceId = target.getAttribute('data-id');
-    if (!targetSpaceId) return;
-
-    setLastSpaceId(targetSpaceId);
-    const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
+  const handleSpaceClick = (spaceId: string) => {
+    setLastSpaceId(spaceId);
+    const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, spaceId));
     if (screenSize === ScreenSize.Mobile) {
       navigate(spacePath);
       return;
     }
 
-    const activePath = navToActivePath.get(targetSpaceId);
+    const activePath = navToActivePath.get(spaceId);
     if (activePath?.pathname.startsWith(spacePath)) {
       navigate(joinPathComponent(activePath));
       return;
     }
 
-    navigate(getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, targetSpaceId)));
+    navigate(getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, spaceId)));
   };
 
   const handleFolderToggle: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -1061,7 +1060,7 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
                         key={space.roomId}
                         space={space}
                         selected={space.roomId === selectedSpaceId}
-                        onClick={handleSpaceClick}
+                        onSelect={handleSpaceClick}
                         folder={item}
                         onDragging={setDraggingItem}
                         disabled={
@@ -1100,7 +1099,7 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
               key={space.roomId}
               space={space}
               selected={space.roomId === selectedSpaceId}
-              onClick={handleSpaceClick}
+              onSelect={handleSpaceClick}
               onDragging={setDraggingItem}
               disabled={typeof draggingItem === 'string' ? draggingItem === space.roomId : false}
               onUnpin={orphanSpaces.includes(space.roomId) ? undefined : handleUnpin}
