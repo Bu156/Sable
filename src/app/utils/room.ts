@@ -516,6 +516,44 @@ export const getUnreadInfos = (mx: MatrixClient, options?: UnreadInfoOptions): U
   return unreadInfos;
 };
 
+export const getUnreadInfosForRooms = (
+  mx: MatrixClient,
+  roomIds: Iterable<string>,
+  options?: UnreadInfoOptions
+): { unread: UnreadInfo[]; deleted: string[] } => {
+  const unread: UnreadInfo[] = [];
+  const deleted: string[] = [];
+
+  for (const roomId of roomIds) {
+    const room = mx.getRoom(roomId);
+    if (!room) {
+      deleted.push(roomId);
+      continue;
+    }
+    if (room.isSpaceRoom()) {
+      deleted.push(roomId);
+      continue;
+    }
+    if (room.getMyMembership() !== 'join') {
+      deleted.push(roomId);
+      continue;
+    }
+    if (getNotificationType(mx, room.roomId) === NotificationType.Mute) {
+      deleted.push(roomId);
+      continue;
+    }
+
+    const unreadInfo = getUnreadInfo(room, options);
+    if (unreadInfo.total > 0 || unreadInfo.highlight > 0) {
+      unread.push(unreadInfo);
+    } else {
+      deleted.push(roomId);
+    }
+  }
+
+  return { unread, deleted };
+};
+
 export const getRoomAvatarUrl = (
   mx: MatrixClient,
   room: Room,

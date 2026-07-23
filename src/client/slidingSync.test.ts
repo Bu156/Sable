@@ -137,7 +137,7 @@ describe('SlidingSyncManager initial request', () => {
 
   it('settles response processing after post-response work can finish', async () => {
     const manager = makeManager(makeMockMx());
-    const settled = vi.fn<() => void>();
+    const settled = vi.fn<(dirtyRoomIds: ReadonlySet<string>) => void>();
     manager.subscribeToResponseSettled(settled);
     manager.attach();
 
