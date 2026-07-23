@@ -15,27 +15,7 @@ const MatrixRTCSessionContext = createContext<ActiveRTCSessionIds>(new Set());
 
 export function MatrixRTCSessionProvider({ children }: { children: ReactNode }): ReactElement {
   const mx = useMatrixClient();
-  const [activeRoomIds, setActiveRoomIds] = useState<ActiveRTCSessionIds>(() => {
-    // Seed with rooms that currently have an active session.
-    // There is no public `getRoomSessions()` bulk method on MatrixRTCSessionManager,
-    // so we iterate all client rooms and check each one individually.
-    const ids = new Set<string>();
-    try {
-      for (const room of mx.getRooms()) {
-        try {
-          const session = mx.matrixRTC.getRoomSession(room);
-          if (session.memberships.length > 0) {
-            ids.add(room.roomId);
-          }
-        } catch {
-          // Individual room session lookup failure is non-fatal.
-        }
-      }
-    } catch {
-      // Best-effort seed; the subscription below will keep it accurate.
-    }
-    return ids;
-  });
+  const [activeRoomIds, setActiveRoomIds] = useState<ActiveRTCSessionIds>(new Set());
 
   useEffect(() => {
     const handleStart = (roomId: string) => {
