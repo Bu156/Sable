@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EventType, KnownMembership, NotificationCountType } from '$types/matrix-sdk';
+import { KnownMembership, NotificationCountType } from '$types/matrix-sdk';
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
 import { getUnreadInfosForRooms } from './room';
 
@@ -19,10 +19,7 @@ const createEvent = (id: string, sender: string, type = 'm.room.message'): Matri
     getRelation: () => undefined,
   }) as unknown as MatrixEvent;
 
-const createClient = (
-  rooms: Record<string, Room>,
-  pushRulesOverride?: unknown[]
-): MatrixClient =>
+const createClient = (rooms: Record<string, Room>, pushRulesOverride?: unknown[]): MatrixClient =>
   ({
     getUserId: () => '@user:example.com',
     getRoom: (roomId: string) => rooms[roomId],
@@ -61,7 +58,7 @@ const createRoom = (
     isSpaceRoom: () => isSpace,
     getMyMembership: () => membership,
     getJoinedMemberCount: () => 10,
-    getUnreadNotificationCount: vi.fn((type: string) => {
+    getUnreadNotificationCount: vi.fn<(type: string) => number>((type: string) => {
       if (type === NotificationCountType.Highlight) return highlight;
       return total;
     }),
@@ -119,10 +116,9 @@ describe('getUnreadInfosForRooms', () => {
 
   it('deletes muted rooms', () => {
     const mutedRoom = createRoom(ROOM_MUTED);
-    const mx = createClient(
-      { [ROOM_MUTED]: mutedRoom },
-      [{ rule_id: ROOM_MUTED, actions: ['dont_notify'] }]
-    );
+    const mx = createClient({ [ROOM_MUTED]: mutedRoom }, [
+      { rule_id: ROOM_MUTED, actions: ['dont_notify'] },
+    ]);
     (mutedRoom as unknown as { client: MatrixClient }).client = mx;
 
     const { deleted } = getUnreadInfosForRooms(mx, [ROOM_MUTED]);
