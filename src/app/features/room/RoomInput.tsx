@@ -35,6 +35,7 @@ import {
 } from 'folds';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useDismissOnBack } from '$utils/androidBack';
 import type { AutocompleteQuery } from '$components/editor';
 import {
   AutocompletePrefix,
@@ -484,6 +485,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
+    // Android back closes the mobile emoji board instead of navigating away.
+    useDismissOnBack(() => setEmojiBoardTab(undefined), emojiBoardTab !== undefined);
     const [enableMediaGalleries] = useSetting(settingsAtom, 'enableMediaGalleries');
     const [sendIndividualAttachmentAsCaption] = useSetting(
       settingsAtom,

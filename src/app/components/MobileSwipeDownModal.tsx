@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Box } from 'folds';
 import * as css from '$features/room/message/styles.css';
+import { useDismissOnBack } from '$utils/androidBack';
 
 interface MobileSwipeDownModalProps {
   children: (
@@ -25,6 +26,9 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Android back closes the overlay instead of navigating away.
+  useDismissOnBack(requestClose);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0]?.clientY ?? null;
