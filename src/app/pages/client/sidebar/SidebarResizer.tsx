@@ -3,7 +3,7 @@
 import { Box } from 'folds';
 import * as css from '$pages/client/sidebar/SidebarResizer.css';
 import type { Dispatch, SetStateAction } from 'react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 export function SidebarResizer({
   sidebarWidth,
@@ -60,9 +60,23 @@ export function SidebarResizer({
     setNewPos(topSided ? e.clientY : e.clientX);
     setIsPointerDown(false);
     setAnnouncement?.(false);
+    releaseResizeListeners();
+  }, []);
+
+  const releaseResizeListeners = useCallback(() => {
+    resizeReleaseRef.current = null;
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointermove', onPointerMove);
-  }, []);
+  }, [onPointerUp, onPointerMove]);
+
+  const resizeReleaseRef = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      resizeReleaseRef.current?.();
+    },
+    []
+  );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -73,8 +87,9 @@ export function SidebarResizer({
       setAnnouncement?.(true);
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointermove', onPointerMove);
+      resizeReleaseRef.current = releaseResizeListeners;
     },
-    [onPointerUp, onPointerMove]
+    [onPointerUp, onPointerMove, releaseResizeListeners]
   );
 
   const dockClass = topSided
