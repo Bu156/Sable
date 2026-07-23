@@ -5,9 +5,8 @@ import type { Session } from '$state/sessions';
 import { createSessionTokenRefresher } from './oidcTokenRefresher';
 
 const mocks = vi.hoisted(() => ({
-  refresh: vi.fn<
-    (refreshToken: string) => Promise<{ accessToken: string; refreshToken?: string }>
-  >(),
+  refresh:
+    vi.fn<(refreshToken: string) => Promise<{ accessToken: string; refreshToken?: string }>>(),
   pushSessionToSW: vi.fn<() => Promise<void>>(),
 }));
 

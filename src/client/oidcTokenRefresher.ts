@@ -92,7 +92,9 @@ export const createSessionTokenRefresher = (
         // Another tab may have rotated the token; reusing a consumed one revokes the session.
         const storedSession = getStoredSession(session.userId);
         const latestRefreshToken =
-          storedSession?.refreshToken ?? getStoredSessionRefreshToken(session.userId) ?? refreshToken;
+          storedSession?.refreshToken ??
+          getStoredSessionRefreshToken(session.userId) ??
+          refreshToken;
         if (storedSession && latestRefreshToken !== refreshToken) {
           return {
             accessToken: storedSession.accessToken,
