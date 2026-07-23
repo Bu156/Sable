@@ -365,7 +365,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [showAudioRecorder, setShowAudioRecorder] = useState(false);
     const audioRecorderRef = useRef<AudioMessageRecorderHandle>(null);
     const micHoldStartRef = useRef(0);
+    const micHoldReleaseRef = useRef<(() => void) | null>(null);
     const HOLD_THRESHOLD_MS = 400;
+
+    useEffect(
+      () => () => {
+        micHoldReleaseRef.current?.();
+      },
+      []
+    );
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [isQuickTextReact, setQuickTextReact] = useState(false);
@@ -1945,25 +1953,31 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
 
+                  function discardRecording() {
+                    releaseListeners();
+                    setTimeout(() => {
+                      audioRecorderRef.current?.cancel();
+                    }, 50);
+                  }
                   function onUp() {
-                    cleanup();
                     const held = Date.now() - micHoldStartRef.current;
                     if (held >= HOLD_THRESHOLD_MS) {
+                      releaseListeners();
                       setTimeout(() => {
                         audioRecorderRef.current?.stop();
                       }, 50);
                     } else {
-                      setTimeout(() => {
-                        audioRecorderRef.current?.cancel();
-                      }, 50);
+                      discardRecording();
                     }
                   }
-                  function cleanup() {
+                  function releaseListeners() {
+                    micHoldReleaseRef.current = null;
                     window.removeEventListener('pointerup', onUp);
-                    window.removeEventListener('pointercancel', cleanup);
+                    window.removeEventListener('pointercancel', discardRecording);
                   }
+                  micHoldReleaseRef.current = releaseListeners;
                   window.addEventListener('pointerup', onUp);
-                  window.addEventListener('pointercancel', cleanup);
+                  window.addEventListener('pointercancel', discardRecording);
                 }}
                 onPointerUp={() => {
                   if (longPressTimer.current !== null) {
