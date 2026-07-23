@@ -1,5 +1,14 @@
 import type { KeyboardEventHandler, MouseEvent, RefObject } from 'react';
-import { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import {
+  forwardRef,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 
 import { isKeyHotkey } from 'is-hotkey';
@@ -192,9 +201,12 @@ import type {
 import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
-import { LocationDialog } from './location-modal';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { PersonaPicker } from './persona-picker/PersonaPicker.tsx';
+
+const LocationDialog = lazy(() =>
+  import('./location-modal').then((module) => ({ default: module.LocationDialog }))
+);
 
 // Returns the event ID of the most recent non-reaction/non-edit event in a thread,
 // falling back to the thread root if no replies exist yet.
@@ -2139,13 +2151,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           />
         )}
         {showLocationPicker && (
-          <LocationDialog
-            onCancel={() => setShowLocationPicker(false)}
-            mx={mx}
-            room={room}
-            replyDraft={replyDraft}
-            clearReplyDraft={() => setReplyDraft(replyDraftBase)}
-          />
+          <Suspense fallback={null}>
+            <LocationDialog
+              onCancel={() => setShowLocationPicker(false)}
+              mx={mx}
+              room={room}
+              replyDraft={replyDraft}
+              clearReplyDraft={() => setReplyDraft(replyDraftBase)}
+            />
+          </Suspense>
         )}
       </div>
     );
