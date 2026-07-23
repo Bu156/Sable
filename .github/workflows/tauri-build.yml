@@ -288,6 +288,9 @@ jobs:
           test -d "$BUNDLE" || { echo "Bundle directory not found: $BUNDLE" >&2; exit 1; }
           for f in "$BUNDLE"/deb/Sable-*-linux-x86_64.deb \
                    "$BUNDLE"/rpm/Sable-*-linux-x86_64.rpm \
+                   "$BUNDLE"/apk/Sable-*-linux-x86_64.apk \
+                   "$BUNDLE"/archlinux/Sable-*-x86_64.pkg.tar.zst \
+                   "$BUNDLE"/ipk/Sable-*-x86_64.ipk \
                    "$BUNDLE"/appimage/Sable-*-linux-x86_64.AppImage \
                    "$BUNDLE"/appimage/Sable-*-linux-x86_64.AppImage.sig; do
             [ -e "$f" ] || continue
@@ -709,3 +712,183 @@ jobs:
                 echo "Removing superseded nightly asset: $name"
                 gh release delete-asset nightly "$name" --yes
               done
+
+  # ─── Distribution via GoReleaser (AUR, Homebrew, Snap, Flatpak, Winget, Nix) ──
+
+  goreleaser:
+    name: GoReleaser (AUR, Homebrew, Snap, Flatpak, Winget, Nix)
+    needs: [setup-release, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ needs.setup-release.outputs.nightly != 'true' }}
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup tools (mise)
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          cache: true
+
+      - name: Install Flatpak build deps (for flatpak builder)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y org.gnome.Platform//50 org.gnome.Sdk//50
+
+      - name: Set up AUR SSH key
+        env:
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN || github.token }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+
+  distribute-nightly-aur:
+    name: Publish nightly to AUR
+    needs: [setup-release, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ needs.setup-release.outputs.nightly == 'true' }}
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download nightly .deb and compute checksum
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${TAG}/Sable-${VERSION}-linux-x86_64.deb" -o sable.deb
+          SHA256=$(sha256sum sable.deb | awk '{print $1}')
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+
+      - name: Push to AUR sable-nightly-bin
+        shell: bash
+        env:
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
+          git clone "ssh://aur@aur.archlinux.org/sable-nightly-bin.git" aur-repo
+          cp packaging/aur/sable-nightly-bin.PKGBUILD packaging/aur/sable-nightly-bin.install aur-repo/
+
+          cd aur-repo
+          PKGVER="${VERSION%%-*}"
+          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${SHA256}')/" PKGBUILD
+
+          docker run --rm -v "$PWD:/pkg" -w /pkg archlinux:latest bash -c \
+            "pacman -Sy --noconfirm --needed base-devel && HOME=/root makepkg --printsrcinfo > .SRCINFO"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD sable-nightly-bin.install .SRCINFO
+          git commit -m "nightly ${VERSION}" || echo "No changes"
+          git push
+
+  # ─── Android distribution (GoReleaser doesn't cover these) ───────────────
+
+  distribute-obtainium:
+    name: Generate Obtainium import file
+    needs: [setup-release, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Generate obtainium.json
+        shell: bash
+        run: node scripts/obtainium-generate.js "$VERSION" "$TAG" obtainium.json
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" obtainium.json --clobber
+
+  distribute-fdroid:
+    name: Publish to self-hosted F-Droid repo
+    needs: [setup-release, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Fetch existing F-Droid repo from Pages
+        shell: bash
+        run: |
+          mkdir -p repo
+          # Download existing repo contents so fdroid can re-index all versions
+          git clone --depth 1 --branch gh-pages \
+            "https://github.com/${{ github.repository }}.git" pages-tmp 2>/dev/null || true
+          if [ -d pages-tmp/fdroid ]; then
+            cp -r pages-tmp/fdroid/. repo/
+          fi
+
+      - name: Download APK from release
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${TAG}/Sable-${VERSION}-android-universal.apk" \
+            -o "repo/Sable-${VERSION}-android-universal.apk"
+
+      - name: Set up fdroidserver
+        run: pip install fdroidserver
+
+      - name: Update F-Droid repo index
+        shell: bash
+        run: |
+          if [ ! -f config.yml ]; then
+            fdroid init --repo repo
+          fi
+          fdroid update --create-metadata --repo repo
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4c0d3854f0590c8a3f1d8c46d7d7805b2e540fe7 # v4.0.0
+        with:
+          github_token: ${{ github.token }}
+          publish_dir: ./repo
+          destination_dir: fdroid
+          keep_files: true

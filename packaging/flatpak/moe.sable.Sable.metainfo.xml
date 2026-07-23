@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>moe.sable.Sable</id>
+
+  <name>Sable</name>
+  <summary>An almost stable Matrix client</summary>
+  <developer_name>Sable Maintainers</developer_name>
+  <url type="homepage">https://sable.moe</url>
+  <url type="bugtracker">https://github.com/SableClient/Sable/issues</url>
+  <url type="donation">https://github.com/SableClient/Sable</url>
+  <content_rating type="oars-1.1" />
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <description>
+    <p>
+      Sable is a cross-platform Matrix client built with Tauri, offering a
+      native desktop experience with end-to-end encryption support.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">moe.sable.Sable.desktop</launchable>
+
+  <releases>
+    <release version="1.20.0" date="2025-07-23">
+      <description>
+        <p>See the changelog at https://github.com/SableClient/Sable/releases</p>
+      </description>
+    </release>
+  </releases>
+</component>

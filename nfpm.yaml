@@ -10,6 +10,7 @@ section: net
 maintainer: SableClient
 description: Sable, a Matrix client
 homepage: https://sable.moe
+license: AGPL-3.0-or-later
 
 contents:
   - src: ${PKGROOT}/opt/sable/
@@ -48,3 +49,34 @@ overrides:
       - xdg-utils
       - xorg-x11-server-Xwayland
       - libayatana-appindicator3.so.1()(64bit)
+  apk:
+    depends:
+      - webkit2gtk-4.1
+      - gtk+3.0
+      - libayatana-appindicator
+      - librsvg
+      - xdotool
+      - mesa-gbm
+      - libdrm
+      - libxkbcommon
+      - alsa-lib
+      - cups
+      - xdg-utils
+      - libxcomposite
+      - ttf-freefont
+  archlinux:
+    depends:
+      - webkit2gtk-4.1
+      - gtk3
+      - libayatana-appindicator
+      - librsvg
+      - xdotool
+      - hicolor-icon-theme
+      - desktop-file-utils
+  ipk:
+    depends:
+      - webkit2gtk-4.1
+      - gtk3
+      - libayatana-appindicator3
+      - librsvg
+      - xdotool

@@ -110,13 +110,24 @@ EOF
   cp "src-tauri/icons/128x128@2x.png" \
     "$PKGROOT/usr/share/icons/hicolor/256x256/apps/sable.png"
 
+  mkdir -p "$OUT/deb" "$OUT/rpm" "$OUT/apk" "$OUT/archlinux" "$OUT/ipk"
+
   PKG_VERSION="$DEB_VERSION" PKG_RELEASE=1 nfpm pkg -f "$CONFIG" -p deb \
     -t "$OUT/deb/Sable-${VERSION}-linux-x86_64.deb"
 
   PKG_VERSION="$RPM_VERSION" PKG_RELEASE="$RPM_ITERATION" nfpm pkg -f "$CONFIG" -p rpm \
     -t "$OUT/rpm/Sable-${VERSION}-linux-x86_64.rpm"
+
+  PKG_VERSION="$DEB_VERSION" PKG_RELEASE=1 nfpm pkg -f "$CONFIG" -p apk \
+    -t "$OUT/apk/Sable-${VERSION}-linux-x86_64.apk"
+
+  PKG_VERSION="$VERSION" PKG_RELEASE=1 nfpm pkg -f "$CONFIG" -p archlinux \
+    -t "$OUT/archlinux/Sable-${VERSION}-x86_64.pkg.tar.zst"
+
+  PKG_VERSION="$DEB_VERSION" PKG_RELEASE=1 nfpm pkg -f "$CONFIG" -p ipk \
+    -t "$OUT/ipk/Sable-${VERSION}-x86_64.ipk"
 else
-  echo "nfpm not found; skipping deb/rpm"
+  echo "nfpm not found; skipping native packages"
 fi
 
 APPIMAGETOOL_CMD=""

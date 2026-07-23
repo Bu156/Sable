@@ -1,0 +1,251 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Secrets: AUR_KEY, HOMEBREW_TAP_GITHUB_TOKEN, SNAPCRAFT_STORE_CREDENTIALS
+
+version: 2
+
+project_name: sable
+
+before:
+  hooks:
+    - pnpm install --frozen-lockfile
+    - pnpm tauri build -- --no-bundle --features wry,updater
+
+builds:
+  - id: sable
+    main: ./src-tauri/
+    binary: sable
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    no_main_check: true
+    skip: true
+
+archives:
+  - id: sable
+    formats:
+      - tar.gz
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    files:
+      - LICENSE
+
+nfpms:
+  - package_name: sable
+    file_name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Arch }}'
+    homepage: https://sable.moe
+    maintainer: SableClient
+    description: Sable, a Matrix client
+    license: AGPL-3.0-or-later
+    formats:
+      - deb
+      - rpm
+      - apk
+      - archlinux
+      - ipk
+    contents:
+      - src: opt/sable/
+        dst: /opt/sable
+        type: tree
+      - src: usr/
+        dst: /usr
+        type: tree
+    overrides:
+      deb:
+        dependencies:
+          - libgtk-3-0
+          - libnss3
+          - libnspr4
+          - libgbm1
+          - libdrm2
+          - libxkbcommon0
+          - libasound2
+          - libcups2
+          - xdg-utils
+          - xwayland
+          - libayatana-appindicator3-1
+      rpm:
+        dependencies:
+          - gtk3
+          - nss
+          - nspr
+          - mesa-libgbm
+          - libdrm
+          - libxkbcommon
+          - alsa-lib
+          - cups-libs
+          - xdg-utils
+          - xorg-x11-server-Xwayland
+          - libayatana-appindicator3.so.1()(64bit)
+      apk:
+        dependencies:
+          - webkit2gtk-4.1
+          - gtk+3.0
+          - libayatana-appindicator
+          - librsvg
+          - xdotool
+          - mesa-gbm
+          - libdrm
+          - libxkbcommon
+          - alsa-lib
+          - cups
+          - xdg-utils
+          - libxcomposite
+          - ttf-freefont
+      archlinux:
+        dependencies:
+          - webkit2gtk-4.1
+          - gtk3
+          - libayatana-appindicator
+          - librsvg
+          - xdotool
+          - hicolor-icon-theme
+          - desktop-file-utils
+      ipk:
+        dependencies:
+          - webkit2gtk-4.1
+          - gtk3
+          - libayatana-appindicator3
+          - librsvg
+          - xdotool
+
+aurs:
+  - name: sable-bin
+    homepage: https://sable.moe
+    description: Sable, a Matrix client
+    maintainers:
+      - SableClient <https://github.com/SableClient/Sable>
+    license: AGPL-3.0-or-later
+    private_key: '{{ .Env.AUR_KEY }}'
+    git_url: ssh://aur@aur.archlinux.org/sable-bin.git
+    depends:
+      - webkit2gtk-4.1
+      - gtk3
+      - libayatana-appindicator
+      - librsvg
+      - xdotool
+      - hicolor-icon-theme
+      - desktop-file-utils
+    package: |-
+      ar x "{{ .ArtifactName }}" data.tar.xz
+      tar -xf data.tar.xz -C "${pkgdir}"
+      find "${pkgdir}" -type d -exec chmod 755 {} +
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+
+homebrew_casks:
+  - name: sable
+    homepage: https://sable.moe
+    description: Sable, a Matrix client
+    binaries:
+      - Sable.app
+    repository:
+      owner: SableClient
+      name: homebrew-sable
+      branch: main
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+    zap:
+      trash:
+        - ~/Library/Application Support/moe.sable.client
+        - ~/Library/Caches/moe.sable.client
+        - ~/Library/Preferences/moe.sable.client.plist
+        - ~/Library/Saved Application State/moe.sable.client.savedState
+
+snapcrafts:
+  - name: sable
+    summary: Sable, a Matrix client
+    description: |
+      Sable is a cross-platform Matrix client built with Tauri, offering a
+      native desktop experience with end-to-end encryption support.
+    grade: stable
+    confinement: strict
+    base: core22
+    publish: true
+    layout:
+      /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:
+        bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
+    apps:
+      sable:
+        command: usr/bin/sable
+        desktop: usr/share/applications/sable.desktop
+        extensions: [gnome]
+        environment:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        plugs:
+          - network
+          - network-bind
+          - home
+          - removable-media
+          - browser-support
+
+flatpak:
+  - app_id: moe.sable.Sable
+    runtime: org.gnome.Platform
+    runtime_version: '50'
+    sdk: org.gnome.Sdk
+    command: sable
+    finish_args:
+      - --socket=wayland
+      - --socket=fallback-x11
+      - --device=dri
+      - --share=ipc
+      - --share=network
+      - --talk-name=org.freedesktop.Notifications
+      - --talk-name=org.kde.StatusNotifierWatcher
+
+winget:
+  - name: sable
+    publisher: SableClient
+    license: AGPL-3.0-or-later
+    homepage: https://sable.moe
+    short_description: Sable, a Matrix client
+    package_identifier: SableClient.Sable
+    repository:
+      owner: microsoft
+      name: winget-pkgs
+      branch: master
+
+scoops:
+  - name: sable
+    homepage: https://sable.moe
+    description: Sable, a Matrix client
+    license: AGPL-3.0-or-later
+    repository:
+      owner: SableClient
+      name: scoop-sable
+      branch: main
+
+nix:
+  - name: sable
+    homepage: https://sable.moe
+    description: Sable, a Matrix client
+    license: agpl3Plus
+    repository:
+      owner: SableClient
+      name: nixpkgs-sable
+      branch: main
+
+checksum:
+  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: git
+  filters:
+    exclude:
+      - '^chore:'
+      - '^docs:'
+      - '^style:'
+      - '^test:'
+
+release:
+  github:
+    owner: SableClient
+    name: Sable
+  draft: false
+  prerelease: auto
+  name_template: '{{ .ProjectName }} v{{ .Version }}'
+  extra_files:
+    - glob: packaging/flatpak/moe.sable.Sable.desktop
+    - glob: packaging/flatpak/moe.sable.Sable.metainfo.xml

@@ -58,7 +58,7 @@ tools = { "cargo:knope" = "0.23.0", cargo-binstall = "1.20.1" }
 
 [tasks."knope:document-change"]
 description = "Document a change with knope"
-alias = ["doc", "doc"]
+alias = ["doc", "dc"]
 run = { task = "knope", args = ["document-change"] }
 
 [tasks."tauri:setup"]
