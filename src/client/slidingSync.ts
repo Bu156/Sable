@@ -60,6 +60,10 @@ type SlidingSyncOptions = {
   initialRoomIds?: Iterable<string>;
 };
 
+type RoomScopedExtensionResponse = {
+  rooms?: Record<string, unknown>;
+};
+
 export type SlidingSyncListDiagnostics = {
   key: string;
   knownCount: number;
@@ -499,6 +503,13 @@ export class SlidingSyncManager {
           totalRoomCount,
         });
       }
+
+      ['receipts', 'account_data'].forEach((extensionName) => {
+        const extension = resp.extensions?.[extensionName] as
+          | RoomScopedExtensionResponse
+          | undefined;
+        Object.keys(extension?.rooms ?? {}).forEach((roomId) => this.dirtyRoomIds.add(roomId));
+      });
 
       globalThis.queueMicrotask(() => {
         if (this.disposed) return;
