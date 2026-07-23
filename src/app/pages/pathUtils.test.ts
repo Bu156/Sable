@@ -32,11 +32,11 @@ describe('getAppPathFromHref', () => {
     ).toBe('/login?code=c&state=s');
   });
 
-  it('returns empty when the href origin does not match the base', () => {
-    expect(getAppPathFromHref('https://app.sable.moe/', 'https://tauri.localhost/')).toBe('');
+  it('extracts the path from the href when the origin does not match the base (Tauri)', () => {
+    expect(getAppPathFromHref('https://app.sable.moe/', 'https://tauri.localhost/')).toBe('/');
     expect(
       getAppPathFromHref('https://app.sable.moe/', 'https://tauri.localhost/login?code=c&state=s')
-    ).toBe('');
+    ).toBe('/login?code=c&state=s');
   });
 
   it('returns empty when a hash-router base is paired with a hashless href', () => {

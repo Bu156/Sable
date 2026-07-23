@@ -71,18 +71,16 @@ export const getAppPathFromHref = (baseUrl: string, href: string): string => {
     const trimmedBaseUrl = trimLeadingSlash(baseUrl.slice(baseHashIndex + 1));
     const trimmedHref = trimLeadingSlash(href.slice(hrefHashIndex + 1));
 
-    // On Tauri the base origin is synthetic and never matches the href origin; guard
-    // against slicing a basename the href does not start with.
     const appPath = trimmedHref.startsWith(trimmedBaseUrl)
       ? trimmedHref.slice(trimmedBaseUrl.length)
       : '';
     return `/${trimLeadingSlash(appPath)}`;
   }
 
-  // On Tauri the base origin is synthetic and never matches the href origin; return
-  // empty instead of slicing a garbage path that would be stored as a redirect.
   const trimmedBaseUrl = trimTrailingSlash(baseUrl);
-  return href.startsWith(trimmedBaseUrl) ? href.slice(trimmedBaseUrl.length) : '';
+  if (href.startsWith(trimmedBaseUrl)) return href.slice(trimmedBaseUrl.length);
+  const { pathname, search } = new URL(href);
+  return pathname + search;
 };
 
 export const getRootPath = (): string => ROOT_PATH;

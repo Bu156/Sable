@@ -42,11 +42,11 @@ describe('expiresInMsFromToken', () => {
 });
 
 const mocks = vi.hoisted(() => ({
-  oauth2Context: vi.fn(),
+  oauth2Context: vi.fn<(context: unknown) => void>(),
   completeAuthorizationCodeGrant: vi.fn<(code: string) => Promise<BearerTokenResponse>>(),
   getAuthMetadata: vi.fn<() => Promise<ValidatedAuthMetadata>>(),
-  whoami: vi.fn(),
-  setAccessToken: vi.fn(),
+  whoami: vi.fn<() => Promise<{ user_id: string; device_id?: string }>>(),
+  setAccessToken: vi.fn<(token: string) => void>(),
 }));
 
 vi.mock('$types/matrix-sdk', async (importOriginal) => {
@@ -60,11 +60,13 @@ vi.mock('$types/matrix-sdk', async (importOriginal) => {
       public completeAuthorizationCodeGrant = mocks.completeAuthorizationCodeGrant;
       public context = { deviceId: 'dev', codeVerifier: 'verifier' };
     },
-    createClient: vi.fn().mockImplementation(() => ({
-      getAuthMetadata: mocks.getAuthMetadata,
-      setAccessToken: mocks.setAccessToken,
-      whoami: mocks.whoami,
-    })),
+    createClient: vi
+      .fn<(opts: { baseUrl: string; fetchFn: typeof fetch }) => Record<string, unknown>>()
+      .mockImplementation(() => ({
+        getAuthMetadata: mocks.getAuthMetadata,
+        setAccessToken: mocks.setAccessToken,
+        whoami: mocks.whoami,
+      })),
   };
 });
 
