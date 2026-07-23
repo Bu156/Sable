@@ -530,10 +530,9 @@ export const getUnreadInfosForRooms = (
       deleted.push(roomId);
       continue;
     }
-    if (room.isSpaceRoom()) {
-      deleted.push(roomId);
-      continue;
-    }
+    // Space unread is derived from children in the atom reducer; skip like
+    // getUnreadInfos rather than deleting.
+    if (room.isSpaceRoom()) continue;
     if (room.getMyMembership() !== 'join') {
       deleted.push(roomId);
       continue;

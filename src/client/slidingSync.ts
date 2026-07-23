@@ -519,7 +519,11 @@ export class SlidingSyncManager {
         const extension = resp.extensions?.[extensionName] as
           | RoomScopedExtensionResponse
           | undefined;
-        Object.keys(extension?.rooms ?? {}).forEach((roomId) => this.dirtyRoomIds.add(roomId));
+        const rooms = extension?.rooms ?? {};
+        Object.entries(rooms).forEach(([roomId, data]) => {
+          if (extensionName === 'account_data' && Array.isArray(data) && data.length === 0) return;
+          this.dirtyRoomIds.add(roomId);
+        });
       });
 
       globalThis.queueMicrotask(() => {
