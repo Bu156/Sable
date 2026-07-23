@@ -35,6 +35,7 @@ import {
   type IncomingCall,
 } from '$state/callEmbed';
 import { createDebugLogger } from '$utils/debugLogger';
+import { useDismissOnBack } from '$utils/androidBack';
 import { dismissSystemCallNotifications } from '$features/call/callNotificationBridge';
 import { getIncomingCallBlockers } from '$features/call/getIncomingCallBlockers';
 import { RoomAvatar } from './room-avatar';
@@ -337,9 +338,12 @@ export function IncomingCallModal() {
   const mx = useMatrixClient();
   const room = incomingCall ? mx.getRoom(incomingCall.roomId) : null;
 
-  if (!incomingCall || !room) return null;
-
   const close = () => setIncomingCall(null);
+
+  // Android back dismisses the incoming call modal instead of navigating away.
+  useDismissOnBack(close, !!incomingCall && !!room);
+
+  if (!incomingCall || !room) return null;
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
