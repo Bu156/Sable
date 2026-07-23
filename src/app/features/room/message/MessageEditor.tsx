@@ -69,6 +69,18 @@ import { floatingEditor } from '$styles/overrides/Composer.css';
 import { RenderMessageContent } from '$components/RenderMessageContent';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
+import { testMatrixTo } from '$plugins/matrix-to';
+import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
+import type { HTMLReactParserOptions } from 'html-react-parser';
+import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import type { Opts as LinkifyOpts } from 'linkifyjs';
+import type { GetContentCallback } from '$types/matrix/room';
+import { sanitizeText } from '$utils/sanitize';
+import type { BundleContent } from '$components/message';
+import {
+  readdAngleBracketsForHiddenPreviews,
+  stripMarkdownEscapesForHiddenPreviews,
+} from './hiddenLinkPreviews';
 
 // Wraps the mobile emoji-board overlay so the Android back action closes it
 // instead of navigating away. Hooks can't run inside the UseStateProvider
@@ -100,18 +112,6 @@ function MobileEmojiOverlay({
     </Overlay>
   );
 }
-import { testMatrixTo } from '$plugins/matrix-to';
-import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
-import type { HTMLReactParserOptions } from 'html-react-parser';
-import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import type { Opts as LinkifyOpts } from 'linkifyjs';
-import type { GetContentCallback } from '$types/matrix/room';
-import { sanitizeText } from '$utils/sanitize';
-import type { BundleContent } from '$components/message';
-import {
-  readdAngleBracketsForHiddenPreviews,
-  stripMarkdownEscapesForHiddenPreviews,
-} from './hiddenLinkPreviews';
 
 type MessageEditorProps = {
   roomId: string;
