@@ -116,7 +116,7 @@ import { getEditedEvent, getMentionContent, getThreadReplyEvents } from '$utils/
 import { buildReplacementContent } from './buildReplacementContent';
 import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { nicknamesAtom } from '$state/nicknames';
@@ -429,7 +429,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setUploadBoard(true);
         const safeFiles = await Promise.all(files.map(safeUploadFile));
         // Eager-read to avoid Android content URI expiry after SAF picker
-        const blobbedFiles = mobileOrTablet()
+        const blobbedFiles = isMobileOrTablet()
           ? await Promise.all(
               safeFiles.map(async (f) => {
                 try {
@@ -2034,7 +2034,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           before={
             <>
-              {mobileOrTablet() ? (
+              {isMobileOrTablet() ? (
                 <>
                   <IconButton
                     onClick={() => setShowAttachmentSheet(true)}
@@ -2176,7 +2176,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       onTabChange={setEmojiBoardTab}
                       imagePackRooms={imagePackRooms}
                       returnFocusOnDeactivate={false}
-                      isFullWidth={mobileOrTablet()}
+                      isFullWidth={isMobileOrTablet()}
                       onEmojiSelect={handleEmoticonSelect}
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
@@ -2251,7 +2251,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       })}
                     </>
                   );
-                  if (mobileOrTablet()) {
+                  if (isMobileOrTablet()) {
                     return (
                       <>
                         {triggers}
@@ -2342,7 +2342,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     return;
                   }
                   if (!editorMicButton) return;
-                  if (mobileOrTablet()) return;
+                  if (isMobileOrTablet()) return;
                   setShowAudioRecorder(true);
                 }}
                 onMouseDown={(e: MouseEvent) => {
@@ -2352,7 +2352,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   if (showAudioRecorder) return;
                   if (hasContent) {
                     isLongPress.current = false;
-                    if (mobileOrTablet() && delayedEventsSupported) {
+                    if (isMobileOrTablet() && delayedEventsSupported) {
                       longPressTimer.current = setTimeout(() => {
                         isLongPress.current = true;
                         setShowSchedulePicker(true);
@@ -2361,7 +2361,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     return;
                   }
                   if (!editorMicButton) return;
-                  if (!mobileOrTablet()) return;
+                  if (!isMobileOrTablet()) return;
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
 
@@ -2467,7 +2467,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </FocusTrap>
                 }
               />
-              {delayedEventsSupported && !mobileOrTablet() && (
+              {delayedEventsSupported && !isMobileOrTablet() && (
                 <IconButton
                   onClick={(evt: MouseEvent<HTMLButtonElement>) => {
                     setScheduleMenuAnchor(evt.currentTarget.getBoundingClientRect());

@@ -19,6 +19,10 @@ import { createRequire } from 'module';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import buildConfig from './build.config';
 
+const appConfig = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, 'config.json'), 'utf8')
+) as Record<string, unknown>;
+
 const packageJson = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')
 ) as {
@@ -57,16 +61,7 @@ const sentryUploadEnabled = Boolean(
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
 );
 
-const isReleaseTag = (() => {
-  const envVal = process.env.VITE_IS_RELEASE_TAG;
-  if (envVal !== undefined && envVal !== '') return envVal === 'true';
-  try {
-    const tag = execSync('git describe --exact-match --tags HEAD 2>/dev/null').toString().trim();
-    return tag.startsWith('v');
-  } catch {
-    return false;
-  }
-})();
+const baseProductName = typeof appConfig.productName === 'string' ? appConfig.productName : 'Sable';
 
 const copyFiles = {
   targets: [
@@ -130,7 +125,11 @@ function serverMatrixSdkCryptoWasm() {
   };
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command }) => {
+  const buildFlavor = process.env.SABLE_BUILD_FLAVOR || (command === 'serve' ? 'dev' : 'stable');
+  const productName = buildFlavor !== 'stable' ? `${baseProductName} Nightly` : baseProductName;
+
+  return ({
   clearScreen: false,
   appType: 'spa',
   publicDir: false,
@@ -139,7 +138,8 @@ export default defineConfig(({ command }) => ({
   define: {
     APP_VERSION: JSON.stringify(appVersion),
     BUILD_HASH: JSON.stringify(buildHash ?? ''),
-    IS_RELEASE_TAG: JSON.stringify(isReleaseTag),
+    SABLE_PRODUCT_NAME: JSON.stringify(productName),
+    SABLE_BUILD_FLAVOR: JSON.stringify(buildFlavor),
   },
   resolve: {
     alias: {
@@ -308,4 +308,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-}));
+  });
+});

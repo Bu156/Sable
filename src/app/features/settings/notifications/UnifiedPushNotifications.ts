@@ -24,11 +24,7 @@ import {
 } from './UnifiedPushMessageListener';
 import { addPluginListener } from '@tauri-apps/api/core';
 import type { PushTransportConfig } from './NotificationTransport';
-import {
-  getTauriNotificationsApi,
-  isAndroidTauri,
-  isIosTauri,
-} from './TauriNotificationsApiClient';
+import { getTauriNotificationsApi, isMobileTauri } from './TauriNotificationsApiClient';
 import {
   resolvePushNotifyUrl,
   withPushPayloadFormat,
@@ -460,7 +456,7 @@ async function postRoomNotification(
     silent: isSilent,
     autoCancel: true,
     extra,
-    ...(isAndroidTauri() || isIosTauri() ? { actionTypeId: 'sable-message' } : {}),
+    ...(isMobileTauri() ? { actionTypeId: 'sable-message' } : {}),
     inboxLines: inboxLines.length > 1 ? inboxLines : undefined,
     largeBody: inboxLines.length > 1 ? undefined : latestBody,
   });

@@ -45,7 +45,7 @@ import { RoomInput } from './RoomInput';
 import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollowing';
 import * as css from './ThreadDrawer.css';
 import { SidebarResizer } from '$pages/client/sidebar/SidebarResizer';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 
 type ThreadDrawerProps = {
   room: Room;
@@ -605,7 +605,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
         width: overlay ? '100%' : toRem(curWidth),
       }}
     >
-      {!mobileOrTablet() && (
+      {!isMobileOrTablet() && (
         <SidebarResizer
           setCurWidth={setCurWidth}
           sidebarWidth={threadSidebarWidth}

@@ -41,13 +41,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Compute nightly version
+      - uses: ./.github/actions/resolve-release-meta
         id: version
-        shell: bash
-        working-directory: ${{ github.workspace }}
-        run: |
-          VERSION="$(node .github/scripts/nightly-version.mjs)"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Prepare OpenTofu deployment
         uses: ./.github/actions/prepare-tofu
