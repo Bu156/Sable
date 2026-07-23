@@ -16,7 +16,6 @@ import {
   EventTimeline,
   EventType,
   NotificationCountType,
-  PushProcessor,
   PushRuleActionName,
   RelationType,
   MsgType,
@@ -427,7 +426,7 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
     const liveEvents = room.getLiveTimeline().getEvents();
     let fallbackTotal = 0;
     let fallbackHighlight = 0;
-    const pushProcessor = new PushProcessor(room.client);
+    const pushProcessor = room.client.pushProcessor;
     for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
       const event = liveEvents[i];
       if (!event) break;
@@ -515,6 +514,44 @@ export const getUnreadInfos = (mx: MatrixClient, options?: UnreadInfoOptions): U
   }, []);
 
   return unreadInfos;
+};
+
+export const getUnreadInfosForRooms = (
+  mx: MatrixClient,
+  roomIds: Iterable<string>,
+  options?: UnreadInfoOptions
+): { unread: UnreadInfo[]; deleted: string[] } => {
+  const unread: UnreadInfo[] = [];
+  const deleted: string[] = [];
+
+  for (const roomId of roomIds) {
+    const room = mx.getRoom(roomId);
+    if (!room) {
+      deleted.push(roomId);
+      continue;
+    }
+    if (room.isSpaceRoom()) {
+      deleted.push(roomId);
+      continue;
+    }
+    if (room.getMyMembership() !== 'join') {
+      deleted.push(roomId);
+      continue;
+    }
+    if (getNotificationType(mx, room.roomId) === NotificationType.Mute) {
+      deleted.push(roomId);
+      continue;
+    }
+
+    const unreadInfo = getUnreadInfo(room, options);
+    if (unreadInfo.total > 0 || unreadInfo.highlight > 0) {
+      unread.push(unreadInfo);
+    } else {
+      deleted.push(roomId);
+    }
+  }
+
+  return { unread, deleted };
 };
 
 export const getRoomAvatarUrl = (

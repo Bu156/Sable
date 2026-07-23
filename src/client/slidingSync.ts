@@ -60,6 +60,10 @@ type SlidingSyncOptions = {
   initialRoomIds?: Iterable<string>;
 };
 
+type RoomScopedExtensionResponse = {
+  rooms?: Record<string, unknown>;
+};
+
 export type SlidingSyncListDiagnostics = {
   key: string;
   knownCount: number;
@@ -245,6 +249,13 @@ export class SlidingSyncManager {
 
   private deferredImagePackSubscriptions: Set<string> | null = null;
 
+  /**
+   * Room IDs that received data in the current sync cycle. Used to narrow the
+   * sync-settled unread recompute to only changed rooms instead of all rooms.
+   * Populated by onCacheRoomData, cleared after the settled listeners fire.
+   */
+  private readonly dirtyRoomIds = new Set<string>();
+
   private roomSubscriptionSyncQueued = false;
 
   private readonly roomTimelineLimit: number;
@@ -294,7 +305,9 @@ export class SlidingSyncManager {
 
   private responseProcessing = false;
 
-  private readonly responseSettledListeners = new Set<() => void>();
+  private readonly responseSettledListeners = new Set<
+    (dirtyRoomIds: ReadonlySet<string>) => void
+  >();
 
   private previousListCounts: Map<string, number> = new Map();
 
@@ -493,10 +506,19 @@ export class SlidingSyncManager {
         });
       }
 
+      ['receipts', 'account_data'].forEach((extensionName) => {
+        const extension = resp.extensions?.[extensionName] as
+          | RoomScopedExtensionResponse
+          | undefined;
+        Object.keys(extension?.rooms ?? {}).forEach((roomId) => this.dirtyRoomIds.add(roomId));
+      });
+
       globalThis.queueMicrotask(() => {
         if (this.disposed) return;
         this.responseProcessing = false;
-        this.responseSettledListeners.forEach((listener) => listener());
+        const dirtyRoomIds = new Set(this.dirtyRoomIds);
+        this.dirtyRoomIds.clear();
+        this.responseSettledListeners.forEach((listener) => listener(dirtyRoomIds));
       });
     };
 
@@ -515,6 +537,7 @@ export class SlidingSyncManager {
     };
 
     this.onCacheRoomData = (roomId, data) => {
+      this.dirtyRoomIds.add(roomId);
       this.sidebarCache.cacheRoom(roomId, data);
 
       if (!this.initialListHydrationCompleted || this.hydratingSidebarCache) return;
@@ -577,6 +600,7 @@ export class SlidingSyncManager {
     this.pendingRoomDataListeners.clear();
     this.responseProcessing = false;
     this.responseSettledListeners.clear();
+    this.dirtyRoomIds.clear();
     this.roomDataAwaitingSyncCompletion.clear();
     this.roomSubscriptionStatusListeners.forEach((listeners) =>
       listeners.forEach((listener) => listener(false))
@@ -982,7 +1006,9 @@ export class SlidingSyncManager {
     return this.responseProcessing;
   }
 
-  public subscribeToResponseSettled(listener: () => void): () => void {
+  public subscribeToResponseSettled(
+    listener: (dirtyRoomIds: ReadonlySet<string>) => void
+  ): () => void {
     this.responseSettledListeners.add(listener);
     return () => this.responseSettledListeners.delete(listener);
   }

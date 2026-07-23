@@ -11,7 +11,6 @@ import { getPresenceSyncManager } from '$client/initMatrix';
 import {
   MatrixEvent,
   MatrixEventEvent,
-  PushProcessor,
   RoomEvent,
   SetPresence,
   SyncState,
@@ -339,7 +338,7 @@ function MessageNotifications() {
   }, []);
 
   useEffect(() => {
-    const pushProcessor = new PushProcessor(mx);
+    const pushProcessor = mx.pushProcessor;
     // Track encrypted events that should skip focus check when decrypted (because we
     // already checked focus when the encrypted event arrived, and want to use that
     // original state rather than re-checking after decryption completes).

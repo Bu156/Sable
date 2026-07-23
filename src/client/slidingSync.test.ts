@@ -137,7 +137,7 @@ describe('SlidingSyncManager initial request', () => {
 
   it('settles response processing after post-response work can finish', async () => {
     const manager = makeManager(makeMockMx());
-    const settled = vi.fn<() => void>();
+    const settled = vi.fn<(dirtyRoomIds: ReadonlySet<string>) => void>();
     manager.subscribeToResponseSettled(settled);
     manager.attach();
 
@@ -151,6 +151,46 @@ describe('SlidingSyncManager initial request', () => {
     await Promise.resolve();
     expect(manager.isResponseProcessing()).toBe(false);
     expect(settled).toHaveBeenCalledOnce();
+  });
+
+  it('includes receipt-only and account-data-only rooms in the settled unread delta', async () => {
+    const manager = makeManager(makeMockMx());
+    const settled = vi.fn<(dirtyRoomIds: ReadonlySet<string>) => void>();
+    manager.subscribeToResponseSettled(settled);
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.RequestFinished, {});
+    fireLifecycle(SlidingSyncState.Complete, {
+      rooms: {},
+      extensions: {
+        receipts: {
+          rooms: {
+            '!receipt:example.com': {
+              type: 'm.receipt',
+              content: {},
+            },
+          },
+        },
+        account_data: {
+          rooms: {
+            '!account-data:example.com': [
+              {
+                type: EventType.FullyRead,
+                content: { event_id: '$event' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(settled).toHaveBeenCalledOnce();
+    expect([...settled.mock.calls[0]![0]]).toEqual([
+      '!receipt:example.com',
+      '!account-data:example.com',
+    ]);
   });
 
   it('does not fan out member requests for users referenced by startup sync', async () => {
