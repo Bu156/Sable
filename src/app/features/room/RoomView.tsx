@@ -138,7 +138,10 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const showCallView = !room.isCallRoom() && (callMembers.length > 0 || isJoinedInThisRoom);
 
   return (
-    <Page ref={roomViewRef}>
+    <Page
+      ref={roomViewRef}
+      style={{ position: 'relative', overflow: 'hidden', isolation: 'isolate', minWidth: 0 }}
+    >
       <SwipeableChatWrapper onOpenMembers={handleOpenMembers}>
         <Box grow="Yes" direction="Column">
           {showCallView && (

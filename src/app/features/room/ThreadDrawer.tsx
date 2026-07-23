@@ -818,11 +818,13 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
   }, [threadRootHeight]);
   return (
     <Box
+      ref={drawerRef}
       className={overlay ? css.ThreadDrawerOverlay : css.ThreadDrawer}
       direction="Column"
       shrink="No"
       style={{
-        position: 'relative',
+        position: overlay ? 'absolute' : 'relative',
+        isolation: 'isolate',
         width: overlay ? '100%' : toRem(curWidth),
       }}
     >
