@@ -1,9 +1,10 @@
-import { useAtomValue } from 'jotai';
+import { useMemo } from 'react';
+import { atom, useAtomValue } from 'jotai';
 import { matchPath, useLocation, useParams } from 'react-router-dom';
 import { getCanonicalAliasRoomId, isRoomAlias } from '$utils/matrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { resolveSection } from '$pages/pathUtils';
-import { lastVisitedRoomAtom } from '$state/room/lastRoom';
+import { lastVisitedRoomSectionAtom } from '$state/room/lastRoom';
 
 export const useSelectedRoom = (): string | undefined => {
   const mx = useMatrixClient();
@@ -18,14 +19,23 @@ export const useSelectedRoom = (): string | undefined => {
   return roomId;
 };
 
+const emptyLastRoomAtom = atom<string | undefined>(undefined);
+
 export const useSelectedOrLastRoom = (): string | undefined => {
   const selectedRoomId = useSelectedRoom();
   const location = useLocation();
-  const lastVisitedRoom = useAtomValue(lastVisitedRoomAtom);
-
-  if (selectedRoomId) return selectedRoomId;
 
   const section = resolveSection(location.pathname);
   const listMatch = section && matchPath({ path: section.listPath, end: true }, location.pathname);
-  return listMatch ? lastVisitedRoom[section.key] : undefined;
+
+  const sectionKey = section?.key;
+  const sectionAtom = useMemo(
+    () => (sectionKey ? lastVisitedRoomSectionAtom(sectionKey) : emptyLastRoomAtom),
+    [sectionKey]
+  );
+  const lastRoomId = useAtomValue(sectionAtom);
+
+  if (selectedRoomId) return selectedRoomId;
+
+  return listMatch ? lastRoomId : undefined;
 };

@@ -7,7 +7,7 @@ import {
   parseTauriSsoCallback,
   takeTauriSsoNonce,
 } from '$pages/auth/SSOTauri';
-import { getOauthContextServer } from '$pages/auth/login/oidcLoginUtil';
+import { getOauthContextServer, hasOauthContext } from '$pages/auth/login/oidcLoginUtil';
 import { getLoginPath, withSearchParam } from './pathUtils';
 
 const log = createLogger('TauriDeepLinkBridge');
@@ -27,6 +27,13 @@ export const mapDeepLinkToLoginPath = (rawUrl: string): string | undefined => {
 
   const oidcCallback = parseTauriOidcCallback(rawUrl);
   if (oidcCallback) {
+    // Tauri can return the deep link that originally opened the app again after a WebView
+    // reload. OAuth callback state is single-use, so ignore callbacks whose pending context
+    // has already been consumed instead of navigating to a misleading login error.
+    if (!hasOauthContext(oidcCallback.state)) {
+      log.warn('Rejected stale OIDC deep-link callback: no pending OAuth context');
+      return undefined;
+    }
     const loginPath = getLoginPath(getOauthContextServer(oidcCallback.state));
     return 'code' in oidcCallback
       ? withSearchParam(loginPath, {

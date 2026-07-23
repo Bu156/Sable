@@ -75,6 +75,9 @@ export const getOauthContextServer = (state: string): string | undefined => {
   }
 };
 
+export const hasOauthContext = (state: string): boolean =>
+  sessionStorage.getItem(oauthContextKey(state)) !== null;
+
 export const startOidcLogin = async (
   authMetadata: ValidatedAuthMetadata,
   homeserverUrl: string,

@@ -104,6 +104,7 @@ export function SwipeableOverlayWrapper({
           flexDirection: 'column',
           flexGrow: 1,
           height: '100%',
+          willChange: 'transform',
         }}
       >
         {children}

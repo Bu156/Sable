@@ -413,12 +413,8 @@ export function RoomNavItem({
         navigateRoom(room.roomId);
       }
     } else {
-      if (isMobile) {
-        navigate(linkPath);
-      } else {
-        // Keep heavy room mounts off the urgent path on desktop.
-        startTransition(() => navigate(linkPath));
-      }
+      // Render the room off the urgent path so the tap doesn't freeze the UI on mount.
+      startTransition(() => navigate(linkPath));
     }
   };
 
@@ -441,7 +437,7 @@ export function RoomNavItem({
     if (dx > 10 || dy > 10) return; // was a drag, not a tap
     if (room.isCallRoom()) return; // call rooms use onClick
     evt.preventDefault();
-    navigate(linkPath);
+    startTransition(() => navigate(linkPath));
   };
 
   const handleChatButtonClick = (evt: MouseEvent<HTMLButtonElement>) => {

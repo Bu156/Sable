@@ -16,9 +16,9 @@ interface MobileSwipeDownModalProps {
 }
 
 export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDownModalProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef<number | null>(null);
-  const [touchYDiff, setTouchYDiff] = useState(0);
-  const date = new Date();
+  const touchYDiff = useRef(0);
   const startTime = useRef(0);
   const [mounted, setMounted] = useState(false);
 
@@ -28,7 +28,7 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0]?.clientY ?? null;
-    startTime.current = date.getTime();
+    startTime.current = Date.now();
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -38,16 +38,27 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
 
     // Only allow pulling down
     if (diff > 0) {
-      setTouchYDiff(diff);
+      touchYDiff.current = diff;
+      if (containerRef.current) {
+        containerRef.current.style.transform = `translateY(${diff}px)`;
+        containerRef.current.style.transition = 'none';
+      }
     }
   };
 
   const handleTouchEnd = () => {
-    const endTime = date.getTime();
-    if (touchYDiff > 100 || (endTime - startTime.current < 600 && touchYDiff > 20)) {
+    const endTime = Date.now();
+    if (
+      touchYDiff.current > 100 ||
+      (endTime - startTime.current < 600 && touchYDiff.current > 20)
+    ) {
       requestClose();
     } else {
-      setTouchYDiff(0);
+      touchYDiff.current = 0;
+      if (containerRef.current) {
+        containerRef.current.style.transform = '';
+        containerRef.current.style.transition = 'transform 0.2s ease-out';
+      }
     }
     touchStartY.current = null;
   };
@@ -76,9 +87,10 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
       onTouchEnd={(e: React.TouchEvent) => e.stopPropagation()}
     >
       <Box
+        ref={containerRef}
         className={css.MessageMobileOptionsContainer}
         style={{
-          transform: touchYDiff > 0 ? `translateY(${touchYDiff}px)` : undefined,
+          transform: touchYDiff.current > 0 ? `translateY(${touchYDiff.current}px)` : undefined,
           transition: touchStartY.current === null ? 'transform 0.2s ease-out' : 'none',
         }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
