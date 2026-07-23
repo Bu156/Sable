@@ -379,6 +379,7 @@ pub fn run() {
             network::native_upload::abort_native_upload,
             network::media_protocol::set_media_session,
             network::media_protocol::clear_media_session,
+            network::media_protocol::set_media_encryption,
             share_inbox::share_inbox_drain,
             share_inbox::share_inbox_read,
             share_inbox::share_inbox_clear,

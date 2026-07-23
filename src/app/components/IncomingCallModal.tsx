@@ -16,6 +16,7 @@ import {
 import { useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomName } from '$hooks/useRoomMeta';
 import { useCallEmbed } from '$hooks/useCallEmbed';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -59,12 +60,13 @@ type IncomingCallInternalProps = {
 
 export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCallInternalProps) {
   const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
   const screenSize = useScreenSizeContext();
   const compact = screenSize === ScreenSize.Mobile;
   const roomName = useRoomName(room);
   const callEmbed = useCallEmbed();
   const { navigateRoom } = useRoomNavigate();
-  const roomAvatarUrl = getRoomAvatarUrl(mx, room, 96);
+  const roomAvatarUrl = getRoomAvatarUrl(mx, room, 96, useAuthentication);
   const setAutoJoinIntent = useSetAtom(autoJoinCallIntentAtom);
   const setMutedRoomId = useSetAtom(mutedCallRoomIdAtom);
   const setCallSoundBlocked = useSetAtom(callSoundBlockedAtom);
@@ -75,7 +77,8 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
     incomingCall.senderId;
   const callerAvatarMxc = room.getMember(incomingCall.senderId)?.getMxcAvatarUrl();
   const callerAvatarUrl = callerAvatarMxc
-    ? (mx.mxcUrlToHttp(callerAvatarMxc, 96, 96, 'crop') ?? undefined)
+    ? (mx.mxcUrlToHttp(callerAvatarMxc, 96, 96, 'crop', undefined, undefined, useAuthentication) ??
+      undefined)
     : undefined;
 
   const isRingNotification = incomingCall.notificationType === 'ring';
