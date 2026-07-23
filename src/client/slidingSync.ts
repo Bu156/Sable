@@ -235,6 +235,14 @@ export class SlidingSyncManager {
 
   private readonly activeRoomSubscriptions = new Set<string>();
 
+  /**
+   * Room IDs joined locally via reconcileRoomMembership(Join) but not yet
+   * confirmed as joined by the server's sliding-sync response. The SDK can
+   * revert these to "invite" when the server still sends invite_state after a
+   * join; we re-assert join after each sync until the server catches up.
+   */
+  private readonly optimisticallyJoinedRoomIds = new Set<string>();
+
   private readonly sidebarRoomSubscriptions = new Set<string>();
 
   private readonly spaceSubscriptions = new Set<string>();
@@ -405,6 +413,7 @@ export class SlidingSyncManager {
       if (err || !resp || state !== SlidingSyncState.Complete) return;
 
       this.recordServerMembershipRooms(resp);
+      this.reassertOptimisticJoins();
 
       this.roomDataAwaitingSyncCompletion.forEach((roomId) =>
         this.notifyRoomSubscriptionStatus(roomId, false)
@@ -575,6 +584,7 @@ export class SlidingSyncManager {
     });
 
     this.pendingRoomDataListeners.clear();
+    this.optimisticallyJoinedRoomIds.clear();
     this.responseProcessing = false;
     this.responseSettledListeners.clear();
     this.roomDataAwaitingSyncCompletion.clear();
@@ -987,13 +997,49 @@ export class SlidingSyncManager {
     return () => this.responseSettledListeners.delete(listener);
   }
 
+  /**
+   * Re-assert join for rooms the SDK reverted to "invite" because the server's
+   * sliding-sync proxy still sent invite_state after a successful join. Runs
+   * after the SDK has finished processing all room data for the cycle (Complete
+   * fires post-processing) and before the responseSettled microtask that drives
+   * unread computation, so the app sees the corrected membership.
+   */
+  private reassertOptimisticJoins(): void {
+    if (this.optimisticallyJoinedRoomIds.size === 0) return;
+    for (const roomId of [...this.optimisticallyJoinedRoomIds]) {
+      const room = this.mx.getRoom(roomId);
+      if (!room) {
+        this.optimisticallyJoinedRoomIds.delete(roomId);
+        continue;
+      }
+      if (room.getMyMembership() === (KnownMembership.Join as string)) {
+        // Server has caught up: the room is genuinely joined now. Stop tracking.
+        this.optimisticallyJoinedRoomIds.delete(roomId);
+      } else {
+        // SDK reverted to invite (or another state). Re-assert join.
+        room.updateMyMembership(KnownMembership.Join);
+      }
+    }
+  }
+
   public reconcileRoomMembership(
     roomId: string,
     membership: KnownMembership.Join | KnownMembership.Leave
   ): void {
     this.mx.getRoom(roomId)?.updateMyMembership(membership);
 
+    if (membership === KnownMembership.Join) {
+      // Track the room so we can re-assert join if the SDK reverts it while the
+      // server's sliding-sync proxy still reports the room in the invite list.
+      this.optimisticallyJoinedRoomIds.add(roomId);
+      // Subscribe so the next sync pulls real joined member state into the
+      // room's current state, letting recalculate() see "join" not "invite".
+      this.subscribeToRoom(roomId);
+      return;
+    }
+
     if (membership === KnownMembership.Leave) {
+      this.optimisticallyJoinedRoomIds.delete(roomId);
       this.sidebarCache.removeRoom(roomId);
       const removedSpaceSubscription = this.spaceSubscriptions.delete(roomId);
       const removedSidebarSubscription = this.sidebarRoomSubscriptions.delete(roomId);
