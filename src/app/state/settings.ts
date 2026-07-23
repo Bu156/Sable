@@ -42,6 +42,11 @@ export type PerRoomShowRoomIcon = {
 };
 
 export type JumboEmojiSize = 'none' | 'extraSmall' | 'small' | 'normal' | 'large' | 'extraLarge';
+
+/** Reorderable inline trigger buttons in the message composer. */
+export type EditorButtonId = 'gif' | 'sticker' | 'emoji';
+export const EDITOR_BUTTON_ORDER_DEFAULT: EditorButtonId[] = ['gif', 'sticker', 'emoji'];
+const EDITOR_BUTTON_ORDER_VALUES = new Set<EditorButtonId>(EDITOR_BUTTON_ORDER_DEFAULT);
 export const CALL_TONE_IDS = [
   'sable-default',
   'classic-soft',
@@ -116,6 +121,11 @@ export interface Settings {
   enterForNewline: boolean;
   editorToolbar: boolean;
   editorOldAddFile: boolean;
+  editorMicButton: boolean;
+  editorEmojiButton: boolean;
+  editorGifButton: boolean;
+  editorStickerButton: boolean;
+  editorButtonOrder: EditorButtonId[];
   composerToolbarOpen: boolean;
   messageLayout: MessageLayout;
   messageSpacing: MessageSpacing;
@@ -289,6 +299,11 @@ export const defaultSettings: Settings = {
   enterForNewline: mobileOrTablet(),
   editorToolbar: false,
   editorOldAddFile: false,
+  editorMicButton: true,
+  editorEmojiButton: true,
+  editorGifButton: false,
+  editorStickerButton: false,
+  editorButtonOrder: [...EDITOR_BUTTON_ORDER_DEFAULT],
   composerToolbarOpen: false,
   messageLayout: 0,
   messageSpacing: '400',
@@ -449,6 +464,7 @@ function cloneDefaultSettings(): Settings {
     })),
     themeRemoteTweakFavorites: defaultSettings.themeRemoteTweakFavorites.map((x) => ({ ...x })),
     themeRemoteEnabledTweakFullUrls: [...defaultSettings.themeRemoteEnabledTweakFullUrls],
+    editorButtonOrder: [...defaultSettings.editorButtonOrder],
   };
 }
 
@@ -565,6 +581,26 @@ function sanitizeIconSizePx(val: unknown): number | undefined {
 function sanitizeStringArray(val: unknown): string[] | undefined {
   if (!Array.isArray(val)) return undefined;
   const out = val.filter((x): x is string => typeof x === 'string');
+  return out;
+}
+
+function sanitizeEditorButtonOrder(val: unknown): EditorButtonId[] | undefined {
+  if (!Array.isArray(val)) return undefined;
+  const out: EditorButtonId[] = [];
+  const seen = new Set<EditorButtonId>();
+  for (const x of val) {
+    if (typeof x === 'string' && EDITOR_BUTTON_ORDER_VALUES.has(x as EditorButtonId)) {
+      const id = x as EditorButtonId;
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  }
+  // Append any missing buttons in default order so the array is always complete.
+  for (const id of EDITOR_BUTTON_ORDER_DEFAULT) {
+    if (!seen.has(id)) out.push(id);
+  }
   return out;
 }
 
@@ -688,6 +724,8 @@ function sanitizeSettingsKey(key: keyof Settings, val: unknown): unknown {
       return sanitizeThemeRemoteTweakFavorites(val);
     case 'themeRemoteEnabledTweakFullUrls':
       return sanitizeStringArray(val);
+    case 'editorButtonOrder':
+      return sanitizeEditorButtonOrder(val);
     default: {
       if (!(key in defaultSettings)) return undefined;
       const sample = defaultSettings[key];

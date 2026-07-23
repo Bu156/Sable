@@ -1,5 +1,6 @@
 import type { KeyboardEventHandler, MouseEvent, RefObject } from 'react';
-import { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { forwardRef, Fragment, useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import type { ReactElement } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 
 import { isKeyHotkey } from 'is-hotkey';
@@ -145,6 +146,7 @@ import {
   composerIcon,
   dropzoneIcon,
   File as FileIcon,
+  Gif,
   Image as ImageIcon,
   ListBullets,
   MapPinPlusIcon,
@@ -154,6 +156,7 @@ import {
   getPhosphorIconSize,
   PlusCircle,
   Smiley,
+  Sticker,
   Stop,
   X,
 } from '$components/icons/phosphor';
@@ -297,6 +300,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
+    const [editorGifButton] = useSetting(settingsAtom, 'editorGifButton');
+    const [editorEmojiButton] = useSetting(settingsAtom, 'editorEmojiButton');
+    const [editorStickerButton] = useSetting(settingsAtom, 'editorStickerButton');
+    const [editorMicButton] = useSetting(settingsAtom, 'editorMicButton');
+    const [editorButtonOrder] = useSetting(settingsAtom, 'editorButtonOrder');
     const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
 
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -1878,22 +1886,69 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     />
                   );
                   const triggers = (
-                    <IconButton
-                      ref={emojiBtnRef}
-                      aria-pressed={emojiBoardTab !== undefined}
-                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
-                      onPointerDown={suppressEditorRefocus}
-                      variant="SurfaceVariant"
-                      size="300"
-                      radii="300"
-                      style={{ backgroundColor: 'transparent' }}
-                      title="open emoji board"
-                      aria-label="Open emoji board"
-                    >
-                      {composerIcon(Smiley, {
-                        weight: emojiBoardTab !== undefined ? 'fill' : 'regular',
+                    <>
+                      {editorButtonOrder.map((id) => {
+                        let button: ReactElement | null = null;
+                        if (id === 'gif' && editorGifButton) {
+                          button = (
+                            <IconButton
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open gif picker"
+                              aria-label="Open gif picker"
+                            >
+                              {composerIcon(Gif, {
+                                weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        } else if (id === 'sticker' && editorStickerButton) {
+                          button = (
+                            <IconButton
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
+                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open sticker picker"
+                              aria-label="Open sticker picker"
+                            >
+                              {composerIcon(Sticker, {
+                                weight:
+                                  emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        } else if (id === 'emoji' && editorEmojiButton) {
+                          button = (
+                            <IconButton
+                              ref={emojiBtnRef}
+                              aria-pressed={emojiBoardTab !== undefined}
+                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open emoji board"
+                              aria-label="Open emoji board"
+                            >
+                              {composerIcon(Smiley, {
+                                weight: emojiBoardTab !== undefined ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        }
+                        return <Fragment key={id}>{button}</Fragment>;
                       })}
-                    </IconButton>
+                    </>
                   );
                   if (mobileOrTablet()) {
                     return (
@@ -1943,23 +1998,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   showAudioRecorder ? 'Critical' : scheduledTime ? 'Primary' : 'SurfaceVariant'
                 }
                 size="300"
-                radii={hasContent || showAudioRecorder ? '0' : '300'}
+                radii={hasContent || showAudioRecorder || !editorMicButton ? '0' : '300'}
                 title={
                   showAudioRecorder
                     ? 'Stop recording'
-                    : hasContent
+                    : hasContent || !editorMicButton
                       ? 'Send Message'
                       : 'Record audio message'
                 }
                 aria-label={
                   showAudioRecorder
                     ? 'Stop recording'
-                    : hasContent
+                    : hasContent || !editorMicButton
                       ? 'Send your composed Message'
                       : 'Record audio message'
                 }
                 style={{ backgroundColor: 'transparent' }}
-                aria-pressed={!hasContent ? showAudioRecorder : undefined}
+                aria-pressed={!hasContent && editorMicButton ? showAudioRecorder : undefined}
                 onClick={() => {
                   if (showAudioRecorder) {
                     audioRecorderRef.current?.stop();
@@ -1973,6 +2028,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     submit();
                     return;
                   }
+                  if (!editorMicButton) return;
                   if (mobileOrTablet()) return;
                   setShowAudioRecorder(true);
                 }}
@@ -1991,6 +2047,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     }
                     return;
                   }
+                  if (!editorMicButton) return;
                   if (!mobileOrTablet()) return;
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
@@ -2042,7 +2099,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     weight="fill"
                     style={{ color: color.Critical.Main }}
                   />
-                ) : hasContent ? (
+                ) : hasContent || !editorMicButton ? (
                   sendBusy ? (
                     <Spinner size="300" variant="Secondary" />
                   ) : scheduledTime ? (
