@@ -64,6 +64,7 @@ import { NotificationBanner } from '$components/notification-banner';
 import { ThemeMigrationBanner } from '$components/theme/ThemeMigrationBanner';
 import { TelemetryConsentBanner } from '$components/telemetry-consent';
 import { useIncomingCallSignaling } from '$hooks/useCallSignaling';
+import { MatrixRTCSessionProvider } from '$hooks/useMatrixRTCSession';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { useSettingsSyncEffect } from '$hooks/useSettingsSync';
 import { resolveIncomingCallFromNotificationData } from '$features/call/callNotificationBridge';
@@ -1003,7 +1004,7 @@ function NativeNotificationClickRouting() {
 export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
   useIncomingCallSignaling();
   return (
-    <>
+    <MatrixRTCSessionProvider>
       <SettingsSyncFeature />
       <SystemEmojiFeature />
       <PageZoomFeature />
@@ -1031,6 +1032,6 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <HealthMonitor />
       <ShareTargetFeature />
       <IconSizesProvider>{children}</IconSizesProvider>
-    </>
+    </MatrixRTCSessionProvider>
   );
 }
