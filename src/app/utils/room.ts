@@ -383,6 +383,11 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
 
   let total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
+  let hasTimelineUnread: boolean | undefined;
+  const roomHasTimelineUnread = () => {
+    hasTimelineUnread ??= roomHaveUnread(room.client, room);
+    return hasTimelineUnread;
+  };
 
   // Check if this is a DM and what notification type it has (using multiple signals for robustness)
   const isDM = isDMRoom(room, options?.mDirects);
@@ -396,7 +401,7 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
   // Only apply to the room (non-thread) portion so thread reply counts are preserved.
   // Guard: only clamp when the room has NO receipt-confirmed unread events; if roomHaveUnread
   // is true then there genuinely are unread messages and the SDK count is not fully stale.
-  if (userId && total > 0 && highlight === 0 && !roomHaveUnread(room.client, room)) {
+  if (userId && total > 0 && highlight === 0 && !roomHasTimelineUnread()) {
     const roomTotal = room.getRoomUnreadNotificationCount(NotificationCountType.Total);
     if (roomTotal > 0) {
       const liveEvents = room.getLiveTimeline().getEvents();
@@ -421,7 +426,7 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
   // Fallback: SDK counters are stale/zero but there are receipt-confirmed unread
   // messages. Walk the live timeline to compute real counts so the badge number
   // and highlight colour reflect actual state rather than a hard-coded stub.
-  if (total === 0 && highlight === 0 && userId && roomHaveUnread(room.client, room)) {
+  if (total === 0 && highlight === 0 && userId && roomHasTimelineUnread()) {
     const readUpToId = room.getEventReadUpTo(userId);
     const liveEvents = room.getLiveTimeline().getEvents();
     let fallbackTotal = 0;

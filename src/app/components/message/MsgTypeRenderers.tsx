@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useMemo } from 'react';
+import { lazy, Suspense, type CSSProperties, type ReactNode, useMemo } from 'react';
 import { ArrowSquareOut, sizedIcon, Link } from '$components/icons/phosphor';
 import { Box, Chip, Text, toRem } from 'folds';
 import { type IContent, type IPreviewUrlResponse, type MatrixClient } from '$types/matrix-sdk';
@@ -38,13 +38,12 @@ import { LINKINPUTREGEX } from '$components/editor';
 import { MATRIX_TO_BASE } from '$plugins/matrix-to';
 import { copyToClipboard } from '$utils/dom';
 import { getAttachmentFilename } from '$utils/download';
-import { MapContainer, Marker, TileLayer } from 'react-leaflet';
-import type { LatLngExpression } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
 import * as css from './MsgTypeRenderers.css';
-import { markerIcon } from '$features/room/location-modal/LocationDialog';
 import { isNumber } from 'matrix-js-sdk/lib/utils';
+
+const LocationMap = lazy(() =>
+  import('./LocationMap').then((module) => ({ default: module.LocationMap }))
+);
 
 export interface BundleContent extends IPreviewUrlResponse {
   matched_url: string;
@@ -707,7 +706,7 @@ export function MLocation({ content, showMaps }: MLocationProps) {
   const location = parseGeoUri(geoUri);
   if (!location) return <BrokenContent />;
   const isValid = isNumber(Number(location.latitude)) && isNumber(Number(location.longitude));
-  const coords: LatLngExpression = [Number(location.latitude), Number(location.longitude)];
+  const coordinates: [number, number] = [Number(location.latitude), Number(location.longitude)];
 
   return (
     <Box
@@ -752,28 +751,9 @@ export function MLocation({ content, showMaps }: MLocationProps) {
         </Chip>
       </Box>
       {showMaps && isValid && (
-        <MapContainer
-          center={coords}
-          zoom={16}
-          scrollWheelZoom={true}
-          className={css.LocationMapContainer}
-          attributionControl
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <Marker
-            position={coords}
-            eventHandlers={{
-              mousedown: (e) => {
-                e.originalEvent.preventDefault();
-                e.originalEvent.stopPropagation();
-              },
-            }}
-            icon={markerIcon}
-          />
-        </MapContainer>
+        <Suspense fallback={null}>
+          <LocationMap coordinates={coordinates} className={css.LocationMapContainer} />
+        </Suspense>
       )}
     </Box>
   );
