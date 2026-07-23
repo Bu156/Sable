@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import type { ValidatedAuthMetadata } from '$types/matrix-sdk';
 import type { Session } from '$state/sessions';
 import { getSessionAuthMetadata } from './useAuthMetadata';
