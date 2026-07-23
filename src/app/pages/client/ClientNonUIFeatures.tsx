@@ -140,16 +140,16 @@ function getUnreadTotals(roomToUnread: RoomToUnread) {
   return { total, highlightTotal, notification, highlight };
 }
 
-// Updates document.title with an unread count.
+// Updates document.title with the mention (highlight) count. Total unread
+// is too noisy for a tab title; the OS app badge already uses the same
+// highlightTotal value for consistency.
 function PageTitleUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
-  const [faviconForMentionsOnly] = useSetting(settingsAtom, 'faviconForMentionsOnly');
 
   useEffect(() => {
-    const { total, highlightTotal } = getUnreadTotals(roomToUnread);
-    const count = faviconForMentionsOnly ? highlightTotal : total;
-    document.title = count > 0 ? `(${count}) Sable Client` : 'Sable Client';
-  }, [roomToUnread, faviconForMentionsOnly]);
+    const { highlightTotal } = getUnreadTotals(roomToUnread);
+    document.title = highlightTotal > 0 ? `(${highlightTotal}) Sable Client` : 'Sable Client';
+  }, [roomToUnread]);
 
   return null;
 }
