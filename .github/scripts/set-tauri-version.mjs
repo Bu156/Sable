@@ -24,9 +24,13 @@ if (updaterEndpoint && !updaterEndpoint.startsWith('https://')) {
 const file = 'src-tauri/tauri.conf.json';
 const config = JSON.parse(readFileSync(file, 'utf8'));
 
-// Sanitize hyphens in prerelease portion for Apple iOS bundle-version compatibility (requires numbers separated by '.')
+// Sanitize hyphens and leading zeroes in prerelease portion for SemVer 2.0.0 and iOS compatibility
 const sanitizedVersion = version.replace(/^(\d+\.\d+\.\d+-nightly)\.(.+)$/, (_, prefix, build) => {
-  return `${prefix}.${build.replace(/-/g, '.')}`;
+  const sanitizedBuild = build
+    .split(/[-.]/)
+    .map((part) => (/^\d+$/.test(part) ? String(Number(part)) : part))
+    .join('.');
+  return `${prefix}.${sanitizedBuild}`;
 });
 
 config.version = sanitizedVersion;
