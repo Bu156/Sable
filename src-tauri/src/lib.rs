@@ -118,6 +118,21 @@ fn setup_cef_resize_workaround(
     Ok(())
 }
 
+/// Routes in-app notification sounds to the native volume stream on mobile.
+/// `kind` is "notification" or "invite".
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn play_notification_sound(kind: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        mobile::play_notification_sound(kind)
+    }
+    #[cfg(target_os = "ios")]
+    {
+        ios::play_notification_sound(kind)
+    }
+}
+
 pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
     if let Some(_window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         #[cfg(desktop)]
@@ -403,6 +418,8 @@ pub fn run() {
             mobile::set_navigation_bar_color,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            play_notification_sound,
             #[cfg(desktop)]
             desktop::download::save_download,
             #[cfg(desktop)]
