@@ -9,7 +9,6 @@ import {
   IconButton,
   Text,
   Menu,
-  MenuItem,
   config,
   PopOut,
   toRem,
@@ -62,6 +61,7 @@ import {
 } from '$components/icons/phosphor';
 import { Copy as CopyIcon } from '@phosphor-icons/react';
 import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
+import { MobileMenuItem } from '$components/MobileMenuItem';
 import { type DragOptsProps } from '$components/message/modals/Options';
 import * as messageCss from '$features/room/message/styles.css';
 import {
@@ -125,6 +125,7 @@ type RoomNavItemMenuProps = {
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
   ({ room, requestClose, notificationMode, dragOpts }, ref) => {
     const mx = useMatrixClient();
+    const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
     const [hideReads] = useSetting(settingsAtom, 'hideReads');
     const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
     const powerLevels = usePowerLevels(room);
@@ -184,7 +185,8 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
           />
         )}
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-          <MenuItem
+          <MobileMenuItem
+            isMobile={isMobile}
             onClick={handleMarkAsRead}
             size="300"
             after={menuIcon(Checks)}
@@ -194,10 +196,11 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Mark as Read
             </Text>
-          </MenuItem>
+          </MobileMenuItem>
           <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
             {(handleOpen, opened, changing) => (
-              <MenuItem
+              <MobileMenuItem
+                isMobile={isMobile}
                 size="300"
                 after={
                   changing ? (
@@ -213,13 +216,14 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
                   Notifications
                 </Text>
-              </MenuItem>
+              </MobileMenuItem>
             )}
           </RoomNotificationModeSwitcher>
         </Box>
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-          <MenuItem
+          <MobileMenuItem
+            isMobile={isMobile}
             onClick={handleInvite}
             variant="Primary"
             fill="None"
@@ -232,29 +236,48 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Invite
             </Text>
-          </MenuItem>
-          <MenuItem onClick={handleCopyLink} size="300" after={menuIcon(Link)} radii="300">
+          </MobileMenuItem>
+          <MobileMenuItem
+            isMobile={isMobile}
+            onClick={handleCopyLink}
+            size="300"
+            after={menuIcon(Link)}
+            radii="300"
+          >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Copy Link
             </Text>
-          </MenuItem>
-          <MenuItem onClick={handleCopyName} size="300" after={menuIcon(CopyIcon)} radii="300">
+          </MobileMenuItem>
+          <MobileMenuItem
+            isMobile={isMobile}
+            onClick={handleCopyName}
+            size="300"
+            after={menuIcon(CopyIcon)}
+            radii="300"
+          >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Copy Room Name
             </Text>
-          </MenuItem>
-          <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">
+          </MobileMenuItem>
+          <MobileMenuItem
+            isMobile={isMobile}
+            onClick={handleRoomSettings}
+            size="300"
+            after={menuIcon(GearSix)}
+            radii="300"
+          >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Room Settings
             </Text>
-          </MenuItem>
+          </MobileMenuItem>
         </Box>
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
           <UseStateProvider initial={false}>
             {(promptLeave, setPromptLeave) => (
               <>
-                <MenuItem
+                <MobileMenuItem
+                  isMobile={isMobile}
                   onClick={() => setPromptLeave(true)}
                   variant="Critical"
                   fill="None"
@@ -266,7 +289,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                   <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
                     Leave Room
                   </Text>
-                </MenuItem>
+                </MobileMenuItem>
                 {promptLeave && (
                   <LeaveRoomPrompt
                     roomId={room.roomId}

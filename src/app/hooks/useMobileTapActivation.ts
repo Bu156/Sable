@@ -1,4 +1,4 @@
-import type { PointerEventHandler } from 'react';
+import type { PointerEventHandler, PointerEvent as ReactPointerEvent } from 'react';
 import { useRef } from 'react';
 
 const TAP_MOVEMENT_THRESHOLD = 10;
@@ -10,7 +10,7 @@ const MAX_TAP_DURATION = 500;
 // or defer it. That reintroduces the double-tap.
 export function useMobileTapActivation<T extends HTMLElement>(
   enabled: boolean,
-  onActivate: () => void
+  onActivate: (evt: ReactPointerEvent<T>) => void
 ): {
   onPointerDown: PointerEventHandler<T>;
   onPointerMove: PointerEventHandler<T>;
@@ -70,7 +70,7 @@ export function useMobileTapActivation<T extends HTMLElement>(
     }
 
     evt.preventDefault();
-    onActivateRef.current();
+    onActivateRef.current(evt);
   };
   const onPointerCancel: PointerEventHandler<T> = (evt) => {
     if (evt.pointerId !== pointerDownRef.current?.pointerId) return;
