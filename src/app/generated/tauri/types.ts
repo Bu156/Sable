@@ -103,16 +103,6 @@ export interface SaveDownloadParams {
   [key: string]: unknown;
 }
 
-export interface SetMediaEncryptionParams {
-  url: string;
-  key: string;
-  iv: string;
-  sha256: string;
-  version: string;
-  mimeType: string;
-  [key: string]: unknown;
-}
-
 export interface SetMediaSessionParams {
   baseUrl: string;
   token: string;
