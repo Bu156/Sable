@@ -179,7 +179,10 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.decorations(!desktop_settings.use_custom_title_bar);
 
+    #[cfg(desktop)]
     let webview_window = builder.build()?;
+    #[cfg(not(desktop))]
+    builder.build()?;
 
     #[cfg(all(feature = "cef", target_os = "linux"))]
     setup_cef_resize_workaround(&webview_window)?;
