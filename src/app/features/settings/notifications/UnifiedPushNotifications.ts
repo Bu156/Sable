@@ -312,6 +312,7 @@ type NotificationSettings = {
 
 const NOTIF_GROUP_KEY = 'matrix_messages';
 const MAX_MESSAGES = 10;
+const MAX_SEEN_EVENT_IDS = 200;
 
 type NotifPerson = {
   name: string;
@@ -389,11 +390,11 @@ const roomNotifId = (userId: string, roomId: string) => hashCode(`${userId}\u000
 const summaryNotifId = (userId: string) => hashCode(`sable-group-summary\u0000${userId}`);
 
 type RoomNotifCache = {
+  key: string;
   roomName: string;
   messages: NotifMessage[];
   seenEventIds: Set<string>;
   isGroupConversation: boolean;
-  latestEventId?: string;
 };
 
 const roomNotifCaches = new Map<string, RoomNotifCache>();
@@ -410,7 +411,7 @@ function getOrCreateRoomCache(userId: string, roomId: string, roomName: string):
   const key = `${userId}\u0000${roomId}`;
   let cache = roomNotifCaches.get(key);
   if (!cache) {
-    cache = { roomName, messages: [], seenEventIds: new Set(), isGroupConversation: false };
+    cache = { key, roomName, messages: [], seenEventIds: new Set(), isGroupConversation: false };
     roomNotifCaches.set(key, cache);
   }
   cache.roomName = roomName;
@@ -605,7 +606,6 @@ async function handleRichPushPayload(
       if (cache.messages.length > MAX_MESSAGES) {
         cache.messages = cache.messages.slice(-MAX_MESSAGES);
       }
-      cache.latestEventId = eventId;
 
       const room = settings.mx.getRoom(roomId);
       if (room) {
@@ -723,13 +723,18 @@ async function handleMinimalPushPayload(
   const cache = getOrCreateRoomCache(userId, roomId, roomName);
 
   if (eventId && cache.seenEventIds.has(eventId)) return;
-  if (eventId) cache.seenEventIds.add(eventId);
+  if (eventId) {
+    cache.seenEventIds.add(eventId);
+    if (cache.seenEventIds.size > MAX_SEEN_EVENT_IDS) {
+      const oldest = cache.seenEventIds.values().next().value;
+      if (oldest !== undefined) cache.seenEventIds.delete(oldest);
+    }
+  }
 
   cache.messages.push(message);
   if (cache.messages.length > MAX_MESSAGES) {
     cache.messages = cache.messages.slice(-MAX_MESSAGES);
   }
-  cache.latestEventId = eventId;
 
   if (room) {
     cache.isGroupConversation = (room.getJoinedMemberCount() ?? 0) > 2;
@@ -748,12 +753,17 @@ async function handleMinimalPushPayload(
     (!isEncryptedRoom || settings.showEncryptedMessageContent)
   ) {
     resolvePreviewEvent(settings.mx, roomId, eventId)
-      .then((fetched) => {
-        if (!fetched || cache.latestEventId !== eventId) return;
+      .then(async (fetched) => {
+        // Skip if the notification was dismissed/replaced or the message evicted while fetching.
+        if (!fetched || roomNotifCaches.get(cache.key) !== cache) return;
+        if (!cache.messages.includes(message)) return;
+
+        // Trust the fetched event's own encryption, not the (possibly-absent) room.
+        const eventEncrypted = isEncryptedRoom || fetched.isEncrypted();
         const enrichedPreview = resolveNotificationPreviewText({
           content: fetched.getContent(),
           eventType: fetched.getType(),
-          isEncryptedRoom,
+          isEncryptedRoom: eventEncrypted,
           showMessageContent: settings.showMessageContent,
           showEncryptedMessageContent: settings.showEncryptedMessageContent,
         });
@@ -777,7 +787,7 @@ async function handleMinimalPushPayload(
             }
           : sender;
 
-        void postRoomNotification(userId, roomId, cache, true, {
+        await postRoomNotification(userId, roomId, cache, true, {
           room_id: roomId,
           event_id: eventId,
           user_id: pushData?.user_id,
