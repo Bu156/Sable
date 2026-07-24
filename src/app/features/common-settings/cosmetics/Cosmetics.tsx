@@ -58,9 +58,12 @@ import { CustomStateEvent } from '$types/matrix/room';
 
 const log = createLogger('Cosmetics');
 
+// Members load lazily under sliding sync, so `room.getMember` can be null here.
+const fallbackDisplayName = (userId: string): string => getMxIdLocalPart(userId) ?? userId;
+
 type CosmeticsSettingProps = {
   profile: UserProfile;
-  member: RoomMember;
+  member: RoomMember | null;
   userId: string;
   room: Room;
 };
@@ -75,7 +78,7 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
   const globalAvatarMxc = mx.getUser(userId)?.avatarUrl ?? profile.avatarUrl;
   const roomAvatarMxc = memberStateEvent
     ? memberStateContent?.avatar_url
-    : member.getMxcAvatarUrl();
+    : member?.getMxcAvatarUrl();
   const avatarMxc = roomAvatarMxc ?? globalAvatarMxc;
   const hasRoomAvatarOverride =
     memberStateEvent !== undefined &&
@@ -123,7 +126,9 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
             userId={userId}
             src={avatarUrl}
             renderFallback={() => (
-              <Text size="H4">{nameInitials(room.getMember(userId)!.rawDisplayName)}</Text>
+              <Text size="H4">
+                {nameInitials(member?.rawDisplayName ?? fallbackDisplayName(userId))}
+              </Text>
             )}
           />
         </Avatar>
@@ -233,7 +238,7 @@ export function CosmeticsAvatar({ profile, member, userId, room }: CosmeticsSett
 export function CosmeticsNickname({ profile, member, userId, room }: CosmeticsSettingProps) {
   const mx = useMatrixClient();
 
-  const defaultDisplayName = member.rawDisplayName;
+  const defaultDisplayName = member?.rawDisplayName ?? fallbackDisplayName(userId);
   const [displayName, setDisplayName] = useState<string>(defaultDisplayName);
   const hasChanges = displayName !== defaultDisplayName;
 
@@ -377,7 +382,7 @@ export function Cosmetics({ requestBack, requestClose }: CosmeticsProps) {
   const room = useRoom();
   const roomProfile = useUserProfile(userId, room);
   const creators = useRoomCreators(room);
-  const member = room.getMember(userId)!;
+  const member = room.getMember(userId);
   const powerLevels = usePowerLevels(room);
   const isSpace = room.isSpaceRoom();
 
