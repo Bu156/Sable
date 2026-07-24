@@ -2,6 +2,7 @@ import type { KeyboardEventHandler, MouseEventHandler } from 'react';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { isTauri } from '@tauri-apps/api/core';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import type { Room } from '$types/matrix-sdk';
@@ -173,8 +174,15 @@ export function ServerChip({
                   size="300"
                   radii="300"
                   onClick={() => {
-                    window.open(`https://${server}`, '_blank');
+                    const url = `https://${server}`;
                     close();
+                    if (isTauri()) {
+                      import('@tauri-apps/plugin-opener')
+                        .then(({ openUrl }) => openUrl(url))
+                        .catch(() => window.open(url, '_blank'));
+                      return;
+                    }
+                    window.open(url, '_blank');
                   }}
                   className={css.UserHeroMenuItem}
                   style={heroMenuItemStyle(
