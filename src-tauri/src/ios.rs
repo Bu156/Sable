@@ -115,10 +115,7 @@ fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
         let path_str = NSString::from_str(&path.to_string_lossy());
         let url = NSURL::fileURLWithPath(&path_str);
         let mut sound_id: u32 = 0;
-        let status = AudioServicesCreateSystemSoundID(
-            &*url as *mut _ as *mut objc2::runtime::AnyObject,
-            &mut sound_id,
-        );
+        let status = AudioServicesCreateSystemSoundID(Retained::as_ptr(&url).cast(), &mut sound_id);
         if status != 0 || sound_id == 0 {
             return None;
         }
