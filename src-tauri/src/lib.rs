@@ -141,6 +141,30 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
             .use_https_scheme(true)
             .background_color(tauri::window::Color(0x1A, 0x1C, 0x28, 0xFF));
 
+    // Only android: intercept navigation to external URLs and open them in the system browser
+    // Other platforms: might need other URI schemes, and on_navigation might get called on iframe urls
+    // (as of now, the following is confirmed not to work with linux/webkit2gtk)
+    #[cfg(target_os = "android")]
+    let builder = {
+        let nav_handle = app.clone();
+        builder.on_navigation(move |url| {
+            let internal = url.scheme() == "tauri"
+                || url.host_str() == Some("tauri.localhost")
+                || (cfg!(dev) && url.host_str() == Some("localhost"));
+            if !internal {
+                // open in new thread
+                // open_url blocks on the ui thread but we are on the ui thread...
+                let handle = nav_handle.clone();
+                let url = url.to_string();
+                std::thread::spawn(move || {
+                    use tauri_plugin_opener::OpenerExt;
+                    let _ = handle.opener().open_url(url, None::<&str>);
+                });
+            }
+            internal
+        })
+    };
+
     #[cfg(desktop)]
     let title = main_window_title(app);
 
