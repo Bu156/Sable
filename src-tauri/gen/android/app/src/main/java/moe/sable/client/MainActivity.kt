@@ -196,7 +196,10 @@ class MainActivity : TauriActivity() {
             mp.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
           }
           mp.setOnCompletionListener { it.release() }
-          mp.setOnErrorListener { err -> err.release(); true }
+          mp.setOnErrorListener { player, _, _ ->
+            player.release()
+            true
+          }
           mp.prepare()
           mp.start()
         } catch (e: Exception) {
