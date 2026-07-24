@@ -366,12 +366,15 @@ jobs:
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # 2c7215f132e9ebf062739d9130488b56d53c060c
         with:
           toolchain: stable
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: src-tauri
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
       - name: Resolve NDK
         shell: bash
@@ -401,7 +404,7 @@ jobs:
           if [ "$IS_NIGHTLY" = "true" ]; then
             ARGS+=(--config src-tauri/tauri.nightly.conf.json)
           fi
-          pnpm tauri android build --apk --aab "${ARGS[@]}"
+          pnpm tauri android build --apk --aab --target aarch64 armv7 "${ARGS[@]}"
           OUT='src-tauri/gen/android/app/build/outputs'
           APK=$(find "$OUT/apk/universal/release" -name '*.apk' -type f | head -1)
           AAB=$(find "$OUT/bundle/universalRelease" -name '*.aab' -type f | head -1)
