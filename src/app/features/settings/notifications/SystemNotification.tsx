@@ -93,33 +93,28 @@ export function deriveLegacyPushSync(input: {
   return deriveLegacyPushFlags(input.enabled, input.provider);
 }
 
-export function shouldRefreshBackgroundPushTransport(
-  previousKind: BackgroundPushKind | null,
-  nextKind: BackgroundPushKind | null
-): boolean {
-  return previousKind !== nextKind;
-}
-
 export async function switchBackgroundPushTransport(params: {
   previousKind: BackgroundPushKind | null;
   activate: () => Promise<BackgroundPushKind | null>;
   deactivate: (kind: BackgroundPushKind | null) => Promise<void>;
+  reactivate?: (kind: BackgroundPushKind) => Promise<void>;
 }): Promise<BackgroundPushKind | null> {
-  const { previousKind, activate, deactivate } = params;
-  const nextKind = await activate();
+  const { previousKind, activate, deactivate, reactivate } = params;
 
-  if (!shouldRefreshBackgroundPushTransport(previousKind, nextKind)) {
-    return nextKind;
+  if (previousKind) {
+    await deactivate(previousKind);
   }
 
   try {
-    await deactivate(previousKind);
+    return await activate();
   } catch (error) {
-    await deactivate(nextKind).catch(() => undefined);
+    // The old transport is already torn down, so restore it rather than
+    // leaving the user with no push delivery.
+    if (previousKind && reactivate) {
+      await reactivate(previousKind);
+    }
     throw error;
   }
-
-  return nextKind;
 }
 
 function getNativePushConfigError(clientConfig: ReturnType<typeof useClientConfig>): string | null {
@@ -699,17 +694,11 @@ function BackgroundPushNotificationSetting() {
     await disableNativePush(mx, clientConfig);
   };
 
-  const activateAndroidAutoTransport = async (
-    currentKind: BackgroundPushKind | null
-  ): Promise<BackgroundPushKind> => {
+  const activateAndroidAutoTransport = async (): Promise<BackgroundPushKind> => {
     const nativeFallback = async (failureReason: string): Promise<BackgroundPushKind> => {
       const configError = getNativePushConfigError(clientConfig);
       if (configError) {
         throw new Error(`${failureReason} Native push fallback is unavailable: ${configError}`);
-      }
-
-      if (currentKind === 'native') {
-        return 'native';
       }
 
       await activateTransport('native');
@@ -752,7 +741,7 @@ function BackgroundPushNotificationSetting() {
       if (currentKind === 'unifiedpush') {
         return 'unifiedpush';
       }
-      return activateAndroidAutoTransport(currentKind);
+      return activateAndroidAutoTransport();
     }
 
     if (currentKind === nextPreferredKind) {
@@ -793,12 +782,19 @@ function BackgroundPushNotificationSetting() {
 
     try {
       if (backgroundPushEnabled) {
-        const nextKind = await switchBackgroundPushTransport({
-          previousKind,
-          activate: () => activateMode(nextMode, previousKind),
-          deactivate: deactivateTransport,
-        });
-        setBackgroundPushProvider(nextKind);
+        const plannedKind = resolvePreferredNotificationTransportProvider(
+          normalizeNotificationTransportMode(nextMode, runtimePlatform),
+          runtimePlatform
+        );
+        if (plannedKind !== previousKind) {
+          const nextKind = await switchBackgroundPushTransport({
+            previousKind,
+            activate: () => activateMode(nextMode, previousKind),
+            deactivate: deactivateTransport,
+            reactivate: activateTransport,
+          });
+          setBackgroundPushProvider(nextKind);
+        }
       } else {
         setBackgroundPushProvider(null);
       }

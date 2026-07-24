@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -17,12 +17,16 @@ import {
 import { menuIcon, X } from '$components/icons/phosphor';
 import { useAtom } from 'jotai';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useClientConfig } from '../../../hooks/useClientConfig';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 import { pushSubscriptionAtom } from '../../../state/pushSubscription';
 import { deRegisterAllPushers } from './PushNotifications';
+import { disableNativePush } from './NotificationTransport';
+import { disableUnifiedPush } from './UnifiedPushNotifications';
 import { SettingTile } from '../../../components/setting-tile';
+import { isTauri } from '@tauri-apps/api/core';
 
 type ConfirmDeregisterDialogProps = {
   onClose: () => void;
@@ -78,9 +82,21 @@ function ConfirmDeregisterDialog({ onClose, onConfirm, isLoading }: ConfirmDereg
 
 export function DeregisterAllPushersSetting() {
   const mx = useMatrixClient();
-  const [deregisterState] = useAsyncCallback(deRegisterAllPushers);
+  const clientConfig = useClientConfig();
+  const deregisterAll = useCallback(async () => {
+    await deRegisterAllPushers(mx);
+    if (isTauri()) {
+      await Promise.allSettled([disableNativePush(mx, clientConfig), disableUnifiedPush(mx)]);
+    }
+  }, [mx, clientConfig]);
+  const [deregisterState, runDeregisterAll] = useAsyncCallback(deregisterAll);
   const [isConfirming, setIsConfirming] = useState(false);
   const [, setPushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
+  const [backgroundPushEnabled, setBackgroundPushEnabled] = useSetting(
+    settingsAtom,
+    'backgroundPushEnabled'
+  );
+  const [, setBackgroundPushProvider] = useSetting(settingsAtom, 'backgroundPushProvider');
 
   const [, setPushSubscription] = useAtom(pushSubscriptionAtom);
 
@@ -94,9 +110,18 @@ export function DeregisterAllPushersSetting() {
   };
 
   const handleConfirmDeregister = async () => {
-    await deRegisterAllPushers(mx);
+    try {
+      await runDeregisterAll();
+    } catch {
+      return;
+    }
     setPushNotifications(false);
     setPushSubscription(null);
+
+    if (backgroundPushEnabled) {
+      setBackgroundPushEnabled(false);
+    }
+    setBackgroundPushProvider(null);
     setIsConfirming(false);
   };
 
@@ -132,7 +157,6 @@ export function DeregisterAllPushersSetting() {
           </Button>
         }
       >
-        {/* FIXME: these two things below, even before my changes, don't really seem to ever appear? */}
         {deregisterState.status === AsyncStatus.Error && (
           <Text as="span" style={{ color: color.Critical.Main }} size="T200">
             <br />
