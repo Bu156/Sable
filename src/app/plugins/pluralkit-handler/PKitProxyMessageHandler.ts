@@ -1,15 +1,13 @@
 import type {
-  InternalPerMessageProfileProxyAssociation,
   PerMessageProfile,
   PerMessageProfileProxyAssociationV2,
 } from '$hooks/usePerMessageProfile';
 import {
   getAllPerMessageProfileProxies,
   getPerMessageProfileById,
-  parsePerMessageProfileProxyAssociation,
 } from '$hooks/usePerMessageProfile';
 import type { MatrixClient } from '$types/matrix-sdk';
-import { buildProxyRegex } from './PKitCommandMessageHandler';
+import { stripProxy, testProxy } from './PKitCommandMessageHandler';
 
 /**
  * proxy message handler
@@ -66,7 +64,7 @@ export class PKitProxyMessageHandler {
    */
   public isAProxiedMessage(message: string): boolean {
     if (!this.succInit) return false;
-    return this.proxiesAssocs.some((assoc) => buildProxyRegex(assoc).test(message));
+    return this.proxiesAssocs.some((assoc) => testProxy(assoc, message));
   }
 
   /**
@@ -78,8 +76,7 @@ export class PKitProxyMessageHandler {
     // Always refresh so newly-added proxies apply immediately.
     await this.init();
     // check if the message matches our formats
-    // maybe a bit unsafe, as we are evaluating regex that aren't necessarily by us, could be _maybe_ manipulated
-    const profileId = this.proxiesAssocs.find((assoc) => buildProxyRegex(assoc).test(message))?.profileId;
+    const profileId = this.proxiesAssocs.find((assoc) => testProxy(assoc, message))?.profileId;
     if (!profileId) return undefined;
     return getPerMessageProfileById(this.mx, profileId);
   }
@@ -95,8 +92,7 @@ export class PKitProxyMessageHandler {
     if (!this.succInit) return undefined;
     let m;
     this.proxiesAssocs.forEach((assoc) => {
-      const match = buildProxyRegex(assoc).exec(message);
-      if (match?.at(1)) m = match.at(1);
+      if (testProxy(assoc, message)) m = stripProxy(assoc, message);
     });
     return m;
   }

@@ -5,7 +5,7 @@ import {
   parsePerMessageProfileProxyAssociation,
   migratePmpProxyAssociation,
   type PerMessageProfileProxyAssociationV2,
-  PerMessageProfileProxyAssociationV1,
+  type PerMessageProfileProxyAssociationV1,
   proxyNeedsMigration,
   createProxyKey,
 } from './usePerMessageProfile';
@@ -15,13 +15,13 @@ describe('migratePerMessageProfileProxyAssociation', () => {
     const key = 'j;text';
     const migrated = extractCircumfixProxyTagsFromKey(key);
 
-    expect(migrated).toStrictEqual({ prefix: 'j;' });
+    expect(migrated).toStrictEqual({ prefix: 'j;', suffix: undefined });
   });
   it('turns a key into a suffix', () => {
     const key = 'text-J';
     const migrated = extractCircumfixProxyTagsFromKey(key);
 
-    expect(migrated).toStrictEqual({ suffix: '-J' });
+    expect(migrated).toStrictEqual({ prefix: undefined, suffix: '-J' });
   });
   it('turns a key into a circumfix', () => {
     const key = '[text]';

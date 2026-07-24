@@ -367,7 +367,7 @@ export async function getAllPerMessageProfiles(mx: MatrixClient): Promise<PerMes
  * @param profile the profile to add/update
  * @returns void
  */
-export function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessageProfile) {
+export async function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessageProfile) {
   const profileListIndex = mx.getAccountData(
     `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
   );
@@ -379,13 +379,13 @@ export function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessa
     } satisfies AccountDataCompatVersion,
   } satisfies PerMessageProfile;
   if (profileListIndex?.getContent()?.profileIds.includes(profile.id)) {
-    return mx.setAccountData(
+    return await mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.${profile.id}` as Parameters<typeof mx.setAccountData>[0],
       profileWithCompat as Parameters<typeof mx.setAccountData>[1]
     );
   }
   const newProfileIds = [...(profileListIndex?.getContent()?.profileIds || []), profile.id];
-  return Promise.all([
+  return await Promise.all([
     mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.setAccountData>[0],
       { profileIds: newProfileIds } as Parameters<typeof mx.setAccountData>[1]
@@ -537,7 +537,7 @@ export async function associateProxyWithProfile(
       prefix,
       suffix,
     } satisfies PerMessageProfileProxyAssociationV2);
-  mx.setAccountData(
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
     { associations: proxyAssociationsMapToObject(associations) } as Parameters<
       typeof mx.setAccountData
@@ -572,13 +572,12 @@ export async function getAllPerMessageProfileProxies(
     return parr.push(v as PerMessageProfileProxyAssociationV2);
   });
 
-
   if (needsMigration) {
     const newPmap = new Map(
-      pmap.entries().map(([k ,v]) => [k, migratePmpProxyAssociation(k, v) ?? v])
-    )
-      
-    mx.setAccountData(
+      pmap.entries().map(([k, v]) => [k, migratePmpProxyAssociation(k, v) ?? v])
+    );
+
+    await mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
       { associations: proxyAssociationsMapToObject(newPmap) } as Parameters<
         typeof mx.setAccountData
@@ -586,6 +585,27 @@ export async function getAllPerMessageProfileProxies(
     );
   }
 
+  return parr;
+}
+
+export async function getAllProxiesForPMP(
+  mx: MatrixClient,
+  profileId: string
+): Promise<PerMessageProfileProxyAssociationV2[]> {
+  const cont: PerMessageProfileProxyAssociationWrapper | undefined = mx
+    .getAccountData(
+      `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
+    )
+    ?.getContent();
+  if (!cont) return [];
+
+  const pmap = getProxyAssociationMap(cont);
+  const parr = new Array<PerMessageProfileProxyAssociationV2>();
+  pmap
+    .entries()
+    /* oxlint-disable no-unused-vars */
+    .filter(([_k, v]) => v.profileId === profileId)
+    .forEach(([k, v]) => parr.push(migratePmpProxyAssociation(k, v)!));
   return parr;
 }
 
@@ -599,7 +619,7 @@ export async function dropProxyAssociationForPMP(mx: MatrixClient, proxy: string
   );
   if (!associations) return;
   associations.delete(proxy);
-  mx.setAccountData(
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
     { associations: proxyAssociationsMapToObject(associations) } as Parameters<
       typeof mx.setAccountData

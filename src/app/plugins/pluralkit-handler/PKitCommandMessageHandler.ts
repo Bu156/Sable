@@ -31,22 +31,40 @@ function regexEscapeFallBackFunc(template: string): string {
 }
 
 /**
+ * @deprecated
  * build a regex to recognize proxies
  * a template can be for example `[text]` or `f:text`
  *
  * @param {string} template
  * @return {*}  {RegExp}
  */
-export function buildProxyRegex({
-  prefix,
-  suffix,
-}: PerMessageProfileProxyAssociationV2): RegExp {
+export function buildProxyRegex({ prefix, suffix }: PerMessageProfileProxyAssociationV2): RegExp {
   const escape = (s: string) =>
     // @ts-ignore TS2339 - RegExp.escape is a new/proposed method
     typeof RegExp.escape === 'function' ? RegExp.escape(s) : regexEscapeFallBackFunc(s);
 
-  const pattern = `${escape(prefix ?? "")}(.+)${escape(suffix ?? "")}`;
+  const pattern = `${escape(prefix ?? '')}(.+)${escape(suffix ?? '')}`;
   return new RegExp(`^${pattern}$`);
+}
+
+export function testProxy(
+  { prefix, suffix }: PerMessageProfileProxyAssociationV2,
+  input: string
+): boolean {
+  const matchesPrefix = prefix ? input.startsWith(prefix) : true;
+  const matchesSuffix = suffix ? input.endsWith(suffix) : true;
+
+  return matchesPrefix && matchesSuffix;
+}
+export function stripProxy(
+  { prefix, suffix }: PerMessageProfileProxyAssociationV2,
+  input: string
+): string {
+  let message = input;
+  if (prefix) message = message.slice(prefix.length);
+  if (suffix) message = message.slice(0, message.length - suffix.length);
+
+  return message;
 }
 
 /**
