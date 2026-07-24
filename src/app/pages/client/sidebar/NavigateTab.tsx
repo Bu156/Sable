@@ -18,7 +18,7 @@ export function NavigateTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
     if (isMobile) navigate(getNavigatePath());
     else setOpen(true);
   };
-  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, open);
+  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, open, open);
 
   return (
     <SidebarItem active={opened && !isMobile} isBottom={isBottom}>
@@ -29,7 +29,6 @@ export function NavigateTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
               as="button"
               ref={triggerRef}
               outlined={!isMobile}
-              onClick={open}
               {...mobileTapActivation}
               size={'400'}
             >

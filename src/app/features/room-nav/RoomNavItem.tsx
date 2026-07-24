@@ -448,13 +448,17 @@ export function RoomNavItem({
     }
   };
 
-  const mobileTapActivation = useMobileTapActivation(isMobile && !room.isCallRoom(), () => {
-    if (openMobileDrawerContent) {
-      openMobileDrawerContent(linkPath);
-    } else {
-      navigate(linkPath);
-    }
-  });
+  const mobileTapActivation = useMobileTapActivation(
+    isMobile && !room.isCallRoom(),
+    () => {
+      if (openMobileDrawerContent) {
+        openMobileDrawerContent(linkPath);
+      } else {
+        navigate(linkPath);
+      }
+    },
+    handleNavItemClick
+  );
 
   const handleChatButtonClick = (evt: MouseEvent<HTMLButtonElement>) => {
     evt.stopPropagation();
@@ -521,7 +525,7 @@ export function RoomNavItem({
           >
             {(triggerRef) => (
               <NavButton
-                onClick={handleNavItemClick}
+                onClick={mobileTapActivation.onClick}
                 onPointerDown={(evt) => {
                   warmupRoomDecryption(mx, room.roomId);
                   mobileTapActivation.onPointerDown(evt);

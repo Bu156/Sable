@@ -49,7 +49,7 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
 
     navigate(getSpacePath(lastSpaceId));
   };
-  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, onBack);
+  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, onBack, onBack);
 
   const [showUnreadCounts] = useSetting(settingsAtom, 'showUnreadCounts');
   const [badgeCountDMsOnly] = useSetting(settingsAtom, 'badgeCountDMsOnly');
@@ -73,7 +73,6 @@ export function MessageTab({ isBottom, isMobile }: { isBottom?: boolean; isMobil
               as="button"
               ref={triggerRef}
               outlined={!isMobile}
-              onClick={onBack}
               {...mobileTapActivation}
               size={'400'}
             >

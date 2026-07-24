@@ -555,7 +555,11 @@ function SpaceTab({
 }: Readonly<SpaceTabProps>) {
   const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const targetRef = useRef<HTMLDivElement>(null);
-  const mobileTapActivation = useMobileTapActivation(isMobile, () => onSelect(space.roomId));
+  const mobileTapActivation = useMobileTapActivation(
+    isMobile,
+    () => onSelect(space.roomId),
+    () => onSelect(space.roomId)
+  );
 
   const spaceDraggable: SidebarDraggable = useMemo(
     () =>
@@ -602,7 +606,6 @@ function SpaceTab({
                 data-id={space.roomId}
                 ref={triggerRef}
                 size={folder ? '300' : '400'}
-                onClick={() => onSelect(space.roomId)}
                 onContextMenu={handleContextMenu}
                 {...mobileTapActivation}
               >
