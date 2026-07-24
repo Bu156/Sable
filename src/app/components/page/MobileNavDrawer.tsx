@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { AnimationPlaybackControls } from 'framer-motion';
-import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
+import { useReducedMotion } from 'framer-motion';
 import {
   DIRECT_PATH,
   DIRECT_ROOM_PATH,
@@ -21,11 +20,6 @@ import { resolveSection } from '$pages/pathUtils';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 import { PersistentRoomHost } from './PersistentRoomHost';
 
-const SETTLE_STIFFNESS = 1000;
-const SETTLE_DAMPING = 63;
-const OPEN_FRACTION = 0.35;
-const VELOCITY_THRESHOLD = 400;
-
 type MobileNavDrawerProps = {
   nav: ReactNode;
   rail?: ReactNode;
@@ -33,8 +27,8 @@ type MobileNavDrawerProps = {
   children: ReactNode;
 };
 
-/** Sliding mobile drawer: the list and active room are adjacent panels; dragging
- * reveals the list and commits the route on release. */
+/** Sliding mobile drawer: the list and active room are adjacent snap panels;
+ * native scrolling reveals the other panel and commits the route after settling. */
 export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDrawerProps) {
   const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
   const reduceMotion = useReducedMotion();
@@ -55,8 +49,8 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const matchedRoomId = roomMatch?.params.roomIdOrAlias
     ? decodeURIComponent(roomMatch.params.roomIdOrAlias)
     : undefined;
-  // `:roomIdOrAlias` also matches non-room segments like `create`, `search`, `lobby`.
-  // Only treat it as a room when it's a real Matrix id/alias.
+  // `:roomIdOrAlias` also matches non-room segments like `create`, `search`, and `lobby`.
+  // Only treat it as a room when it is a real Matrix ID or alias.
   const isRoomRoute = !!matchedRoomId && (isRoomId(matchedRoomId) || isRoomAlias(matchedRoomId));
 
   const listView =
@@ -71,17 +65,15 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const navPanelRef = useRef<HTMLDivElement | null>(null);
   const contentPanelRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
-  const x = useMotionValue(0);
-  const dragControls = useDragControls();
-  const settleAnimRef = useRef<AnimationPlaybackControls | null>(null);
 
-  const initialIntent = contentOpen ? 1 : 0;
-  const [panelIntent, setPanelIntent] = useState(initialIntent);
-  const panelIntentRef = useRef(initialIntent);
+  const [panelIntent, setPanelIntent] = useState(contentOpen ? 1 : 0);
+  const userScrollRef = useRef(false);
+  const touchActiveRef = useRef(false);
+  const scrollEndTimerRef = useRef<number>();
 
-  const [roomArmed, setRoomArmed] = useState(isRoomRoute);
+  const [roomArmed, setRoomArmed] = useState(() => isRoomRoute || canOpenRoom);
   useEffect(() => {
-    if (isRoomRoute) {
+    if (isRoomRoute || canOpenRoom) {
       setRoomArmed(true);
       return undefined;
     }
@@ -90,26 +82,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     const cic = window.cancelIdleCallback ?? window.clearTimeout;
     const handle = ric(() => setRoomArmed(true));
     return () => cic(handle as number);
-  }, [isRoomRoute, roomArmed]);
-
-  const settle = useCallback(
-    (target: number) => {
-      settleAnimRef.current?.stop();
-      settleAnimRef.current = null;
-
-      if (reduceMotion) {
-        x.jump(target);
-        return;
-      }
-      settleAnimRef.current = animate(x, target, {
-        type: 'spring',
-        stiffness: SETTLE_STIFFNESS,
-        damping: SETTLE_DAMPING,
-        velocity: 0,
-      });
-    },
-    [reduceMotion, x]
-  );
+  }, [isRoomRoute, canOpenRoom, roomArmed]);
 
   useLayoutEffect(() => {
     const el = viewportRef.current;
@@ -122,163 +95,182 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   }, []);
 
   useLayoutEffect(() => {
+    setPanelIntent(contentOpen ? 1 : 0);
+  }, [contentOpen]);
+
+  useLayoutEffect(() => {
     navPanelRef.current?.toggleAttribute('inert', panelIntent === 1);
     contentPanelRef.current?.toggleAttribute('inert', panelIntent === 0);
   }, [panelIntent]);
 
   useLayoutEffect(() => {
-    const routePanel = contentOpen ? 1 : 0;
-    if (routePanel !== panelIntentRef.current) {
-      panelIntentRef.current = routePanel;
-      setPanelIntent(routePanel);
-      const target = routePanel === 1 ? -width : 0;
-      if (width > 0 && !reduceMotion) {
-        settle(target);
+    const el = viewportRef.current;
+    if (!el || width === 0) return;
+    const targetLeft = contentOpen ? width : 0;
+
+    userScrollRef.current = false;
+    touchActiveRef.current = false;
+    window.clearTimeout(scrollEndTimerRef.current);
+    if (Math.abs(el.scrollLeft - targetLeft) > 5) {
+      el.scrollTo({ left: targetLeft, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+  }, [contentOpen, width, reduceMotion]);
+
+  const finishUserScroll = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !userScrollRef.current || width === 0) return;
+
+    userScrollRef.current = false;
+    const roomVisible = viewport.scrollLeft >= width / 2;
+    setPanelIntent(roomVisible ? 1 : 0);
+
+    if (roomVisible !== contentOpen) {
+      if (roomVisible) {
+        const section = resolveSection(location.pathname);
+        if (section?.getRoomPath) {
+          const lastRoomId = lastRoom?.[section.key];
+          if (lastRoomId) {
+            startTransition(() => navigate(section.getRoomPath!(lastRoomId)));
+            return;
+          }
+        }
+        viewport.scrollTo({ left: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        setPanelIntent(0);
       } else {
-        settleAnimRef.current?.stop();
-        settleAnimRef.current = null;
-        x.jump(target);
+        const section = resolveSection(location.pathname);
+        if (section) {
+          if (section.getRoomPath && matchedRoomId && isRoomRoute) {
+            setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
+          }
+          startTransition(() => navigate(section.listPath));
+        }
       }
     }
-  }, [contentOpen, width, x, settle, reduceMotion]);
+  }, [
+    contentOpen,
+    isRoomRoute,
+    lastRoom,
+    location.pathname,
+    matchedRoomId,
+    navigate,
+    reduceMotion,
+    setLastRoom,
+    width,
+  ]);
 
-  useLayoutEffect(() => {
-    settleAnimRef.current?.stop();
-    settleAnimRef.current = null;
-    const target = panelIntentRef.current === 1 ? -width : 0;
-    x.jump(target);
-  }, [width, x]);
+  const scheduleScrollEnd = useCallback(
+    (delay = 120) => {
+      window.clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = window.setTimeout(finishUserScroll, delay);
+    },
+    [finishUserScroll]
+  );
+
+  useEffect(() => {
+    return () => window.clearTimeout(scrollEndTimerRef.current);
+  }, []);
+
+  const allowScroll = mobileGestures && (canOpenRoom || contentOpen);
 
   return (
     <div
-      onPointerDown={(event) => {
-        if (!mobileGestures || width === 0) return;
-        const target = event.target as HTMLElement | null;
-        if (target?.closest('[data-gestures="ignore"]')) return;
-        // On the list panel, only start drag tracking when a room is available to open.
-        if (panelIntentRef.current === 0 && !canOpenRoom) return;
-        dragControls.start(event);
-      }}
       ref={viewportRef}
+      className="no-scrollbar"
+      onTouchStart={() => {
+        userScrollRef.current = true;
+        touchActiveRef.current = true;
+        window.clearTimeout(scrollEndTimerRef.current);
+      }}
+      onScroll={() => {
+        if (!userScrollRef.current || width === 0) return;
+        if (!touchActiveRef.current) scheduleScrollEnd();
+      }}
+      onTouchEnd={() => {
+        touchActiveRef.current = false;
+        scheduleScrollEnd(180);
+      }}
+      onTouchCancel={() => {
+        touchActiveRef.current = false;
+        scheduleScrollEnd();
+      }}
       style={{
-        position: 'relative',
-        overflow: 'hidden',
         display: 'flex',
         flexGrow: 1,
         height: '100%',
         width: '100%',
-        touchAction: 'manipulation',
+        overflowX: allowScroll ? 'auto' : 'hidden',
+        overflowY: 'hidden',
+        overscrollBehaviorX: 'none',
+        scrollSnapType: 'x mandatory',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
-      <motion.div
-        drag={mobileGestures ? 'x' : false}
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ left: -width, right: 0 }}
-        dragDirectionLock
-        dragElastic={0.05}
-        dragMomentum={false}
-        onDragStart={() => {
-          x.stop();
-          settleAnimRef.current?.stop();
-          settleAnimRef.current = null;
-          if (panelIntentRef.current === 0 && !roomArmed) setRoomArmed(true);
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+      <div
+        ref={navPanelRef}
+        className="no-scrollbar"
+        style={{
+          width: '100%',
+          flexBasis: '100%',
+          height: '100%',
+          flexShrink: 0,
+          scrollSnapAlign: 'start',
+          scrollSnapStop: 'always',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
         }}
-        onDragEnd={(_event, info) => {
-          const { offset, velocity } = info;
-
-          if (panelIntentRef.current === 1) {
-            // Room panel → swipe right to reveal the list.
-            const opened = offset.x > width * OPEN_FRACTION || velocity.x > VELOCITY_THRESHOLD;
-            if (opened) {
-              panelIntentRef.current = 0;
-              setPanelIntent(0);
-              settle(0);
-              const section = resolveSection(location.pathname);
-              if (section?.getRoomPath && matchedRoomId && isRoomRoute) {
-                setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
-              }
-              if (section) startTransition(() => navigate(section.listPath));
-            } else {
-              settle(-width);
-            }
-            return;
-          }
-
-          // List panel → swipe left to open the last visited room.
-          const wantRoom = -offset.x > width * OPEN_FRACTION || velocity.x < -VELOCITY_THRESHOLD;
-          if (wantRoom) {
-            const section = resolveSection(location.pathname);
-            if (section?.getRoomPath) {
-              const lastRoomId = lastRoom?.[section.key];
-              if (lastRoomId) {
-                const roomPath = section.getRoomPath(lastRoomId);
-                panelIntentRef.current = 1;
-                setPanelIntent(1);
-                settle(-width);
-                startTransition(() => navigate(roomPath));
-              } else {
-                settle(0);
-              }
-            } else {
-              settle(0);
-            }
-          } else {
-            settle(0);
-          }
-        }}
-        style={{ x, display: 'flex', height: '100%', willChange: 'transform' }}
       >
         <div
-          ref={navPanelRef}
           style={{
-            width,
-            height: '100%',
-            flexShrink: 0,
+            flexGrow: 1,
+            minHeight: 0,
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: 'row',
             overflow: 'hidden',
           }}
         >
-          <div
-            style={{
-              flexGrow: 1,
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'row',
-              overflow: 'hidden',
-            }}
-          >
-            {rail && (
-              <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>
-            )}
-            <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
-              {nav}
-            </div>
-          </div>
-          {bottomNav}
+          {rail && <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>}
+          <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>{nav}</div>
         </div>
-        <div
-          ref={contentPanelRef}
-          style={{
-            width,
-            height: '100%',
-            flexShrink: 0,
-            display: 'flex',
-            overflow: 'hidden',
-          }}
-        >
-          {isRoomRoute ? (
+        {bottomNav}
+      </div>
+      <div
+        ref={contentPanelRef}
+        className="no-scrollbar"
+        style={{
+          width: '100%',
+          flexBasis: '100%',
+          height: '100%',
+          flexShrink: 0,
+          scrollSnapAlign: 'start',
+          scrollSnapStop: 'always',
+          display: 'flex',
+          overflow: 'hidden',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+        }}
+      >
+        {isRoomRoute ? (
+          <PersistentRoomHost inactive={panelIntent === 0} />
+        ) : listView ? (
+          roomArmed ? (
             <PersistentRoomHost inactive={panelIntent === 0} />
-          ) : listView ? (
-            roomArmed ? (
-              <PersistentRoomHost inactive={panelIntent === 0} />
-            ) : null
-          ) : (
-            children
-          )}
-        </div>
-      </motion.div>
+          ) : null
+        ) : (
+          children
+        )}
+      </div>
     </div>
   );
 }

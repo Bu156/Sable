@@ -91,7 +91,6 @@ export function SwipeableChatWrapper({
     <div
       {...bind()}
       style={{
-        touchAction: 'pan-y',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
