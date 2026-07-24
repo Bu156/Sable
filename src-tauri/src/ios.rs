@@ -94,7 +94,7 @@ use objc2_foundation::{NSString, NSURL};
 
 extern "C" {
     fn AudioServicesCreateSystemSoundID(
-        in_file_url: *mut objc2::runtime::AnyObject,
+        in_file_url: *const objc2::runtime::AnyObject,
         out_sound_id: *mut u32,
     ) -> i32;
     fn AudioServicesPlaySystemSound(sound_id: u32);
