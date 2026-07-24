@@ -682,9 +682,13 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
   };
 
   const handleCloseMenu = () => setMenuAnchor(undefined);
-  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, () => {
-    navigate(getProfilePath());
-  });
+  const mobileTapActivation = useMobileTapActivation(
+    isMobile ?? false,
+    () => {
+      navigate(getProfilePath());
+    },
+    handleToggle
+  );
 
   const isActive = (!!menuAnchor || profileSelected) && !isMobile;
 
@@ -693,7 +697,6 @@ export function UserMenuTab({ isBottom, isMobile }: { isBottom?: boolean; isMobi
       <Box
         direction="Column"
         alignItems="Center"
-        onClick={handleToggle}
         {...mobileTapActivation}
         style={
           isMobile

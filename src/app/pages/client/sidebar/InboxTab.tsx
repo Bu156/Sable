@@ -55,7 +55,11 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
     const path = inviteCount > 0 ? getInboxInvitesPath() : getInboxNotificationsPath();
     navigate(path);
   };
-  const mobileTapActivation = useMobileTapActivation(isMobile ?? false, handleInboxClick);
+  const mobileTapActivation = useMobileTapActivation(
+    isMobile ?? false,
+    handleInboxClick,
+    handleInboxClick
+  );
 
   return (
     <SidebarItem active={opened && !isMobile} isBottom={isBottom}>
@@ -66,7 +70,6 @@ export function InboxTab({ isBottom, isMobile }: { isBottom?: boolean; isMobile?
               as="button"
               ref={triggerRef}
               outlined={!isMobile}
-              onClick={handleInboxClick}
               {...mobileTapActivation}
               size={'400'}
             >
