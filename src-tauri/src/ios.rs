@@ -92,13 +92,15 @@ pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
 
 use objc2_foundation::{NSString, NSURL};
 
+// This library is linked by Cargo before Xcode creates the application bundle,
+// so declaring AudioToolbox only in tauri.conf.json is not sufficient.
+#[link(name = "AudioToolbox", kind = "framework")]
 extern "C" {
     fn AudioServicesCreateSystemSoundID(
         in_file_url: *const objc2::runtime::AnyObject,
         out_sound_id: *mut u32,
     ) -> i32;
     fn AudioServicesPlaySystemSound(sound_id: u32);
-    fn AudioServicesDisposeSystemSoundID(sound_id: u32);
 }
 
 fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
