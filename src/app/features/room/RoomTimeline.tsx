@@ -303,6 +303,8 @@ export type RoomTimelineProps = {
   editor: Editor;
   onEditorReset?: () => void;
   onEditLastMessageRef?: React.MutableRefObject<(() => void) | undefined>;
+  editId?: string;
+  onEditId?: (editId?: string) => void;
 };
 
 export function RoomTimeline({
@@ -311,12 +313,16 @@ export function RoomTimeline({
   editor,
   onEditorReset,
   onEditLastMessageRef,
+  editId: propsEditId,
+  onEditId: propsOnEditId,
 }: Readonly<RoomTimelineProps>) {
   const mx = useMatrixClient();
   const alive = useAlive();
   const roomSyncLoading = useSlidingSyncRoomLoading(room.roomId);
 
-  const { editId, handleEdit } = useMessageEdit(editor, { onReset: onEditorReset, alive });
+  const internalEdit = useMessageEdit(editor, { onReset: onEditorReset, alive });
+  const editId = propsOnEditId ? propsEditId : internalEdit.editId;
+  const handleEdit = propsOnEditId ?? internalEdit.handleEdit;
   const { navigateRoom } = useRoomNavigate();
   const isInactivePanel = useIsInactivePanel();
 

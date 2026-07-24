@@ -108,14 +108,15 @@ describe('AttachmentSheet', () => {
     expect(onPointerDown).not.toHaveBeenCalled();
   });
 
-  it('closes once on Escape and returns focus to the opener', async () => {
+  it('does not move focus on open, closes once on Escape, and restores the opener', async () => {
     const handlers = callbacks();
     render(<AttachmentSheetHarness handlers={handlers} />);
     const opener = screen.getByRole('button', { name: 'Open attachments' });
 
     opener.focus();
     fireEvent.click(opener);
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Share' })).toHaveFocus());
+    expect(screen.getByRole('dialog', { name: 'Share' })).not.toHaveFocus();
+    expect(opener).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
 
     expect(handlers.onClose).toHaveBeenCalledOnce();
