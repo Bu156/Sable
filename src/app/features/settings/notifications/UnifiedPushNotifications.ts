@@ -701,29 +701,7 @@ async function handleMinimalPushPayload(
     }
   }
 
-  if (
-    !previewText &&
-    eventId &&
-    settings.showMessageContent &&
-    (!isEncryptedRoom || settings.showEncryptedMessageContent)
-  ) {
-    const fetched = await resolvePreviewEvent(settings.mx, roomId, eventId);
-    if (fetched) {
-      const sender = fetched.getSender();
-      if (sender) {
-        senderName = room?.getMember(sender)?.name ?? getMxIdLocalPart(sender) ?? sender;
-        senderId = sender;
-      }
-      previewText = resolveNotificationPreviewText({
-        content: fetched.getContent(),
-        eventType: fetched.getType(),
-        isEncryptedRoom,
-        showMessageContent: settings.showMessageContent,
-        showEncryptedMessageContent: settings.showEncryptedMessageContent,
-      });
-    }
-  }
-
+  const hasInMemoryPreview = Boolean(previewText);
   if (!previewText) {
     previewText = isEncryptedRoom ? 'Encrypted message' : 'New message';
   }
@@ -762,6 +740,57 @@ async function handleMinimalPushPayload(
     event_id: eventId,
     user_id: pushData?.user_id,
   });
+
+  if (
+    !hasInMemoryPreview &&
+    eventId &&
+    settings.showMessageContent &&
+    (!isEncryptedRoom || settings.showEncryptedMessageContent)
+  ) {
+    resolvePreviewEvent(settings.mx, roomId, eventId)
+      .then((fetched) => {
+        if (!fetched || cache.latestEventId !== eventId) return;
+        const enrichedPreview = resolveNotificationPreviewText({
+          content: fetched.getContent(),
+          eventType: fetched.getType(),
+          isEncryptedRoom,
+          showMessageContent: settings.showMessageContent,
+          showEncryptedMessageContent: settings.showEncryptedMessageContent,
+        });
+        if (!enrichedPreview) return;
+
+        const fetchedSender = fetched.getSender();
+        if (fetchedSender) {
+          senderName =
+            room?.getMember(fetchedSender)?.name ??
+            getMxIdLocalPart(fetchedSender) ??
+            fetchedSender;
+          senderId = fetchedSender;
+        }
+        message.text = enrichedPreview;
+        message.sender = senderName
+          ? {
+              name: senderName,
+              key: senderId,
+              iconUrl:
+                senderId && roomId ? resolveAvatarUrl(settings.mx, roomId, senderId) : undefined,
+            }
+          : sender;
+
+        void postRoomNotification(userId, roomId, cache, true, {
+          room_id: roomId,
+          event_id: eventId,
+          user_id: pushData?.user_id,
+        });
+      })
+      .catch((error) => {
+        unifiedPushLog.warn(
+          'notification',
+          'Background preview fetch failed',
+          error instanceof Error ? error : new Error(String(error))
+        );
+      });
+  }
 }
 
 async function handleUnifiedPushPayload(

@@ -17,12 +17,16 @@ import {
 import { menuIcon, X } from '$components/icons/phosphor';
 import { useAtom } from 'jotai';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useClientConfig } from '../../../hooks/useClientConfig';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 import { pushSubscriptionAtom } from '../../../state/pushSubscription';
 import { deRegisterAllPushers } from './PushNotifications';
+import { disableNativePush } from './NotificationTransport';
+import { disableUnifiedPush } from './UnifiedPushNotifications';
 import { SettingTile } from '../../../components/setting-tile';
+import { isTauri } from '@tauri-apps/api/core';
 
 type ConfirmDeregisterDialogProps = {
   onClose: () => void;
@@ -78,9 +82,15 @@ function ConfirmDeregisterDialog({ onClose, onConfirm, isLoading }: ConfirmDereg
 
 export function DeregisterAllPushersSetting() {
   const mx = useMatrixClient();
+  const clientConfig = useClientConfig();
   const [deregisterState] = useAsyncCallback(deRegisterAllPushers);
   const [isConfirming, setIsConfirming] = useState(false);
   const [, setPushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
+  const [backgroundPushEnabled, setBackgroundPushEnabled] = useSetting(
+    settingsAtom,
+    'backgroundPushEnabled'
+  );
+  const [, setBackgroundPushProvider] = useSetting(settingsAtom, 'backgroundPushProvider');
 
   const [, setPushSubscription] = useAtom(pushSubscriptionAtom);
 
@@ -97,6 +107,15 @@ export function DeregisterAllPushersSetting() {
     await deRegisterAllPushers(mx);
     setPushNotifications(false);
     setPushSubscription(null);
+
+    if (isTauri()) {
+      await Promise.allSettled([disableNativePush(mx, clientConfig), disableUnifiedPush(mx)]);
+    }
+
+    if (backgroundPushEnabled) {
+      setBackgroundPushEnabled(false);
+    }
+    setBackgroundPushProvider(null);
     setIsConfirming(false);
   };
 
