@@ -106,7 +106,9 @@ export const UrlPreviewCard = as<
   );
 
   useEffect(() => {
-    loadPreview();
+    // A homeserver refusing to preview a URL is an ordinary answer and the card already
+    // renders nothing on error, so the rejection must not reach the global handler.
+    loadPreview().catch(() => undefined);
   }, [url, loadPreview]);
 
   if (previewStatus.status === AsyncStatus.Error) return null;
