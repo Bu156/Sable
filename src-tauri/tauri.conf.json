@@ -23,7 +23,8 @@
       "infoPlist": "Info.plist"
     },
     "iOS": {
-      "template": "src-tauri/ios-project.yml"
+      "template": "src-tauri/ios-project.yml",
+      "frameworks": ["AudioToolbox"]
     },
     "linux": {
       "deb": {
