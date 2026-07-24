@@ -199,7 +199,17 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
                     settings.set_enable_media_stream(true);
                     settings.set_enable_mediasource(true);
                     settings.set_enable_media(true);
+                    // Enable inspector via SABLE_DEVTOOLS env var.
+                    if std::env::var("SABLE_DEVTOOLS").is_ok() {
+                        settings.set_enable_developer_extras(true);
+                    }
                 }
+
+                // Bypass CORS for HTTP(S) targets so Element Call's iframe
+                // fetches to split-horizon DNS homeservers aren't PNA-blocked.
+                // Same-origin policy and CSP remain enforced.
+                gtk_webview.set_cors_allowlist(&["http://*/*", "https://*/*"]);
+
                 gtk_webview.connect_permission_request(move |_wv, request| {
                     // Ask the user (once per permission type, then remember the choice)
                     // for the permissions Sable actually uses; deny anything else.
