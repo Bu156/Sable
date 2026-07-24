@@ -1588,6 +1588,7 @@ function Sync() {
       ? `Last synced at ${dayjs(lastSynced).format('HH:mm:ss')}`
       : 'Not yet synced this session',
     syncing: 'Syncing…',
+    partial: 'Settings synced, but some local tweaks were too large to sync.',
     error: 'Sync failed — will retry on next change',
   };
 
@@ -1620,7 +1621,7 @@ function Sync() {
         <SettingTile
           title="Sync settings across devices"
           focusId="sync-across-devices"
-          description="Store your settings in your Matrix account so they follow you to any Sable instance. Notification and zoom preferences are kept per-device."
+          description="Store your settings in your Matrix account so they follow you to any Sable instance. Locally imported tweak CSS is uploaded as unencrypted account data readable by your homeserver. Notification and zoom preferences are kept per-device."
           after={<Switch variant="Primary" value={syncEnabled} onChange={setSyncEnabled} />}
         />
         {syncEnabled && (

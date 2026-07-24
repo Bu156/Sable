@@ -7,6 +7,7 @@ import type {
   PushTransportOverrides,
 } from '$features/settings/notifications/NotificationTransport';
 import type { IImageInfo } from '$types/matrix/common';
+import { isLocalImportTweakUrl } from '../theme/localImportUrls';
 import { sanitizeShortcutOverrides, type ShortcutOverrides } from '../keyboard/shortcuts';
 
 const STORAGE_KEY = 'settings';
@@ -71,6 +72,8 @@ export type ThemeRemoteTweakFavorite = {
   basename: string;
   pinned?: boolean;
   importedLocal?: boolean;
+  /** CSS for locally imported tweaks, replicated with settings for device restore. */
+  cssText?: string;
 };
 
 /** Custom profile card hero colors: which brightness schemes to honor. */
@@ -629,7 +632,9 @@ function sanitizeThemeRemoteFavorites(val: unknown): ThemeRemoteFavorite[] | und
   return out;
 }
 
-function sanitizeThemeRemoteTweakFavorites(val: unknown): ThemeRemoteTweakFavorite[] | undefined {
+export function sanitizeThemeRemoteTweakFavorites(
+  val: unknown
+): ThemeRemoteTweakFavorite[] | undefined {
   if (!Array.isArray(val)) return undefined;
   const out: ThemeRemoteTweakFavorite[] = [];
   for (const item of val) {
@@ -640,12 +645,15 @@ function sanitizeThemeRemoteTweakFavorites(val: unknown): ThemeRemoteTweakFavori
       typeof o.displayName === 'string' &&
       typeof o.basename === 'string'
     ) {
+      const cssText =
+        isLocalImportTweakUrl(o.fullUrl) && typeof o.cssText === 'string' ? o.cssText : undefined;
       out.push({
         fullUrl: o.fullUrl,
         displayName: o.displayName,
         basename: o.basename,
         pinned: typeof o.pinned === 'boolean' ? o.pinned : undefined,
         importedLocal: typeof o.importedLocal === 'boolean' ? o.importedLocal : undefined,
+        cssText,
       });
     }
   }
