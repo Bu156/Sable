@@ -132,11 +132,11 @@ export const VideoContent = as<'div', VideoContentProps>(
 
     const handleRetry = () => {
       setError(false);
-      loadSrc();
+      loadSrc().catch(() => undefined);
     };
 
     useEffect(() => {
-      if (autoPlay) loadSrc();
+      if (autoPlay) loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
 
     useRevokeObjectURL(srcState.status === AsyncStatus.Success ? srcState.data : undefined);
@@ -206,7 +206,7 @@ export const VideoContent = as<'div', VideoContentProps>(
             onClick={() => {
               setBlurred(false);
               if (srcState.status === AsyncStatus.Idle) {
-                loadSrc();
+                loadSrc().catch(() => undefined);
               }
             }}
           >
@@ -218,7 +218,7 @@ export const VideoContent = as<'div', VideoContentProps>(
               onClick={() => {
                 setBlurred(false);
                 if (srcState.status === AsyncStatus.Idle) {
-                  loadSrc();
+                  loadSrc().catch(() => undefined);
                 }
               }}
             >
@@ -283,7 +283,7 @@ export const VideoContent = as<'div', VideoContentProps>(
                 onClick={(e) => {
                   e.preventDefault();
                   if (srcState.status === AsyncStatus.Idle) {
-                    loadSrc();
+                    loadSrc().catch(() => undefined);
                     setBlurred(false);
                   } else setBlurred(!blurred);
                 }}

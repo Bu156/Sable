@@ -32,9 +32,14 @@ interface OEmbed {
 }
 
 async function oEmbedData(url: string): Promise<OEmbed> {
-  const data = await fetch(url).then((resp) => resp.json());
+  const response = await fetch(url);
+  // YouTube answers errors with a plain-text body under an application/json content type,
+  // so the status has to be checked before parsing.
+  if (!response.ok) {
+    throw new Error(`oEmbed request failed: ${response.status}`);
+  }
 
-  return data;
+  return response.json();
 }
 
 export type EmbedHeaderProps = {
@@ -230,7 +235,8 @@ export const ClientPreview = as<'div', { url: string }>(({ url, ...props }, ref)
   useEffect(() => {
     const fetchYoutube = isYoutube && showYoutube;
 
-    if (fetchYoutube) loadEmbed();
+    // The card renders nothing on error; keep the failure out of the global handler.
+    if (fetchYoutube) loadEmbed().catch(() => undefined);
   }, [isYoutube, showYoutube, loadEmbed]);
 
   let previewContent;

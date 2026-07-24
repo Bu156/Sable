@@ -124,7 +124,7 @@ export function AudioContent({
     if (srcState.status === AsyncStatus.Success) {
       setPlaying(!playing);
     } else if (srcState.status !== AsyncStatus.Loading) {
-      loadSrc();
+      loadSrc().catch(() => undefined);
     }
   };
 

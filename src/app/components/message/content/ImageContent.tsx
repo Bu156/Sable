@@ -210,11 +210,11 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleRetry = () => {
       setError(false);
-      loadSrc();
+      loadSrc().catch(() => undefined);
     };
 
     useEffect(() => {
-      if (autoPlay) loadSrc();
+      if (autoPlay) loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
 
     useRevokeObjectURL(
@@ -347,7 +347,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             onClick={() => {
               setBlurred(false);
               if (srcState.status === AsyncStatus.Idle) {
-                loadSrc();
+                loadSrc().catch(() => undefined);
               }
             }}
           >
@@ -359,7 +359,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               onClick={() => {
                 setBlurred(false);
                 if (srcState.status === AsyncStatus.Idle) {
-                  loadSrc();
+                  loadSrc().catch(() => undefined);
                 }
               }}
             >
@@ -424,7 +424,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={(e) => {
                     e.preventDefault();
                     if (srcState.status === AsyncStatus.Idle) {
-                      loadSrc();
+                      loadSrc().catch(() => undefined);
                       setBlurred(false);
                     } else setBlurred(!blurred);
                   }}

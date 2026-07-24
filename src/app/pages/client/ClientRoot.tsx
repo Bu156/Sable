@@ -273,7 +273,11 @@ export function ClientRoot({ children }: ClientRootProps) {
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;
-      await pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
+      await pushSessionToSW(
+        activeSession.baseUrl,
+        activeSession.accessToken,
+        activeSession.userId
+      );
       return newMx;
     }, [activeSession, activeSessionId, setActiveSessionId])
   );
@@ -312,7 +316,7 @@ export function ClientRoot({ children }: ClientRootProps) {
         activeSession.userId,
         '— reloading client'
       );
-      void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
+      void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
       if (mx?.clientRunning) {
         stopClient(mx);
       }

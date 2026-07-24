@@ -125,10 +125,16 @@ function getStoredAccessToken(url: string): string | undefined {
   return undefined;
 }
 
-export function getActiveMediaSession(): { baseUrl: string; accessToken: string } | undefined {
+export function getActiveMediaSession():
+  | { baseUrl: string; accessToken: string; userId: string }
+  | undefined {
   const activeSession = getActiveStoredSession();
   if (activeSession?.baseUrl && activeSession.accessToken) {
-    return { baseUrl: activeSession.baseUrl, accessToken: activeSession.accessToken };
+    return {
+      baseUrl: activeSession.baseUrl,
+      accessToken: activeSession.accessToken,
+      userId: activeSession.userId,
+    };
   }
   return undefined;
 }

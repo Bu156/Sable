@@ -38,17 +38,19 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
   const [thumbSrcState, loadThumbSrc] = useAsyncCallback(
     useCallback(async () => {
       const thumbInfo = info.thumbnail_info;
-      if (typeof thumbMxcUrl !== 'string' || typeof thumbInfo?.mimetype !== 'string') {
+      // Only the URL is required: `mimetype` is a decryption hint that already falls back,
+      // and other clients routinely omit it.
+      if (typeof thumbMxcUrl !== 'string') {
         throw new Error('Failed to load thumbnail');
       }
       if (encInfo) {
         if (!rawMediaUrl) throw new Error('Invalid media URL');
         if (isTauri()) {
-          await setMediaEncryption(rawMediaUrl, encInfo, thumbInfo.mimetype ?? FALLBACK_MIMETYPE);
+          await setMediaEncryption(rawMediaUrl, encInfo, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE);
           return rewriteAuthenticatedMediaUrl(rawMediaUrl)!;
         }
         const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
-          decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
+          decryptFile(encBuf, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE, encInfo)
         );
         return URL.createObjectURL(fileContent);
       }
@@ -57,7 +59,9 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
   );
 
   useEffect(() => {
-    loadThumbSrc();
+    // The failure is already reflected in `thumbSrcState`; swallow the rejection so it
+    // does not surface as an unhandled promise rejection.
+    loadThumbSrc().catch(() => undefined);
   }, [loadThumbSrc]);
 
   useRevokeObjectURL(

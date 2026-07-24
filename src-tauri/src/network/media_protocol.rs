@@ -25,10 +25,19 @@ use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
 
 const MEDIA_PATH_PREFIXES: [&str; 2] = ["/_matrix/media/", "/_matrix/client/v1/media/"];
+// How the webview spells this protocol: `sable-media://` on iOS/macOS, and
+// `http(s)://sable-media.localhost/` on Windows/Android respectively.
+const MEDIA_PROTOCOL_PREFIXES: [&str; 3] = [
+    "sable-media://",
+    "http://sable-media.localhost/",
+    "https://sable-media.localhost/",
+];
 const CACHE_SUBDIR: &str = "sable-media";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+// Inactivity deadline between chunks, so a slow but progressing download is not killed.
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_CONCURRENT_REQUESTS: usize = 4;
+const MAX_CONCURRENT_THUMBNAIL_REQUESTS: usize = 4;
+const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 2;
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
 
@@ -41,7 +50,8 @@ pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
     encryption: RwLock<HashMap<String, EncryptionParams>>,
     client: OnceLock<Client>,
-    semaphore: Semaphore,
+    thumbnail_semaphore: Semaphore,
+    download_semaphore: Semaphore,
     cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
 }
 
@@ -51,7 +61,8 @@ impl Default for MediaSessionState {
             inner: RwLock::new(None),
             encryption: RwLock::new(HashMap::new()),
             client: OnceLock::new(),
-            semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            thumbnail_semaphore: Semaphore::new(MAX_CONCURRENT_THUMBNAIL_REQUESTS),
+            download_semaphore: Semaphore::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
             cache_miss_gates: Mutex::new(HashMap::new()),
         }
     }
@@ -64,7 +75,7 @@ impl MediaSessionState {
             .get_or_init(|| {
                 // MSC3916: default policy strips Authorization on cross-origin redirects to a signed CDN URL.
                 Client::builder()
-                    .timeout(REQUEST_TIMEOUT)
+                    .read_timeout(READ_TIMEOUT)
                     .connect_timeout(CONNECT_TIMEOUT)
                     .redirect(tauri_plugin_http::reqwest::redirect::Policy::default())
                     .build()
@@ -96,6 +107,9 @@ impl MediaSessionState {
 struct MediaSession {
     origin: String,
     token: String,
+    // Cache key input. The Matrix user ID, not `token`, which rotates on every OIDC
+    // refresh and would orphan the whole on-disk cache.
+    scope: String,
 }
 
 #[derive(Clone)]
@@ -112,17 +126,26 @@ pub fn set_media_session(
     state: tauri::State<'_, MediaSessionState>,
     base_url: String,
     token: String,
+    scope: Option<String>,
 ) -> Result<(), String> {
     let origin = Url::parse(&base_url)
         .map_err(|err| err.to_string())?
         .origin()
         .ascii_serialization();
 
+    let scope = scope
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| origin.clone());
+
     let mut guard = state
         .inner
         .write()
         .map_err(|_| "media session lock poisoned".to_string())?;
-    *guard = Some(MediaSession { origin, token });
+    *guard = Some(MediaSession {
+        origin,
+        token,
+        scope,
+    });
     Ok(())
 }
 
@@ -133,6 +156,9 @@ pub fn clear_media_session<R: Runtime>(
 ) {
     if let Ok(mut guard) = state.inner.write() {
         *guard = None;
+    }
+    if let Ok(mut guard) = state.encryption.write() {
+        guard.clear();
     }
     if let Ok(dir) = cache_dir(&app) {
         let _ = fs::remove_dir_all(dir);
@@ -203,7 +229,10 @@ pub fn set_media_encryption(
 }
 
 fn normalize_encryption_key(url: &str) -> String {
-    if url.starts_with("sable-media://") || url.starts_with("http://sable-media.localhost/") {
+    if MEDIA_PROTOCOL_PREFIXES
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+    {
         if let Ok(uri) = Uri::try_from(url) {
             let path = uri.path().trim_start_matches('/');
             let decoded = percent_encoding::percent_decode_str(path)
@@ -215,7 +244,10 @@ fn normalize_encryption_key(url: &str) -> String {
             return decoded.into_owned();
         }
     }
-    url.to_string()
+    // Parse bare URLs too, so both sides of the map agree on one canonical form.
+    Url::parse(url)
+        .map(|parsed| parsed.to_string())
+        .unwrap_or_else(|_| url.to_string())
 }
 
 pub fn respond<R: Runtime>(
@@ -281,7 +313,7 @@ async fn handle_request<R: Runtime>(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let key = cache_key(&session.token, &target);
+    let key = cache_key(&session.scope, &target);
     let dir = cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let temp_dir = temp_cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -427,6 +459,34 @@ async fn ensure_cached_with_limits(
     }
 }
 
+// Thumbnails queue separately so a few large downloads cannot stall a painting timeline.
+async fn acquire_lane<'a>(
+    state: &'a MediaSessionState,
+    media_url: &Url,
+) -> Result<tokio::sync::SemaphorePermit<'a>, StatusCode> {
+    let semaphore = if is_thumbnail_request(media_url) {
+        &state.thumbnail_semaphore
+    } else {
+        &state.download_semaphore
+    };
+    semaphore
+        .acquire()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn is_thumbnail_request(media_url: &Url) -> bool {
+    media_url.path().contains("/thumbnail/")
+}
+
+fn has_encryption_params(state: &MediaSessionState, url: &str) -> bool {
+    state
+        .encryption
+        .read()
+        .map(|guard| guard.contains_key(url))
+        .unwrap_or(false)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn fetch_and_cache(
     state: &MediaSessionState,
@@ -441,13 +501,9 @@ async fn fetch_and_cache(
     max_persistent_cache_bytes: u64,
     max_temp_cache_bytes: u64,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
-    let permit = state
-        .semaphore
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let permit = acquire_lane(state, &media_url).await?;
 
-    let upstream = state
+    let mut upstream = state
         .client()
         .get(media_url.clone())
         .header(AUTHORIZATION, format!("Bearer {}", session.token))
@@ -468,27 +524,179 @@ async fn fetch_and_cache(
         .unwrap_or("application/octet-stream")
         .to_owned();
 
-    let body = upstream
-        .bytes()
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?
-        .to_vec();
+    // Encrypted media stays buffered: its SHA-256 only verifies over the whole ciphertext.
+    if has_encryption_params(state, media_url.as_str()) {
+        let body = upstream
+            .bytes()
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?
+            .to_vec();
+        let (body, content_type) =
+            decrypt_if_encrypted(state, media_url.as_str(), body, &content_type)?;
+        drop(permit);
 
-    // Check for encryption params and decrypt if present
-    let (body, content_type) =
-        match decrypt_if_encrypted(state, media_url.as_str(), body, &content_type) {
-            Ok((decrypted_body, decrypted_ct)) => (decrypted_body, decrypted_ct),
-            Err(status) => return Err(status),
-        };
-    drop(permit);
+        return store_buffered_body(
+            body,
+            content_type,
+            dir,
+            temp_dir,
+            body_path,
+            content_type_path,
+            temp_body_path,
+            temp_content_type_path,
+            max_persistent_cache_bytes,
+            max_temp_cache_bytes,
+        )
+        .await;
+    }
 
+    // Plaintext media streams to disk, so peak memory is one chunk instead of the whole file.
+    let staging_path = temp_body_path.with_extension("part");
+    match stream_to_staging_file(&mut upstream, temp_dir.clone(), staging_path.clone()).await {
+        StreamOutcome::Written(size) => {
+            drop(permit);
+            let (target_dir, target_body, target_ct, max_bytes) =
+                if size <= max_persistent_cache_bytes {
+                    (
+                        dir,
+                        body_path,
+                        content_type_path,
+                        max_persistent_cache_bytes,
+                    )
+                } else {
+                    (
+                        temp_dir,
+                        temp_body_path,
+                        temp_content_type_path,
+                        max_temp_cache_bytes,
+                    )
+                };
+
+            if promote_staging_file(
+                staging_path,
+                target_dir,
+                target_body.clone(),
+                target_ct,
+                content_type.clone(),
+                max_bytes,
+            )
+            .await
+            {
+                Ok((content_type, None, target_body))
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+        // Cache directory unusable (read-only, full): serve from memory instead of failing.
+        StreamOutcome::Unstorable => {
+            let body = upstream
+                .bytes()
+                .await
+                .map_err(|_| StatusCode::BAD_GATEWAY)?
+                .to_vec();
+            drop(permit);
+            Ok((content_type, Some(Arc::new(body)), temp_body_path))
+        }
+        StreamOutcome::Failed => Err(StatusCode::BAD_GATEWAY),
+    }
+}
+
+enum StreamOutcome {
+    Written(u64),
+    /// The staging file could not be created; nothing was read from the body yet.
+    Unstorable,
+    Failed,
+}
+
+async fn stream_to_staging_file(
+    upstream: &mut tauri_plugin_http::reqwest::Response,
+    temp_dir: PathBuf,
+    staging_path: PathBuf,
+) -> StreamOutcome {
+    if tokio::fs::create_dir_all(&temp_dir).await.is_err() {
+        return StreamOutcome::Unstorable;
+    }
+    let Ok(file) = tokio::fs::File::create(&staging_path).await else {
+        return StreamOutcome::Unstorable;
+    };
+
+    let mut file = tokio::io::BufWriter::new(file);
+    let mut written: u64 = 0;
+
+    loop {
+        match upstream.chunk().await {
+            Ok(Some(chunk)) => {
+                if tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                written += chunk.len() as u64;
+            }
+            Ok(None) => {
+                if tokio::io::AsyncWriteExt::flush(&mut file).await.is_ok() {
+                    return StreamOutcome::Written(written);
+                }
+                break;
+            }
+            Err(_) => break,
+        }
+    }
+
+    let _ = tokio::fs::remove_file(&staging_path).await;
+    StreamOutcome::Failed
+}
+
+// Move a completed staging file into its cache directory and record its content type.
+async fn promote_staging_file(
+    staging_path: PathBuf,
+    target_dir: PathBuf,
+    target_body: PathBuf,
+    target_content_type: PathBuf,
+    content_type: String,
+    max_bytes: u64,
+) -> bool {
+    tokio::task::spawn_blocking(move || {
+        if fs::create_dir_all(&target_dir).is_err() {
+            let _ = fs::remove_file(&staging_path);
+            return false;
+        }
+        if fs::rename(&staging_path, &target_body).is_err() {
+            let _ = fs::remove_file(&staging_path);
+            return false;
+        }
+        if fs::write(&target_content_type, &content_type).is_err() {
+            let _ = fs::remove_file(&target_body);
+            return false;
+        }
+        evict_directory_if_needed(&target_dir, max_bytes);
+        target_body.is_file()
+    })
+    .await
+    .unwrap_or(false)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn store_buffered_body(
+    body: Vec<u8>,
+    content_type: String,
+    dir: PathBuf,
+    temp_dir: PathBuf,
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+    temp_body_path: PathBuf,
+    temp_content_type_path: PathBuf,
+    max_persistent_cache_bytes: u64,
+    max_temp_cache_bytes: u64,
+) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
     if body.len() as u64 > max_temp_cache_bytes {
         return Ok((content_type, Some(Arc::new(body)), temp_body_path));
     }
 
     if body.len() as u64 <= max_persistent_cache_bytes {
         write_cache(
-            dir.clone(),
+            dir,
             body_path.clone(),
             content_type_path,
             body,
@@ -498,12 +706,12 @@ async fn fetch_and_cache(
         .await;
         Ok((content_type, None, body_path))
     } else {
-        // Oversized media: write to temporary session cache for sequential range requests
+        let shared = Arc::new(body);
         let written = write_cache(
-            temp_dir.clone(),
+            temp_dir,
             temp_body_path.clone(),
             temp_content_type_path,
-            body.clone(),
+            shared.as_ref().clone(),
             content_type.clone(),
             max_temp_cache_bytes,
         )
@@ -513,7 +721,7 @@ async fn fetch_and_cache(
             Ok((content_type, None, temp_body_path))
         } else {
             // Storage write failed or evicted; serve from memory fallback
-            Ok((content_type, Some(Arc::new(body)), temp_body_path))
+            Ok((content_type, Some(shared), temp_body_path))
         }
     }
 }
@@ -576,9 +784,8 @@ fn decrypt_if_encrypted(
         _ => return Err(StatusCode::BAD_REQUEST),
     }
 
-    // Remove encryption params — decrypted content is now cached on disk
-    let _ = state.encryption.write().map(|mut guard| guard.remove(url));
-
+    // Kept for the session: if this file is evicted, the refetch must still decrypt rather
+    // than serve ciphertext. `clear_media_session` drops them.
     let final_content_type =
         if params.content_type.is_empty() || params.content_type == "application/octet-stream" {
             sniff_image_content_type(&plaintext)
@@ -893,19 +1100,32 @@ mod tests {
     #[test]
     fn cache_key_is_stable_and_hex() {
         let url = "https://matrix.example.org/_matrix/client/v1/media/download/x/y";
-        let key = cache_key("account-a-token", url);
+        let key = cache_key("@a:example.org", url);
         assert_eq!(key.len(), 64);
         assert!(key.chars().all(|c| c.is_ascii_hexdigit()));
-        assert_eq!(key, cache_key("account-a-token", url));
+        assert_eq!(key, cache_key("@a:example.org", url));
     }
 
     #[test]
-    fn cache_key_is_scoped_to_the_session() {
+    fn cache_key_is_scoped_per_account() {
         let url = "https://matrix.example.org/_matrix/client/v1/media/download/x/y";
         assert_ne!(
-            cache_key("account-a-token", url),
-            cache_key("account-b-token", url)
+            cache_key("@a:example.org", url),
+            cache_key("@b:example.org", url)
         );
+    }
+
+    #[test]
+    fn thumbnail_requests_use_their_own_lane() {
+        let thumbnail = super::Url::parse(
+            "https://matrix.example.org/_matrix/client/v1/media/thumbnail/x/y?width=96",
+        )
+        .unwrap();
+        let download =
+            super::Url::parse("https://matrix.example.org/_matrix/client/v1/media/download/x/y")
+                .unwrap();
+        assert!(super::is_thumbnail_request(&thumbnail));
+        assert!(!super::is_thumbnail_request(&download));
     }
 
     #[test]
@@ -1009,6 +1229,19 @@ mod tests {
         assert_eq!(
             result,
             "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123"
+        );
+    }
+
+    #[test]
+    fn normalize_encryption_key_strips_android_prefix() {
+        // Android serves the protocol over https, which used to fall through to the bare-URL
+        // branch: the params were then keyed by the sable-media URL, never matched at fetch
+        // time, and encrypted media was served as ciphertext.
+        let input = "https://sable-media.localhost/https%3A%2F%2Fmatrix.example.org%2F_matrix%2Fclient%2Fv1%2Fmedia%2Fdownload%2Fmatrix.org%2Fabc123%3Fallow_redirect%3Dtrue?__sable_media_cache=3&__sable_media_session=%40a%3Aexample.org";
+        let result = super::normalize_encryption_key(input);
+        assert_eq!(
+            result,
+            "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123?allow_redirect=true"
         );
     }
 
