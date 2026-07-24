@@ -97,14 +97,24 @@ export async function switchBackgroundPushTransport(params: {
   previousKind: BackgroundPushKind | null;
   activate: () => Promise<BackgroundPushKind | null>;
   deactivate: (kind: BackgroundPushKind | null) => Promise<void>;
+  reactivate?: (kind: BackgroundPushKind) => Promise<void>;
 }): Promise<BackgroundPushKind | null> {
-  const { previousKind, activate, deactivate } = params;
+  const { previousKind, activate, deactivate, reactivate } = params;
 
   if (previousKind) {
     await deactivate(previousKind);
   }
 
-  return activate();
+  try {
+    return await activate();
+  } catch (error) {
+    // The old transport is already torn down, so restore it rather than
+    // leaving the user with no push delivery.
+    if (previousKind && reactivate) {
+      await reactivate(previousKind);
+    }
+    throw error;
+  }
 }
 
 function getNativePushConfigError(clientConfig: ReturnType<typeof useClientConfig>): string | null {
@@ -781,6 +791,7 @@ function BackgroundPushNotificationSetting() {
             previousKind,
             activate: () => activateMode(nextMode, previousKind),
             deactivate: deactivateTransport,
+            reactivate: activateTransport,
           });
           setBackgroundPushProvider(nextKind);
         }

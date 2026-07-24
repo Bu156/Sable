@@ -60,4 +60,32 @@ describe('switchBackgroundPushTransport', () => {
 
     expect(activate).not.toHaveBeenCalled();
   });
+
+  it('restores the previous transport when activation fails, then rethrows', async () => {
+    const order: string[] = [];
+    const deactivate = vi
+      .fn<(kind: NotificationTransportProvider | null) => Promise<void>>()
+      .mockImplementation(async (kind) => {
+        order.push(`deactivate:${kind}`);
+      });
+    const activate = vi
+      .fn<() => Promise<NotificationTransportProvider | null>>()
+      .mockRejectedValue(new Error('register failed'));
+    const reactivate = vi
+      .fn<(kind: NotificationTransportProvider) => Promise<void>>()
+      .mockImplementation(async (kind) => {
+        order.push(`reactivate:${kind}`);
+      });
+
+    await expect(
+      switchBackgroundPushTransport({
+        previousKind: 'unifiedpush',
+        activate,
+        deactivate,
+        reactivate,
+      })
+    ).rejects.toThrow('register failed');
+
+    expect(order).toEqual(['deactivate:unifiedpush', 'reactivate:unifiedpush']);
+  });
 });
