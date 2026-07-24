@@ -579,7 +579,6 @@ export class SlidingSyncManager {
 
   public attach(): void {
     debugLog.info('sync', 'Attaching sliding sync listeners', {
-      baseUrl: this.baseUrl,
       roomTimelineLimit: this.roomTimelineLimit,
       lists: this.listKeys,
     });
@@ -590,7 +589,6 @@ export class SlidingSyncManager {
       op: 'matrix.sync',
       attributes: {
         'sync.transport': 'sliding',
-        'sync.base_url': this.baseUrl,
       },
     });
 
