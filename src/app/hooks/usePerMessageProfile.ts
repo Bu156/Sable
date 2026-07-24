@@ -199,6 +199,21 @@ type PerMessageProfileRoomAssociationWrapper = {
 };
 
 /**
+ * the shape of the account data for room associations, which is a wrapper around a list of associations.
+ * This is used to store the associations in account data, and allows us to easily add additional fields in the future if needed without breaking the existing data structure.
+ */
+type PerMessageProfileGlobalAssociationWrapper = {
+  /**
+   * Key-Value pairs of room ids and profile ids, used to apply a profile to all messages in a room without having to set the profile for each message individually.
+   * The key is the room id, and the value is the profile id. The profile id can then be used to fetch the profile data when applying the profile to a message before sending it.
+   *
+   * @type {Map<string, PerMessageProfileRoomAssociation>}
+   */
+  association: PerMessageProfileRoomAssociation;
+  compat?: AccountDataCompatVersion;
+};
+
+/**
  * unwrap a profile-room-associations-wrapper
  * @param wrapper the wrapper to unwrap
  * @returns unwrapped map for profile-room-associations
@@ -385,6 +400,33 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
 }
 
 /**
+ * todo
+ */
+export async function setCurrentlyUsedPerMessageProfileIdForAccount(
+  mx: MatrixClient,
+  profileId: string | undefined,
+  validUntil?: number,
+  reset?: boolean
+) {
+  if (reset) {
+    mx.deleteAccountData(
+      `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0]
+    );
+    return;
+  }
+  if (!profileId) {
+    throw new Error("profile Id is empty, yet it isn't a reset");
+  }
+
+  const association: PerMessageProfileRoomAssociation = { profileId, validUntil };
+
+  mx.setAccountData(
+    `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0],
+    { association: association } as Parameters<typeof mx.setAccountData>[1]
+  );
+}
+
+/**
  *
  * @param mx the matrix client
  * @param profileId the profile id which the prefix should be attached to
@@ -565,6 +607,21 @@ export async function getCurrentlyUsedPerMessageProfileForRoom(
   const content: PerMessageProfileRoomAssociationWrapper | undefined = accountData?.getContent();
   const associations = getAssociationsMap(content);
   const profileId = associations.get(roomId)?.profileId;
+  const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
+  return profileId ? pmp : undefined;
+}
+
+/**
+ * get the per message profile associated with the account todo
+ */
+export async function getCurrentlyUsedPerMessageProfileForAccount(
+  mx: MatrixClient
+): Promise<PerMessageProfile | undefined> {
+  const accountData = mx.getAccountData(
+    `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.getAccountData>[0]
+  );
+  const content: PerMessageProfileGlobalAssociationWrapper | undefined = accountData?.getContent();
+  const profileId = content?.association.profileId;
   const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
   return profileId ? pmp : undefined;
 }
