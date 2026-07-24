@@ -54,11 +54,7 @@ export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIA
         />
       )}
       {stageToComplete.type === (AuthType.OAuth as string) && stageToComplete.session && (
-        <OAuthStage
-          stageData={stageToComplete}
-          onCancel={onCancel}
-          submitAuthDict={action}
-        />
+        <OAuthStage stageData={stageToComplete} onCancel={onCancel} submitAuthDict={action} />
       )}
     </UIAFlowOverlay>
   );
