@@ -1,5 +1,5 @@
 import { addPluginListener, invoke } from '@tauri-apps/api/core';
-import { isDesktopTauri, isMobileTauri } from '$utils/platform';
+import { isDesktopTauri, isMobileTauri, isAndroidTauri } from '$utils/platform';
 export type NotificationPluginListener = {
   unregister: () => Promise<void> | void;
 };
@@ -184,4 +184,4 @@ export async function sendNativeTauriNotification({
   });
 }
 
-export { isDesktopTauri, isMobileTauri };
+export { isDesktopTauri, isMobileTauri, isAndroidTauri };

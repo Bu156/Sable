@@ -588,7 +588,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const prevEditingEventId = useRef<string>();
     const preEditDraftRef = useRef<Editor['children']>();
     useEffect(() => {
-      if (!mobileOrTablet()) {
+      if (!isMobileOrTablet()) {
         prevEditingEventId.current = undefined;
         preEditDraftRef.current = undefined;
         return;
@@ -1034,7 +1034,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(async () => {
-      if (editingEvent && mobileOrTablet()) {
+      if (editingEvent && isMobileOrTablet()) {
         let plainText = toPlainText(editor.children).trim();
         if (!plainText) {
           onCancelEdit?.();
@@ -1566,7 +1566,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         if (isKeyHotkey('escape', evt)) {
           evt.preventDefault();
-          if (editingEvent && mobileOrTablet()) {
+          if (editingEvent && isMobileOrTablet()) {
             onCancelEdit?.();
             resetEditor(editor);
             resetEditorHistory(editor);
@@ -1917,7 +1917,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </Box>
                 </div>
               )}
-              {editingEvent && mobileOrTablet() && (
+              {editingEvent && isMobileOrTablet() && (
                 <div>
                   <Box
                     alignItems="Center"

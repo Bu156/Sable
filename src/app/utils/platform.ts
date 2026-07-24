@@ -66,6 +66,10 @@ export function isMobileTauri(): boolean {
   return tauriOS === 'ios' || tauriOS === 'android';
 }
 
+export function isAndroidTauri(): boolean {
+  return getTauriOS() === 'android';
+}
+
 export function hasControllingServiceWorker(): boolean {
   return hasServiceWorker() && navigator.serviceWorker.controller !== null;
 }

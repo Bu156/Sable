@@ -785,7 +785,7 @@ function MessageInternal(
         </Chip>
       )}
       {reply}
-      {edit && onEditId && !mobileOrTablet() ? (
+      {edit && onEditId && !isMobileOrTablet() ? (
         <MessageEditor
           style={{
             maxWidth: '100%',

@@ -2,10 +2,10 @@ name: Prepare OpenTofu Deployment
 description: Prepares OpenTofu in infra/web.
 
 inputs:
-  is_release_tag:
-    description: Whether the build is for a release tag. Passed through to SABLE_BUILD_FLAVOR.
+  build-flavor:
+    description: Build flavor (stable or dev). Controls app build behavior.
     required: false
-    default: 'false'
+    default: stable
 
 runs:
   using: composite
@@ -15,7 +15,7 @@ runs:
       with:
         build: 'true'
       env:
-        SABLE_BUILD_FLAVOR: ${{ inputs.is_release_tag == 'true' && 'stable' || '' }}
+        SABLE_BUILD_FLAVOR: ${{ inputs.build-flavor }}
         VITE_SENTRY_DSN: ${{ env.VITE_SENTRY_DSN }}
         VITE_SENTRY_ENVIRONMENT: ${{ env.VITE_SENTRY_ENVIRONMENT }}
         VITE_APP_VERSION: ${{ env.VITE_APP_VERSION }}

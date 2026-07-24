@@ -2,7 +2,7 @@ import classNames from 'classnames';
 import type { Position } from 'folds';
 import { as, Avatar, Text, Tooltip, TooltipProvider, toRem } from 'folds';
 import type { ComponentProps, ReactNode, RefCallback } from 'react';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import * as css from './Sidebar.css';
 
 const SidebarItemBottom = as<'div', css.SidebarItemVariants>(
@@ -70,7 +70,7 @@ export function SidebarItemTooltip({
   children: (triggerRef: RefCallback<HTMLElement | SVGElement>) => ReactNode;
   position?: Position;
 }) {
-  if (!tooltip || mobileOrTablet()) {
+  if (!tooltip || isMobileOrTablet()) {
     return children(() => undefined);
   }
 

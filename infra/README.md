@@ -97,8 +97,8 @@ npx wrangler versions upload
 
 Production deploys:
 
-- `.github/workflows/cloudflare-web-deploy.yml` comments PR plans for `infra/web` changes.
+- `.github/workflows/cloudflare-web.yml` comments PR plans for `infra/web` changes.
 - That PR plan job only runs for same-repo PRs, not fork PRs, because it needs repo secrets.
-- The same workflow applies production on pushes to `dev` or manual dispatch.
+- The workflow applies dev on pushes to `dev` or manual dispatch without tag; production on pushes to tags or manual dispatch with a tag.
 - `tofu apply` uploads `dist/` through `cloudflare_worker_version` and promotes it with `cloudflare_workers_deployment`.
 - Production lives on `app.sable.moe`.
