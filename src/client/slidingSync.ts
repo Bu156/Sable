@@ -689,6 +689,15 @@ export class SlidingSyncManager {
 
       const validRoomIds = new Set([...this.serverMembershipRoomIds, ...joinedRoomIds]);
 
+      this.sidebarCache.clearInviteStateForRooms(joinedRoomIds);
+
+      joinedRoomIds.forEach((roomId) => {
+        const room = this.mx.getRoom(roomId);
+        if (room?.getMyMembership() === (KnownMembership.Invite as string)) {
+          room.updateMyMembership(KnownMembership.Join);
+        }
+      });
+
       const removedRoomIds = this.sidebarCache.reconcileRooms(validRoomIds);
       removedRoomIds.forEach((roomId) => {
         this.mx.getRoom(roomId)?.updateMyMembership(KnownMembership.Leave);
