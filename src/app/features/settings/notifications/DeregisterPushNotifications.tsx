@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -83,7 +83,13 @@ function ConfirmDeregisterDialog({ onClose, onConfirm, isLoading }: ConfirmDereg
 export function DeregisterAllPushersSetting() {
   const mx = useMatrixClient();
   const clientConfig = useClientConfig();
-  const [deregisterState] = useAsyncCallback(deRegisterAllPushers);
+  const deregisterAll = useCallback(async () => {
+    await deRegisterAllPushers(mx);
+    if (isTauri()) {
+      await Promise.allSettled([disableNativePush(mx, clientConfig), disableUnifiedPush(mx)]);
+    }
+  }, [mx, clientConfig]);
+  const [deregisterState, runDeregisterAll] = useAsyncCallback(deregisterAll);
   const [isConfirming, setIsConfirming] = useState(false);
   const [, setPushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
   const [backgroundPushEnabled, setBackgroundPushEnabled] = useSetting(
@@ -104,13 +110,13 @@ export function DeregisterAllPushersSetting() {
   };
 
   const handleConfirmDeregister = async () => {
-    await deRegisterAllPushers(mx);
+    try {
+      await runDeregisterAll();
+    } catch {
+      return;
+    }
     setPushNotifications(false);
     setPushSubscription(null);
-
-    if (isTauri()) {
-      await Promise.allSettled([disableNativePush(mx, clientConfig), disableUnifiedPush(mx)]);
-    }
 
     if (backgroundPushEnabled) {
       setBackgroundPushEnabled(false);
@@ -151,7 +157,6 @@ export function DeregisterAllPushersSetting() {
           </Button>
         }
       >
-        {/* FIXME: these two things below, even before my changes, don't really seem to ever appear? */}
         {deregisterState.status === AsyncStatus.Error && (
           <Text as="span" style={{ color: color.Critical.Main }} size="T200">
             <br />
