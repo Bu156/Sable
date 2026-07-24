@@ -39,7 +39,7 @@ import {
   Username,
   UsernameBold,
 } from '$components/message';
-import { getEditedEvent, getMemberAvatarMxc } from '$utils/room';
+import { canEditEvent, getEditedEvent, getMemberAvatarMxc } from '$utils/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import type { MessageSpacing } from '$state/settings';
 import { getSettings, MessageLayout, settingsAtom } from '$state/settings';
@@ -263,6 +263,7 @@ type WrappedMessageProps = {
   msgContentJSX: JSX.Element;
   messageLayout?: MessageLayout;
   handleSwipeReply?: () => void;
+  handleSwipeEdit?: () => void;
   handleContextMenu: MouseEventHandler<HTMLDivElement>;
   align?: 'left' | 'right';
 };
@@ -272,6 +273,7 @@ function WrappedMessage({
   msgContentJSX,
   messageLayout,
   handleSwipeReply,
+  handleSwipeEdit,
   handleContextMenu,
   align,
 }: WrappedMessageProps) {
@@ -279,7 +281,7 @@ function WrappedMessage({
 
   if (messageLayout === MessageLayout.Compact)
     return (
-      <SwipeableMessageWrapper onReply={handleSwipeReply}>
+      <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
         <CompactLayout before={headerJSX} onContextMenu={handleContextMenu}>
           {msgContentJSX}
         </CompactLayout>
@@ -287,7 +289,7 @@ function WrappedMessage({
     );
   if (messageLayout === MessageLayout.Bubble)
     return (
-      <SwipeableMessageWrapper onReply={handleSwipeReply}>
+      <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
         <BubbleLayout
           before={avatarJSX}
           header={headerJSX}
@@ -299,7 +301,7 @@ function WrappedMessage({
       </SwipeableMessageWrapper>
     );
   return (
-    <SwipeableMessageWrapper onReply={handleSwipeReply}>
+    <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
       <ModernLayout before={avatarJSX} onContextMenu={handleContextMenu}>
         {headerJSX}
         {msgContentJSX}
@@ -762,7 +764,7 @@ function MessageInternal(
         </Chip>
       )}
       {reply}
-      {edit && onEditId ? (
+      {edit && onEditId && !mobileOrTablet() ? (
         <MessageEditor
           style={{
             maxWidth: '100%',
@@ -914,6 +916,9 @@ function MessageInternal(
   };
 
   const handleSwipeReply = () => {
+    if (onEditId) {
+      onEditId(undefined);
+    }
     const currentId = mEvent.getId();
     const targetId = activeReplyId === currentId ? null : currentId;
     const mockEvent = {
@@ -924,6 +929,21 @@ function MessageInternal(
 
     onReplyClick(mockEvent);
   };
+
+  const handleSwipeEdit = useMemo(
+    () =>
+      canEditEvent(mx, mEvent) && onEditId
+        ? () => {
+            const currentId = mEvent.getId();
+            if (edit) {
+              onEditId(undefined);
+            } else {
+              onEditId(currentId);
+            }
+          }
+        : undefined,
+    [mx, mEvent, onEditId, edit]
+  );
 
   return (
     <MessageBase
@@ -987,6 +1007,7 @@ function MessageInternal(
           msgContentJSX={msgContentJSX}
           messageLayout={messageLayout}
           handleSwipeReply={handleSwipeReply}
+          handleSwipeEdit={handleSwipeEdit}
           handleContextMenu={handleContextMenu}
           align={useRightBubbles && senderId === mx.getUserId() ? 'right' : 'left'}
         />

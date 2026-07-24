@@ -76,6 +76,7 @@ import {
   replaceWithElement,
   BlockType,
 } from '$components/editor';
+import { stripMarkdownEscapesForHiddenPreviews } from './message/hiddenLinkPreviews';
 import { plainToEditorInput } from '$components/editor/input';
 import type { GifData } from '$components/emoji-board';
 import { EmojiBoard, EmojiBoardTab } from '$components/emoji-board';
@@ -110,7 +111,13 @@ import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { matchesShortcut } from '../../keyboard/shortcuts';
-import { getMentionContent, isThreadRelationEvent, reactionOrEditEvent } from '$utils/room';
+import {
+  getEditedEvent,
+  getMentionContent,
+  isThreadRelationEvent,
+  reactionOrEditEvent,
+} from '$utils/room';
+import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
 import { mobileOrTablet } from '$utils/user-agent';
 import { Reply, ThreadIndicator } from '$components/message';
@@ -163,6 +170,7 @@ import {
   menuIcon,
   Microphone,
   PaperPlaneTilt,
+  PencilSimple,
   getPhosphorIconSize,
   PlusCircle,
   Smiley,
@@ -301,10 +309,24 @@ interface RoomInputProps {
   room: Room;
   threadRootId?: string;
   onEditLastMessage?: () => void;
+  editId?: string;
+  onCancelEdit?: () => void;
 }
 
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
-  ({ editor, fileDropContainerRef, roomId, room, threadRootId, onEditLastMessage }, ref) => {
+  (
+    {
+      editor,
+      fileDropContainerRef,
+      roomId,
+      room,
+      threadRootId,
+      onEditLastMessage,
+      editId,
+      onCancelEdit,
+    },
+    ref
+  ) => {
     // When in thread mode, isolate drafts by thread root ID so thread replies
     // don't clobber the main room draft (and vice versa).
     const draftKey = threadRootId ?? roomId;
@@ -563,6 +585,138 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [draftKey, editor, setMsgDraft]
     );
 
+    const editingEvent = editId ? room.findEventById(editId) : undefined;
+    const getEditingContent = useCallback(
+      (event: MatrixEvent): IContent => {
+        const eventId = event.getId();
+        const timeline = eventId ? room.getTimelineForEvent(eventId) : undefined;
+        const latestEdit =
+          eventId && timeline
+            ? getEditedEvent(eventId, event, timeline.getTimelineSet())
+            : undefined;
+        return latestEdit?.getContent()['m.new_content'] ?? event.getContent();
+      },
+      [room]
+    );
+
+    const prevEditingEventId = useRef<string>();
+    const preEditDraftRef = useRef<Editor['children']>();
+    useEffect(() => {
+      if (!mobileOrTablet()) {
+        prevEditingEventId.current = undefined;
+        preEditDraftRef.current = undefined;
+        return;
+      }
+
+      if (editingEvent) {
+        if (editingEvent.getId() !== prevEditingEventId.current) {
+          if (!prevEditingEventId.current) {
+            preEditDraftRef.current = structuredClone(editor.children);
+          }
+          prevEditingEventId.current = editingEvent.getId();
+
+          const content = getEditingContent(editingEvent);
+          let bodyText = (content.body as string | undefined) ?? '';
+          const customHtml = (content.formatted_body as string | undefined) ?? undefined;
+
+          const rawPmp = content['com.beeper.per_message_profile'];
+          const pmpDisplayname =
+            rawPmp !== null &&
+            typeof rawPmp === 'object' &&
+            'displayname' in rawPmp &&
+            typeof rawPmp.displayname === 'string' &&
+            rawPmp.displayname.length > 0
+              ? (rawPmp.displayname as string)
+              : undefined;
+
+          if (pmpDisplayname && typeof bodyText === 'string') {
+            const bodyPrefix = `${pmpDisplayname}: `;
+            if (bodyText.startsWith(bodyPrefix)) {
+              bodyText = bodyText.slice(bodyPrefix.length);
+            }
+          }
+          const editableHtml = pmpDisplayname
+            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+            : customHtml;
+
+          const mentionOptions = {
+            room,
+            nicknames,
+            mxUserId: mx.getUserId() ?? undefined,
+          };
+
+          const initialValue = plainToEditorInput(
+            editableHtml
+              ? stripMarkdownEscapesForHiddenPreviews(htmlToMarkdown(editableHtml))
+              : typeof bodyText === 'string'
+                ? stripMarkdownEscapesForHiddenPreviews(bodyText)
+                : '',
+            mentionOptions
+          );
+
+          resetEditor(editor);
+          resetEditorHistory(editor);
+          Transforms.insertFragment(editor, initialValue);
+
+          requestAnimationFrame(() => {
+            try {
+              ReactEditor.focus(editor);
+              moveCursor(editor);
+            } catch {
+              // Ignore focus error
+            }
+          });
+        }
+      } else {
+        const previousDraft = preEditDraftRef.current;
+        if (prevEditingEventId.current && previousDraft) {
+          resetEditor(editor);
+          resetEditorHistory(editor);
+          Transforms.insertFragment(editor, previousDraft);
+        }
+        preEditDraftRef.current = undefined;
+        if (
+          prevEditingEventId.current &&
+          (!replyDraft?.eventId || replyDraft.eventId === threadRootId)
+        ) {
+          requestAnimationFrame(() => {
+            try {
+              const domNode = ReactEditor.toDOMNode(editor, editor);
+              domNode.blur();
+              (document.activeElement as HTMLElement)?.blur();
+            } catch {
+              // Ignore blur error
+            }
+          });
+        }
+        prevEditingEventId.current = undefined;
+      }
+    }, [
+      editingEvent,
+      editor,
+      getEditingContent,
+      mx,
+      nicknames,
+      room,
+      replyDraft?.eventId,
+      threadRootId,
+    ]);
+
+    useEffect(() => {
+      if (editId && replyDraft?.eventId && replyDraft.eventId !== threadRootId) {
+        if (threadRootId) {
+          setReplyDraft({
+            userId: mx.getUserId() ?? '',
+            eventId: threadRootId,
+            body: '',
+            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
+          });
+        } else {
+          setReplyDraft(undefined);
+        }
+      }
+    }, [editId, threadRootId, setReplyDraft, mx, replyDraft?.eventId]);
+
     useEffect(() => {
       if (replyDraft !== undefined) {
         setSilentReply(replyDraft.userId === mx.getUserId() || !mentionInReplies);
@@ -571,10 +725,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const prevReplyEventId = useRef(replyDraft?.eventId);
     useEffect(() => {
-      if (replyDraft?.eventId !== prevReplyEventId.current) {
-        prevReplyEventId.current = replyDraft?.eventId;
+      const prevId = prevReplyEventId.current;
+      const newId = replyDraft?.eventId;
 
-        if (replyDraft?.eventId) {
+      if (newId !== prevId) {
+        prevReplyEventId.current = newId;
+
+        if (newId && newId !== threadRootId) {
           requestAnimationFrame(() => {
             try {
               ReactEditor.focus(editor);
@@ -583,9 +740,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               // Ignore focus errors
             }
           });
+        } else if (!newId && prevId && prevId !== threadRootId && !editId) {
+          requestAnimationFrame(() => {
+            try {
+              const domNode = ReactEditor.toDOMNode(editor, editor);
+              domNode.blur();
+              (document.activeElement as HTMLElement)?.blur();
+            } catch {
+              // Ignore blur errors
+            }
+          });
         }
       }
-    }, [replyDraft?.eventId, editor]);
+    }, [replyDraft?.eventId, threadRootId, editId, editor]);
 
     const handleFileMetadata = useCallback(
       (fileItem: TUploadItem, metadata: TUploadMetadata) => {
@@ -879,6 +1046,116 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(async () => {
+      if (editingEvent && mobileOrTablet()) {
+        let plainText = toPlainText(editor.children).trim();
+        if (!plainText) {
+          onCancelEdit?.();
+          return;
+        }
+
+        let customHtml = trimCustomHtml(
+          toMatrixCustomHTML(editor.children, {
+            forEmote: editingEvent.getContent().msgtype === MsgType.Emote,
+            room,
+          })
+        );
+        const oldContent = editingEvent.getContent();
+        const currentContent = getEditingContent(editingEvent);
+        const eventId = editingEvent.getId();
+        if (!eventId) return;
+
+        const msgtype = oldContent.msgtype ?? MsgType.Text;
+        const newContent: IContent = {
+          msgtype,
+          body: plainText,
+        };
+
+        const rawPmp =
+          currentContent['com.beeper.per_message_profile'] ??
+          oldContent['com.beeper.per_message_profile'];
+        const pmpDisplayname =
+          rawPmp !== null &&
+          typeof rawPmp === 'object' &&
+          'displayname' in rawPmp &&
+          typeof rawPmp.displayname === 'string' &&
+          rawPmp.displayname.length > 0
+            ? rawPmp.displayname
+            : undefined;
+
+        if (pmpDisplayname) {
+          const bodyPrefix = `${pmpDisplayname}: `;
+          if (!plainText.startsWith(bodyPrefix)) plainText = bodyPrefix + plainText;
+
+          const htmlPrefix = `<strong data-mx-profile-fallback>${sanitizeText(pmpDisplayname)}: </strong>`;
+          if (!customHtml.startsWith(htmlPrefix)) customHtml = htmlPrefix + customHtml;
+          newContent.body = plainText;
+          newContent['com.beeper.per_message_profile'] = rawPmp;
+        }
+
+        const mentionData = getMentions(mx, roomId, editor);
+        const previousMentions = currentContent['m.mentions'];
+        if (
+          previousMentions &&
+          typeof previousMentions === 'object' &&
+          'user_ids' in previousMentions &&
+          Array.isArray(previousMentions.user_ids)
+        ) {
+          previousMentions.user_ids.forEach((userId) => {
+            if (typeof userId === 'string') mentionData.users.add(userId);
+          });
+        }
+        const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
+        newContent['m.mentions'] = mMentions;
+
+        const content: IContent = {
+          ...oldContent,
+          'm.relates_to': {
+            event_id: eventId,
+            rel_type: RelationType.Replace,
+          },
+          body: `* ${plainText}`,
+          'm.mentions': mMentions,
+          'm.new_content': newContent,
+        };
+
+        if (pmpDisplayname || !customHtmlEqualsPlainText(customHtml, plainText)) {
+          newContent.format = 'org.matrix.custom.html';
+          newContent.formatted_body = customHtml;
+          content.format = 'org.matrix.custom.html';
+          content.formatted_body = `* ${customHtml}`;
+        } else {
+          delete content.format;
+          delete content.formatted_body;
+        }
+
+        if (oldContent.info !== undefined && oldContent.msgtype !== MsgType.Text) {
+          const filename = 'filename' in oldContent ? oldContent.filename : oldContent.body;
+          content.filename = filename;
+          newContent.filename = filename;
+          content.info = oldContent.info;
+          newContent.info = oldContent.info;
+          if (oldContent.file !== undefined) newContent.file = oldContent.file;
+          if (oldContent.url !== undefined) newContent.url = oldContent.url;
+
+          const spoilerKey = 'page.codeberg.everypizza.msc4193.spoiler';
+          if (oldContent[spoilerKey] !== undefined) {
+            content[spoilerKey] = oldContent[spoilerKey];
+            newContent[spoilerKey] = oldContent[spoilerKey];
+          }
+        }
+
+        const linkPreviews = getLinks(editor.children)?.map((matchedUrl) => ({
+          matched_url: matchedUrl,
+        }));
+        content['com.beeper.linkpreviews'] = linkPreviews ?? [];
+        newContent['com.beeper.linkpreviews'] = linkPreviews ?? [];
+
+        await mx.sendMessage(roomId, content as RoomMessageEventContent);
+        onCancelEdit?.();
+        sendTypingStatus(false);
+        return;
+      }
+
       if (selectedFiles.some((f) => f.encrypting)) return;
       uploadBoardHandlers.current?.handleSend();
       if (
@@ -1282,6 +1559,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       selectedFiles,
       enableMediaGalleries,
       sendIndividualAttachmentAsCaption,
+      editingEvent,
+      getEditingContent,
+      onCancelEdit,
     ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
@@ -1339,6 +1619,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         if (isKeyHotkey('escape', evt)) {
           evt.preventDefault();
+          if (editingEvent && mobileOrTablet()) {
+            onCancelEdit?.();
+            resetEditor(editor);
+            resetEditorHistory(editor);
+            return;
+          }
           if (showAudioRecorder) {
             audioRecorderRef.current?.cancel();
             return;
@@ -1367,6 +1653,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         onEditLastMessage,
         setEmojiBoardTab,
         shortcutOverrides,
+        editingEvent,
+        onCancelEdit,
       ]
     );
 
@@ -1663,6 +1951,45 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     <Text style={{ color: color.Critical.Main }} size="T300">
                       {sendError}
                     </Text>
+                  </Box>
+                </div>
+              )}
+              {editingEvent && mobileOrTablet() && (
+                <div>
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{
+                      padding: `${config.space.S200} ${config.space.S300} 0`,
+                    }}
+                  >
+                    <IconButton
+                      onClick={() => {
+                        onCancelEdit?.();
+                        resetEditor(editor);
+                        resetEditorHistory(editor);
+                      }}
+                      variant="SurfaceVariant"
+                      style={{ background: 'transparent' }}
+                      size="300"
+                      radii="300"
+                      aria-label="Cancel editing"
+                      title="Cancel editing"
+                    >
+                      {chipIcon(X)}
+                    </IconButton>
+                    <Box
+                      direction="Row"
+                      gap="200"
+                      alignItems="Center"
+                      grow="Yes"
+                      style={{ minWidth: 0 }}
+                    >
+                      {menuIcon(PencilSimple)}
+                      <Text size="T300" truncate>
+                        Editing message: {editingEvent.getContent().body as string}
+                      </Text>
+                    </Box>
                   </Box>
                 </div>
               )}
