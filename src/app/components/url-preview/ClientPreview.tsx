@@ -8,7 +8,7 @@ import { settingsAtom } from '$state/settings';
 import { encodeBlurHash } from '$utils/blurHash';
 import { fetch } from '$utils/fetch';
 import { Attachment, AttachmentBox, AttachmentHeader } from '../message/attachment';
-import { Image } from '../media';
+import { Image as MediaImage } from '../media';
 import { UrlPreview } from './UrlPreview';
 import { VideoContent } from '../message';
 import { MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME } from '../../../unstable/prefixes';
@@ -124,7 +124,7 @@ const YoutubeElement = as<'div', YoutubeElementProps>(({ videoInfo, embedData })
             thumbnail_info: { [MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]: blurHash },
           }}
           renderThumbnail={() => (
-            <Image
+            <MediaImage
               src={thumbnailUrl}
               /*
 								this allows the blurhash to be computed, otherwise it throws an "insecure operation" error

@@ -34,6 +34,7 @@ import { ServerPicker } from './ServerPicker';
 import * as css from './styles.css';
 import { AuthFooter } from './AuthFooter';
 import { usePathWithOrigin } from '$hooks/usePathWithOrigin';
+import { Image as MediaImage } from '$components/media';
 
 const currentAuthPath = (pathname: string): string => {
   if (matchPath(LOGIN_PATH, pathname)) {
@@ -221,7 +222,7 @@ export function AuthLayout() {
         <Box direction="Column" className={css.AuthCard}>
           <Header className={css.AuthHeader} size="600" variant="Surface">
             <Box grow="Yes" direction="Row" gap="300" alignItems="Center">
-              <img className={css.AuthLogo} src={LogoSVG} alt="Sable Logo" />
+              <MediaImage className={css.AuthLogo} src={LogoSVG} alt="Sable Logo" />
               <Text size="H3">Sable</Text>
             </Box>
             {isAddingAccount && (

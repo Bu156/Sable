@@ -3,6 +3,7 @@ import type { MatrixClient } from '$types/matrix-sdk';
 import type { PackImageReader } from '$plugins/custom-emoji';
 import type { IEmoji } from '$plugins/emoji';
 import { mxcUrlToHttp } from '$utils/matrix';
+import { Image as MediaImage } from '$components/media';
 import type { EmojiItemInfo, GifData } from '$components/emoji-board/types';
 import { EmojiType } from '$components/emoji-board/types';
 import type { CSSProperties, ReactNode } from 'react';
@@ -103,7 +104,7 @@ export function CustomEmojiItem({
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
     >
-      <img
+      <MediaImage
         loading="lazy"
         className={css.CustomEmojiImg}
         alt={image.body || image.shortcode}
@@ -139,7 +140,7 @@ export function StickerItem({
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
     >
-      <img
+      <MediaImage
         loading="lazy"
         className={css.StickerImg}
         alt={image.body || image.shortcode}

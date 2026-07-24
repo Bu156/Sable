@@ -33,6 +33,7 @@ import { ImageUsage } from '$plugins/custom-emoji';
 import { getEmoticonSearchStr } from '$plugins/utils';
 import { VirtualTile } from '$components/virtualizer';
 import { useSetting } from '$state/hooks/settings';
+import { Image as MediaImage } from '$components/media';
 import { settingsAtom } from '$state/settings';
 import { useEmojiGroupIcons } from './useEmojiGroupIcons';
 import { useEmojiGroupLabels } from './useEmojiGroupLabels';
@@ -189,7 +190,7 @@ const useItemRenderer = (tab: EmojiBoardTab, saveStickerEmojiBandwidth: boolean)
           gif={gif}
           style={{ aspectRatio }}
         >
-          <img
+          <MediaImage
             loading="lazy"
             alt=""
             aria-hidden

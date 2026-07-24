@@ -43,6 +43,9 @@ importers:
       '@fontsource/space-mono':
         specifier: 5.2.9
         version: 5.2.9
+      '@lottiefiles/dotlottie-react':
+        specifier: ^0.12.0
+        version: 0.12.3(react@18.3.1)
       '@noble/hashes':
         specifier: ^2.2.0
         version: 2.2.0
@@ -1612,6 +1615,14 @@ packages:
 
   '@kwsites/file-exists@1.1.1':
     resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
+
+  '@lottiefiles/dotlottie-react@0.12.3':
+    resolution: {integrity: sha512-b0k0Lakj2hmhyIkwJSpKySh6xoelpgWRaijyrCb6fraOCnzuitKglVTtYs0VWf72rk+2aSmC/0IK8j8wruVfOw==}
+    peerDependencies:
+      react: ^17 || ^18 || ^19
+
+  '@lottiefiles/dotlottie-web@0.40.1':
+    resolution: {integrity: sha512-iNz1rr8zRTSJ0xCZEPeoCX6YnaNhBdkF7gJWhSa8bwB4NTrYZm0vAuC0jF/aLLhU7q9nf6ykxffrz0Sf4JPSPg==}
 
   '@matrix-org/matrix-sdk-crypto-wasm@18.3.1':
     resolution: {integrity: sha512-VRjWhE1UgHnPpJ3b9B5+8z71ZC/HICFngPPFIN6ktzmUBKI5RusPujzbAQUoB3CgZ0yU58L99AfSQS4YTztSWw==}
@@ -7086,6 +7097,13 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  '@lottiefiles/dotlottie-react@0.12.3(react@18.3.1)':
+    dependencies:
+      '@lottiefiles/dotlottie-web': 0.40.1
+      react: 18.3.1
+
+  '@lottiefiles/dotlottie-web@0.40.1': {}
 
   '@matrix-org/matrix-sdk-crypto-wasm@18.3.1': {}
 

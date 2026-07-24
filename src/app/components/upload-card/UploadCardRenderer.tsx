@@ -17,6 +17,7 @@ import {
 import type { HTMLReactParserOptions } from 'html-react-parser';
 import { Play, Pause } from '@phosphor-icons/react';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import { Image as MediaImage } from '$components/media';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '$plugins/react-custom-html-parser';
 import { useSpoilerClickHandler } from '$hooks/useSpoilerClickHandler';
@@ -53,7 +54,7 @@ function PreviewImage({ fileItem }: Readonly<PreviewImageProps>) {
   const fileUrl = useObjectURL(originalFile);
 
   return (
-    <img
+    <MediaImage
       style={{
         objectFit: 'contain',
         width: '100%',

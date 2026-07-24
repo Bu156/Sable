@@ -23,7 +23,7 @@ import {
   type RenderImageContentProps,
 } from '$components/message';
 import { UserAvatar } from '$components/user-avatar';
-import { Image } from '$components/media';
+import { Image as MediaImage } from '$components/media';
 import { ImageViewer } from '$components/image-viewer';
 import { RenderMessageContent } from '$components/RenderMessageContent';
 import { PowerIcon } from '$components/power';
@@ -72,8 +72,8 @@ type MessagePreviewRendererContext = MessagePreviewRendererOptions & {
   mx: ReturnType<typeof useMatrixClient>;
 };
 
-function LazyImage(props: ComponentProps<typeof Image>) {
-  return <Image {...props} loading="lazy" />;
+function LazyImage(props: ComponentProps<typeof MediaImage>) {
+  return <MediaImage {...props} loading="lazy" />;
 }
 
 function resolvePreviewContent(

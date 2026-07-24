@@ -1,4 +1,4 @@
-import type { PointerEvent, SyntheticEvent, WheelEvent } from 'react';
+import type { ImgHTMLAttributes, PointerEvent, SyntheticEvent, WheelEvent } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FileSaver from 'file-saver';
@@ -58,5 +58,17 @@ describe('ImageViewer', () => {
       expect(downloadMedia).toHaveBeenCalledWith('https://example.org/kitten.png');
     });
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'kitten.png');
+  });
+});
+
+vi.mock('$components/media', () => ({
+  Image: ({ alt, ...props }: ImgHTMLAttributes<HTMLImageElement>) => <img alt={alt} {...props} />,
+}));
+
+describe('ImageViewer', () => {
+  it('renders the fullscreen image without crashing', () => {
+    render(<ImageViewer alt="demo" src="https://example.com/demo.png" requestClose={() => {}} />);
+
+    expect(screen.getByAltText('demo')).toBeInTheDocument();
   });
 });
