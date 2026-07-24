@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type CryptoApi, type CryptoEventHandlerMap, CryptoEvent } from '$types/matrix-sdk';
 import { verifiedDevice } from '$utils/matrix-crypto';
-import { fulfilledPromiseSettledResult } from '$utils/common';
-import { useAlive } from './useAlive';
 import { useMatrixClient } from './useMatrixClient';
 import { useDeviceListChange } from './useDeviceList';
 
@@ -18,6 +17,20 @@ export const useCrossSigningKeysChange = (
   }, [mx, onChange]);
 };
 
+// onUserIdentityUpdated only emits KeysChanged for our own identity, so another user's
+// cross-signing status changes are observable through this event alone.
+export const useUserTrustStatusChange = (
+  onChange: CryptoEventHandlerMap[CryptoEvent.UserTrustStatusChanged]
+) => {
+  const mx = useMatrixClient();
+  useEffect(() => {
+    mx.on(CryptoEvent.UserTrustStatusChanged, onChange);
+    return () => {
+      mx.removeListener(CryptoEvent.UserTrustStatusChanged, onChange);
+    };
+  }, [mx, onChange]);
+};
+
 export enum VerificationStatus {
   Unknown,
   Unverified,
@@ -25,43 +38,61 @@ export enum VerificationStatus {
   Unsupported,
 }
 
-export const useDeviceVerificationDetect = (
+const DEVICE_VERIFICATION_QUERY_KEY = 'device-verification';
+
+// Every sliding sync response carrying device_lists re-emits DevicesUpdated, and each check is a
+// full ed25519 cross-signing verification in wasm. Cache per device so repeated consumers share
+// one result and we only re-verify when the device list or cross-signing keys actually change.
+const deviceVerificationQuery = (
   crypto: CryptoApi | undefined,
   userId: string,
-  deviceId: string | undefined,
-  callback: (status: VerificationStatus) => void
-): void => {
-  const mx = useMatrixClient();
+  deviceId: string | undefined
+) => ({
+  queryKey: [DEVICE_VERIFICATION_QUERY_KEY, userId, deviceId ?? ''],
+  queryFn: async () => {
+    if (!crypto || !deviceId) return null;
+    return verifiedDevice(crypto, userId, deviceId);
+  },
+  enabled: Boolean(crypto) && Boolean(deviceId),
+  staleTime: Infinity,
+});
 
-  const updateStatus = useCallback(async () => {
-    if (crypto && deviceId) {
-      const data = await verifiedDevice(crypto, userId, deviceId);
-      if (data === null) {
-        callback(VerificationStatus.Unsupported);
-        return;
-      }
-      callback(data ? VerificationStatus.Verified : VerificationStatus.Unverified);
-      return;
-    }
-    callback(VerificationStatus.Unknown);
-  }, [crypto, deviceId, userId, callback]);
-
-  useEffect(() => {
-    updateStatus();
-  }, [mx, updateStatus, userId]);
+const useInvalidateDeviceVerification = (userId: string): void => {
+  const queryClient = useQueryClient();
 
   useDeviceListChange(
     useCallback(
       (userIds) => {
         if (userIds.includes(userId)) {
-          updateStatus();
+          queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY, userId] });
         }
       },
-      [userId, updateStatus]
+      [queryClient, userId]
     )
   );
 
-  useCrossSigningKeysChange(useCallback(() => updateStatus(), [updateStatus]));
+  useCrossSigningKeysChange(
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY] });
+    }, [queryClient])
+  );
+
+  useUserTrustStatusChange(
+    useCallback(
+      (changedUserId) => {
+        queryClient.invalidateQueries({
+          queryKey: [DEVICE_VERIFICATION_QUERY_KEY, changedUserId],
+        });
+      },
+      [queryClient]
+    )
+  );
+};
+
+const toVerificationStatus = (verified: boolean | null | undefined): VerificationStatus => {
+  if (verified === undefined) return VerificationStatus.Unknown;
+  if (verified === null) return VerificationStatus.Unsupported;
+  return verified ? VerificationStatus.Verified : VerificationStatus.Unverified;
 };
 
 export const useDeviceVerificationStatus = (
@@ -69,11 +100,11 @@ export const useDeviceVerificationStatus = (
   userId: string,
   deviceId: string | undefined
 ): VerificationStatus => {
-  const [verificationStatus, setVerificationStatus] = useState(VerificationStatus.Unknown);
+  useInvalidateDeviceVerification(userId);
 
-  useDeviceVerificationDetect(crypto, userId, deviceId, setVerificationStatus);
+  const { data } = useQuery(deviceVerificationQuery(crypto, userId, deviceId));
 
-  return verificationStatus;
+  return toVerificationStatus(data);
 };
 
 export const useUnverifiedDeviceCount = (
@@ -81,42 +112,14 @@ export const useUnverifiedDeviceCount = (
   userId: string,
   devices: string[]
 ): number | undefined => {
-  const [unverifiedCount, setUnverifiedCount] = useState<number>();
-  const alive = useAlive();
+  useInvalidateDeviceVerification(userId);
 
-  const updateCount = useCallback(async () => {
-    let count = 0;
-    if (crypto) {
-      const promises = devices.map((deviceId) => verifiedDevice(crypto, userId, deviceId));
-      const result = await Promise.allSettled(promises);
-      const settledResult = fulfilledPromiseSettledResult(result);
-      settledResult.forEach((status) => {
-        if (status === false) {
-          count += 1;
-        }
-      });
-    }
-    if (alive()) {
-      setUnverifiedCount(count);
-    }
-  }, [crypto, userId, devices, alive]);
-
-  useDeviceListChange(
-    useCallback(
-      (userIds) => {
-        if (userIds.includes(userId)) {
-          updateCount();
-        }
-      },
-      [userId, updateCount]
-    )
-  );
-
-  useCrossSigningKeysChange(useCallback(() => updateCount(), [updateCount]));
-
-  useEffect(() => {
-    updateCount();
-  }, [updateCount]);
-
-  return unverifiedCount;
+  return useQueries({
+    queries: devices.map((deviceId) => deviceVerificationQuery(crypto, userId, deviceId)),
+    combine: (results) => {
+      if (!crypto) return 0;
+      if (results.some((result) => result.isPending)) return undefined;
+      return results.filter((result) => result.data === false).length;
+    },
+  });
 };
