@@ -4,6 +4,7 @@
 // the same approach as Capacitor's hideFormAccessoryBar.
 
 use std::ffi::CString;
+use std::sync::OnceLock;
 
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
@@ -84,4 +85,73 @@ pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
             AnyObject::set_class(&*subview, subclass);
         }
     });
+}
+
+// WKWebView plays HTMLAudioElement on .playback, ignoring the silent switch.
+// AudioServicesPlaySystemSound respects the switch and uses ringer volume.
+
+use objc2_foundation::{NSString, NSURL};
+
+extern "C" {
+    fn AudioServicesCreateSystemSoundID(
+        in_file_url: *mut objc2::runtime::AnyObject,
+        out_sound_id: *mut u32,
+    ) -> i32;
+    fn AudioServicesPlaySystemSound(sound_id: u32);
+    fn AudioServicesDisposeSystemSoundID(sound_id: u32);
+}
+
+fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
+    // AudioServicesCreateSystemSoundID needs a file URL, so write the
+    // embedded .caf to the app's temp directory on first use.
+    let mut path = std::env::temp_dir();
+    path.push(temp_name);
+    if !path.exists() {
+        if let Err(_) = std::fs::write(&path, caf_bytes) {
+            return None;
+        }
+    }
+    unsafe {
+        let path_str = NSString::from_str(&path.to_string_lossy());
+        let url: Option<Retained<NSURL>> = msg_send![
+            NSURL, fileURLWithPath: &*path_str
+        ];
+        let url = url?;
+        let mut sound_id: u32 = 0;
+        let status = AudioServicesCreateSystemSoundID(
+            &*url as *mut _ as *mut objc2::runtime::AnyObject,
+            &mut sound_id,
+        );
+        if status != 0 || sound_id == 0 {
+            return None;
+        }
+        Some(sound_id)
+    }
+}
+
+pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
+    static NOTIFICATION_SOUND: OnceLock<Option<u32>> = OnceLock::new();
+    static INVITE_SOUND: OnceLock<Option<u32>> = OnceLock::new();
+
+    let cache = if kind == "invite" {
+        &INVITE_SOUND
+    } else {
+        &NOTIFICATION_SOUND
+    };
+    let caf = if kind == "invite" {
+        include_bytes!("../resources/invite.caf")
+    } else {
+        include_bytes!("../resources/notification.caf")
+    };
+    let name = if kind == "invite" {
+        "sable_invite.caf"
+    } else {
+        "sable_notification.caf"
+    };
+
+    let sound_id = cache.get_or_init(|| load_system_sound(caf, name));
+    if let Some(id) = sound_id {
+        unsafe { AudioServicesPlaySystemSound(*id) };
+    }
+    Ok(())
 }
