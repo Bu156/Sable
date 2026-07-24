@@ -17,6 +17,7 @@ export const SUPPORTED_FLOW_TYPES = [
   AuthType.Terms,
   AuthType.Recaptcha,
   AuthType.RegistrationToken,
+  AuthType.OAuth,
 ] as const;
 
 export const useSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: string[]): UIAFlow[] =>
