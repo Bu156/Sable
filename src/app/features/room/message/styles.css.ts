@@ -13,6 +13,14 @@ export const MessageForceHover = style({
   backgroundColor: `${color.Surface.ContainerHover} !important`,
 });
 
+export const MessageSwipeReply = style({
+  backgroundColor: color.Surface.ContainerHover,
+});
+
+export const MessageSwipeEdit = style({
+  backgroundColor: color.Primary.Container,
+});
+
 export const MessageOptionsBase = style([
   DefaultReset,
   {

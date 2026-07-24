@@ -53,7 +53,7 @@ import { PowerIcon } from '$components/power';
 import { Info, menuIcon, userFallbackIcon } from '$components/icons/phosphor';
 import { getPowerTagIconSrc } from '$hooks/useMemberPowerTag';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
-import { SwipeableMessageWrapper } from '$components/SwipeableMessageWrapper';
+import { SwipeableMessageWrapper, type SwipeActionMode } from '$components/SwipeableMessageWrapper';
 import { mobileOrTablet } from '$utils/user-agent';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
@@ -264,6 +264,7 @@ type WrappedMessageProps = {
   messageLayout?: MessageLayout;
   handleSwipeReply?: () => void;
   handleSwipeEdit?: () => void;
+  handleSwipeActionChange?: (mode: SwipeActionMode) => void;
   handleContextMenu: MouseEventHandler<HTMLDivElement>;
   align?: 'left' | 'right';
 };
@@ -274,6 +275,7 @@ function WrappedMessage({
   messageLayout,
   handleSwipeReply,
   handleSwipeEdit,
+  handleSwipeActionChange,
   handleContextMenu,
   align,
 }: WrappedMessageProps) {
@@ -281,7 +283,11 @@ function WrappedMessage({
 
   if (messageLayout === MessageLayout.Compact)
     return (
-      <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
+      <SwipeableMessageWrapper
+        onReply={handleSwipeReply}
+        onEdit={handleSwipeEdit}
+        onActionModeChange={handleSwipeActionChange}
+      >
         <CompactLayout before={headerJSX} onContextMenu={handleContextMenu}>
           {msgContentJSX}
         </CompactLayout>
@@ -289,7 +295,11 @@ function WrappedMessage({
     );
   if (messageLayout === MessageLayout.Bubble)
     return (
-      <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
+      <SwipeableMessageWrapper
+        onReply={handleSwipeReply}
+        onEdit={handleSwipeEdit}
+        onActionModeChange={handleSwipeActionChange}
+      >
         <BubbleLayout
           before={avatarJSX}
           header={headerJSX}
@@ -301,7 +311,11 @@ function WrappedMessage({
       </SwipeableMessageWrapper>
     );
   return (
-    <SwipeableMessageWrapper onReply={handleSwipeReply} onEdit={handleSwipeEdit}>
+    <SwipeableMessageWrapper
+      onReply={handleSwipeReply}
+      onEdit={handleSwipeEdit}
+      onActionModeChange={handleSwipeActionChange}
+    >
       <ModernLayout before={avatarJSX} onContextMenu={handleContextMenu}>
         {headerJSX}
         {msgContentJSX}
@@ -944,12 +958,15 @@ function MessageInternal(
         : undefined,
     [mx, mEvent, onEditId, edit]
   );
+  const [swipeActionMode, setSwipeActionMode] = useState<SwipeActionMode>('none');
 
   return (
     <MessageBase
       className={classNames(css.MessageBase, className, {
         [css.MessageBaseBubbleCollapsed]: messageLayout === MessageLayout.Bubble && collapse,
         [css.MessageForceHover]: isPressing || isEmoji || !!menuAnchor,
+        [css.MessageSwipeReply]: swipeActionMode === 'reply',
+        [css.MessageSwipeEdit]: swipeActionMode === 'edit',
       })}
       tabIndex={0}
       space={messageSpacing}
@@ -1008,6 +1025,7 @@ function MessageInternal(
           messageLayout={messageLayout}
           handleSwipeReply={handleSwipeReply}
           handleSwipeEdit={handleSwipeEdit}
+          handleSwipeActionChange={setSwipeActionMode}
           handleContextMenu={handleContextMenu}
           align={useRightBubbles && senderId === mx.getUserId() ? 'right' : 'left'}
         />

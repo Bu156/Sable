@@ -207,8 +207,11 @@ export function AttachmentSheet({
 
       <FocusTrap
         focusTrapOptions={{
-          initialFocus: () => sheetRef.current ?? containerEl,
+          // Moving focus to the bottom sheet makes iOS reposition the visual viewport
+          // and briefly jolts the timeline. Existing mobile sheets leave focus in place.
+          initialFocus: false,
           fallbackFocus: () => sheetRef.current ?? containerEl,
+          preventScroll: true,
           returnFocusOnDeactivate: true,
           setReturnFocus: (previousActiveElement: HTMLElement) =>
             skipReturnFocusRef.current ? false : previousActiveElement,

@@ -1,5 +1,13 @@
 import type { ReactNode } from 'react';
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useSetting } from '$state/hooks/settings';
@@ -19,6 +27,12 @@ import {
 import { resolveSection } from '$pages/pathUtils';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 import { PersistentRoomHost } from './PersistentRoomHost';
+import { MobileNavDrawerContext, type MobileSwipeTarget } from './MobileNavDrawerContext';
+import {
+  classifyMobileGesture,
+  getDrawerSettlePosition,
+  type MobileGestureMode,
+} from './mobileSwipeCoordinator';
 
 type MobileNavDrawerProps = {
   nav: ReactNode;
@@ -27,8 +41,21 @@ type MobileNavDrawerProps = {
   children: ReactNode;
 };
 
-/** Sliding mobile drawer: the list and active room are adjacent snap panels;
- * native scrolling reveals the other panel and commits the route after settling. */
+const DRAWER_TRANSITION_MS = 220;
+
+type ActiveTouchGesture = {
+  startX: number;
+  startY: number;
+  startPosition: number;
+  lastX: number;
+  lastTime: number;
+  velocityX: number;
+  mode: MobileGestureMode;
+  message?: MobileSwipeTarget;
+  chat?: MobileSwipeTarget;
+};
+
+/** Sliding mobile drawer with one touch coordinator and a GPU-transformed panel track. */
 export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDrawerProps) {
   const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
   const reduceMotion = useReducedMotion();
@@ -62,14 +89,83 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const contentOpen = !listView;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const navPanelRef = useRef<HTMLDivElement | null>(null);
   const contentPanelRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  const widthRef = useRef(0);
+  const positionRef = useRef(0);
 
   const [panelIntent, setPanelIntent] = useState(contentOpen ? 1 : 0);
-  const userScrollRef = useRef(false);
-  const touchActiveRef = useRef(false);
-  const scrollEndTimerRef = useRef<number>();
+  const gestureRef = useRef<ActiveTouchGesture>();
+  const messageTargetsRef = useRef(new WeakMap<HTMLElement, MobileSwipeTarget>());
+  const chatTargetsRef = useRef(new WeakMap<HTMLElement, MobileSwipeTarget>());
+  const settleAnimationRef = useRef<number>();
+  const programmaticTargetRef = useRef<number>();
+
+  const setTrackPosition = useCallback((position: number) => {
+    positionRef.current = position;
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translate3d(${position}px, 0, 0)`;
+    }
+  }, []);
+
+  const settleToPanel = useCallback(
+    (targetPosition: number, onComplete?: () => void) => {
+      if (!trackRef.current) return;
+
+      window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
+      if (reduceMotion) {
+        setTrackPosition(targetPosition);
+        onComplete?.();
+        return;
+      }
+
+      const startPosition = positionRef.current;
+      const distance = targetPosition - startPosition;
+      if (Math.abs(distance) <= 1) {
+        setTrackPosition(targetPosition);
+        onComplete?.();
+        return;
+      }
+
+      const startTime = window.performance.now();
+      const tick = (time: number) => {
+        const progress = Math.min(1, (time - startTime) / DRAWER_TRANSITION_MS);
+        const eased = 1 - (1 - progress) ** 3;
+        setTrackPosition(startPosition + distance * eased);
+
+        if (progress < 1) {
+          settleAnimationRef.current = window.requestAnimationFrame(tick);
+        } else {
+          setTrackPosition(targetPosition);
+          settleAnimationRef.current = undefined;
+          onComplete?.();
+        }
+      };
+
+      settleAnimationRef.current = window.requestAnimationFrame(tick);
+    },
+    [reduceMotion, setTrackPosition]
+  );
+
+  const registerMessageSwipe = useCallback((element: HTMLElement, target: MobileSwipeTarget) => {
+    messageTargetsRef.current.set(element, target);
+    return () => {
+      if (messageTargetsRef.current.get(element) === target) {
+        messageTargetsRef.current.delete(element);
+      }
+    };
+  }, []);
+
+  const registerChatSwipe = useCallback((element: HTMLElement, target: MobileSwipeTarget) => {
+    chatTargetsRef.current.set(element, target);
+    return () => {
+      if (chatTargetsRef.current.get(element) === target) {
+        chatTargetsRef.current.delete(element);
+      }
+    };
+  }, []);
 
   const [roomArmed, setRoomArmed] = useState(() => isRoomRoute || canOpenRoom);
   useEffect(() => {
@@ -84,19 +180,51 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     return () => cic(handle as number);
   }, [isRoomRoute, canOpenRoom, roomArmed]);
 
+  const openContent = useCallback(
+    (path: string) => {
+      const viewport = viewportRef.current;
+      if (!viewport || width === 0) {
+        startTransition(() => navigate(path));
+        return;
+      }
+
+      setRoomArmed(true);
+      programmaticTargetRef.current = -width;
+
+      // Start the exact same settle used after a swipe immediately, while the
+      // selected room renders concurrently in the panel being revealed.
+      settleToPanel(-width, () => {
+        if (programmaticTargetRef.current === -width) {
+          programmaticTargetRef.current = undefined;
+        }
+        setPanelIntent(1);
+      });
+      startTransition(() => navigate(path));
+    },
+    [navigate, settleToPanel, width]
+  );
+
   useLayoutEffect(() => {
     const el = viewportRef.current;
     if (!el) return undefined;
-    const update = () => setWidth(el.clientWidth);
+    const update = () => {
+      const nextWidth = el.clientWidth;
+      const previousWidth = widthRef.current;
+      const nextPosition =
+        previousWidth > 0
+          ? (positionRef.current / previousWidth) * nextWidth
+          : contentOpen
+            ? -nextWidth
+            : 0;
+      widthRef.current = nextWidth;
+      setTrackPosition(nextPosition);
+      setWidth(nextWidth);
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
-
-  useLayoutEffect(() => {
-    setPanelIntent(contentOpen ? 1 : 0);
-  }, [contentOpen]);
+  }, [contentOpen, setTrackPosition]);
 
   useLayoutEffect(() => {
     navPanelRef.current?.toggleAttribute('inert', panelIntent === 1);
@@ -106,25 +234,26 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   useLayoutEffect(() => {
     const el = viewportRef.current;
     if (!el || width === 0) return;
-    const targetLeft = contentOpen ? width : 0;
+    const targetPosition = contentOpen ? -width : 0;
 
-    userScrollRef.current = false;
-    touchActiveRef.current = false;
-    window.clearTimeout(scrollEndTimerRef.current);
-    if (Math.abs(el.scrollLeft - targetLeft) > 5) {
-      el.scrollTo({ left: targetLeft, behavior: reduceMotion ? 'auto' : 'smooth' });
+    if (programmaticTargetRef.current === targetPosition) return;
+
+    if (Math.abs(positionRef.current - targetPosition) > 5) {
+      settleToPanel(targetPosition, () => setPanelIntent(contentOpen ? 1 : 0));
+    } else {
+      setPanelIntent(contentOpen ? 1 : 0);
     }
-  }, [contentOpen, width, reduceMotion]);
+  }, [contentOpen, settleToPanel, width]);
 
-  const finishUserScroll = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || !userScrollRef.current || width === 0) return;
+  const commitPanel = useCallback(
+    (roomVisible: boolean) => {
+      if (width === 0) return;
 
-    userScrollRef.current = false;
-    const roomVisible = viewport.scrollLeft >= width / 2;
-    setPanelIntent(roomVisible ? 1 : 0);
+      setTrackPosition(roomVisible ? -width : 0);
+      setPanelIntent(roomVisible ? 1 : 0);
 
-    if (roomVisible !== contentOpen) {
+      if (roomVisible === contentOpen) return;
+
       if (roomVisible) {
         const section = resolveSection(location.pathname);
         if (section?.getRoomPath) {
@@ -134,75 +263,165 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
             return;
           }
         }
-        viewport.scrollTo({ left: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        settleToPanel(0);
         setPanelIntent(0);
-      } else {
-        const section = resolveSection(location.pathname);
-        if (section) {
-          if (section.getRoomPath && matchedRoomId && isRoomRoute) {
-            setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
-          }
-          startTransition(() => navigate(section.listPath));
-        }
+        return;
       }
-    }
-  }, [
-    contentOpen,
-    isRoomRoute,
-    lastRoom,
-    location.pathname,
-    matchedRoomId,
-    navigate,
-    reduceMotion,
-    setLastRoom,
-    width,
-  ]);
 
-  const scheduleScrollEnd = useCallback(
-    (delay = 120) => {
-      window.clearTimeout(scrollEndTimerRef.current);
-      scrollEndTimerRef.current = window.setTimeout(finishUserScroll, delay);
+      const section = resolveSection(location.pathname);
+      if (!section) return;
+      if (section.getRoomPath && matchedRoomId && isRoomRoute) {
+        setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
+      }
+      startTransition(() => navigate(section.listPath));
     },
-    [finishUserScroll]
+    [
+      contentOpen,
+      isRoomRoute,
+      lastRoom,
+      location.pathname,
+      matchedRoomId,
+      navigate,
+      settleToPanel,
+      setLastRoom,
+      setTrackPosition,
+      width,
+    ]
+  );
+
+  const finishGesture = useCallback(
+    (cancelled: boolean) => {
+      const gesture = gestureRef.current;
+      gestureRef.current = undefined;
+      if (!gesture) return;
+
+      const distanceX = gesture.lastX - gesture.startX;
+      if (gesture.mode === 'message') {
+        if (cancelled) gesture.message?.cancel();
+        else gesture.message?.end({ distanceX, velocityX: gesture.velocityX });
+        return;
+      }
+      if (gesture.mode === 'chat') {
+        if (cancelled) gesture.chat?.cancel();
+        else gesture.chat?.end({ distanceX, velocityX: gesture.velocityX });
+        return;
+      }
+      if (gesture.mode !== 'drawer' || width === 0) return;
+
+      const targetPosition = getDrawerSettlePosition({
+        startPosition: gesture.startPosition,
+        distanceX,
+        velocityX: gesture.velocityX,
+        width,
+        cancelled,
+      });
+
+      settleToPanel(targetPosition, () => commitPanel(targetPosition === -width));
+    },
+    [commitPanel, settleToPanel, width]
   );
 
   useEffect(() => {
-    return () => window.clearTimeout(scrollEndTimerRef.current);
+    return () => {
+      window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
+      const gesture = gestureRef.current;
+      gestureRef.current = undefined;
+      gesture?.message?.cancel();
+      gesture?.chat?.cancel();
+    };
   }, []);
 
-  const allowScroll = mobileGestures && (canOpenRoom || contentOpen);
+  const contextValue = useMemo(
+    () => ({ openContent, registerChatSwipe, registerMessageSwipe }),
+    [openContent, registerChatSwipe, registerMessageSwipe]
+  );
 
-  return (
+  const drawer = (
     <div
       ref={viewportRef}
       className="no-scrollbar"
-      onTouchStart={() => {
-        userScrollRef.current = true;
-        touchActiveRef.current = true;
-        window.clearTimeout(scrollEndTimerRef.current);
+      onTouchStartCapture={(event) => {
+        const viewport = viewportRef.current;
+        const touch = event.touches[0];
+        if (!mobileGestures || !viewport || !touch) return;
+        if (event.touches.length !== 1) {
+          finishGesture(true);
+          return;
+        }
+
+        const target = event.target instanceof Element ? event.target : event.currentTarget;
+        const messageElement = target.closest<HTMLElement>('[data-message-swipe]');
+        const chatElement = target.closest<HTMLElement>('[data-chat-swipe]');
+        const ignoredElement = target.closest<HTMLElement>('[data-gestures="ignore"]');
+        const message = messageElement ? messageTargetsRef.current.get(messageElement) : undefined;
+        const chat = chatElement ? chatTargetsRef.current.get(chatElement) : undefined;
+        const blocked = ignoredElement !== null && ignoredElement !== messageElement;
+
+        gestureRef.current = {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startPosition: positionRef.current,
+          lastX: touch.clientX,
+          lastTime: event.timeStamp,
+          velocityX: 0,
+          mode: blocked ? 'blocked' : 'pending',
+          message,
+          chat,
+        };
+        if (positionRef.current > -width && canOpenRoom) setRoomArmed(true);
       }}
-      onScroll={() => {
-        if (!userScrollRef.current || width === 0) return;
-        if (!touchActiveRef.current) scheduleScrollEnd();
+      onTouchMoveCapture={(event) => {
+        const viewport = viewportRef.current;
+        const gesture = gestureRef.current;
+        const touch = event.touches[0];
+        if (!viewport || !gesture || !touch || gesture.mode === 'blocked') return;
+
+        const distanceX = touch.clientX - gesture.startX;
+        const distanceY = touch.clientY - gesture.startY;
+        const elapsed = event.timeStamp - gesture.lastTime;
+        if (elapsed > 0) {
+          gesture.velocityX = (touch.clientX - gesture.lastX) / elapsed;
+          gesture.lastX = touch.clientX;
+          gesture.lastTime = event.timeStamp;
+        }
+
+        if (gesture.mode === 'pending') {
+          gesture.mode = classifyMobileGesture({
+            distanceX,
+            distanceY,
+            startPosition: positionRef.current,
+            width,
+            canOpenRoom,
+            hasMessage: gesture.message !== undefined,
+            hasChat: gesture.chat !== undefined,
+          });
+          if (gesture.mode === 'drawer' || gesture.mode === 'message' || gesture.mode === 'chat') {
+            const animationActive = settleAnimationRef.current !== undefined;
+            window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
+            settleAnimationRef.current = undefined;
+            programmaticTargetRef.current = undefined;
+            if (animationActive) gesture.startPosition = positionRef.current - distanceX;
+          }
+        }
+
+        if (gesture.mode === 'drawer') {
+          setTrackPosition(Math.max(-width, Math.min(0, gesture.startPosition + distanceX)));
+        } else if (gesture.mode === 'message') {
+          gesture.message?.move(distanceX);
+        } else if (gesture.mode === 'chat') {
+          gesture.chat?.move(distanceX);
+        }
       }}
-      onTouchEnd={() => {
-        touchActiveRef.current = false;
-        scheduleScrollEnd(180);
-      }}
-      onTouchCancel={() => {
-        touchActiveRef.current = false;
-        scheduleScrollEnd();
-      }}
+      onTouchEndCapture={() => finishGesture(false)}
+      onTouchCancelCapture={() => finishGesture(true)}
       style={{
         display: 'flex',
         flexGrow: 1,
         height: '100%',
         width: '100%',
-        overflowX: allowScroll ? 'auto' : 'hidden',
-        overflowY: 'hidden',
+        overflow: 'hidden',
         overscrollBehaviorX: 'none',
-        scrollSnapType: 'x mandatory',
-        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
       }}
     >
       <style>{`
@@ -215,62 +434,78 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         }
       `}</style>
       <div
-        ref={navPanelRef}
-        className="no-scrollbar"
+        ref={trackRef}
         style={{
-          width: '100%',
-          flexBasis: '100%',
+          display: 'flex',
+          width: '200%',
           height: '100%',
           flexShrink: 0,
-          scrollSnapAlign: 'start',
-          scrollSnapStop: 'always',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden',
+          transform: 'translate3d(0, 0, 0)',
+          willChange: 'transform',
         }}
       >
         <div
+          ref={navPanelRef}
+          className="no-scrollbar"
           style={{
-            flexGrow: 1,
-            minHeight: 0,
+            width: '50%',
+            flexBasis: '50%',
+            height: '100%',
+            flexShrink: 0,
             display: 'flex',
-            flexDirection: 'row',
+            flexDirection: 'column',
             overflow: 'hidden',
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
           }}
         >
-          {rail && <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>}
-          <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>{nav}</div>
+          <div
+            style={{
+              flexGrow: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'row',
+              overflow: 'hidden',
+            }}
+          >
+            {rail && (
+              <div style={{ flexShrink: 0, display: 'flex', overflow: 'hidden' }}>{rail}</div>
+            )}
+            <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              {nav}
+            </div>
+          </div>
+          {bottomNav}
         </div>
-        {bottomNav}
-      </div>
-      <div
-        ref={contentPanelRef}
-        className="no-scrollbar"
-        style={{
-          width: '100%',
-          flexBasis: '100%',
-          height: '100%',
-          flexShrink: 0,
-          scrollSnapAlign: 'start',
-          scrollSnapStop: 'always',
-          display: 'flex',
-          overflow: 'hidden',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden',
-        }}
-      >
-        {isRoomRoute ? (
-          <PersistentRoomHost inactive={panelIntent === 0} />
-        ) : listView ? (
-          roomArmed ? (
+        <div
+          ref={contentPanelRef}
+          className="no-scrollbar"
+          style={{
+            width: '50%',
+            flexBasis: '50%',
+            height: '100%',
+            flexShrink: 0,
+            display: 'flex',
+            overflow: 'hidden',
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+          }}
+        >
+          {isRoomRoute ? (
             <PersistentRoomHost inactive={panelIntent === 0} />
-          ) : null
-        ) : (
-          children
-        )}
+          ) : listView ? (
+            roomArmed ? (
+              <PersistentRoomHost inactive={panelIntent === 0} />
+            ) : null
+          ) : (
+            children
+          )}
+        </div>
       </div>
     </div>
+  );
+
+  return (
+    <MobileNavDrawerContext.Provider value={contextValue}>{drawer}</MobileNavDrawerContext.Provider>
   );
 }
