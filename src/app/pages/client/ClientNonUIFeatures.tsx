@@ -1,6 +1,7 @@
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import * as Sentry from '@sentry/react';
 import { type as osType } from '@tauri-apps/plugin-os';
+import { invoke } from '@tauri-apps/api/core';
 import { setTrayBadge } from '$generated/tauri/commands';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -271,6 +272,10 @@ function InviteNotifications() {
   );
 
   const playSound = useCallback(() => {
+    if (isAndroidTauri() || isIosTauri()) {
+      invoke('play_notification_sound', { kind: 'invite' }).catch(() => {});
+      return;
+    }
     const audioElement = audioRef.current;
     audioElement?.play()?.catch(() => {});
     clearMediaSessionQuickly();
@@ -350,6 +355,10 @@ function MessageNotifications() {
   const notificationSelected = useInboxNotificationsSelected();
 
   const playSound = useCallback(() => {
+    if (isAndroidTauri() || isIosTauri()) {
+      invoke('play_notification_sound', { kind: 'notification' }).catch(() => {});
+      return;
+    }
     const audioElement = audioRef.current;
     audioElement?.play()?.catch(() => {});
     clearMediaSessionQuickly();
