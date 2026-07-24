@@ -26,11 +26,6 @@ fn main() {
         println!("cargo:rustc-link-arg-bins=-Wl,-rpath,/usr/lib/swift");
     }
 
-    // AudioServicesPlaySystemSound (ios.rs). System framework.
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
-        println!("cargo:rustc-link-lib=framework=AudioToolbox");
-    }
-
     tauri_typegen::BuildSystem::generate_at_build_time()
         .expect("Failed to generate TypeScript bindings");
 
