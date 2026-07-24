@@ -278,10 +278,9 @@ export function DeviceVerificationOptions() {
         import('@tauri-apps/plugin-opener')
           .then(({ openUrl }) => openUrl(url))
           .catch(() => window.open(url, '_blank'));
-        return;
+      } else {
+        window.open(url, '_blank');
       }
-      window.open(url, '_blank');
-      return;
     }
 
     setReset(true);

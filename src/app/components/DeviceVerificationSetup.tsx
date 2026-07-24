@@ -85,8 +85,9 @@ function SetupVerificationUIA({
 
 type SetupVerificationProps = {
   onComplete: (recoveryKey: string) => void;
+  reset?: boolean;
 };
-function SetupVerification({ onComplete }: Readonly<SetupVerificationProps>) {
+function SetupVerification({ onComplete, reset }: Readonly<SetupVerificationProps>) {
   const mx = useMatrixClient();
   const alive = useAlive();
 
@@ -161,21 +162,27 @@ function SetupVerification({ onComplete }: Readonly<SetupVerificationProps>) {
         }
         clearSecretStorageKeys();
 
-        await crypto.bootstrapSecretStorage({
-          createSecretStorageKey: async () => recoveryKeyData,
-          setupNewSecretStorage: true,
-        });
-
-        await crypto.bootstrapCrossSigning({
-          authUploadDeviceSigningKeys,
-          setupNewCrossSigning: true,
-        });
-
-        await crypto.resetKeyBackup();
+        if (reset) {
+          await crypto.resetEncryption(authUploadDeviceSigningKeys);
+          await crypto.bootstrapSecretStorage({
+            createSecretStorageKey: async () => recoveryKeyData,
+            setupNewSecretStorage: true,
+          });
+        } else {
+          await crypto.bootstrapSecretStorage({
+            createSecretStorageKey: async () => recoveryKeyData,
+            setupNewSecretStorage: true,
+          });
+          await crypto.bootstrapCrossSigning({
+            authUploadDeviceSigningKeys,
+            setupNewCrossSigning: true,
+          });
+          await crypto.resetKeyBackup();
+        }
 
         onComplete(recoveryKeyData.encodedPrivateKey);
       },
-      [mx, onComplete, authUploadDeviceSigningKeys]
+      [mx, onComplete, authUploadDeviceSigningKeys, reset]
     )
   );
 
@@ -367,7 +374,7 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                 recoveryKey ? (
                   <RecoveryKeyDisplay recoveryKey={recoveryKey} />
                 ) : (
-                  <SetupVerification onComplete={setRecoveryKey} />
+                  <SetupVerification onComplete={setRecoveryKey} reset />
                 )
               }
             </UseStateProvider>
