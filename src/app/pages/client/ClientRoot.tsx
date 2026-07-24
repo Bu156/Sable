@@ -273,11 +273,7 @@ export function ClientRoot({ children }: ClientRootProps) {
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;
-      await pushSessionToSW(
-        activeSession.baseUrl,
-        activeSession.accessToken,
-        activeSession.userId
-      );
+      await pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
       return newMx;
     }, [activeSession, activeSessionId, setActiveSessionId])
   );
