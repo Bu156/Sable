@@ -173,5 +173,12 @@ export const fetch: AppFetch = async (input, init) => {
   }
 
   const tauriFetch = await getTauriFetch();
-  return tauriFetch(request, init);
+  try {
+    return await tauriFetch(request, init);
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      return new Response(null, { status: 502, statusText: 'Bad Gateway' });
+    }
+    throw e;
+  }
 };

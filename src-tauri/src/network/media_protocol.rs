@@ -345,6 +345,9 @@ async fn ensure_cached_with_limits(
     if let Some(content_type) =
         read_content_type(body_path.clone(), content_type_path.clone()).await
     {
+        let content_type =
+            sniff_and_fix_content_type(body_path.clone(), content_type_path.clone(), content_type)
+                .await;
         return Ok((content_type, None, body_path));
     }
 
@@ -352,6 +355,12 @@ async fn ensure_cached_with_limits(
     if let Some(content_type) =
         read_content_type(temp_body_path.clone(), temp_content_type_path.clone()).await
     {
+        let content_type = sniff_and_fix_content_type(
+            temp_body_path.clone(),
+            temp_content_type_path.clone(),
+            content_type,
+        )
+        .await;
         return Ok((content_type, None, temp_body_path));
     }
 
@@ -362,6 +371,9 @@ async fn ensure_cached_with_limits(
     if let Some(content_type) =
         read_content_type(body_path.clone(), content_type_path.clone()).await
     {
+        let content_type =
+            sniff_and_fix_content_type(body_path.clone(), content_type_path.clone(), content_type)
+                .await;
         return Ok((content_type, None, body_path));
     }
 
@@ -369,6 +381,12 @@ async fn ensure_cached_with_limits(
     if let Some(content_type) =
         read_content_type(temp_body_path.clone(), temp_content_type_path.clone()).await
     {
+        let content_type = sniff_and_fix_content_type(
+            temp_body_path.clone(),
+            temp_content_type_path.clone(),
+            content_type,
+        )
+        .await;
         return Ok((content_type, None, temp_body_path));
     }
 
@@ -423,7 +441,7 @@ async fn fetch_and_cache(
     max_persistent_cache_bytes: u64,
     max_temp_cache_bytes: u64,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
-    let _permit = state
+    let permit = state
         .semaphore
         .acquire()
         .await
@@ -462,6 +480,7 @@ async fn fetch_and_cache(
             Ok((decrypted_body, decrypted_ct)) => (decrypted_body, decrypted_ct),
             Err(status) => return Err(status),
         };
+    drop(permit);
 
     if body.len() as u64 > max_temp_cache_bytes {
         return Ok((content_type, Some(Arc::new(body)), temp_body_path));
@@ -499,6 +518,22 @@ async fn fetch_and_cache(
     }
 }
 
+/// Sniff the image MIME type from magic bytes of decrypted content.
+/// Restricted to an image allowlist and never returns SVG (which can carry scripts).
+/// Used as a fallback when the registered content type is missing or octet-stream.
+fn sniff_image_content_type(bytes: &[u8]) -> Option<&'static str> {
+    const ALLOWED: [&str; 5] = [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+    ];
+    infer::get(bytes)
+        .filter(|kind| ALLOWED.contains(&kind.mime_type()))
+        .map(|kind| kind.mime_type())
+}
+
 /// Decrypt the body if encryption params exist for this URL.
 fn decrypt_if_encrypted(
     state: &MediaSessionState,
@@ -524,7 +559,6 @@ fn decrypt_if_encrypted(
     hasher.update(&ciphertext);
     let actual_sha256 = hasher.finalize().to_vec();
     if actual_sha256 != params.expected_sha256 {
-        let _ = state.encryption.write().map(|mut guard| guard.remove(url));
         return Err(StatusCode::BAD_GATEWAY);
     }
 
@@ -545,7 +579,15 @@ fn decrypt_if_encrypted(
     // Remove encryption params — decrypted content is now cached on disk
     let _ = state.encryption.write().map(|mut guard| guard.remove(url));
 
-    Ok((plaintext, params.content_type))
+    let final_content_type =
+        if params.content_type.is_empty() || params.content_type == "application/octet-stream" {
+            sniff_image_content_type(&plaintext)
+                .map(|s| s.to_owned())
+                .unwrap_or(params.content_type)
+        } else {
+            params.content_type
+        };
+    Ok((plaintext, final_content_type))
 }
 
 async fn write_cache(
@@ -585,6 +627,34 @@ async fn read_content_type(body_path: PathBuf, content_type_path: PathBuf) -> Op
     })
     .await
     .unwrap_or(None)
+}
+
+/// On a cache hit where the stored content type is octet-stream, re-sniff the
+/// body file's magic bytes and rewrite the .ct file if a real image type is found.
+async fn sniff_and_fix_content_type(
+    body_path: PathBuf,
+    content_type_path: PathBuf,
+    stored_ct: String,
+) -> String {
+    if stored_ct != "application/octet-stream" {
+        return stored_ct;
+    }
+    let ct_for_closure = stored_ct.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut file = match fs::File::open(&body_path) {
+            Ok(f) => f,
+            Err(_) => return ct_for_closure,
+        };
+        let mut buf = [0u8; 64];
+        let n = file.read(&mut buf).unwrap_or(0);
+        if let Some(sniffed) = sniff_image_content_type(&buf[..n]) {
+            let _ = fs::write(&content_type_path, sniffed);
+            return sniffed.to_owned();
+        }
+        ct_for_closure
+    })
+    .await
+    .unwrap_or(stored_ct)
 }
 
 async fn read_full(body_path: PathBuf) -> Result<Vec<u8>, StatusCode> {
@@ -706,15 +776,17 @@ fn evict_directory_if_needed(dir: &Path, max_bytes: u64) {
 // Shared 200/206 headers. Media is content-addressed and the URL is session-scoped, so
 // it is safe to let the webview cache it as immutable and to advertise Range support.
 fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBuilder {
+    let cache_control = if content_type == "application/octet-stream" {
+        "no-store"
+    } else {
+        "private, max-age=31536000, immutable"
+    };
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, content_type)
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header(header::ACCEPT_RANGES, "bytes")
-        .header(
-            header::CACHE_CONTROL,
-            "private, max-age=31536000, immutable",
-        )
+        .header(header::CACHE_CONTROL, cache_control)
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(
             header::CONTENT_SECURITY_POLICY,
@@ -955,5 +1027,47 @@ mod tests {
         let input = "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123";
         let result = super::normalize_encryption_key(input);
         assert_eq!(result, input);
+    }
+
+    #[test]
+    fn sniff_detects_png() {
+        let png_header = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        assert_eq!(
+            super::sniff_image_content_type(&png_header),
+            Some("image/png")
+        );
+    }
+
+    #[test]
+    fn sniff_rejects_unknown() {
+        assert_eq!(super::sniff_image_content_type(&[0x00, 0x01, 0x02]), None);
+    }
+
+    #[test]
+    fn sniff_does_not_detect_svg() {
+        let svg = b"<svg xmlns='http://www.w3.org/2000/svg'>";
+        assert_eq!(super::sniff_image_content_type(svg), None);
+    }
+
+    #[test]
+    fn octet_stream_response_is_not_cached_immutable() {
+        let response = super::media_response_builder(StatusCode::OK, "application/octet-stream")
+            .body(Vec::<u8>::new())
+            .unwrap();
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+    }
+
+    #[test]
+    fn image_response_is_cached_immutable() {
+        let response = super::media_response_builder(StatusCode::OK, "image/png")
+            .body(Vec::<u8>::new())
+            .unwrap();
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "private, max-age=31536000, immutable"
+        );
     }
 }

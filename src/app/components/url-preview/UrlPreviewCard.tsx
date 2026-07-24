@@ -96,8 +96,9 @@ export const UrlPreviewCard = as<
         const cached = clientCache.get(url);
         if (cached !== undefined) return cached;
         const previewResult = mx?.getUrlPreview(url, ts);
+        if (!previewResult) return Promise.resolve(null);
         clientCache.set(url, previewResult);
-        previewResult.finally(() => clientCache.delete(url));
+        previewResult.finally(() => clientCache.delete(url)).catch(() => {});
         return previewResult;
       }
       return Promise.resolve(bundle);
