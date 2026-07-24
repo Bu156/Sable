@@ -113,10 +113,7 @@ fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
     }
     unsafe {
         let path_str = NSString::from_str(&path.to_string_lossy());
-        let url: Option<Retained<NSURL>> = msg_send![
-            NSURL, fileURLWithPath: &*path_str
-        ];
-        let url = url?;
+        let url = NSURL::fileURLWithPath(&path_str);
         let mut sound_id: u32 = 0;
         let status = AudioServicesCreateSystemSoundID(
             &*url as *mut _ as *mut objc2::runtime::AnyObject,
@@ -138,7 +135,7 @@ pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
     } else {
         &NOTIFICATION_SOUND
     };
-    let caf = if kind == "invite" {
+    let caf: &[u8] = if kind == "invite" {
         include_bytes!("../resources/invite.caf")
     } else {
         include_bytes!("../resources/notification.caf")
