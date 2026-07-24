@@ -94,7 +94,6 @@ run = [
   "winget install --id Microsoft.EdgeWebView2Runtime --source winget",
 ]
 
-
 [tasks."cargo:lint"]
 description = "Check Rust formatting and Clippy lints"
 alias = ["cl", "cargo-lint"]

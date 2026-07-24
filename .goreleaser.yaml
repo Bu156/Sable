@@ -1,52 +1,73 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# Secrets: AUR_KEY, HOMEBREW_TAP_GITHUB_TOKEN, SNAPCRAFT_STORE_CREDENTIALS
+# Linux packaging for the CEF build. Tauri builds the macOS/Windows bundles;
+# GoReleaser OSS can't import pre-built artifacts (`builder: prebuilt` is Pro).
+#
+# Secrets: AUR_KEY, SNAPCRAFT_STORE_CREDENTIALS
 
 version: 2
 
 project_name: sable
 
+# Vite owns ./dist.
+dist: .goreleaser-dist
+
 before:
   hooks:
     - pnpm install --frozen-lockfile
-    - pnpm tauri build -- --no-bundle --features wry,updater
+    # cargo skips tauri.conf.json's beforeBuildCommand.
+    - pnpm build
 
 builds:
   - id: sable
-    main: ./src-tauri/
-    binary: sable
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    no_main_check: true
-    skip: true
+    builder: rust
+    dir: src-tauri
+    tool: cargo
+    command: build
+    targets: [x86_64-unknown-linux-gnu]
+    flags:
+      - --release
+      - --no-default-features
+      - --features
+      - cef,updater
+    hooks:
+      post: bash scripts/cef/stage.sh
 
 archives:
   - id: sable
-    formats:
-      - tar.gz
-    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    formats: [tar.gz]
+    name_template: 'Sable-{{ .Version }}-linux-x86_64'
     files:
       - LICENSE
+      - src: src-tauri/target/cef-stage/runtime
+        dst: .
+      - src: src-tauri/target/cef-stage/share
+        dst: .
 
 nfpms:
   - package_name: sable
-    file_name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Arch }}'
+    file_name_template: 'Sable-{{ .Version }}-linux-x86_64'
     homepage: https://sable.moe
-    maintainer: SableClient
+    maintainer: Sable Maintainers <https://github.com/SableClient/Sable>
     description: Sable, a Matrix client
     license: AGPL-3.0-or-later
-    formats:
-      - deb
-      - rpm
-      - apk
-      - archlinux
-      - ipk
+    section: net
+    formats: [deb, rpm, archlinux]
+    # Beside the CEF runtime, for build.rs's rpath=$ORIGIN.
+    bindir: /opt/sable
+    provides: [sable]
     contents:
-      - src: opt/sable/
+      - src: src-tauri/target/cef-stage/runtime/
         dst: /opt/sable
         type: tree
-      - src: usr/
-        dst: /usr
+      - src: src-tauri/target/cef-stage/share/
+        dst: /usr/share
         type: tree
+      - src: /opt/sable/sable
+        dst: /usr/bin/sable
+        type: symlink
+    scripts:
+      postinstall: packaging/linux/postinstall.sh
+      postremove: packaging/linux/postinstall.sh
     overrides:
       deb:
         dependencies:
@@ -56,10 +77,10 @@ nfpms:
           - libgbm1
           - libdrm2
           - libxkbcommon0
+          - libxss1
           - libasound2
           - libcups2
           - xdg-utils
-          - xwayland
           - libayatana-appindicator3-1
       rpm:
         dependencies:
@@ -69,173 +90,115 @@ nfpms:
           - mesa-libgbm
           - libdrm
           - libxkbcommon
+          - libXScrnSaver
           - alsa-lib
           - cups-libs
           - xdg-utils
-          - xorg-x11-server-Xwayland
           - libayatana-appindicator3.so.1()(64bit)
-      apk:
-        dependencies:
-          - webkit2gtk-4.1
-          - gtk+3.0
-          - libayatana-appindicator
-          - librsvg
-          - xdotool
-          - mesa-gbm
-          - libdrm
-          - libxkbcommon
-          - alsa-lib
-          - cups
-          - xdg-utils
-          - libxcomposite
-          - ttf-freefont
       archlinux:
         dependencies:
-          - webkit2gtk-4.1
           - gtk3
+          - nss
+          - alsa-lib
+          - libcups
+          - libdrm
+          - mesa
+          - libxkbcommon
+          - libxss
+          - at-spi2-core
+          - dbus
+          - xdg-utils
           - libayatana-appindicator
-          - librsvg
-          - xdotool
           - hicolor-icon-theme
           - desktop-file-utils
-      ipk:
-        dependencies:
-          - webkit2gtk-4.1
-          - gtk3
-          - libayatana-appindicator3
-          - librsvg
-          - xdotool
 
 aurs:
   - name: sable-bin
     homepage: https://sable.moe
     description: Sable, a Matrix client
     maintainers:
-      - SableClient <https://github.com/SableClient/Sable>
+      - Sable Maintainers <https://github.com/SableClient/Sable>
     license: AGPL-3.0-or-later
     private_key: '{{ .Env.AUR_KEY }}'
     git_url: ssh://aur@aur.archlinux.org/sable-bin.git
+    provides: [sable]
+    conflicts: [sable, sable-nightly-bin]
     depends:
-      - webkit2gtk-4.1
       - gtk3
+      - nss
+      - alsa-lib
+      - libcups
+      - libdrm
+      - mesa
+      - libxkbcommon
+      - libxss
+      - at-spi2-core
+      - dbus
+      - xdg-utils
       - libayatana-appindicator
-      - librsvg
-      - xdotool
       - hicolor-icon-theme
       - desktop-file-utils
     package: |-
-      ar x "{{ .ArtifactName }}" data.tar.xz
-      tar -xf data.tar.xz -C "${pkgdir}"
-      find "${pkgdir}" -type d -exec chmod 755 {} +
+      install -Dm755 sable "${pkgdir}/opt/sable/sable"
+      cp -a runtime/. "${pkgdir}/opt/sable/"
+      install -dm755 "${pkgdir}/usr/share" "${pkgdir}/usr/bin"
+      cp -a share/. "${pkgdir}/usr/share/"
+      ln -s /opt/sable/sable "${pkgdir}/usr/bin/sable"
+      install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
     commit_author:
       name: github-actions[bot]
       email: github-actions[bot]@users.noreply.github.com
-
-homebrew_casks:
-  - name: sable
-    homepage: https://sable.moe
-    description: Sable, a Matrix client
-    binaries:
-      - Sable.app
-    repository:
-      owner: SableClient
-      name: homebrew-sable
-      branch: main
-    commit_author:
-      name: github-actions[bot]
-      email: github-actions[bot]@users.noreply.github.com
-    zap:
-      trash:
-        - ~/Library/Application Support/moe.sable.client
-        - ~/Library/Caches/moe.sable.client
-        - ~/Library/Preferences/moe.sable.client.plist
-        - ~/Library/Saved Application State/moe.sable.client.savedState
 
 snapcrafts:
   - name: sable
+    title: Sable
     summary: Sable, a Matrix client
     description: |
       Sable is a cross-platform Matrix client built with Tauri, offering a
       native desktop experience with end-to-end encryption support.
+    icon: src-tauri/icons/128x128@2x.png
+    license: AGPL-3.0-or-later
     grade: stable
     confinement: strict
     base: core22
     publish: true
-    layout:
-      /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1:
-        bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/webkit2gtk-4.1
+    extra_files:
+      # Binaries land at the prime root.
+      - source: src-tauri/target/cef-stage/runtime
+        destination: .
+      - source: src-tauri/target/cef-stage/share/applications/sable.desktop
+        destination: meta/gui/sable.desktop
+      - source: src-tauri/icons/128x128@2x.png
+        destination: meta/gui/icon.png
     apps:
       sable:
-        command: usr/bin/sable
-        desktop: usr/share/applications/sable.desktop
+        command: sable
+        desktop: meta/gui/sable.desktop
         extensions: [gnome]
-        environment:
-          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
         plugs:
           - network
           - network-bind
           - home
           - removable-media
           - browser-support
-
-flatpak:
-  - app_id: moe.sable.Sable
-    runtime: org.gnome.Platform
-    runtime_version: '50'
-    sdk: org.gnome.Sdk
-    command: sable
-    finish_args:
-      - --socket=wayland
-      - --socket=fallback-x11
-      - --device=dri
-      - --share=ipc
-      - --share=network
-      - --talk-name=org.freedesktop.Notifications
-      - --talk-name=org.kde.StatusNotifierWatcher
-
-winget:
-  - name: sable
-    publisher: SableClient
-    license: AGPL-3.0-or-later
-    homepage: https://sable.moe
-    short_description: Sable, a Matrix client
-    package_identifier: SableClient.Sable
-    repository:
-      owner: SableClient
-      name: winget-pkgs
-      branch: master
-
-scoops:
-  - name: sable
-    homepage: https://sable.moe
-    description: Sable, a Matrix client
-    license: AGPL-3.0-or-later
-    repository:
-      owner: SableClient
-      name: scoop-sable
-      branch: main
+          - audio-playback
+          - audio-record
+          - camera
+          - password-manager-service
 
 checksum:
-  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
+  name_template: 'Sable-{{ .Version }}-linux-checksums.txt'
   algorithm: sha256
 
-changelog:
-  sort: asc
-  use: git
-  filters:
-    exclude:
-      - '^chore:'
-      - '^docs:'
-      - '^style:'
-      - '^test:'
+# Nightlies run `release --snapshot`; GoReleaser's `nightly` pipe is Pro-only.
+snapshot:
+  version_template: '{{ .Env.VERSION }}'
 
 release:
   github:
     owner: SableClient
     name: Sable
+  # Knope writes the release notes.
+  mode: keep-existing
   draft: false
   prerelease: auto
-  name_template: '{{ .ProjectName }} v{{ .Version }}'
-  extra_files:
-    - glob: packaging/flatpak/moe.sable.Sable.desktop
-    - glob: packaging/flatpak/moe.sable.Sable.metainfo.xml

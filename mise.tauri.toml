@@ -28,10 +28,6 @@ android-sdk = "22.0"
 "apt:curl" = "latest"
 "apt:wget" = "latest"
 
-# Flatpak (for GoReleaser flatpak builder)
-"apt:flatpak" = "latest"
-"apt:flatpak-builder" = "latest"
-
 # Fedora/RHEL
 "dnf:webkit2gtk4.1-devel" = "latest"
 "dnf:openssl-devel" = "latest"
