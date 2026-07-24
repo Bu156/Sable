@@ -140,7 +140,6 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
-    const [useFullDownload, setUseFullDownload] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [viewerFullSrc, setViewerFullSrc] = useState<string | null>(null);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
@@ -155,11 +154,8 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const rawMediaUrl = useMemo(() => {
       if (url.startsWith('http')) return url;
-      if (encInfo || isGif || useFullDownload) {
-        return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
-      }
-      return mxcUrlToHttp(mx, url, useAuthentication, 800, 600, 'scale') ?? undefined;
-    }, [mx, url, useAuthentication, encInfo, isGif, useFullDownload]);
+      return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
+    }, [mx, url, useAuthentication]);
 
     const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
 
@@ -214,12 +210,8 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleRetry = () => {
       setError(false);
-      setUseFullDownload(true);
+      loadSrc();
     };
-
-    useEffect(() => {
-      if (useFullDownload) loadSrc();
-    }, [useFullDownload, loadSrc]);
 
     useEffect(() => {
       if (autoPlay) loadSrc();
