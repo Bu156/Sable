@@ -62,7 +62,7 @@ run = { task = "knope", args = ["document-change"] }
 
 [tasks."tauri:setup"]
 description = "Install Tauri tools and system packages"
-run = ["mise install", "mise bootstrap packages apply --yes"]
+run = ["mise install", "mise bootstrap packages apply --yes --update"]
 env = { MISE_ENV = "tauri" }
 
 [tasks."tauri:setup:android"]
@@ -83,7 +83,13 @@ run = "xcode-select --install"
 description = "Set up iOS Xcode project"
 depends = ["tauri:setup:macos"]
 confirm = { message = "Set up iOS Xcode project? (required for Tauri)", default = "no" }
-run = [{ task = "tauri", args = ["ios", "init"] }]
+run = [
+  "command -v pod >/dev/null 2>&1 || brew install cocoapods",
+  { task = "tauri", args = [
+    "ios",
+    "init",
+  ] },
+]
 
 [tasks."tauri:setup:windows"]
 description = "Install Visual Studio Build Tools + WebView2 runtime"

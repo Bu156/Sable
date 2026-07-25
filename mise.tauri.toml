@@ -58,9 +58,6 @@ android-sdk = "22.0"
 "apk:wget" = "latest"
 "apk:file" = "latest"
 
-# macOS
-"brew:curl" = "latest"
-"brew:wget" = "latest"
-
-# iOS
-"brew:cocoapods" = "latest"
+# macOS ships curl, and the iOS setup task installs CocoaPods on demand with
+# Homebrew itself. Keeping these out of mise's bootstrap avoids link conflicts
+# with packages preinstalled on GitHub's macOS runners.
