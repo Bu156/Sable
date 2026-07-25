@@ -29,6 +29,11 @@ jobs:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: Setup mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          cache: true
+
       - uses: fregante/setup-git-user@024bc0b8e177d7e77203b48dab6fb45666854b35 # v2.0.2
 
       - name: Prepare Release

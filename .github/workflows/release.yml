@@ -28,6 +28,11 @@ jobs:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: Setup mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          cache: true
+
       - name: Create Release
         run: mise run knope -- release --verbose
         env:
