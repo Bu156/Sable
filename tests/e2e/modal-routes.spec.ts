@@ -43,12 +43,16 @@ test.describe('create room surface', () => {
     test.skip(testInfo.project.name !== 'desktop');
     await openApp(page);
 
-    await page.goto('/create-room');
+    await page.goto('/create-room?type=voice');
 
     await expect(page.getByText('New Room').first()).toBeVisible({ timeout: 180_000 });
     // A desktop deep link is a full page with the desktop sidebar, so it has
     // no mobile-only close button.
     await expect(page.getByText('General').first()).toBeHidden();
+    await expect(page.getByRole('button', { name: /Voice Room/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
   });
 });
 
@@ -62,5 +66,5 @@ test('browser back closes a surface opened over a page', async ({ page }, testIn
   await page.goBack();
 
   await expect(page).toHaveURL(/\/home\/?$/);
-  await expect(page.getByText('New Chat Room')).toBeHidden();
+  await expect(page.getByText('New Room')).toBeHidden();
 });
