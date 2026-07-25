@@ -131,7 +131,8 @@ export function Login() {
     ? (oidcErrorDescription ?? `Sign-in was not completed (${oidcError}).`)
     : undefined;
 
-  const showOidc = isUsableOAuthMetadata(authMetadata);
+  const oidcMetadata = isUsableOAuthMetadata(authMetadata) ? authMetadata : undefined;
+  const showOidc = oidcMetadata !== undefined;
   const hidePassword = hideUsernamePasswordFields;
   const showPassword = !hidePassword && parsedFlows.password !== undefined;
   const showLegacySso = parsedFlows.sso !== undefined;
@@ -152,7 +153,7 @@ export function Login() {
       {showOidc && (
         <>
           <OidcLoginButton
-            authMetadata={authMetadata}
+            authMetadata={oidcMetadata}
             homeserverUrl={baseUrl}
             redirectUri={oidcRedirectUri}
             label={`Continue with ${server}`}

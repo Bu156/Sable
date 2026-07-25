@@ -76,7 +76,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       return;
     }
     window.open(url, '_blank');
-  }, [authMetadata, accountManagementActions]);
+  }, [authMetadata, accountManagementActions, mx]);
 
   const handleDeleteOIDC = useCallback(
     (deviceId: string) => {
@@ -95,7 +95,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       }
       window.open(url, '_blank');
     },
-    [authMetadata, accountManagementActions]
+    [authMetadata, accountManagementActions, mx]
   );
 
   const handleToggleDelete = useCallback((deviceId: string) => {
