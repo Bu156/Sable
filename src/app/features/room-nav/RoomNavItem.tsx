@@ -439,7 +439,7 @@ export function RoomNavItem({
     navigate(linkPath);
   };
 
-  const optionsVisible = hover || !!menuAnchor;
+  const optionsVisible = hover || !!menuAnchor || isMobileMenuOpen;
   const isMutedRoom = notificationMode === RoomNotificationMode.Mute;
   const shouldShowUnreadIndicator = !isMutedRoom && (!!unread || hasRoomUnread);
 

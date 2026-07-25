@@ -2,7 +2,6 @@ import { test as base } from '@playwright/test';
 import { AppShell } from '../pages/AppShell';
 
 type Fixtures = {
-  /** The signed-in app, already loaded and past the device banner. */
   app: AppShell;
 };
 

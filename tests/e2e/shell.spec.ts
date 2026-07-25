@@ -20,7 +20,6 @@ test.describe('app shell', () => {
     await expect(page.getByText('Layout baseline seed message.')).toBeVisible();
   });
 
-  // `app` is requested so the fixture loads the shell before the snapshot.
   test('matches the shell layout baseline', async ({ app, page }) => {
     test.skip(!containerised, 'run via pnpm test:e2e:docker');
     await expect(app.room('General')).toBeVisible();

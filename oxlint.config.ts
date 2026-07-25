@@ -82,8 +82,6 @@ export default defineConfig({
       },
     },
     {
-      // Playwright fixtures take a `use` callback, which the React hook rule
-      // mistakes for the `use` hook.
       files: ['tests/e2e/**'],
       rules: {
         'react/rules-of-hooks': 'off',
