@@ -46,13 +46,9 @@ updates:
     commit-message:
       prefix: chore
     groups:
-      npm-major:
-        update-types:
-          - major
-      npm-non-major:
-        update-types:
-          - minor
-          - patch
+      npm:
+        patterns:
+          - '*'
 
   - package-ecosystem: cargo
     cooldown:
@@ -66,6 +62,6 @@ updates:
     commit-message:
       prefix: chore
     groups:
-      docker:
+      cargo:
         patterns:
           - '*'
