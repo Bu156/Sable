@@ -27,19 +27,12 @@ runs:
       with:
         cache: true
 
-    - name: Configure mise trust for Xcode subprocesses
-      if: ${{ runner.os == 'macOS' }}
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      run: |
-        mkdir -p "$HOME/.config/mise"
-        printf 'trusted_config_paths = ["%s"]\n' "$GITHUB_WORKSPACE" > "$HOME/.config/mise/miserc.toml"
-
     - name: Trust project mise configuration
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
         mise trust --all
+        mise settings set trusted_config_paths '["*"]'
         echo "MISE_TRUSTED_CONFIG_PATHS=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
 
     - name: Install dependencies
