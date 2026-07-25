@@ -7,6 +7,7 @@ import type {
   Room,
   MatrixEvent,
   EventTimeline,
+  EventTimelineSet,
   EventTimelineSetHandlerMap,
   IRoomTimelineData,
   RoomEventHandlerMap,
@@ -103,7 +104,8 @@ const useTimelinePagination = (
   mx: MatrixClient,
   timeline: TimelineState,
   setTimeline: Dispatch<SetStateAction<TimelineState>>,
-  limit: number
+  limit: number,
+  isEventVisible?: (mEvent: MatrixEvent, timelineSet: EventTimelineSet) => boolean
 ) => {
   const timelineRef = useRef(timeline);
   timelineRef.current = timeline;
@@ -183,8 +185,19 @@ const useTimelinePagination = (
           const countAfter = getTimelinesEventsCount(getLinkedTimelines(firstTimeline));
           const fetched = countAfter - countBefore;
 
+          let visibleFetched = fetched;
+          if (isEventVisible && fetched > 0) {
+            const afterEvents = getLinkedTimelines(firstTimeline).flatMap((t) =>
+              (t.getEvents() || []).map((ev) => ({ ev, ts: t.getTimelineSet() }))
+            );
+            const newEvents = backwards
+              ? afterEvents.slice(0, fetched)
+              : afterEvents.slice(afterEvents.length - fetched);
+            visibleFetched = newEvents.filter(({ ev, ts }) => isEventVisible(ev, ts)).length;
+          }
+
           let willContinue = false;
-          if (fetched > 0 && fetched < 5) {
+          if (fetched > 0 && visibleFetched < 5) {
             const checkTimeline = backwards
               ? freshLTimelines[0]
               : freshLTimelines[freshLTimelines.length - 1];
@@ -223,7 +236,7 @@ const useTimelinePagination = (
         }
       }
     };
-  }, [mx, alive, setTimeline, limit, setBackwardStatus, setForwardStatus]);
+  }, [mx, alive, setTimeline, limit, setBackwardStatus, setForwardStatus, isEventVisible]);
 
   return { paginate, backwardStatus, forwardStatus };
 };
@@ -357,6 +370,7 @@ export interface UseTimelineSyncOptions {
   setUnreadInfo: Dispatch<SetStateAction<ReturnType<typeof getRoomUnreadInfo>>>;
   hideReadsRef: React.MutableRefObject<boolean>;
   readUptoEventIdRef: React.MutableRefObject<string | undefined>;
+  isEventVisible?: (mEvent: MatrixEvent, timelineSet: EventTimelineSet) => boolean;
 }
 
 export function useTimelineSync({
@@ -370,6 +384,7 @@ export function useTimelineSync({
   setUnreadInfo,
   hideReadsRef,
   readUptoEventIdRef,
+  isEventVisible,
 }: UseTimelineSyncOptions) {
   const alive = useAlive();
 
@@ -402,7 +417,7 @@ export function useTimelineSync({
     paginate: handleTimelinePagination,
     backwardStatus,
     forwardStatus,
-  } = useTimelinePagination(mx, timeline, setTimeline, PAGINATION_LIMIT);
+  } = useTimelinePagination(mx, timeline, setTimeline, PAGINATION_LIMIT, isEventVisible);
 
   const prevEventsLengthRef = useRef(eventsLength);
   useEffect(() => {

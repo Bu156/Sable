@@ -75,7 +75,7 @@ const MESSAGE_EVENT_TYPES = new Set([
   'm.room.encrypted',
 ]);
 
-const STANDARD_RENDERED_EVENT_TYPES = new Set([
+export const STANDARD_RENDERED_EVENT_TYPES = new Set([
   'm.room.message',
   'm.room.message.encrypted',
   'm.sticker',
@@ -453,12 +453,8 @@ const processTimelineItems = (
 
     if (!(showHiddenEvents && hiddenEventOther)) {
       const isStandardRendered = STANDARD_RENDERED_EVENT_TYPES.has(type);
-      if (!isStandardRendered) {
-        if (Object.keys(mEvent.getContent()).length === 0 && !allowSpecificHiddenEvent) continue;
-        if (!allowSpecificHiddenEvent) {
-          if (mEvent.getRelation()) continue;
-          if (mEvent.isRedaction()) continue;
-        }
+      if (!isStandardRendered && !allowSpecificHiddenEvent) {
+        continue;
       }
     }
 

@@ -11,7 +11,7 @@ import {
 } from 'react';
 import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import type { Room } from '$types/matrix-sdk';
+import type { Room, MatrixEvent, EventTimelineSet } from '$types/matrix-sdk';
 import { Direction, EventType } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import type { VListHandle } from 'virtua';
@@ -35,7 +35,16 @@ import {
   factoryRenderLinkifyWithMention,
 } from '$plugins/react-custom-html-parser';
 import { today, yesterday, timeDayMonthYear } from '$utils/time';
-import { unwrapRelationJumpTarget } from '$utils/room';
+import {
+  unwrapRelationJumpTarget,
+  isEditEvent,
+  isReactionEvent,
+  isRedactableMessageType,
+  isMembershipChanged,
+  isThreadRelationEvent,
+  getRedactionTargetEvent,
+  shouldShowRedactionTimelineEvent,
+} from '$utils/room';
 import { useMemberEventParser } from '$hooks/useMemberEventParser';
 import { usePowerLevelsContext } from '$hooks/usePowerLevels';
 import { useRoomCreators } from '$hooks/useRoomCreators';
@@ -72,6 +81,7 @@ import { useTimelineActions } from '$hooks/timeline/useTimelineActions';
 import {
   useProcessedTimeline,
   getProcessedRowIndexForRawTimelineIndex,
+  STANDARD_RENDERED_EVENT_TYPES,
   type ProcessedEvent,
 } from '$hooks/timeline/useProcessedTimeline';
 import { useTimelineEventRenderer } from '$hooks/timeline/useTimelineEventRenderer';
@@ -512,6 +522,90 @@ export function RoomTimeline({
     setUnreadInfo,
     hideReadsRef,
     readUptoEventIdRef,
+    isEventVisible: useCallback(
+      (mEvent: MatrixEvent, timelineSet: EventTimelineSet) => {
+        const type = mEvent.getType();
+        const isEdit = isEditEvent(mEvent);
+        const isReaction = isReactionEvent(mEvent);
+        const isRedactionEvt = mEvent.isRedaction();
+
+        if (hideMemberInReadOnly && isReadOnly) {
+          if (isReaction) return false;
+          if (
+            isRedactionEvt &&
+            getRedactionTargetEvent(timelineSet, mEvent)?.getType() ===
+              (EventType.Reaction as string)
+          ) {
+            return false;
+          }
+        }
+
+        if (mEvent.isRedacted()) {
+          const showMessageTombstone =
+            hiddenEvents.showTombstoneEvents && isRedactableMessageType(type);
+          const showReactionTombstone = hiddenEvents.hiddenEventReactionTombstone && isReaction;
+          if (!showMessageTombstone && !showReactionTombstone) return false;
+        }
+
+        if (type === 'm.room.member') {
+          const membershipChanged = isMembershipChanged(mEvent);
+          if (hideMemberInReadOnly && isReadOnly) return false;
+          if (membershipChanged && hideMembershipEvents) return false;
+          if (!membershipChanged && hideNickAvatarEvents) return false;
+        }
+
+        const allowSpecificHiddenEvent =
+          (isEdit && hiddenEvents.hiddenEventEdits) ||
+          (isReaction && !mEvent.isRedacted() && hiddenEvents.hiddenEventReactions) ||
+          (isReaction && mEvent.isRedacted() && hiddenEvents.hiddenEventReactionTombstone) ||
+          (isRedactionEvt &&
+            shouldShowRedactionTimelineEvent(
+              mEvent,
+              timelineSet,
+              hiddenEvents.hiddenEventRedactionTimeline,
+              hiddenEvents.hiddenEventReactionRedactionTimeline
+            ));
+
+        if (!(hiddenEvents.showHiddenEvents && hiddenEvents.hiddenEventOther)) {
+          const isStandardRendered = STANDARD_RENDERED_EVENT_TYPES.has(type);
+          if (!isStandardRendered && !allowSpecificHiddenEvent) {
+            return false;
+          }
+        }
+
+        const threadRootId = mEvent.threadRootId;
+        if (
+          threadRootId !== undefined &&
+          threadRootId !== mEvent.getId() &&
+          isThreadRelationEvent(mEvent, threadRootId)
+        ) {
+          return false;
+        }
+
+        if (isEdit && !hiddenEvents.hiddenEventEdits) return false;
+        if (isReaction) {
+          if (mEvent.isRedacted()) {
+            if (!hiddenEvents.hiddenEventReactionTombstone) return false;
+          } else if (!hiddenEvents.hiddenEventReactions) {
+            return false;
+          }
+        }
+        if (
+          isRedactionEvt &&
+          !shouldShowRedactionTimelineEvent(
+            mEvent,
+            timelineSet,
+            hiddenEvents.hiddenEventRedactionTimeline,
+            hiddenEvents.hiddenEventReactionRedactionTimeline
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      },
+      [hiddenEvents, hideMemberInReadOnly, isReadOnly, hideMembershipEvents, hideNickAvatarEvents]
+    ),
   });
 
   timelineSyncRef.current = timelineSync;
