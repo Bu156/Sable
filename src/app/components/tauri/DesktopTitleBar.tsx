@@ -8,6 +8,7 @@ import { useAtomValue } from 'jotai';
 import { createLogger } from '$utils/debug';
 import { titlebarStatusAtom } from '$state/titlebarStatus';
 import { SyncConnectionStatusTitlebar } from '$components/SyncConnectionStatus';
+import { DesktopUpdatePill } from './DesktopUpdatePill';
 import {
   hideSnapOverlay as hideSnapOverlayCommand,
   showSnapOverlay as showSnapOverlayCommand,
@@ -271,6 +272,9 @@ export function DesktopTitleBar() {
         <SyncConnectionStatusTitlebar status={titlebarStatus} />
       </div>
 
+      <div className="tauri-titlebar__update">
+        <DesktopUpdatePill />
+      </div>
       <div className="tauri-titlebar__controls">
         <button
           type="button"

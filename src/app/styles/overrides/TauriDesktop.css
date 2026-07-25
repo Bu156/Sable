@@ -6,7 +6,7 @@
 .tauri-titlebar {
   height: var(--tauri-titlebar-height);
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   align-items: stretch;
   position: relative;
   background: var(--sable-bg-container);
@@ -42,6 +42,21 @@
   font-size: 12px;
   line-height: 1;
   letter-spacing: 0.02em;
+}
+
+.tauri-titlebar__update {
+  display: flex;
+  align-items: center;
+  padding-inline: 4px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.tauri-titlebar--mac .tauri-titlebar__update {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  height: 100%;
 }
 
 .tauri-titlebar__controls {

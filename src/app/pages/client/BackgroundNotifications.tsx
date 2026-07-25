@@ -44,20 +44,14 @@ import {
 import * as Sentry from '@sentry/react';
 import { startClient, stopClient } from '$client/initMatrix';
 import { createSessionTokenRefresher } from '$client/oidcTokenRefresher';
+import { isDesktopTauri } from '$utils/platform';
 import { mobileOrTablet } from '$utils/user-agent';
-import { isTauri } from '@tauri-apps/api/core';
-import { type as osType } from '@tauri-apps/plugin-os';
 
 const log = createLogger('BackgroundNotifications');
 const debugLog = createDebugLogger('BackgroundNotifications');
 
 const BACKGROUND_SYNC_POLL_TIMEOUT_MS = 60_000;
 const BACKGROUND_STAGGER_DELAY_MS = 5_000;
-
-// Desktop webviews can't show web notifications (WKWebView lacks the API; the
-// Linux CEF runtime never grants it), so desktop routes through the native plugin.
-const DESKTOP_TAURI_OS = new Set(['linux', 'macos', 'windows']);
-const isDesktopTauri = (): boolean => isTauri() && DESKTOP_TAURI_OS.has(osType());
 
 let desktopNotificationSeq = 1;
 const nextDesktopNotificationId = (): number => {

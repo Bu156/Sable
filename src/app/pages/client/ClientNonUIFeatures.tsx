@@ -89,11 +89,8 @@ import { isIncomingCallSuppressed } from '$features/call/callIncomingIngress';
 import { incomingCallAtom, mutedCallRoomIdAtom } from '$state/callEmbed';
 import { getInboxInvitesPath } from '../pathUtils';
 import { BackgroundNotifications } from './BackgroundNotifications';
-import { DesktopUpdater } from './DesktopUpdater';
-import { WebUpdater } from './WebUpdater';
 import { NotificationTransportRuntimeFeature } from '$features/settings/notifications/NotificationTransportRuntimeFeature';
 import { UnverifiedNoticeBanner } from '$components/unverified-notice';
-import { GlobalBannerRenderer } from '$components/global-banner/GlobalBannerRenderer';
 import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
@@ -1152,15 +1149,13 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <NativeNotificationClickRouting />
       <NativeNotificationActionRouting />
       <BackgroundNotifications />
-      <DesktopUpdater />
-      <WebUpdater />
+
       <NotificationTransportRuntimeFeature />
       <SyncNotificationSettingsWithServiceWorker />
       <HandleDecryptPushEvent />
       <NotificationBanner />
       <TelemetryConsentBanner />
       <UnverifiedNoticeBanner />
-      <GlobalBannerRenderer />
       <ThemeMigrationBanner />
       <SlidingSyncActiveRoomSubscriber />
       <PresenceFeature />

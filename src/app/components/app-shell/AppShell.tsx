@@ -9,6 +9,9 @@ import { type as osType } from '@tauri-apps/plugin-os';
 import { TauriFrontendReady } from '$components/tauri/TauriFrontendReady';
 import { DesktopTitleBar } from '$components/tauri/DesktopTitleBar';
 import { MacTitleBar } from '$components/tauri/MacTitleBar';
+import { DesktopUpdater } from '$pages/client/DesktopUpdater';
+import { WebUpdater } from '$pages/client/WebUpdater';
+import { GlobalBannerRenderer } from '$components/global-banner/GlobalBannerRenderer';
 import { Toast } from '$components/toast/Toast';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider } from '$hooks/useScreenSize';
@@ -88,6 +91,9 @@ function AppShellFrame({ children, portalContainer, onPortalContainerChange }: A
       >
         {titlebarKind === 'desktop' && <DesktopTitleBar />}
         {titlebarKind === 'mac' && <MacTitleBar />}
+        <DesktopUpdater />
+        <WebUpdater />
+        <GlobalBannerRenderer />
         <div
           style={{
             display: 'flex',
