@@ -19,7 +19,6 @@ import {
 } from '$state/desktopUpdate';
 import dayjs from 'dayjs';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { SettingsSectionPage } from '../SettingsSectionPage';
 
 type VersionResult =
   | { error: { message: string } }
