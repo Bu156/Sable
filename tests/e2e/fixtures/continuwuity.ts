@@ -38,39 +38,43 @@ export async function startContinuwuity(): Promise<TestHomeserver> {
 
   const baseUrl = `http://${container.getHost()}:${container.getMappedPort(CS_PORT)}`;
 
-  const register = async (username: string, password: string): Promise<RegisteredUser> => {
-    const url = `${baseUrl}/_matrix/client/v3/register?kind=user`;
-    const probe = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-
-    let done = probe;
-    if (probe.status === 401) {
-      const { session } = (await probe.json()) as { session: string };
-      done = await fetch(url, {
-        method: 'POST',
-        body: JSON.stringify({ username, password, auth: { type: 'm.login.dummy', session } }),
-      });
-    }
-    if (!done.ok) {
-      throw new Error(`register failed: ${done.status} ${await done.text()}`);
-    }
-    const body = (await done.json()) as {
-      user_id: string;
-      access_token: string;
-      device_id: string;
-    };
-    return { userId: body.user_id, accessToken: body.access_token, deviceId: body.device_id };
-  };
-
   return {
     baseUrl,
-    register,
+    register: (username, password) => registerUser(baseUrl, username, password),
     stop: async () => {
       await container.stop();
     },
   };
+}
+
+export async function registerUser(
+  baseUrl: string,
+  username: string,
+  password: string
+): Promise<RegisteredUser> {
+  const url = `${baseUrl}/_matrix/client/v3/register?kind=user`;
+  const probe = await fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+
+  let done = probe;
+  if (probe.status === 401) {
+    const { session } = (await probe.json()) as { session: string };
+    done = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ username, password, auth: { type: 'm.login.dummy', session } }),
+    });
+  }
+  if (!done.ok) {
+    throw new Error(`register failed: ${done.status} ${await done.text()}`);
+  }
+  const body = (await done.json()) as {
+    user_id: string;
+    access_token: string;
+    device_id: string;
+  };
+  return { userId: body.user_id, accessToken: body.access_token, deviceId: body.device_id };
 }
 
 export async function createRoom(
