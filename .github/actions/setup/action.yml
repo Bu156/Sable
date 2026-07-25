@@ -23,19 +23,24 @@ runs:
   using: composite
   steps:
     - name: Setup tools (mise)
+      id: setup-mise
       uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
       with:
         cache: true
 
+    - name: Cache Rust toolchain (workaround jdx/mise-action#215)
+      if: ${{ inputs.tauri == 'true' }}
+      id: cache-rust
+      uses: actions/cache@5ecf6929733c1215af2f1b6cbaf15e157b97a9f7 # v5.0.1
+      with:
+        path: ~/.rustup/toolchains/
+        key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+        restore-keys: rust-${{ runner.os }}-
+
     - name: Trust project mise configuration
       shell: bash
       working-directory: ${{ github.workspace }}
-      run: |
-        mise trust "$GITHUB_WORKSPACE/mise.toml"
-        mise trust --all "$GITHUB_WORKSPACE"
-        mise settings set trusted_config_paths "$GITHUB_WORKSPACE"
-        mise settings add trusted_config_paths "*"
-        echo "MISE_TRUSTED_CONFIG_PATHS=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      run: mise settings set trusted_config_paths "$GITHUB_WORKSPACE"
 
     - name: Install dependencies
       shell: bash
@@ -49,6 +54,12 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       run: mise run tauri:setup
+
+    - name: Force reinstall Rust on cache mismatch
+      if: ${{ inputs.tauri == 'true' && steps.setup-mise.outputs.cache-hit == 'true' && steps.cache-rust.outputs.cache-hit != 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: mise install rust --force
 
     - name: Build app
       if: ${{ inputs.build == 'true' }}
