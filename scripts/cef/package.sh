@@ -120,10 +120,10 @@ else
 fi
 
 APPIMAGETOOL_CMD=""
-if command -v appimagetool >/dev/null 2>&1; then
+if command -v appimagetool.AppImage >/dev/null 2>&1; then
+  APPIMAGETOOL_CMD="appimagetool.AppImage"
+elif command -v appimagetool >/dev/null 2>&1; then
   APPIMAGETOOL_CMD="appimagetool"
-elif command -v appimagetool-x86_64.AppImage >/dev/null 2>&1; then
-  APPIMAGETOOL_CMD="appimagetool-x86_64.AppImage"
 fi
 
 if [ -n "$APPIMAGETOOL_CMD" ]; then
