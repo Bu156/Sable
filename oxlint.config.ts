@@ -81,5 +81,11 @@ export default defineConfig({
         'typescript/no-unsafe-enum-comparison': 'off',
       },
     },
+    {
+      files: ['tests/e2e/**'],
+      rules: {
+        'react/rules-of-hooks': 'off',
+      },
+    },
   ],
 });

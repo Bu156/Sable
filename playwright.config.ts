@@ -6,10 +6,10 @@ export default defineConfig({
   snapshotPathTemplate: 'tests/e2e/__screenshots__/{projectName}/{testFileName}/{arg}{ext}',
   fullyParallel: false,
   workers: 1,
-  retries: 2,
+  retries: process.env.CI ? 2 : 0,
   reporter: [['html', { open: 'never' }], ['list']],
   globalSetup: './tests/e2e/global-setup.ts',
-  timeout: 240_000,
+  timeout: 60_000,
   expect: {
     toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
   },
@@ -29,10 +29,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev',
+    command: 'pnpm run build && pnpm exec vite preview --port 8080 --strictPort',
     url: 'http://localhost:8080',
-    reuseExistingServer: !process.env.CI,
-    timeout: 240_000,
+    reuseExistingServer: false,
+    timeout: 180_000,
     env: { NODE_OPTIONS: '--max-old-space-size=8192' },
   },
 });
