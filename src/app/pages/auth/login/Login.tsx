@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react';
 import { Box, Switch, Text, Tooltip, TooltipProvider, color, config } from 'folds';
 import { Link, useSearchParams } from 'react-router-dom';
 import { SSOAction } from '$types/matrix-sdk';
-import { RegisterFlowStatus, useAuthFlows } from '$hooks/useAuthFlows';
+import { isUsableOAuthMetadata, RegisterFlowStatus, useAuthFlows } from '$hooks/useAuthFlows';
 import { useAuthServer } from '$hooks/useAuthServer';
 import { useAutoDiscoveryInfo } from '$hooks/useAutoDiscoveryInfo';
-import { isOauthAwarePreferred, useParsedLoginFlows } from '$hooks/useParsedLoginFlows';
+import { useParsedLoginFlows } from '$hooks/useParsedLoginFlows';
 import { getLoginPath, getRegisterPath, withSearchParam } from '$pages/pathUtils';
 import { usePathWithOrigin } from '$hooks/usePathWithOrigin';
 import type { LoginPathSearchParams } from '$pages/paths';
@@ -131,11 +131,10 @@ export function Login() {
     ? (oidcErrorDescription ?? `Sign-in was not completed (${oidcError}).`)
     : undefined;
 
-  const showOidc = authMetadata !== undefined;
-  const hidePassword =
-    hideUsernamePasswordFields || (showOidc && isOauthAwarePreferred(parsedFlows.sso));
+  const showOidc = isUsableOAuthMetadata(authMetadata);
+  const hidePassword = hideUsernamePasswordFields;
   const showPassword = !hidePassword && parsedFlows.password !== undefined;
-  const showLegacySso = !showOidc && parsedFlows.sso !== undefined;
+  const showLegacySso = parsedFlows.sso !== undefined;
 
   if (showOidc && oidcCode && oidcState) {
     return <OidcCallback code={oidcCode} state={oidcState} slidingSyncOptIn={useSlidingSync} />;
@@ -146,25 +145,9 @@ export function Login() {
       <Text size="H2" priority="400">
         Login
       </Text>
-      {!showPassword && (
-        <SlidingSyncLoginOption value={useSlidingSync} onChange={handleSlidingSyncChange} />
-      )}
+      <SlidingSyncLoginOption value={useSlidingSync} onChange={handleSlidingSyncChange} />
       {parsedFlows.token && loginSearchParams.loginToken && (
         <TokenLogin token={loginSearchParams.loginToken} slidingSyncOptIn={useSlidingSync} />
-      )}
-      {showPassword && (
-        <>
-          <PasswordLoginForm
-            defaultUsername={loginSearchParams.username}
-            defaultEmail={loginSearchParams.email}
-            slidingSyncOptIn={useSlidingSync}
-            slidingSyncOption={
-              <SlidingSyncLoginOption value={useSlidingSync} onChange={handleSlidingSyncChange} />
-            }
-          />
-          <span data-spacing-node />
-          {(showLegacySso || showOidc) && <OrDivider />}
-        </>
       )}
       {showOidc && (
         <>
@@ -181,11 +164,23 @@ export function Login() {
       )}
       {showLegacySso && (
         <>
+          {showOidc && <OrDivider />}
           <SSOLogin
             providers={parsedFlows.sso!.identity_providers}
             redirectUrl={ssoRedirectUrl}
             action={SSOAction.LOGIN}
-            saveScreenSpace={showPassword}
+            saveScreenSpace={showPassword || showOidc}
+          />
+          <span data-spacing-node />
+        </>
+      )}
+      {showPassword && (
+        <>
+          {(showLegacySso || (showOidc && !showLegacySso)) && <OrDivider />}
+          <PasswordLoginForm
+            defaultUsername={loginSearchParams.username}
+            defaultEmail={loginSearchParams.email}
+            slidingSyncOptIn={useSlidingSync}
           />
           <span data-spacing-node />
         </>
