@@ -83,13 +83,7 @@ run = "xcode-select --print-path >/dev/null 2>&1 || xcode-select --install"
 description = "Set up iOS Xcode project"
 depends = ["tauri:setup:macos"]
 confirm = { message = "Set up iOS Xcode project? (required for Tauri)", default = "no" }
-run = [
-  "command -v pod >/dev/null 2>&1 || brew install cocoapods",
-  { task = "tauri", args = [
-    "ios",
-    "init",
-  ] },
-]
+run = ["command -v pod >/dev/null 2>&1 || brew install cocoapods", "pnpm tauri ios init"]
 
 [tasks."tauri:setup:windows"]
 description = "Install Visual Studio Build Tools + WebView2 runtime"
