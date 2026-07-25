@@ -31,8 +31,10 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        mise trust --all
-        mise settings set trusted_config_paths '["*"]'
+        mise trust "$GITHUB_WORKSPACE/mise.toml"
+        mise trust --all "$GITHUB_WORKSPACE"
+        mise settings set trusted_config_paths "$GITHUB_WORKSPACE"
+        mise settings add trusted_config_paths "*"
         echo "MISE_TRUSTED_CONFIG_PATHS=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
 
     - name: Install dependencies
