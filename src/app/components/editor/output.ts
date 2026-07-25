@@ -170,15 +170,20 @@ const SPOILEREDLINKDIRECTREGEX = new RegExp(`\\|\\|(${LINK_URL})\\|\\|`, 'g');
 export const toPlainText = (
   node: Descendant | Descendant[],
   stripNickname = false,
+  stripSpoilers = true,
   nickNameReplacement?: Map<RegExp, string>
 ): string => {
   if (Array.isArray(node))
-    return node.map((n) => toPlainText(n, stripNickname, nickNameReplacement)).join('');
+    return node
+      .map((n) => toPlainText(n, stripNickname, stripSpoilers, nickNameReplacement))
+      .join('');
   if (Text.isText(node)) {
     let { text } = node;
 
-    text = text.replaceAll(SPOILERINPUTREGEX, '[Spoiler]');
-    text = text.replaceAll(SPOILEREDLINKINPUTREGEX, '$1');
+    if (stripSpoilers) {
+      text = text.replaceAll(SPOILERINPUTREGEX, '[Spoiler]');
+      text = text.replaceAll(SPOILEREDLINKINPUTREGEX, '$1');
+    }
 
     if (stripNickname && nickNameReplacement) {
       for (const [key, replacement] of nickNameReplacement) {
@@ -189,7 +194,7 @@ export const toPlainText = (
   }
 
   const children = node.children
-    .map((n) => toPlainText(n, stripNickname, nickNameReplacement))
+    .map((n) => toPlainText(n, stripNickname, stripSpoilers, nickNameReplacement))
     .join('');
   return elementToPlainText(node, children);
 };
