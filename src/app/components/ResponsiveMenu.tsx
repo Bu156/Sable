@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { RectCords } from 'folds';
 import { PopOut } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
+import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
 import { MobileSwipeDownModal } from './MobileSwipeDownModal';
+
+type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
 
 type DragHandlers = {
   onTouchStart: (e: React.TouchEvent) => void;
@@ -14,6 +16,9 @@ type DragHandlers = {
 
 /** Given the sheet's drag handle on mobile, and nothing on desktop. */
 type MenuRenderer = (dragHandle: ReactNode, dragHandlers: DragHandlers | undefined) => ReactNode;
+
+type ComponentPosition = 'Top' | 'Right' | 'Bottom' | 'Left';
+type ComponentAlign = 'Start' | 'Center' | 'End';
 
 type ResponsiveMenuProps = {
   anchor: RectCords | undefined;
@@ -26,14 +31,17 @@ type ResponsiveMenuProps = {
   align?: ComponentAlign;
   offset?: number;
   alignOffset?: number;
+  /** Set true for menus whose trigger should regain focus when they close. */
+  returnFocusOnDeactivate?: boolean;
+  /** Menus containing a search field want their input focused on open. */
+  initialFocus?: FocusTrapOptions['initialFocus'];
+  /** `both` also maps Left/Right, for menus laid out horizontally. */
+  arrowNavigation?: 'vertical' | 'both';
 };
-
-type ComponentPosition = 'Top' | 'Right' | 'Bottom' | 'Left';
-type ComponentAlign = 'Start' | 'Center' | 'End';
 
 /**
  * A menu that hangs off its trigger on desktop and rises as a bottom sheet on
- * mobile, where a popout anchored to a small target is hard to hit and easy to
+ * mobile, where a popout anchored to a tiny target is hard to hit and easy to
  * dismiss by accident.
  */
 export function ResponsiveMenu({
@@ -46,8 +54,28 @@ export function ResponsiveMenu({
   align = 'End',
   offset,
   alignOffset,
+  returnFocusOnDeactivate = false,
+  initialFocus = false,
+  arrowNavigation = 'vertical',
 }: ResponsiveMenuProps) {
-  const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
+  // Null outside a provider, where desktop is the safe assumption.
+  const isMobile = useScreenSizeOptionally() === ScreenSize.Mobile;
+
+  const isKeyForward = (evt: KeyboardEvent) =>
+    evt.key === 'ArrowDown' || (arrowNavigation === 'both' && evt.key === 'ArrowRight');
+  const isKeyBackward = (evt: KeyboardEvent) =>
+    evt.key === 'ArrowUp' || (arrowNavigation === 'both' && evt.key === 'ArrowLeft');
+
+  const focusTrapOptions = {
+    initialFocus,
+    fallbackFocus: () => document.body,
+    returnFocusOnDeactivate,
+    onDeactivate: requestClose,
+    clickOutsideDeactivates: true,
+    isKeyForward,
+    isKeyBackward,
+    escapeDeactivates: stopPropagation,
+  };
 
   if (isMobile) {
     return (
@@ -55,9 +83,13 @@ export function ResponsiveMenu({
         {children}
         {anchor && (
           <MobileSwipeDownModal requestClose={requestClose}>
-            {(dragHandle, dragHandlers) =>
-              typeof menu === 'function' ? menu(dragHandle, dragHandlers) : menu
-            }
+            {(dragHandle, dragHandlers) => (
+              <FocusTrap focusTrapOptions={focusTrapOptions}>
+                <div role="dialog" aria-modal="true">
+                  {typeof menu === 'function' ? menu(dragHandle, dragHandlers) : menu}
+                </div>
+              </FocusTrap>
+            )}
           </MobileSwipeDownModal>
         )}
       </>
@@ -74,17 +106,7 @@ export function ResponsiveMenu({
       offset={offset}
       alignOffset={alignOffset}
       content={
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: false,
-            returnFocusOnDeactivate: false,
-            onDeactivate: requestClose,
-            clickOutsideDeactivates: true,
-            isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
-            isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
-            escapeDeactivates: stopPropagation,
-          }}
-        >
+        <FocusTrap focusTrapOptions={focusTrapOptions}>
           {typeof menu === 'function' ? menu(null, undefined) : menu}
         </FocusTrap>
       }
