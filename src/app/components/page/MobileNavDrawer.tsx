@@ -28,7 +28,6 @@ import { resolveSection } from '$pages/pathUtils';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 import { PersistentRoomHost } from './PersistentRoomHost';
 import { MobileNavDrawerContext, type MobileSwipeTarget } from './MobileNavDrawerContext';
-import { NoScrollbar } from './MobileNavDrawer.css';
 import {
   classifyMobileGesture,
   getDrawerSettlePosition,
@@ -42,17 +41,7 @@ type MobileNavDrawerProps = {
   children: ReactNode;
 };
 
-const DRAWER_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
-// Initial slope of DRAWER_EASE; matched against release speed so the slide picks up the
-// finger's motion instead of starting from a standstill.
-const DRAWER_EASE_INITIAL_SLOPE = 2.25;
-const DRAWER_FULL_SLIDE_MS = 300;
-const DRAWER_MIN_SLIDE_MS = 160;
-const DRAWER_MAX_SLIDE_MS = 420;
-const DRAWER_FLICK_SPEED = 0.05; // px/ms
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max);
+const DRAWER_TRANSITION_MS = 220;
 
 type ActiveTouchGesture = {
   startX: number;
@@ -111,94 +100,53 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const gestureRef = useRef<ActiveTouchGesture>();
   const messageTargetsRef = useRef(new WeakMap<HTMLElement, MobileSwipeTarget>());
   const chatTargetsRef = useRef(new WeakMap<HTMLElement, MobileSwipeTarget>());
-  const settleTimeoutRef = useRef<number>();
+  const settleAnimationRef = useRef<number>();
   const programmaticTargetRef = useRef<number>();
 
   const setTrackPosition = useCallback((position: number) => {
     positionRef.current = position;
-    const el = trackRef.current;
-    if (!el) return;
-    el.style.transition = 'none';
-    el.style.transform = `translate3d(${position}px, 0, 0)`;
-  }, []);
-
-  // Reading the computed transform also flushes pending style, without which a settle
-  // starting right after a drag frame would jump instead of interpolating.
-  const readTrackPosition = useCallback((): number => {
-    const el = trackRef.current;
-    if (!el) return positionRef.current;
-    const { transform } = getComputedStyle(el);
-    if (!transform || transform === 'none') return positionRef.current;
-    try {
-      return new DOMMatrix(transform).m41;
-    } catch {
-      return positionRef.current;
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translate3d(${position}px, 0, 0)`;
     }
   }, []);
 
-  // While a transition is in flight positionRef holds its target, not the visible position.
-  const currentPosition = useCallback(
-    () => (settleTimeoutRef.current === undefined ? positionRef.current : readTrackPosition()),
-    [readTrackPosition]
-  );
-
-  const setTrackBoosted = useCallback((boosted: boolean) => {
-    const el = trackRef.current;
-    if (el) el.style.willChange = boosted ? 'transform' : 'auto';
-  }, []);
-
-  const cancelSettle = useCallback(() => {
-    if (settleTimeoutRef.current === undefined) return;
-    window.clearTimeout(settleTimeoutRef.current);
-    settleTimeoutRef.current = undefined;
-    setTrackPosition(readTrackPosition());
-  }, [readTrackPosition, setTrackPosition]);
-
   const settleToPanel = useCallback(
-    (targetPosition: number, velocityX: number, onComplete?: () => void) => {
-      const el = trackRef.current;
-      if (!el) return;
+    (targetPosition: number, onComplete?: () => void) => {
+      if (!trackRef.current) return;
 
-      window.clearTimeout(settleTimeoutRef.current);
-      settleTimeoutRef.current = undefined;
-
-      const startPosition = readTrackPosition();
-      const distance = targetPosition - startPosition;
-
-      if (reduceMotion || Math.abs(distance) <= 1) {
+      window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
+      if (reduceMotion) {
         setTrackPosition(targetPosition);
-        setTrackBoosted(false);
         onComplete?.();
         return;
       }
 
-      // A flick against the committed direction must not shorten the glide.
-      const speed = Math.sign(velocityX) === Math.sign(distance) ? Math.abs(velocityX) : 0;
-      const duration =
-        speed > DRAWER_FLICK_SPEED
-          ? clamp(
-              (DRAWER_EASE_INITIAL_SLOPE * Math.abs(distance)) / speed,
-              DRAWER_MIN_SLIDE_MS,
-              DRAWER_MAX_SLIDE_MS
-            )
-          : clamp(
-              (Math.abs(distance) / Math.max(widthRef.current, 1)) * DRAWER_FULL_SLIDE_MS,
-              DRAWER_MIN_SLIDE_MS,
-              DRAWER_FULL_SLIDE_MS
-            );
-
-      setTrackBoosted(true);
-      positionRef.current = targetPosition;
-      el.style.transition = `transform ${Math.round(duration)}ms ${DRAWER_EASE}`;
-      el.style.transform = `translate3d(${targetPosition}px, 0, 0)`;
-
-      settleTimeoutRef.current = window.setTimeout(() => {
-        settleTimeoutRef.current = undefined;
-        setTrackBoosted(false);
+      const startPosition = positionRef.current;
+      const distance = targetPosition - startPosition;
+      if (Math.abs(distance) <= 1) {
+        setTrackPosition(targetPosition);
         onComplete?.();
-      }, Math.round(duration));
+        return;
+      }
+
+      const startTime = window.performance.now();
+      const tick = (time: number) => {
+        const progress = Math.min(1, (time - startTime) / DRAWER_TRANSITION_MS);
+        const eased = 1 - (1 - progress) ** 3;
+        setTrackPosition(startPosition + distance * eased);
+
+        if (progress < 1) {
+          settleAnimationRef.current = window.requestAnimationFrame(tick);
+        } else {
+          setTrackPosition(targetPosition);
+          settleAnimationRef.current = undefined;
+          onComplete?.();
+        }
+      };
+
+      settleAnimationRef.current = window.requestAnimationFrame(tick);
     },
-    [reduceMotion, readTrackPosition, setTrackBoosted, setTrackPosition]
+    [reduceMotion, setTrackPosition]
   );
 
   const registerMessageSwipe = useCallback((element: HTMLElement, target: MobileSwipeTarget) => {
@@ -245,7 +193,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
 
       // Start the exact same settle used after a swipe immediately, while the
       // selected room renders concurrently in the panel being revealed.
-      settleToPanel(-width, 0, () => {
+      settleToPanel(-width, () => {
         if (programmaticTargetRef.current === -width) {
           programmaticTargetRef.current = undefined;
         }
@@ -291,7 +239,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     if (programmaticTargetRef.current === targetPosition) return;
 
     if (Math.abs(positionRef.current - targetPosition) > 5) {
-      settleToPanel(targetPosition, 0, () => setPanelIntent(contentOpen ? 1 : 0));
+      settleToPanel(targetPosition, () => setPanelIntent(contentOpen ? 1 : 0));
     } else {
       setPanelIntent(contentOpen ? 1 : 0);
     }
@@ -315,7 +263,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
             return;
           }
         }
-        settleToPanel(0, 0);
+        settleToPanel(0);
         setPanelIntent(0);
         return;
       }
@@ -368,16 +316,14 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         cancelled,
       });
 
-      settleToPanel(targetPosition, gesture.velocityX, () =>
-        commitPanel(targetPosition === -width)
-      );
+      settleToPanel(targetPosition, () => commitPanel(targetPosition === -width));
     },
     [commitPanel, settleToPanel, width]
   );
 
   useEffect(() => {
     return () => {
-      window.clearTimeout(settleTimeoutRef.current);
+      window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
       const gesture = gestureRef.current;
       gestureRef.current = undefined;
       gesture?.message?.cancel();
@@ -393,7 +339,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   const drawer = (
     <div
       ref={viewportRef}
-      data-testid="mobile-nav-drawer-viewport"
+      className="no-scrollbar"
       onTouchStartCapture={(event) => {
         const viewport = viewportRef.current;
         const touch = event.touches[0];
@@ -414,7 +360,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         gestureRef.current = {
           startX: touch.clientX,
           startY: touch.clientY,
-          startPosition: currentPosition(),
+          startPosition: positionRef.current,
           lastX: touch.clientX,
           lastTime: event.timeStamp,
           velocityX: 0,
@@ -443,18 +389,18 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
           gesture.mode = classifyMobileGesture({
             distanceX,
             distanceY,
-            startPosition: currentPosition(),
+            startPosition: positionRef.current,
             width,
             canOpenRoom,
             hasMessage: gesture.message !== undefined,
             hasChat: gesture.chat !== undefined,
           });
           if (gesture.mode === 'drawer' || gesture.mode === 'message' || gesture.mode === 'chat') {
-            const wasSettling = settleTimeoutRef.current !== undefined;
-            cancelSettle();
+            const animationActive = settleAnimationRef.current !== undefined;
+            window.cancelAnimationFrame(settleAnimationRef.current ?? 0);
+            settleAnimationRef.current = undefined;
             programmaticTargetRef.current = undefined;
-            if (wasSettling) gesture.startPosition = positionRef.current - distanceX;
-            if (gesture.mode === 'drawer') setTrackBoosted(true);
+            if (animationActive) gesture.startPosition = positionRef.current - distanceX;
           }
         }
 
@@ -473,12 +419,20 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         flexGrow: 1,
         height: '100%',
         width: '100%',
-        // `clip`, not `hidden`: hidden keeps a scrollport, so a focus or scrollIntoView on
-        // the revealed panel scrolls it a full panel width out of frame, permanently.
-        overflow: 'clip',
+        overflow: 'hidden',
+        overscrollBehaviorX: 'none',
         touchAction: 'pan-y',
       }}
     >
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
       <div
         ref={trackRef}
         style={{
@@ -487,11 +441,12 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
           height: '100%',
           flexShrink: 0,
           transform: 'translate3d(0, 0, 0)',
+          willChange: 'transform',
         }}
       >
         <div
           ref={navPanelRef}
-          className={NoScrollbar}
+          className="no-scrollbar"
           style={{
             width: '50%',
             flexBasis: '50%',
@@ -524,7 +479,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         </div>
         <div
           ref={contentPanelRef}
-          className={NoScrollbar}
+          className="no-scrollbar"
           style={{
             width: '50%',
             flexBasis: '50%',
