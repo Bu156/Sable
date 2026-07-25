@@ -147,10 +147,15 @@ const nextNativeNotificationId = (): number => {
   return id;
 };
 
+// Bundled at the app bundle root by ios-project.yml, where UNNotificationSound looks.
+export const IOS_NOTIFICATION_SOUND = 'notification.caf';
+export const IOS_INVITE_SOUND = 'invite.caf';
+
 export type NativeTauriNotification = {
   title: string;
   body?: string;
   silent?: boolean;
+  sound?: string;
   extra?: Record<string, string>;
   actionTypeId?: string;
   group?: string;
@@ -161,6 +166,7 @@ export async function sendNativeTauriNotification({
   title,
   body,
   silent,
+  sound,
   extra,
   actionTypeId,
   group,
@@ -174,6 +180,7 @@ export async function sendNativeTauriNotification({
     body,
     silent: silent ?? false,
     extra,
+    ...(sound ? { sound } : {}),
     ...(actionTypeId ? { actionTypeId } : {}),
     ...(group ? { group } : {}),
     ...(icon ? { icon } : {}),

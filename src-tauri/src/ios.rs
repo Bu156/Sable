@@ -103,15 +103,14 @@ extern "C" {
     fn AudioServicesPlaySystemSound(sound_id: u32);
 }
 
-fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
+fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Result<u32, String> {
     // AudioServicesCreateSystemSoundID needs a file URL, so write the
     // embedded .caf to the app's temp directory on first use.
     let mut path = std::env::temp_dir();
     path.push(temp_name);
     if !path.exists() {
-        if let Err(_) = std::fs::write(&path, caf_bytes) {
-            return None;
-        }
+        std::fs::write(&path, caf_bytes)
+            .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
     }
     unsafe {
         let path_str = NSString::from_str(&path.to_string_lossy());
@@ -119,15 +118,18 @@ fn load_system_sound(caf_bytes: &[u8], temp_name: &str) -> Option<u32> {
         let mut sound_id: u32 = 0;
         let status = AudioServicesCreateSystemSoundID(Retained::as_ptr(&url).cast(), &mut sound_id);
         if status != 0 || sound_id == 0 {
-            return None;
+            return Err(format!(
+                "AudioServicesCreateSystemSoundID failed for {} with status {status}",
+                path.display()
+            ));
         }
-        Some(sound_id)
+        Ok(sound_id)
     }
 }
 
 pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
-    static NOTIFICATION_SOUND: OnceLock<Option<u32>> = OnceLock::new();
-    static INVITE_SOUND: OnceLock<Option<u32>> = OnceLock::new();
+    static NOTIFICATION_SOUND: OnceLock<u32> = OnceLock::new();
+    static INVITE_SOUND: OnceLock<u32> = OnceLock::new();
 
     let cache = if kind == "invite" {
         &INVITE_SOUND
@@ -145,9 +147,15 @@ pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
         "sable_notification.caf"
     };
 
-    let sound_id = cache.get_or_init(|| load_system_sound(caf, name));
-    if let Some(id) = sound_id {
-        unsafe { AudioServicesPlaySystemSound(*id) };
-    }
+    // Not get_or_init: a failed load must not be cached as permanent silence.
+    let sound_id = match cache.get() {
+        Some(id) => *id,
+        None => {
+            let id = load_system_sound(caf, name)?;
+            let _ = cache.set(id);
+            id
+        }
+    };
+    unsafe { AudioServicesPlaySystemSound(sound_id) };
     Ok(())
 }

@@ -27,6 +27,8 @@ import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
 import {
   getTauriNotificationsApi,
+  IOS_INVITE_SOUND,
+  IOS_NOTIFICATION_SOUND,
   isAndroidTauri,
   isDesktopTauri,
   isIosTauri,
@@ -241,13 +243,16 @@ function InviteNotifications() {
   const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
 
   const notify = useCallback(
-    (count: number) => {
+    (count: number, withSound: boolean) => {
       const body = `You have ${count} new invitation request.`;
       if (isNativeNotificationTauri()) {
+        // iOS suppresses a silent notification entirely, so it can neither show nor play.
+        const ios = isIosTauri();
         sendNativeTauriNotification({
           title: 'Invitation',
           body,
-          silent: true,
+          silent: !ios,
+          ...(ios && withSound ? { sound: IOS_INVITE_SOUND } : {}),
           group: 'matrix_messages',
           extra: { type: 'invite' },
         }).catch(() => {});
@@ -270,7 +275,9 @@ function InviteNotifications() {
 
   const playSound = useCallback(() => {
     if (isAndroidTauri() || isIosTauri()) {
-      invoke('play_notification_sound', { kind: 'invite' }).catch(() => {});
+      invoke('play_notification_sound', { kind: 'invite' }).catch((err) => {
+        console.warn('[app] play_notification_sound failed', err);
+      });
       return;
     }
     const audioElement = audioRef.current;
@@ -284,6 +291,10 @@ function InviteNotifications() {
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
 
+    const tabVisible = document.visibilityState === 'visible';
+    const withSound = notificationSound && (tabVisible || backgroundNotificationSounds);
+    let soundOnNotification = false;
+
     // OS notification for invites — desktop, plus iOS while foregrounded (testing).
     if (
       (!mobileOrTablet() || isIosTauri()) &&
@@ -291,13 +302,13 @@ function InviteNotifications() {
       (isNativeNotificationTauri() || notificationPermission('granted'))
     ) {
       try {
-        notify(invites.length - perviousInviteLen);
+        notify(invites.length - perviousInviteLen, withSound);
+        soundOnNotification = isIosTauri() && withSound;
       } catch {
         // window.Notification may be unavailable in sandboxed environments.
       }
     }
-    const tabVisible = document.visibilityState === 'visible';
-    if (notificationSound && (tabVisible || backgroundNotificationSounds)) {
+    if (withSound && !soundOnNotification) {
       playSound();
     }
   }, [
@@ -353,7 +364,9 @@ function MessageNotifications() {
 
   const playSound = useCallback(() => {
     if (isAndroidTauri() || isIosTauri()) {
-      invoke('play_notification_sound', { kind: 'notification' }).catch(() => {});
+      invoke('play_notification_sound', { kind: 'notification' }).catch((err) => {
+        console.warn('[app] play_notification_sound failed', err);
+      });
       return;
     }
     const audioElement = audioRef.current;
@@ -498,6 +511,9 @@ function MessageNotifications() {
       // in sandboxed environments, browsers with DnD active, or Electron — and
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
+      const tabVisible = document.visibilityState === 'visible';
+      const withSound = notificationSound && isLoud && (tabVisible || backgroundNotificationSounds);
+      let soundOnNotification = false;
       if (
         (!mobileOrTablet() || isIosTauri()) &&
         showSystemNotifications &&
@@ -531,10 +547,13 @@ function MessageNotifications() {
             if (eventId) extra.event_id = eventId;
             const userId = mx.getUserId();
             if (userId) extra.user_id = userId;
+            // iOS plays content.sound or nothing, so the sound rides on the notification.
+            soundOnNotification = isIosTauri() && withSound;
             sendNativeTauriNotification({
               title: osPayload.title,
               body: osPayload.options.body,
               silent: osPayload.options.silent ?? false,
+              ...(soundOnNotification ? { sound: IOS_NOTIFICATION_SOUND } : {}),
               extra,
               actionTypeId: 'sable-message',
               group: 'matrix_messages',
@@ -557,8 +576,7 @@ function MessageNotifications() {
         }
       }
 
-      const tabVisible = document.visibilityState === 'visible';
-      if (notificationSound && isLoud && (tabVisible || backgroundNotificationSounds)) {
+      if (withSound && !soundOnNotification) {
         playSound();
       }
 
