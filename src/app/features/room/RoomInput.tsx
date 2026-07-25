@@ -109,6 +109,7 @@ import { loadImageElementFromMediaUrl } from '$utils/dom';
 import { safeFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
+import type { EditorButtonId } from '$state/settings';
 import { settingsAtom } from '$state/settings';
 import { matchesShortcut } from '../../keyboard/shortcuts';
 import {
@@ -365,6 +366,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
 
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
+    const gifBtnRef = useRef<HTMLButtonElement>(null);
+    const stickerBtnRef = useRef<HTMLButtonElement>(null);
     const micBtnRef = useRef<HTMLButtonElement>(null);
     // Preserve stable list keys across metadata/description replacements without
     // storing UI-only IDs in the upload draft state.
@@ -540,6 +543,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
     // Android back closes the mobile emoji board instead of navigating away.
     useDismissOnBack(() => setEmojiBoardTab(undefined), emojiBoardTab !== undefined);
+
+    const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
+      setEmojiBoardTab((prev) => (prev === tab ? undefined : tab));
+    }, []);
+
     const [personaPickerTab, setPersonaPickerTab] = useState<PersonaPickerTab | undefined>(
       undefined
     );
@@ -2239,15 +2247,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
                       onGifSelect={handleGifSelect}
-                      requestClose={() => {
-                        setEmojiBoardTab((t) => {
-                          if (t) {
-                            if (!mobileOrTablet()) ReactEditor.focus(editor);
-                            return undefined;
-                          }
-                          return t;
-                        });
-                      }}
+                      requestClose={() => setEmojiBoardTab(undefined)}
                     />
                   );
                   const triggers = (
@@ -2257,8 +2257,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         if (id === 'gif' && editorGifButton) {
                           button = (
                             <IconButton
+                              ref={gifBtnRef}
                               aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
-                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Gif)}
                               onPointerDown={suppressEditorRefocus}
                               variant="SurfaceVariant"
                               size="300"
@@ -2275,8 +2276,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         } else if (id === 'sticker' && editorStickerButton) {
                           button = (
                             <IconButton
+                              ref={stickerBtnRef}
                               aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
                               onPointerDown={suppressEditorRefocus}
                               variant="SurfaceVariant"
                               size="300"
@@ -2295,8 +2297,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                           button = (
                             <IconButton
                               ref={emojiBtnRef}
-                              aria-pressed={emojiBoardTab !== undefined}
-                              onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Emoji}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
                               onPointerDown={suppressEditorRefocus}
                               variant="SurfaceVariant"
                               size="300"
@@ -2306,7 +2308,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                               aria-label="Open emoji board"
                             >
                               {composerIcon(Smiley, {
-                                weight: emojiBoardTab !== undefined ? 'fill' : 'regular',
+                                weight: emojiBoardTab === EmojiBoardTab.Emoji ? 'fill' : 'regular',
                               })}
                             </IconButton>
                           );
@@ -2342,11 +2344,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       alignOffset={-44}
                       position="Top"
                       align="End"
-                      anchor={
-                        emojiBoardTab === undefined
-                          ? undefined
-                          : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
-                      }
+                      anchor={(() => {
+                        if (emojiBoardTab === undefined) return undefined;
+                        const buttonRefs: Record<EditorButtonId, RefObject<HTMLButtonElement>> = {
+                          gif: gifBtnRef,
+                          sticker: stickerBtnRef,
+                          emoji: emojiBtnRef,
+                        };
+                        for (let i = editorButtonOrder.length - 1; i >= 0; i--) {
+                          const id = editorButtonOrder[i];
+                          if (!id) continue;
+                          const btnRef = buttonRefs[id];
+                          if (btnRef?.current) {
+                            return btnRef.current.getBoundingClientRect();
+                          }
+                        }
+                        return undefined;
+                      })()}
                       content={emojiBoard}
                     >
                       {triggers}

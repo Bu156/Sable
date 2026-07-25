@@ -766,11 +766,8 @@ export function EmojiBoard({
         initialFocus: false,
         onDeactivate: requestClose,
 
-        allowOutsideClick: (e: MouseEvent | TouchEvent) => {
-          e.preventDefault();
-          requestClose();
-          return false;
-        },
+        clickOutsideDeactivates: true,
+        allowOutsideClick: () => true,
         isKeyForward: (evt: KeyboardEvent) =>
           !editableActiveElement() && isKeyHotkey(['arrowdown', 'arrowright'], evt),
         isKeyBackward: (evt: KeyboardEvent) =>
