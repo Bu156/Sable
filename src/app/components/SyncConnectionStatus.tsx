@@ -2,7 +2,6 @@ import React from 'react';
 import classNames from 'classnames';
 import { Box, config, Text } from 'folds';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
-import { SyncState } from '$types/matrix-sdk';
 import { type TitlebarStatusView } from '$state/titlebarStatus';
 import { ContainerColor } from '$styles/ContainerColor.css';
 
@@ -14,30 +13,6 @@ type SyncConnectionStatusProps = {
   onClick?: () => void;
   icon?: React.ReactNode;
 };
-
-export function getSyncConnectionStatusView(
-  current: SyncState | null,
-  previous: SyncState | null | undefined
-): TitlebarStatusView | null {
-  if (
-    (current === SyncState.Prepared ||
-      current === SyncState.Syncing ||
-      current === SyncState.Catchup) &&
-    previous !== SyncState.Syncing
-  ) {
-    return { text: 'Connecting...', variant: 'Success' };
-  }
-
-  if (current === SyncState.Reconnecting) {
-    return { text: 'Connection Lost! Reconnecting...', variant: 'Warning' };
-  }
-
-  if (current === SyncState.Error) {
-    return { text: 'Connection Lost!', variant: 'Critical' };
-  }
-
-  return null;
-}
 
 export function SyncConnectionStatusBanner({ status }: SyncConnectionStatusProps) {
   const shouldReduceMotion = useReducedMotion();

@@ -27,7 +27,7 @@ import {
   PAGINATION_LIMIT,
 } from '$utils/timeline';
 
-export const EVENT_TIMELINE_LOAD_TIMEOUT_MS = 12000;
+const EVENT_TIMELINE_LOAD_TIMEOUT_MS = 12000;
 
 export type PaginationStatus = 'idle' | 'loading' | 'error';
 
