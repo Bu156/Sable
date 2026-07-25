@@ -30,7 +30,9 @@ runs:
     - name: Trust project mise configuration
       shell: bash
       working-directory: ${{ github.workspace }}
-      run: mise trust --all
+      run: |
+        mise trust --all
+        echo "MISE_TRUSTED_CONFIG_PATHS=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       shell: bash
