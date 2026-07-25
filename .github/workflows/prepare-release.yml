@@ -41,27 +41,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 
-      - name: Enrich changelog and update release PR
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: node .github/scripts/enrich-changelog.mjs --update-release-pr
-
-      - name: Amend release commit with enriched changelog
-        shell: bash
+      - name: Add internal label
         run: |
-          if [[ "$(git rev-parse --abbrev-ref HEAD)" != "release" ]]; then
-            echo "Not on release branch — skipping amend."
-            exit 1
-          fi
-
-          if git diff --cached --name-only | grep -q "CHANGELOG.md"; then
-            git add CHANGELOG.md
-            git commit --amend --no-edit
-          elif git diff --name-only HEAD | grep -q "CHANGELOG.md"; then
-            git add CHANGELOG.md
-            git commit --amend --no-edit
-          fi
-
-      - name: Push release branch
-        shell: bash
-        run: git push --force --set-upstream origin release
+          PR_NUMBER=$(gh pr list --head release --json number --jq '.[0].number')
+          gh pr edit "$PR_NUMBER" --add-label internal
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
