@@ -2,7 +2,6 @@ import type { MouseEventHandler, MouseEvent } from 'react';
 import { forwardRef, startTransition, useState, useEffect } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { RoomEvent as RoomEventEnum } from '$types/matrix-sdk';
-import type { RectCords } from 'folds';
 import {
   Avatar,
   Box,
@@ -10,7 +9,6 @@ import {
   Text,
   Menu,
   config,
-  PopOut,
   toRem,
   Line,
   Badge,
@@ -19,34 +17,26 @@ import {
   TooltipProvider,
 } from 'folds';
 import { useFocusWithin, useHover } from 'react-aria';
-import FocusTrap from 'focus-trap-react';
 import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { NavButton, NavItem, NavItemContent, NavItemOptions } from '$components/nav';
 import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
 import { RoomAvatar, RoomIcon } from '$components/room-avatar';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl, roomHaveUnread } from '$utils/room';
+import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '$utils/room/display';
+import { roomHaveUnread } from '$utils/room/unread';
 import { nameInitials } from '$utils/common';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useRoomUnread } from '$state/hooks/unread';
 import { roomToUnreadAtom } from '$state/room/roomToUnread';
-import { usePowerLevels } from '$hooks/usePowerLevels';
-import { copyToClipboard, getMouseEventCords } from '$utils/dom';
-import { markAsRead } from '$utils/notifications';
-import { confirm } from '$components/confirm/confirm';
-import { showToast } from '$state/toast';
-import { useMobileLongPress } from '$hooks/useMobileLongPress';
+import { copyToClipboard } from '$utils/dom';
+import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { useRoomTypingMember } from '$hooks/useRoomTypingMembers';
 import { TypingIndicator } from '$components/typing-indicator';
-import { stopPropagation } from '$utils/keyboard';
-import { getMatrixToRoom } from '$plugins/matrix-to';
-import { getCanonicalAliasOrRoomId, isRoomAlias } from '$utils/matrix';
-import { getViaServers } from '$plugins/via-servers';
+
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
-import { useOpenRoomSettings } from '$state/hooks/roomSettings';
-import { useSpaceOptionally } from '$hooks/useSpace';
+
 import {
   ChatCircleDots,
   Checks,
@@ -60,19 +50,17 @@ import {
   UserPlus,
 } from '$components/icons/phosphor';
 import { Copy as CopyIcon } from '@phosphor-icons/react';
-import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import { MobileMenuItem } from '$components/MobileMenuItem';
-import { type DragOptsProps } from '$components/message/modals/Options';
-import * as messageCss from '$features/room/message/styles.css';
 import {
   RoomNotificationMode,
   roomNotificationModeChipIcon,
   roomNotificationModeIcon,
 } from '$hooks/useRoomsNotificationPreferences';
 import { RoomNotificationModeSwitcher } from '$components/RoomNotificationSwitcher';
-import { useRoomCreators } from '$hooks/useRoomCreators';
-import { useRoomPermissions } from '$hooks/useRoomPermissions';
+
 import { InviteUserPrompt } from '$components/invite-user-prompt';
+import { DirectInvitePrompt } from '$components/direct-invite-prompt';
+import { AsyncStatus } from '$hooks/useAsyncCallback';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useRoomName, useRoomTopic } from '$hooks/useRoomMeta';
 import { nicknamesAtom } from '$state/nicknames';
@@ -80,6 +68,8 @@ import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { warmupRoomDecryption } from '$utils/decryptScheduler';
 import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 import { useOpenMobileDrawerContent } from '$components/page/MobileNavDrawerContext';
+import { ResponsiveMenu } from '$components/ResponsiveMenu';
+import { useRoomMenuActions } from '$hooks/useRoomMenuActions';
 
 // Call Hooks & Plugins
 import { useCallMembers, useCallSession } from '$hooks/useCall';
@@ -119,33 +109,36 @@ type RoomNavItemMenuProps = {
   room: Room;
   requestClose: () => void;
   notificationMode?: RoomNotificationMode;
-  dragOpts?: DragOptsProps;
 };
 
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
-  ({ room, requestClose, notificationMode, dragOpts }, ref) => {
+  ({ room, requestClose, notificationMode }, ref) => {
+    const {
+      handleMarkAsRead: hookMarkAsRead,
+      handleInvite: hookInvite,
+      handleCopyLink: hookCopyLink,
+      handleOpenSettings: hookOpenSettings,
+      handleLeaveRoom: hookLeaveRoom,
+      canInvite,
+      unread,
+      invitePrompt,
+      setInvitePrompt,
+      directInvitePrompt,
+      setDirectInvitePrompt,
+      handleInviteDirect,
+      handleConvertAndInvite,
+      convertState,
+    } = useRoomMenuActions(room);
+
     const mx = useMatrixClient();
     const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
-    const [hideReads] = useSetting(settingsAtom, 'hideReads');
-    const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
-    const powerLevels = usePowerLevels(room);
-    const creators = useRoomCreators(room);
-
-    const permissions = useRoomPermissions(creators, powerLevels);
-    const canInvite = permissions.action('invite', mx.getSafeUserId());
-    const openRoomSettings = useOpenRoomSettings();
-    const space = useSpaceOptionally();
-
-    const [invitePrompt, setInvitePrompt] = useState(false);
 
     const handleMarkAsRead = () => {
-      markAsRead(mx, room.roomId, hideReads);
+      hookMarkAsRead();
       requestClose();
     };
 
-    const handleInvite = () => {
-      setInvitePrompt(true);
-    };
+    const handleInvite = hookInvite;
 
     const handleCopyName = () => {
       const roomName = mx.getRoom(room.roomId)?.name || 'Room';
@@ -154,44 +147,21 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     };
 
     const handleCopyLink = () => {
-      const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
-      copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
+      hookCopyLink();
       requestClose();
     };
 
     const handleRoomSettings = () => {
-      openRoomSettings(room.roomId, space?.roomId);
+      hookOpenSettings();
       requestClose();
     };
 
     const handleLeaveRoom = async () => {
-      const ok = await confirm({
-        title: 'Leave Room',
-        description: 'Are you sure you want to leave this room?',
-        action: 'Leave',
-        variant: 'Critical',
-      });
-      if (ok) {
-        try {
-          await mx.leave(room.roomId);
-          requestClose();
-        } catch (e) {
-          showToast(`Failed to leave room: ${e instanceof Error ? e.message : 'unknown error'}`);
-        }
-      }
+      if (await hookLeaveRoom()) requestClose();
     };
 
     return (
-      <Menu
-        ref={ref}
-        className={dragOpts ? messageCss.MessageOptionsMenu : undefined}
-        style={dragOpts ? undefined : { maxWidth: toRem(160), width: '100vw' }}
-        onTouchStart={dragOpts?.onTouchStart}
-        onTouchMove={dragOpts?.onTouchMove}
-        onTouchEnd={dragOpts?.onTouchEnd}
-      >
-        {dragOpts?.dragHandle}
+      <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
         {invitePrompt && room && (
           <InviteUserPrompt
             room={room}
@@ -199,6 +169,20 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
               setInvitePrompt(false);
               requestClose();
             }}
+          />
+        )}
+        {directInvitePrompt && (
+          <DirectInvitePrompt
+            onCancel={() => {
+              setDirectInvitePrompt(false);
+              requestClose();
+            }}
+            onInviteDirect={handleInviteDirect}
+            onConvertAndInvite={handleConvertAndInvite}
+            converting={convertState.status === AsyncStatus.Loading}
+            convertError={
+              convertState.status === AsyncStatus.Error ? convertState.error.message : undefined
+            }
           />
         )}
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
@@ -342,7 +326,6 @@ export function RoomNavItem({
   const [hover, setHover] = useState(false);
   const { hoverProps } = useHover({ onHoverChange: setHover });
   const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
-  const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
   const hasRoomUnread = useRoomHasUnread(room);
@@ -380,41 +363,19 @@ export function RoomNavItem({
 
   const isActiveCall = callEmbed?.roomId === room.roomId;
 
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const menu = useMenuAnchor<HTMLElement>();
 
-  const {
-    onTouchStart,
-    onTouchEnd,
-    onTouchMove,
-    onTouchCancel,
-    firedRef: longPressFiredRef,
-    isPressing,
-  } = useMobileLongPress(() => {
-    setIsMobileMenuOpen(true);
-  });
-
-  const handleContextMenu: MouseEventHandler<HTMLElement> = (evt) => {
+  const contextMenuHandler: MouseEventHandler<HTMLElement> = (evt) => {
     if (isMobile) {
-      if (longPressFiredRef.current) {
-        evt.preventDefault();
-        longPressFiredRef.current = false;
-        return;
-      }
       evt.preventDefault();
-      setIsMobileMenuOpen(true);
+      menu.triggerProps.onContextMenu(evt);
       return;
     }
-
-    evt.preventDefault();
-    setMenuAnchor(getMouseEventCords(evt.nativeEvent));
+    menu.triggerProps.onContextMenu(evt);
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    if (isMobile) {
-      setIsMobileMenuOpen(true);
-    } else {
-      setMenuAnchor(evt.currentTarget.getBoundingClientRect());
-    }
+    menu.triggerProps.onClick(evt);
   };
 
   const handleNavItemClick: MouseEventHandler<HTMLElement> = (evt) => {
@@ -464,7 +425,7 @@ export function RoomNavItem({
     navigate(linkPath);
   };
 
-  const optionsVisible = hover || !!menuAnchor || isMobileMenuOpen;
+  const optionsVisible = hover || !!menu.anchor;
   const isMutedRoom = notificationMode === RoomNotificationMode.Mute;
   const shouldShowUnreadIndicator = !isMutedRoom && (!!unread || hasRoomUnread);
 
@@ -504,8 +465,8 @@ export function RoomNavItem({
           radii="400"
           highlight={shouldShowUnreadIndicator}
           aria-selected={selected}
-          data-hover={!!menuAnchor || isPressing}
-          onContextMenu={handleContextMenu}
+          data-hover={!!menu.anchor || menu.isPressing}
+          onContextMenu={contextMenuHandler}
           {...hoverProps}
           {...focusWithinProps}
           style={hideTextStyling(hideText)}
@@ -531,10 +492,10 @@ export function RoomNavItem({
                 onPointerMove={mobileTapActivation.onPointerMove}
                 onPointerUp={mobileTapActivation.onPointerUp}
                 onPointerCancel={mobileTapActivation.onPointerCancel}
-                onTouchStart={onTouchStart}
-                onTouchEnd={onTouchEnd}
-                onTouchMove={onTouchMove}
-                onTouchCancel={onTouchCancel}
+                onTouchStart={menu.triggerProps.onTouchStart}
+                onTouchEnd={menu.triggerProps.onTouchEnd}
+                onTouchMove={menu.triggerProps.onTouchMove}
+                onTouchCancel={menu.triggerProps.onTouchCancel}
                 aria-label={ariaLabel}
                 ref={triggerRef}
                 style={{
@@ -696,53 +657,24 @@ export function RoomNavItem({
                   )}
                 </TooltipProvider>
               )}
-              {isMobileMenuOpen && (
-                <MobileSwipeDownModal requestClose={() => setIsMobileMenuOpen(false)}>
-                  {(dragHandleJSX, dragHandlers) => (
-                    <RoomNavItemMenu
-                      room={room}
-                      requestClose={() => setIsMobileMenuOpen(false)}
-                      notificationMode={notificationMode}
-                      dragOpts={{
-                        dragHandle: dragHandleJSX,
-                        ...dragHandlers,
-                      }}
-                    />
-                  )}
-                </MobileSwipeDownModal>
-              )}
-              <PopOut
-                id={`menu-${room.roomId}`}
-                aria-expanded={!!menuAnchor}
-                anchor={menuAnchor}
-                offset={menuAnchor?.width === 0 ? 0 : undefined}
-                alignOffset={menuAnchor?.width === 0 ? 0 : -5}
+              <ResponsiveMenu
+                anchor={menu.anchor}
+                requestClose={menu.close}
                 position="Bottom"
-                align={menuAnchor?.width === 0 ? 'Start' : 'End'}
-                content={
-                  <FocusTrap
-                    focusTrapOptions={{
-                      initialFocus: false,
-                      returnFocusOnDeactivate: false,
-                      onDeactivate: () => setMenuAnchor(undefined),
-                      clickOutsideDeactivates: true,
-                      isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
-                      isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
-                      escapeDeactivates: stopPropagation,
-                    }}
-                  >
-                    <RoomNavItemMenu
-                      room={room}
-                      requestClose={() => setMenuAnchor(undefined)}
-                      notificationMode={notificationMode}
-                    />
-                  </FocusTrap>
+                align={menu.anchor?.width === 0 ? 'Start' : 'End'}
+                offset={menu.anchor?.width === 0 ? 0 : undefined}
+                menu={
+                  <RoomNavItemMenu
+                    room={room}
+                    requestClose={menu.close}
+                    notificationMode={notificationMode}
+                  />
                 }
               >
                 {!hideText && (
                   <IconButton
                     onClick={handleOpenMenu}
-                    aria-pressed={!!menuAnchor}
+                    aria-pressed={!!menu.anchor}
                     aria-controls={`menu-${room.roomId}`}
                     aria-label="More Options"
                     variant="Background"
@@ -751,11 +683,11 @@ export function RoomNavItem({
                     radii="300"
                   >
                     {chipIcon(DotsThreeOutlineVerticalIcon, {
-                      weight: menuAnchor ? 'fill' : 'regular',
+                      weight: menu.anchor ? 'fill' : 'regular',
                     })}
                   </IconButton>
                 )}
-              </PopOut>
+              </ResponsiveMenu>
             </NavItemOptions>
           )}
         </NavItem>

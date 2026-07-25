@@ -26,7 +26,7 @@ import { copyImageToClipboard } from '$utils/dom';
 import { getDownloadFilename, saveFileToDevice } from '$utils/download';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 
-export type ImageViewerProps = {
+type ImageViewerProps = {
   alt: string;
   filename?: string;
   src: string;
@@ -108,6 +108,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           anchor={menu.anchor}
           requestClose={menu.close}
           align="Start"
+          offset={0}
           menu={
             <Menu variant="Surface" style={{ maxWidth: toRem(160), width: '100vw' }}>
               <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>

@@ -13,7 +13,7 @@ import {
   config,
 } from 'folds';
 import type { MatrixEvent, Room, RoomMember } from '$types/matrix-sdk';
-import { getAvatarUrl, getMemberDisplayName } from '$utils/room';
+import { getAvatarUrl, getMemberDisplayName } from '$utils/room/display';
 import { getMxIdLocalPart } from '$utils/matrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useAtomValue } from 'jotai';
@@ -29,7 +29,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PollAnswerItem } from '$components/message/PollEvent';
 import { M_POLL_RESPONSE, M_TEXT } from 'matrix-js-sdk';
 
-export type PollResponsesViewerProps = {
+type PollResponsesViewerProps = {
   room: Room;
   answers: PollAnswerItem[];
   events: MatrixEvent[];
