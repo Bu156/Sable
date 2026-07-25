@@ -25,6 +25,7 @@ import LogoHighlightSVG from '$public/res/svg/highlight.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
+import { playNotificationSound } from '$utils/notificationSound';
 import {
   getTauriNotificationsApi,
   IOS_INVITE_SOUND,
@@ -96,19 +97,6 @@ import { UnverifiedNoticeBanner } from '$components/unverified-notice';
 import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
-
-function clearMediaSessionQuickly(): void {
-  if (!('mediaSession' in navigator)) return;
-  // iOS registers the lock screen media player as a side-effect of
-  // HTMLAudioElement.play(). We delay slightly so iOS has finished updating
-  // the media session before we clear it — clearing too early is a no-op.
-  // We only clear if no real in-app media (video/audio in a room) has since
-  // registered meaningful metadata; if it has, leave it alone.
-  setTimeout(() => {
-    if (navigator.mediaSession.metadata !== null) return;
-    navigator.mediaSession.playbackState = 'none';
-  }, 500);
-}
 
 function SystemEmojiFeature() {
   const [twitterEmoji] = useSetting(settingsAtom, 'twitterEmoji');
@@ -231,7 +219,6 @@ function FaviconUpdater() {
 }
 
 function InviteNotifications() {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const invites = useAtomValue(allInvitesAtom);
   const perviousInviteLen = usePreviousValue(invites.length, 0);
   const mx = useMatrixClient();
@@ -280,9 +267,9 @@ function InviteNotifications() {
       });
       return;
     }
-    const audioElement = audioRef.current;
-    audioElement?.play()?.catch(() => {});
-    clearMediaSessionQuickly();
+    playNotificationSound(InviteSound).catch((err) => {
+      console.warn('[app] invite sound failed', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -323,16 +310,10 @@ function InviteNotifications() {
     playSound,
   ]);
 
-  return (
-    // oxlint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
-      <source src={InviteSound} type="audio/ogg" />
-    </audio>
-  );
+  return null;
 }
 
 function MessageNotifications() {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const notifiedEventsRef = useRef(new Set());
   // Record mount time so we can distinguish live events from historical backfill
   // on sliding sync proxies that don't set num_live (which causes liveEvent=false
@@ -369,9 +350,9 @@ function MessageNotifications() {
       });
       return;
     }
-    const audioElement = audioRef.current;
-    audioElement?.play()?.catch(() => {});
-    clearMediaSessionQuickly();
+    playNotificationSound(NotificationSound).catch((err) => {
+      console.warn('[app] notification sound failed', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -662,12 +643,7 @@ function MessageNotifications() {
     useAuthentication,
   ]);
 
-  return (
-    // oxlint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
-      <source src={NotificationSound} type="audio/ogg" />
-    </audio>
-  );
+  return null;
 }
 
 function PrivacyBlurFeature() {
@@ -803,7 +779,7 @@ function SyncNotificationSettingsWithServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     // notificationSoundEnabled is intentionally excluded: push notification sound
     // is governed by the push rule's tweakSound alone (OS/Sygnal handles it).
-    // The in-app sound setting only controls the in-page <audio> playback above.
+    // The in-app sound setting only controls the local sound playback above.
     const payload = {
       type: 'setNotificationSettings' as const,
       showMessageContent,
