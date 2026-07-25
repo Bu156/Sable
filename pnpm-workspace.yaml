@@ -3,8 +3,11 @@ allowBuilds:
   '@sentry/cli': true
   '@swc/core': true
   cloudflared: true
+  cpu-features: true
   esbuild: true
+  protobufjs: true
   sharp: true
+  ssh2: true
   unrs-resolver: true
   workerd: true
 engineStrict: true
