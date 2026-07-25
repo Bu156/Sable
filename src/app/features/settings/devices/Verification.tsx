@@ -257,6 +257,7 @@ export function EnableVerification({ visible }: EnableVerificationProps) {
 export function DeviceVerificationOptions() {
   const [menuCords, setMenuCords] = useState<RectCords>();
   const authMetadata = useAuthMetadata();
+  const mx = useMatrixClient();
   const accountManagementActions = useAccountManagementActions();
 
   const [reset, setReset] = useState(false);
@@ -272,7 +273,12 @@ export function DeviceVerificationOptions() {
   const handleReset = () => {
     setMenuCords(undefined);
 
-    const url = getAccountManagementUrl(authMetadata, accountManagementActions.crossSigningReset);
+    const url = getAccountManagementUrl(
+      authMetadata,
+      accountManagementActions.crossSigningReset,
+      undefined,
+      mx.getHomeserverUrl()
+    );
     if (url) {
       if (isTauri()) {
         import('@tauri-apps/plugin-opener')

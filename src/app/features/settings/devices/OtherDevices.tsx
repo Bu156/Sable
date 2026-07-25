@@ -62,7 +62,12 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const [deleted, setDeleted] = useState(new Set());
 
   const handleDashboardOIDC = useCallback(() => {
-    const url = getAccountManagementUrl(authMetadata, accountManagementActions.sessionsList);
+    const url = getAccountManagementUrl(
+      authMetadata,
+      accountManagementActions.sessionsList,
+      undefined,
+      mx.getHomeserverUrl()
+    );
     if (!url) return;
     if (isTauri()) {
       import('@tauri-apps/plugin-opener')
@@ -78,7 +83,8 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       const url = getAccountManagementUrl(
         authMetadata,
         accountManagementActions.sessionEnd,
-        deviceId
+        deviceId,
+        mx.getHomeserverUrl()
       );
       if (!url) return;
       if (isTauri()) {
