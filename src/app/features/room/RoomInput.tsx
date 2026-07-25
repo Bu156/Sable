@@ -2343,14 +2343,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       alignOffset={-44}
                       position="Top"
                       align="End"
-                      anchor={
-                        emojiBoardTab === undefined
-                          ? undefined
-                          : (emojiBtnRef.current?.getBoundingClientRect() ??
-                             gifBtnRef.current?.getBoundingClientRect() ??
-                             stickerBtnRef.current?.getBoundingClientRect() ??
-                             undefined)
-                      }
+                      anchor={(() => {
+                        if (emojiBoardTab === undefined) return undefined;
+                        const buttonRefs: Record<EditorButtonId, RefObject<HTMLButtonElement>> = {
+                          gif: gifBtnRef,
+                          sticker: stickerBtnRef,
+                          emoji: emojiBtnRef,
+                        };
+                        for (let i = editorButtonOrder.length - 1; i >= 0; i--) {
+                          const id = editorButtonOrder[i];
+                          const ref = buttonRefs[id];
+                          if (ref?.current) {
+                            return ref.current.getBoundingClientRect();
+                          }
+                        }
+                        return undefined;
+                      })()}
                       content={emojiBoard}
                     >
                       {triggers}
