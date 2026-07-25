@@ -27,6 +27,11 @@ runs:
       with:
         cache: true
 
+    - name: Trust project mise configuration
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: mise trust --all
+
     - name: Install dependencies
       shell: bash
       working-directory: ${{ github.workspace }}
