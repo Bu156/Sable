@@ -8,9 +8,6 @@ idiomatic_version_file_enable_tools = ["pnpm", "node"]
 minimum_release_age = "1d"
 experimental = true
 
-[task_config]
-includes = ["scripts"]
-
 [tasks.setup]
 description = "Install dependencies with pnpm"
 run = 'pnpm install'
@@ -93,6 +90,34 @@ run = [
   "winget install --id Microsoft.EdgeWebView2Runtime --source winget",
 ]
 
+[tasks.tauri]
+description = "Run Tauri CLI"
+depends = ["tauri:setup"]
+run = "node scripts/tauri.js"
+raw_args = true
+
+[tasks."icons:symlink"]
+description = "Create Tauri icon symlinks"
+run = "node scripts/icons/symlink.js"
+raw_args = true
+
+[tasks."icons:replace"]
+description = "Replace icon assets from SVG inputs"
+run = "node scripts/icons/replace.js"
+raw_args = true
+tools = { ffmpeg = "7.1.1" }
+
+[tasks."cef:copy-libs"]
+description = "Copy CEF runtime libs next to the built binary"
+run = "bash scripts/cef/copy-libs.sh"
+raw_args = true
+
+[tasks."cef:package"]
+description = "Package CEF build into deb/rpm/AppImage"
+run = "bash scripts/cef/package.sh"
+raw_args = true
+tools = { nfpm = "2.47.0", "github:AppImage/appimagetool" = { version = "1.9.1", matching = ".AppImage" } }
+
 [tasks."cargo:lint"]
 description = "Check Rust formatting and Clippy lints"
 alias = ["cl", "cargo-lint"]
@@ -129,6 +154,7 @@ tools = { "pinact" = "latest" }
 
 [tasks.opentofu]
 run = "tofu"
+dir = "{{cwd}}"
 raw_args = true
 hide = true
 tools = { "opentofu" = "1.11.5" }
