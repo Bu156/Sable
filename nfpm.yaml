@@ -15,9 +15,11 @@ contents:
   - src: ${PKGROOT}/opt/sable/
     dst: /opt/sable
     type: tree
+    expand: true
   - src: ${PKGROOT}/usr/
     dst: /usr
     type: tree
+    expand: true
 
 overrides:
   deb:

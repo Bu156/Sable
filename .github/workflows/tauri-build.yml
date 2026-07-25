@@ -447,7 +447,6 @@ jobs:
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
       CARGO_INCREMENTAL: 0
       CARGO_TERM_COLOR: always
-      RUST_TARGETS: aarch64-apple-ios
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout repository
@@ -461,9 +460,11 @@ jobs:
         with:
           tauri: 'true'
 
-      - name: Add Rust targets
-        shell: bash
-        run: rustup target add $RUST_TARGETS
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-apple-ios
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
