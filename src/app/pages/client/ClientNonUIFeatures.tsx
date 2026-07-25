@@ -25,8 +25,11 @@ import LogoHighlightSVG from '$public/res/svg/highlight.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
 import { notificationPermission, setFavicon } from '$utils/dom';
+import { playNotificationSound } from '$utils/notificationSound';
 import {
   getTauriNotificationsApi,
+  IOS_INVITE_SOUND,
+  IOS_NOTIFICATION_SOUND,
   isAndroidTauri,
   isDesktopTauri,
   isIosTauri,
@@ -94,19 +97,6 @@ import { UnverifiedNoticeBanner } from '$components/unverified-notice';
 import { getRenderableMediaUrlStats } from '$hooks/useRenderableMediaUrl';
 
 const pushRelayLog = createDebugLogger('push-relay');
-
-function clearMediaSessionQuickly(): void {
-  if (!('mediaSession' in navigator)) return;
-  // iOS registers the lock screen media player as a side-effect of
-  // HTMLAudioElement.play(). We delay slightly so iOS has finished updating
-  // the media session before we clear it — clearing too early is a no-op.
-  // We only clear if no real in-app media (video/audio in a room) has since
-  // registered meaningful metadata; if it has, leave it alone.
-  setTimeout(() => {
-    if (navigator.mediaSession.metadata !== null) return;
-    navigator.mediaSession.playbackState = 'none';
-  }, 500);
-}
 
 function SystemEmojiFeature() {
   const [twitterEmoji] = useSetting(settingsAtom, 'twitterEmoji');
@@ -229,7 +219,6 @@ function FaviconUpdater() {
 }
 
 function InviteNotifications() {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const invites = useAtomValue(allInvitesAtom);
   const perviousInviteLen = usePreviousValue(invites.length, 0);
   const mx = useMatrixClient();
@@ -241,13 +230,16 @@ function InviteNotifications() {
   const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
 
   const notify = useCallback(
-    (count: number) => {
+    (count: number, withSound: boolean) => {
       const body = `You have ${count} new invitation request.`;
       if (isNativeNotificationTauri()) {
+        // iOS suppresses a silent notification entirely, so it can neither show nor play.
+        const ios = isIosTauri();
         sendNativeTauriNotification({
           title: 'Invitation',
           body,
-          silent: true,
+          silent: !ios,
+          ...(ios && withSound ? { sound: IOS_INVITE_SOUND } : {}),
           group: 'matrix_messages',
           extra: { type: 'invite' },
         }).catch(() => {});
@@ -270,12 +262,14 @@ function InviteNotifications() {
 
   const playSound = useCallback(() => {
     if (isAndroidTauri() || isIosTauri()) {
-      invoke('play_notification_sound', { kind: 'invite' }).catch(() => {});
+      invoke('play_notification_sound', { kind: 'invite' }).catch((err) => {
+        console.warn('[app] play_notification_sound failed', err);
+      });
       return;
     }
-    const audioElement = audioRef.current;
-    audioElement?.play()?.catch(() => {});
-    clearMediaSessionQuickly();
+    playNotificationSound(InviteSound).catch((err) => {
+      console.warn('[app] invite sound failed', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -284,6 +278,10 @@ function InviteNotifications() {
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
     if (document.visibilityState !== 'visible' && usePushNotifications) return;
 
+    const tabVisible = document.visibilityState === 'visible';
+    const withSound = notificationSound && (tabVisible || backgroundNotificationSounds);
+    let soundOnNotification = false;
+
     // OS notification for invites — desktop, plus iOS while foregrounded (testing).
     if (
       (!mobileOrTablet() || isIosTauri()) &&
@@ -291,13 +289,13 @@ function InviteNotifications() {
       (isNativeNotificationTauri() || notificationPermission('granted'))
     ) {
       try {
-        notify(invites.length - perviousInviteLen);
+        notify(invites.length - perviousInviteLen, withSound);
+        soundOnNotification = isIosTauri() && withSound;
       } catch {
         // window.Notification may be unavailable in sandboxed environments.
       }
     }
-    const tabVisible = document.visibilityState === 'visible';
-    if (notificationSound && (tabVisible || backgroundNotificationSounds)) {
+    if (withSound && !soundOnNotification) {
       playSound();
     }
   }, [
@@ -312,16 +310,10 @@ function InviteNotifications() {
     playSound,
   ]);
 
-  return (
-    // oxlint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
-      <source src={InviteSound} type="audio/ogg" />
-    </audio>
-  );
+  return null;
 }
 
 function MessageNotifications() {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const notifiedEventsRef = useRef(new Set());
   // Record mount time so we can distinguish live events from historical backfill
   // on sliding sync proxies that don't set num_live (which causes liveEvent=false
@@ -353,12 +345,14 @@ function MessageNotifications() {
 
   const playSound = useCallback(() => {
     if (isAndroidTauri() || isIosTauri()) {
-      invoke('play_notification_sound', { kind: 'notification' }).catch(() => {});
+      invoke('play_notification_sound', { kind: 'notification' }).catch((err) => {
+        console.warn('[app] play_notification_sound failed', err);
+      });
       return;
     }
-    const audioElement = audioRef.current;
-    audioElement?.play()?.catch(() => {});
-    clearMediaSessionQuickly();
+    playNotificationSound(NotificationSound).catch((err) => {
+      console.warn('[app] notification sound failed', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -498,6 +492,9 @@ function MessageNotifications() {
       // in sandboxed environments, browsers with DnD active, or Electron — and
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
+      const tabVisible = document.visibilityState === 'visible';
+      const withSound = notificationSound && isLoud && (tabVisible || backgroundNotificationSounds);
+      let soundOnNotification = false;
       if (
         (!mobileOrTablet() || isIosTauri()) &&
         showSystemNotifications &&
@@ -531,10 +528,13 @@ function MessageNotifications() {
             if (eventId) extra.event_id = eventId;
             const userId = mx.getUserId();
             if (userId) extra.user_id = userId;
+            // iOS plays content.sound or nothing, so the sound rides on the notification.
+            soundOnNotification = isIosTauri() && withSound;
             sendNativeTauriNotification({
               title: osPayload.title,
               body: osPayload.options.body,
               silent: osPayload.options.silent ?? false,
+              ...(soundOnNotification ? { sound: IOS_NOTIFICATION_SOUND } : {}),
               extra,
               actionTypeId: 'sable-message',
               group: 'matrix_messages',
@@ -557,8 +557,7 @@ function MessageNotifications() {
         }
       }
 
-      const tabVisible = document.visibilityState === 'visible';
-      if (notificationSound && isLoud && (tabVisible || backgroundNotificationSounds)) {
+      if (withSound && !soundOnNotification) {
         playSound();
       }
 
@@ -644,12 +643,7 @@ function MessageNotifications() {
     useAuthentication,
   ]);
 
-  return (
-    // oxlint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
-      <source src={NotificationSound} type="audio/ogg" />
-    </audio>
-  );
+  return null;
 }
 
 function PrivacyBlurFeature() {
@@ -785,7 +779,7 @@ function SyncNotificationSettingsWithServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     // notificationSoundEnabled is intentionally excluded: push notification sound
     // is governed by the push rule's tweakSound alone (OS/Sygnal handles it).
-    // The in-app sound setting only controls the in-page <audio> playback above.
+    // The in-app sound setting only controls the local sound playback above.
     const payload = {
       type: 'setNotificationSettings' as const,
       showMessageContent,
