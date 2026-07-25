@@ -336,7 +336,8 @@ jobs:
       CARGO_TERM_COLOR: always
       MISE_ENV: tauri
       NODE_OPTIONS: --max-old-space-size=8192
-      RUST_TARGETS: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      # Matches the ABIs passed to `tauri android build` below.
+      RUST_TARGETS: aarch64-linux-android armv7-linux-androideabi
       ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -618,9 +619,10 @@ jobs:
             --title "Nightly (dev)" \
             --notes "Rolling nightly build $VERSION from dev — $GIT_SHA"
 
+          # .json manifests are overwritten in place, not accumulated.
           gh release view nightly --json assets \
             | jq -r --arg cutoff "$STARTED_AT" \
-                '.assets[] | select(.updatedAt <= $cutoff) | .name' \
+                '.assets[] | select(.updatedAt <= $cutoff and (.name | endswith(".json") | not)) | .name' \
             | while read -r name; do
                 [ -n "$name" ] || continue
                 echo "Removing superseded nightly asset: $name"
