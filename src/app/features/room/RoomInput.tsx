@@ -1253,7 +1253,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
       });
 
-      let plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+      let plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
 
       /**
        * the html we will send
@@ -1327,7 +1327,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         proxiedPerMessageProfile =
           await pluralkitProxyMessageHandler.getPmpBasedOnMessage(plainText);
         if (proxiedPerMessageProfile) {
-          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(plainText);
+          // normal plainText has spoilers stripped, but this breaks spoilers with a proxy tag.
+          // here we get a new 'unsanitized' plainText without spoiler stripping
+          let unsanitizedPlainText = toPlainText(
+            serializedChildren,
+            true,
+            false,
+            nicknameReplacement
+          ).trim();
+
+          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(unsanitizedPlainText);
           if (stripped !== undefined) {
             // Re-run the normal outgoing pipeline on the stripped content so the message
             // goes through the same transforms/parsers as any other message.
@@ -1338,7 +1347,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
             });
 
-            plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+            plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
             customHtml = trimCustomHtml(
               toMatrixCustomHTML(serializedChildren, {
                 stripNickname: true,
