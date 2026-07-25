@@ -139,7 +139,12 @@ export function getPackImageInfo(
   usage: ImageUsage,
   mxcUrl: string
 ): IImageInfo | undefined {
-  const packs = [...getRoomImagePacks(room), ...getGlobalImagePacks(mx)];
+  const userPack = getUserImagePack(mx);
+  const packs = [
+    ...getRoomImagePacks(room),
+    ...(userPack ? [userPack] : []),
+    ...getGlobalImagePacks(mx),
+  ];
   for (const pack of packs) {
     const info = pack.getImages(usage).find((image) => image.url === mxcUrl)?.info;
     if (info) return info;
