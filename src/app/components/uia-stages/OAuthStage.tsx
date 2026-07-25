@@ -2,6 +2,7 @@ import { Box, Button, color, config, Dialog, Header, IconButton, Text } from 'fo
 import { Warning, composerIcon, sizedIcon, X } from '$components/icons/phosphor';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
+import { AuthType } from '$types/matrix-sdk';
 import type { StageComponentProps } from './types';
 
 const POLL_COOLDOWN_MS = 1500;
@@ -15,6 +16,7 @@ export function OAuthStage({ stageData, submitAuthDict, onCancel }: StageCompone
 
   const handleSubmit = useCallback(() => {
     submitAuthDict({
+      type: AuthType.OAuth,
       session,
     });
   }, [submitAuthDict, session]);
