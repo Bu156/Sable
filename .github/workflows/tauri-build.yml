@@ -120,7 +120,7 @@ jobs:
           - name: macOS
             platform: macos-latest
             asset-platform: macos-universal
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
             args: --target universal-apple-darwin
             bundle_path: src-tauri/target/universal-apple-darwin/release/bundle
           - name: Windows
@@ -145,6 +145,8 @@ jobs:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: always
       NODE_OPTIONS: --max-old-space-size=8192
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -155,34 +157,15 @@ jobs:
           ref: ${{ needs.setup-release.outputs.ref }}
           persist-credentials: false
 
-      - name: Install Linux build dependencies
-        if: matrix.cef
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev \
-            libssl-dev \
-            libxdo-dev \
-            build-essential \
-            file \
-            rpm \
-            ruby \
-            ruby-dev
-          sudo gem install --no-document fpm
-
       - name: Setup app
         uses: ./.github/actions/setup
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # 2c7215f132e9ebf062739d9130488b56d53c060c
         with:
-          toolchain: stable
-          targets: ${{ matrix.rust-targets }}
+          tauri: 'true'
+
+      - name: Add Rust targets
+        if: ${{ matrix.rust-targets != '' }}
+        shell: bash
+        run: rustup target add ${{ matrix.rust-targets }}
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -195,8 +178,7 @@ jobs:
           UPDATER_ENDPOINT: ${{ needs.setup-release.outputs.nightly == 'true' && format('https://github.com/{0}/releases/download/nightly/latest.json', github.repository) || '' }}
         run: node .github/scripts/set-tauri-version.mjs "$VERSION" "$UPDATER_ENDPOINT"
 
-      # --- macOS / Windows: standard wry build via tauri-action ---
-      - name: Configure desktop build
+      - name: Configure build args
         shell: bash
         env:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
@@ -215,11 +197,22 @@ jobs:
           echo "TAURI_BUILD_ARGS=${ARGS# }" >> "$GITHUB_ENV"
 
       - name: Build desktop bundles
-        id: tauri
         if: ${{ !matrix.cef }}
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
-        with:
-          args: ${{ matrix.args }} ${{ env.TAURI_BUILD_ARGS }}
+        shell: bash
+        run: pnpm tauri build ${{ matrix.args }} $TAURI_BUILD_ARGS
+
+      - name: Package macOS .app for updater
+        if: ${{ matrix.name == 'macOS' }}
+        shell: bash
+        run: |
+          macos_dir="${{ matrix.bundle_path }}/macos"
+          if [ -d "$macos_dir" ]; then
+            for app in "$macos_dir"/*.app; do
+              [ -e "$app" ] || continue
+              echo "Packaging $(basename "$app") into .tar.gz"
+              tar czf "$app.tar.gz" -C "$macos_dir" "$(basename "$app")"
+            done
+          fi
 
       - name: Normalize desktop artifact names
         if: ${{ !matrix.cef }}
@@ -280,7 +273,7 @@ jobs:
       - name: Build native packages
         if: matrix.cef
         shell: bash
-        run: bash scripts/cef-package.sh "$VERSION"
+        run: mise run cef:package "$VERSION"
 
       - name: Sign the AppImage for the updater
         if: ${{ matrix.cef && env.TAURI_SIGNING_PRIVATE_KEY != '' }}
@@ -339,7 +332,11 @@ jobs:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: always
+      MISE_ENV: tauri
       NODE_OPTIONS: --max-old-space-size=8192
+      RUST_TARGETS: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -352,34 +349,29 @@ jobs:
 
       - name: Setup app
         uses: ./.github/actions/setup
-
-      - name: Setup Java
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
-          distribution: temurin
-          java-version: '17'
+          tauri: 'true'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - name: Setup Android SDK + NDK
+        shell: bash
+        run: mise run tauri:setup:android
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # 2c7215f132e9ebf062739d9130488b56d53c060c
-        with:
-          toolchain: stable
-          targets: aarch64-linux-android,armv7-linux-androideabi
+      - name: Add Rust targets
+        shell: bash
+        run: rustup target add $RUST_TARGETS
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: src-tauri
 
-      - name: Cache Gradle
-        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Resolve NDK
         shell: bash
         run: |
-          echo "NDK_HOME=$ANDROID_HOME/ndk/$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n1)" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
 
       - name: Stamp release version into tauri.conf.json
         shell: bash
@@ -453,6 +445,9 @@ jobs:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: always
+      RUST_TARGETS: aarch64-apple-ios
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout repository
@@ -463,12 +458,12 @@ jobs:
 
       - name: Setup app
         uses: ./.github/actions/setup
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # 2c7215f132e9ebf062739d9130488b56d53c060c
         with:
-          toolchain: stable
-          targets: aarch64-apple-ios
+          tauri: 'true'
+
+      - name: Add Rust targets
+        shell: bash
+        run: rustup target add $RUST_TARGETS
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -479,13 +474,13 @@ jobs:
         shell: bash
         run: node .github/scripts/set-tauri-version.mjs "$VERSION"
 
-      - name: Setup Xcode
+      - name: Set up iOS
         shell: bash
-        run: pnpm tauri ios init
+        run: mise -y run tauri:setup:ios
 
       - name: Symlink icons to the ios folder
         shell: bash
-        run: pnpm run setup:tauri-icons --write --force
+        run: mise run icons:symlink --write --force
 
       - name: Build unsigned IPA
         id: ipa
@@ -522,7 +517,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" "${{ steps.ipa.outputs.path }}" --clobber
+          STEPS_IPA_OUTPUTS_PATH: ${{ steps.ipa.outputs.path }}
+        run: gh release upload "$TAG" "${STEPS_IPA_OUTPUTS_PATH}" --clobber
 
       - name: Update AltStore/SideStore source
         shell: bash
@@ -531,8 +527,10 @@ jobs:
           REPO: ${{ github.repository }}
           ALTSTORE_VERSION: ${{ steps.ipa.outputs.ipa_version }}
           ALTSTORE_VERSION_BUILD: ${{ steps.ipa.outputs.ipa_build }}
+          STEPS_IPA_OUTPUTS_NAME: ${{ steps.ipa.outputs.name }}
+          STEPS_IPA_OUTPUTS_SIZE: ${{ steps.ipa.outputs.size }}
         run: |
-          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/${{ steps.ipa.outputs.name }}"
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/${STEPS_IPA_OUTPUTS_NAME}"
           DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           if gh release download "$TAG" --pattern 'altstore-source.json' --dir . --clobber 2>/dev/null; then
             echo "Using existing altstore-source.json from release $TAG"
@@ -540,7 +538,7 @@ jobs:
             echo "Using repo altstore-source.json"
           fi
           node .github/scripts/update-altstore-source.mjs \
-            altstore-source.json "${ALTSTORE_VERSION:-$VERSION}" "${ALTSTORE_VERSION_BUILD:-$VERSION}" "${{ steps.ipa.outputs.size }}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
+            altstore-source.json "${ALTSTORE_VERSION:-$VERSION}" "${ALTSTORE_VERSION_BUILD:-$VERSION}" "${STEPS_IPA_OUTPUTS_SIZE}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
           gh release upload "$TAG" altstore-source.json --clobber
 
   updater-manifest:
@@ -572,8 +570,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          NEEDS_SETUP_RELEASE_OUTPUTS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
-          if [ "${{ needs.setup-release.outputs.nightly }}" = "true" ]; then
+          if [ "${NEEDS_SETUP_RELEASE_OUTPUTS_NIGHTLY}" = "true" ]; then
             gh release view "$TAG" --json assets \
               | jq -r --arg cutoff "$STARTED_AT" \
                   '.assets[] | select(.updatedAt <= $cutoff and (.name | endswith(".sig"))) | .name' \
