@@ -11,7 +11,7 @@ import {
   VerificationStatus,
 } from './useDeviceVerificationStatus';
 
-const { mockMx } = vi.hoisted(() => {
+const { mockMx, getListenerCount } = vi.hoisted(() => {
   const listeners = new Map<string, Set<(...args: never[]) => void>>();
   const mx = {
     on(event: string, cb: (...args: never[]) => void) {
@@ -27,8 +27,11 @@ const { mockMx } = vi.hoisted(() => {
     emit(event: string, ...args: never[]) {
       listeners.get(event)?.forEach((cb) => cb(...args));
     },
+    getListenerCount(event: string) {
+      return listeners.get(event)?.size ?? 0;
+    },
   };
-  return { mockMx: mx };
+  return { mockMx: mx, getListenerCount: (event: string) => mx.getListenerCount(event) };
 });
 
 vi.mock('$hooks/useMatrixClient', () => ({
@@ -129,6 +132,24 @@ describe('useDeviceVerificationStatus', () => {
     expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('re-verifies when a consumer remounts after the previous one unmounted', async () => {
+    const wrapper = createWrapper();
+    const first = renderHook(() => useDeviceVerificationStatus(crypto, USER_ID, DEVICE_ID), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(first.result.current).toBe(VerificationStatus.Verified));
+    expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = renderHook(() => useDeviceVerificationStatus(crypto, USER_ID, DEVICE_ID), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(2));
+    second.unmount();
+  });
+
   it.each([
     ['DevicesUpdated for the user', CryptoEvent.DevicesUpdated, [[USER_ID], false]],
     ['KeysChanged', CryptoEvent.KeysChanged, [{}]],
@@ -163,6 +184,83 @@ describe('useDeviceVerificationStatus', () => {
     });
 
     expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('triggers a new verification call when the crypto instance changes for the same user/device', async () => {
+    const wrapper = createWrapper();
+    const getDeviceVerificationStatus2 = vi
+      .fn<(userId: string, deviceId: string) => Promise<{ crossSigningVerified: boolean } | null>>()
+      .mockResolvedValue({ crossSigningVerified: true });
+    const crypto2 = {
+      getDeviceVerificationStatus: getDeviceVerificationStatus2,
+    } as unknown as CryptoApi;
+
+    const { result, rerender } = renderHook(
+      ({ c }) => useDeviceVerificationStatus(c, USER_ID, DEVICE_ID),
+      {
+        wrapper,
+        initialProps: { c: crypto },
+      }
+    );
+
+    await waitFor(() => expect(result.current).toBe(VerificationStatus.Verified));
+    expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(1);
+
+    rerender({ c: crypto2 });
+
+    await waitFor(() => expect(getDeviceVerificationStatus2).toHaveBeenCalledTimes(1));
+    expect(getDeviceVerificationStatus2).toHaveBeenCalledWith(USER_ID, DEVICE_ID);
+  });
+
+  it('does not trigger duplicate invalidations for unaffected users when UserTrustStatusChanged fires', async () => {
+    const USER_B = '@userB:example.org';
+    const wrapper = createWrapper();
+
+    const { result: resultA } = renderHook(
+      () => useDeviceVerificationStatus(crypto, USER_ID, DEVICE_ID),
+      { wrapper }
+    );
+    const { result: resultB } = renderHook(
+      () => useDeviceVerificationStatus(crypto, USER_B, DEVICE_ID),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(resultA.current).toBe(VerificationStatus.Verified));
+    await waitFor(() => expect(resultB.current).toBe(VerificationStatus.Verified));
+    expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(2);
+
+    getDeviceVerificationStatus.mockResolvedValue({ crossSigningVerified: false });
+
+    await act(async () => {
+      mockMx.emit(CryptoEvent.UserTrustStatusChanged, ...([USER_B, {}] as never[]));
+    });
+
+    await waitFor(() => expect(resultB.current).toBe(VerificationStatus.Unverified));
+    expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares event subscriptions across multiple consumers and cleans up when all unmount', async () => {
+    const wrapper = createWrapper();
+    const { unmount: unmount1 } = renderHook(
+      () => useDeviceVerificationStatus(crypto, USER_ID, DEVICE_ID),
+      { wrapper }
+    );
+    const { unmount: unmount2 } = renderHook(
+      () => useDeviceVerificationStatus(crypto, '@user2:example.org', DEVICE_ID),
+      { wrapper }
+    );
+
+    expect(getListenerCount(CryptoEvent.DevicesUpdated)).toBe(1);
+    expect(getListenerCount(CryptoEvent.KeysChanged)).toBe(1);
+    expect(getListenerCount(CryptoEvent.UserTrustStatusChanged)).toBe(1);
+
+    unmount1();
+    expect(getListenerCount(CryptoEvent.DevicesUpdated)).toBe(1);
+
+    unmount2();
+    expect(getListenerCount(CryptoEvent.DevicesUpdated)).toBe(0);
+    expect(getListenerCount(CryptoEvent.KeysChanged)).toBe(0);
+    expect(getListenerCount(CryptoEvent.UserTrustStatusChanged)).toBe(0);
   });
 });
 

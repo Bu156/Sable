@@ -1,9 +1,8 @@
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type CryptoApi, type CryptoEventHandlerMap, CryptoEvent } from '$types/matrix-sdk';
 import { verifiedDevice } from '$utils/matrix-crypto';
 import { useMatrixClient } from './useMatrixClient';
-import { useDeviceListChange } from './useDeviceList';
 
 export const useCrossSigningKeysChange = (
   onChange: CryptoEventHandlerMap[CryptoEvent.KeysChanged]
@@ -40,53 +39,96 @@ export enum VerificationStatus {
 
 const DEVICE_VERIFICATION_QUERY_KEY = 'device-verification';
 
-// Every sliding sync response carrying device_lists re-emits DevicesUpdated, and each check is a
-// full ed25519 cross-signing verification in wasm. Cache per device so repeated consumers share
-// one result and we only re-verify when the device list or cross-signing keys actually change.
+const cryptoIds = new WeakMap<CryptoApi, string>();
+let cryptoIdCounter = 0;
+
+const getCryptoId = (crypto: CryptoApi | undefined): string => {
+  if (!crypto) return 'none';
+  let id = cryptoIds.get(crypto);
+  if (!id) {
+    id = `crypto_${++cryptoIdCounter}`;
+    cryptoIds.set(crypto, id);
+  }
+  return id;
+};
+
+// Cache per device so repeated consumers share one verification result.
+// Event-driven invalidation refreshes the cache when device or trust data may have changed.
 const deviceVerificationQuery = (
   crypto: CryptoApi | undefined,
   userId: string,
   deviceId: string | undefined
 ) => ({
-  queryKey: [DEVICE_VERIFICATION_QUERY_KEY, userId, deviceId ?? ''],
+  queryKey: [DEVICE_VERIFICATION_QUERY_KEY, userId, deviceId ?? '', getCryptoId(crypto)],
   queryFn: async () => {
     if (!crypto || !deviceId) return null;
     return verifiedDevice(crypto, userId, deviceId);
   },
   enabled: Boolean(crypto) && Boolean(deviceId),
   staleTime: Infinity,
+  // Crypto listeners are shared only while a consumer is mounted. Refresh on
+  // remount so changes that happened while the UI was closed cannot stay hidden
+  // behind an indefinitely fresh inactive query.
+  refetchOnMount: 'always' as const,
 });
 
-const useInvalidateDeviceVerification = (userId: string): void => {
+type SubscriptionState = {
+  refCount: number;
+  cleanup: () => void;
+};
+
+const clientSubscriptions = new WeakMap<ReturnType<typeof useMatrixClient>, SubscriptionState>();
+
+const useInvalidateDeviceVerification = (crypto: CryptoApi | undefined): void => {
+  const mx = useMatrixClient();
   const queryClient = useQueryClient();
 
-  useDeviceListChange(
-    useCallback(
-      (userIds) => {
-        if (userIds.includes(userId)) {
-          queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY, userId] });
+  useEffect(() => {
+    if (!crypto) return undefined;
+
+    let sub = clientSubscriptions.get(mx);
+    if (!sub) {
+      const onDevicesUpdated: CryptoEventHandlerMap[CryptoEvent.DevicesUpdated] = (userIds) => {
+        for (const uid of userIds) {
+          queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY, uid] });
         }
-      },
-      [queryClient, userId]
-    )
-  );
-
-  useCrossSigningKeysChange(
-    useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY] });
-    }, [queryClient])
-  );
-
-  useUserTrustStatusChange(
-    useCallback(
-      (changedUserId) => {
+      };
+      const onKeysChanged: CryptoEventHandlerMap[CryptoEvent.KeysChanged] = () => {
+        queryClient.invalidateQueries({ queryKey: [DEVICE_VERIFICATION_QUERY_KEY] });
+      };
+      const onUserTrustStatusChanged: CryptoEventHandlerMap[CryptoEvent.UserTrustStatusChanged] = (
+        changedUserId
+      ) => {
         queryClient.invalidateQueries({
           queryKey: [DEVICE_VERIFICATION_QUERY_KEY, changedUserId],
         });
-      },
-      [queryClient]
-    )
-  );
+      };
+
+      mx.on(CryptoEvent.DevicesUpdated, onDevicesUpdated);
+      mx.on(CryptoEvent.KeysChanged, onKeysChanged);
+      mx.on(CryptoEvent.UserTrustStatusChanged, onUserTrustStatusChanged);
+
+      sub = {
+        refCount: 0,
+        cleanup: () => {
+          mx.removeListener(CryptoEvent.DevicesUpdated, onDevicesUpdated);
+          mx.removeListener(CryptoEvent.KeysChanged, onKeysChanged);
+          mx.removeListener(CryptoEvent.UserTrustStatusChanged, onUserTrustStatusChanged);
+        },
+      };
+      clientSubscriptions.set(mx, sub);
+    }
+
+    sub.refCount++;
+
+    return () => {
+      sub!.refCount--;
+      if (sub!.refCount === 0) {
+        sub!.cleanup();
+        clientSubscriptions.delete(mx);
+      }
+    };
+  }, [mx, crypto, queryClient]);
 };
 
 const toVerificationStatus = (verified: boolean | null | undefined): VerificationStatus => {
@@ -100,7 +142,7 @@ export const useDeviceVerificationStatus = (
   userId: string,
   deviceId: string | undefined
 ): VerificationStatus => {
-  useInvalidateDeviceVerification(userId);
+  useInvalidateDeviceVerification(crypto);
 
   const { data } = useQuery(deviceVerificationQuery(crypto, userId, deviceId));
 
@@ -112,7 +154,7 @@ export const useUnverifiedDeviceCount = (
   userId: string,
   devices: string[]
 ): number | undefined => {
-  useInvalidateDeviceVerification(userId);
+  useInvalidateDeviceVerification(crypto);
 
   return useQueries({
     queries: devices.map((deviceId) => deviceVerificationQuery(crypto, userId, deviceId)),
