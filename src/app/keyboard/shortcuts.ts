@@ -8,6 +8,7 @@ export type ShortcutScope = 'global' | 'composer';
 export type ShortcutId =
   | 'app.searchMessages'
   | 'app.openBookmarks'
+  | 'app.createRoom'
   | 'navigation.nextUnread'
   | 'navigation.cycleNextUnread'
   | 'navigation.cyclePreviousUnread'
@@ -56,6 +57,13 @@ export const SHORTCUTS: readonly ShortcutDefinition[] = [
     label: 'Open bookmarks',
     category: 'General',
     defaultBinding: 'mod+shift+b',
+    scope: 'global',
+  },
+  {
+    id: 'app.createRoom',
+    label: 'Create a room',
+    category: 'General',
+    defaultBinding: 'mod+shift+n',
     scope: 'global',
   },
   {

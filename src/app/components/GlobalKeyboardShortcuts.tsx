@@ -17,6 +17,7 @@ import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useKeyDown } from '$hooks/useKeyDown';
 import {
   getDirectRoomPath,
+  getCreateRoomPath,
   getHomeRoomPath,
   getHomeSearchPath,
   getInboxBookmarksPath,
@@ -180,6 +181,15 @@ export function GlobalKeyboardShortcuts() {
     [navigate, shortcutOverrides]
   );
 
+  const handleCreateRoomKeyDown = useCallback(
+    (evt: KeyboardEvent) => {
+      if (!matchesShortcut('app.createRoom', evt, shortcutOverrides)) return;
+      evt.preventDefault();
+      openShallowRoute(getCreateRoomPath(currentSpace));
+    },
+    [currentSpace, openShallowRoute, shortcutOverrides]
+  );
+
   /** Opens the room search palette */
   const handleOpenRoomSearch = useCallback(
     (evt: KeyboardEvent) => {
@@ -213,6 +223,7 @@ export function GlobalKeyboardShortcuts() {
   useKeyDown(window, handleUnreadNavKeyDown);
   useKeyDown(window, handleReplyKeyDown);
   useKeyDown(window, handleBookmarkKeyDown);
+  useKeyDown(window, handleCreateRoomKeyDown);
   useKeyDown(window, handleSearchMessageInRoom);
   useKeyDown(window, handleOpenRoomSearch);
 
