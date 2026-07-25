@@ -340,6 +340,7 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     <div
       ref={viewportRef}
       className="no-scrollbar"
+      data-testid="mobile-nav-drawer-viewport"
       onTouchStartCapture={(event) => {
         const viewport = viewportRef.current;
         const touch = event.touches[0];
@@ -419,7 +420,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         flexGrow: 1,
         height: '100%',
         width: '100%',
-        overflow: 'hidden',
+        // `clip`, not `hidden`: hidden keeps a scrollport, so a focus or scrollIntoView on
+        // the revealed panel scrolls it a full panel width out of frame, permanently.
+        overflow: 'clip',
         overscrollBehaviorX: 'none',
         touchAction: 'pan-y',
       }}
