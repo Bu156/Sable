@@ -119,7 +119,14 @@ else
   echo "nfpm not found; skipping deb/rpm"
 fi
 
+APPIMAGETOOL_CMD=""
 if command -v appimagetool >/dev/null 2>&1; then
+  APPIMAGETOOL_CMD="appimagetool"
+elif command -v appimagetool-x86_64.AppImage >/dev/null 2>&1; then
+  APPIMAGETOOL_CMD="appimagetool-x86_64.AppImage"
+fi
+
+if [ -n "$APPIMAGETOOL_CMD" ]; then
   APPDIR="$WORK/Sable.AppDir"
   stage_runtime "$APPDIR/usr/bin"
   stage_appindicator "$APPDIR/usr/bin"
@@ -135,7 +142,7 @@ exec "$HERE/usr/bin/sable" "$@"
 EOF
   chmod 755 "$APPDIR/AppRun"
 
-  ARCH=x86_64 appimagetool "$APPDIR" \
+  APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "$APPIMAGETOOL_CMD" "$APPDIR" \
     "$OUT/appimage/Sable-${VERSION}-linux-x86_64.AppImage"
 else
   echo "appimagetool not found; skipping AppImage" >&2
