@@ -55,7 +55,7 @@ import type { EditorButtonId } from '$state/settings';
 import { MessageLayout, RightSwipeAction, settingsAtom } from '$state/settings';
 import { SettingTile, SettingToggle } from '$components/setting-tile';
 import { KeySymbol } from '$utils/key-symbol';
-import { isMacOS, mobileOrTablet } from '$utils/user-agent';
+import { isMacOS, isMobileOrTablet } from '$utils/platform';
 import { stopPropagation } from '$utils/keyboard';
 import { sessionsAtom, activeSessionIdAtom } from '$state/sessions';
 import { isKeyHotkey } from 'is-hotkey';
@@ -1358,7 +1358,7 @@ export function General({ requestBack, requestClose }: Readonly<GeneralProps>) {
           <PageContent>
             <Box direction="Column" gap="700">
               <DateAndTime />
-              <Gestures isMobile={mobileOrTablet()} />
+              <Gestures isMobile={isMobileOrTablet()} />
               <Editor />
               <Messages />
               <Embeds />

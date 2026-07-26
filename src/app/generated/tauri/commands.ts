@@ -54,6 +54,10 @@ export async function saveDownload(params: types.SaveDownloadParams): Promise<bo
   return invoke('save_download', params);
 }
 
+export async function setMediaEncryption(params: types.SetMediaEncryptionParams): Promise<void> {
+  return invoke('set_media_encryption', params);
+}
+
 export async function setMediaSession(params: types.SetMediaSessionParams): Promise<void> {
   return invoke('set_media_session', params);
 }

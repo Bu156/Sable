@@ -34,6 +34,14 @@ export function isMobileOrTablet(): boolean {
   return false;
 }
 
+export function isMacOS(): boolean {
+  return ua.os.name === 'Mac OS' || ua.os.name === 'macOS';
+}
+
+export function iosApp(): boolean {
+  return getTauriOS() === 'ios';
+}
+
 export function isNightly(): boolean {
   return SABLE_BUILD_FLAVOR === 'dev';
 }

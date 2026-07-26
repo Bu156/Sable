@@ -19,7 +19,7 @@ import { MessagePreview, useRoomMessagePreviewRenderer } from '$components/messa
 import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
 import * as css from './ThreadDrawer.css';
 import { SidebarResizer } from '$pages/client/sidebar/SidebarResizer';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { useMatrixEvent } from '$hooks/useMatrixEvent';
 
 type ThreadPreviewProps = {
@@ -315,7 +315,7 @@ export function ThreadBrowser({ room, onOpenThread, onClose, overlay }: ThreadBr
         width: overlay ? '100%' : toRem(curWidth),
       }}
     >
-      {!mobileOrTablet() && (
+      {!isMobileOrTablet() && (
         <SidebarResizer
           setCurWidth={setCurWidth}
           sidebarWidth={threadSidebarWidth}

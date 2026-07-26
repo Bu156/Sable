@@ -1,4 +1,5 @@
-import { addPluginListener, invoke } from '@tauri-apps/api/core';
+import { addPluginListener, invoke, isTauri } from '@tauri-apps/api/core';
+import { type as osType } from '@tauri-apps/plugin-os';
 import { isDesktopTauri, isMobileTauri, isAndroidTauri } from '$utils/platform';
 export type NotificationPluginListener = {
   unregister: () => Promise<void> | void;
@@ -136,6 +137,8 @@ async function ensureTauriNotificationPermission(): Promise<boolean> {
 
 // Platforms where OS notifications go through the native plugin instead of web APIs.
 export const isNativeNotificationTauri = (): boolean => isDesktopTauri() || isMobileTauri();
+
+export const isIosTauri = (): boolean => isTauri() && osType() === 'ios';
 
 let nativeNotificationSeq = 1;
 const nextNativeNotificationId = (): number => {
