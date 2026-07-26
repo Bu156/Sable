@@ -769,6 +769,22 @@ export function RoomTimeline({
     return () => observer.disconnect();
   }, [syncAtBottom]);
 
+  // Decrypting rows and late-loading images grow without changing eventsLength,
+  // so useTimelineSync's auto-scroll never re-fires for them.
+  const lastScrollSizeRef = useRef(0);
+  useLayoutEffect(() => {
+    const v = vListRef.current;
+    if (!v) return;
+
+    const grew = v.scrollSize > lastScrollSizeRef.current;
+    lastScrollSizeRef.current = v.scrollSize;
+
+    if (!grew || !atBottomRef.current || !liveTimelineLinkedRef.current) return;
+
+    const lastIndex = processedEventsRef.current.length - 1;
+    if (lastIndex >= 0) v.scrollToIndex(lastIndex, { align: 'end' });
+  });
+
   const actions = useTimelineActions({
     room,
     mx,
@@ -1048,6 +1064,7 @@ export function RoomTimeline({
 
   useEffect(() => {
     viewportFillCountRef.current = 0;
+    lastScrollSizeRef.current = 0;
   }, [room.roomId]);
 
   // Re-enters on every length change, so an unfillable viewport pages to the start of the
