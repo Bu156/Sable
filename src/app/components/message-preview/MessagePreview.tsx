@@ -73,7 +73,7 @@ type MessagePreviewRendererContext = MessagePreviewRendererOptions & {
 };
 
 function LazyImage(props: ComponentProps<typeof MediaImage>) {
-  return <MediaImage {...props} loading="lazy" />;
+  return <MediaImage {...props} disablePixelation loading="lazy" />;
 }
 
 function resolvePreviewContent(

@@ -859,11 +859,11 @@ export function useTimelineEventRenderer({
                             if (!autoplayStickers && p.src) {
                               return (
                                 <ClientSideHoverFreeze src={p.src}>
-                                  <MediaImage {...p} loading="lazy" />
+                                  <MediaImage {...p} disablePixelation loading="lazy" />
                                 </ClientSideHoverFreeze>
                               );
                             }
-                            return <MediaImage {...p} loading="lazy" />;
+                            return <MediaImage {...p} disablePixelation loading="lazy" />;
                           }}
                           renderViewer={(p) => <ImageViewer {...p} />}
                         />
@@ -1006,11 +1006,11 @@ export function useTimelineEventRenderer({
                       if (!autoplayStickers && p.src) {
                         return (
                           <ClientSideHoverFreeze src={p.src}>
-                            <MediaImage {...p} loading="lazy" />
+                            <MediaImage {...p} disablePixelation loading="lazy" />
                           </ClientSideHoverFreeze>
                         );
                       }
-                      return <MediaImage {...p} loading="lazy" />;
+                      return <MediaImage {...p} disablePixelation loading="lazy" />;
                     }}
                     renderViewer={(p) => <ImageViewer {...p} />}
                   />

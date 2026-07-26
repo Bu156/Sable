@@ -560,12 +560,23 @@ export function CodeBlock({
 function FallbackImg({
   fallback,
   src,
+  className,
+  style,
   ...props
 }: ComponentPropsWithoutRef<typeof MediaImage> & { fallback: ReactNode }) {
   const [failed, setFailed] = useState(false);
   const renderableSrc = useRenderableMediaUrl(typeof src === 'string' ? src : undefined);
   if (failed) return <>{fallback}</>;
-  return <MediaImage {...props} src={renderableSrc ?? src} onError={() => setFailed(true)} />;
+  return (
+    <MediaImage
+      {...props}
+      src={renderableSrc ?? src}
+      className={className}
+      style={className === css.EmoticonImg ? { width: 'auto', height: '1em', ...style } : style}
+      onError={() => setFailed(true)}
+      onLottieError={() => setFailed(true)}
+    />
+  );
 }
 
 export const getReactCustomHtmlParser = (

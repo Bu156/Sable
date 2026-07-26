@@ -1,7 +1,6 @@
 import { Box, Button, Text, config, toRem } from 'folds';
 import { Code, Heart, menuIcon } from '$components/icons/phosphor';
 import { Page, PageHero, PageHeroSection } from '$components/page';
-import { Image as MediaImage } from '$components/media';
 import LogoSVG from '$public/res/svg/logo.svg';
 
 export function WelcomePage() {
@@ -15,7 +14,7 @@ export function WelcomePage() {
       >
         <PageHeroSection>
           <PageHero
-            icon={<MediaImage width="70" height="70" src={LogoSVG} alt="Sable Logo" />}
+            icon={<img width="70" height="70" src={LogoSVG} alt="Sable Logo" />}
             title="Welcome to Sable"
             subTitle={
               <span>

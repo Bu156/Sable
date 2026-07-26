@@ -94,6 +94,7 @@ function RenderEmoticonElement({
         {element.key.startsWith('mxc://') ? (
           <MediaImage
             className={css.EmoticonImg}
+            style={{ width: 'auto', height: '1em' }}
             src={mxcUrlToHttp(mx, element.key, useAuthentication) ?? undefined}
             alt={element.shortcode}
           />

@@ -1,10 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { gzipSync } from 'node:zlib';
 import {
   getBlobSafeMimeType,
+  isImageMimeType,
+  isTgsFile,
   mimeTypeToExt,
   getFileNameExt,
   getFileNameWithoutExt,
   FALLBACK_MIMETYPE,
+  safeUploadFile,
+  TGS_MIMETYPE,
 } from './mimeTypes';
 
 describe('getBlobSafeMimeType', () => {
@@ -38,6 +43,28 @@ describe('getBlobSafeMimeType', () => {
     expect(getBlobSafeMimeType(null)).toBe(FALLBACK_MIMETYPE);
     // @ts-expect-error
     expect(getBlobSafeMimeType(42)).toBe(FALLBACK_MIMETYPE);
+  });
+});
+
+describe('TGS uploads', () => {
+  const tgsBytes = Uint8Array.from(gzipSync('{"v":"5.11.0","w":100,"h":100}'));
+
+  it('detects gzipped .tgs files and assigns the sticker MIME type', async () => {
+    const upload = await safeUploadFile(new File([tgsBytes], 'sticker.tgs'));
+
+    expect(await isTgsFile(upload)).toBe(true);
+    expect(upload.type).toBe(TGS_MIMETYPE);
+    expect(isImageMimeType(upload.type)).toBe(true);
+  });
+
+  it('does not treat a mislabeled non-gzip file as a TGS image', async () => {
+    const upload = await safeUploadFile(
+      new File(['not gzipped'], 'sticker.tgs', { type: TGS_MIMETYPE })
+    );
+
+    expect(await isTgsFile(upload)).toBe(false);
+    expect(upload.type).toBe(FALLBACK_MIMETYPE);
+    expect(isImageMimeType(upload.type)).toBe(false);
   });
 });
 

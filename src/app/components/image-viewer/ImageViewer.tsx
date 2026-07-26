@@ -63,6 +63,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       imageRef,
       containerRef,
       handleImageLoad,
+      handleImageDimensions,
       enableResizeWithWindow,
     } = useImageGestures(true, 0.2, 0.1);
     useEffect(() => {
@@ -331,9 +332,18 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               }}
               src={src}
               alt={alt}
+              info={info}
+              pixelated={isPixelated}
               onPointerDown={onPointerDown}
               onLoad={(event: React.SyntheticEvent<HTMLImageElement>) => {
                 handleImageLoad(event);
+                setIsImageReady(true);
+              }}
+              onLottieLoad={(canvas) => {
+                handleImageDimensions(
+                  info?.w ?? canvas?.width ?? 0,
+                  info?.h ?? canvas?.height ?? 0
+                );
                 setIsImageReady(true);
               }}
             />

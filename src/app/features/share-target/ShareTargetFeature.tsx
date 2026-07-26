@@ -11,7 +11,7 @@ import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { useSyncState } from '$hooks/useSyncState';
 import { useMessageTargetRooms } from '$hooks/useMessageTargetRooms';
 import { encryptFile } from '$utils/matrix';
-import { safeFile } from '$utils/mimeTypes';
+import { safeUploadFile } from '$utils/mimeTypes';
 import { createLogger } from '$utils/debug';
 import { plainToEditorInput } from '$components/editor/input';
 import {
@@ -150,7 +150,7 @@ export function ShareTargetFeature() {
             })
           );
 
-          const safeFiles = files.map(safeFile);
+          const safeFiles = await Promise.all(files.map(safeUploadFile));
           const fileItems: TUploadItem[] = [];
           if (room.hasEncryptionStateEvent()) {
             const encryptedFiles = await Promise.all(safeFiles.map((f) => encryptFile(f)));

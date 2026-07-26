@@ -1,77 +1,160 @@
 import type { ComponentProps, ImgHTMLAttributes } from 'react';
-import { forwardRef, useEffect, useState } from 'react';
+import { forwardRef, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import type { DotLottieReact as DotLottieReactComponent } from '@lottiefiles/dotlottie-react';
 import { useSetting } from '$state/hooks/settings';
 import { isPixelatedRendering, settingsAtom } from '$state/settings';
 import * as css from './media.css';
 import type { IImageInfo } from '$types/matrix/common';
 
-type ImageProps = ImgHTMLAttributes<HTMLImageElement> & { info?: IImageInfo };
+type ImageProps = ImgHTMLAttributes<HTMLImageElement> & {
+  info?: IImageInfo;
+  mimeType?: string;
+  disablePixelation?: boolean;
+  pixelated?: boolean;
+  onLottieLoad?: (canvas?: HTMLCanvasElement) => void;
+  onLottieError?: () => void;
+};
 
-type LottieDotProps = Omit<ComponentProps<typeof DotLottieReact>, 'src' | 'alt' | 'loading'>;
+type LottieDotProps = Omit<
+  ComponentProps<typeof DotLottieReactComponent>,
+  'src' | 'alt' | 'loading'
+>;
+type DotLottieInstance = Parameters<
+  NonNullable<ComponentProps<typeof DotLottieReactComponent>['dotLottieRefCallback']>
+>[0];
 
-/**
- * Gzipped files begin with a fixed byte sequence (1f 8b), which distinguis
- * them from standard image formats (PNG, WebP, JPG). The implementation detects
- * this signature in the file header and automatically decompresses gzipped
- * content before parsing it as Lottie JSON. If parsing succeeds,
- * the decompressed animation is passed to the Lottie player.
- */
-async function resolveLottieDataUrl(src: string): Promise<string | null> {
-  const dataUrlMatch = src.match(/^data:([^;,]+)?;base64,(.+)$/i);
-  if (dataUrlMatch) {
-    const [, , encoded] = dataUrlMatch;
-    if (typeof encoded !== 'string' || encoded.length === 0) {
-      return null;
-    }
+const DotLottieReact = lazy(() =>
+  import('@lottiefiles/dotlottie-react').then((module) => ({
+    default: module.DotLottieReact,
+  }))
+) as typeof DotLottieReactComponent;
 
-    const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+const GZIPPED_LOTTIE_MIME = /^application\/(?:(?:x-)?gzip|x-tgsticker)(?:;|$)/i;
+const UNSAFE_LOTTIE_KEYS = new Set([
+  'expression',
+  'expressions',
+  'script',
+  'scripts',
+  'javascript',
+  'onload',
+  'onclick',
+]);
 
-    if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
-      return null;
-    }
+export function sanitizeLottieJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeLottieJson);
+  if (!value || typeof value !== 'object') return value;
 
-    try {
-      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-      const decompressed = await new Response(stream).arrayBuffer();
-      const jsonText = new TextDecoder().decode(decompressed);
-      const json = JSON.parse(jsonText);
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, child]) => {
+      if (UNSAFE_LOTTIE_KEYS.has(key) || (key === 'x' && typeof child === 'string')) return [];
+      return [[key, sanitizeLottieJson(child)]];
+    })
+  );
+}
 
-      if (json && typeof json === 'object' && 'v' in json) {
-        return `data:application/json;charset=utf-8,${encodeURIComponent(jsonText)}`;
-      }
-    } catch {
-      return null;
-    }
+function isGzippedLottieCandidate(
+  src: string | undefined,
+  mimeType: string | undefined,
+  name: string | undefined
+): src is string {
+  if (!src) return false;
+  return (
+    GZIPPED_LOTTIE_MIME.test(mimeType ?? '') ||
+    /^data:application\/(?:(?:x-)?gzip|x-tgsticker);base64,/i.test(src) ||
+    [name, src].some((value) => value?.toLowerCase().split(/[?#]/, 1)[0]?.endsWith('.tgs'))
+  );
+}
 
-    return null;
+async function loadBytes(src: string): Promise<Uint8Array | null> {
+  const encoded = src.match(/^data:[^;,]*;base64,(.+)$/i)?.[1];
+  if (encoded) {
+    return Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
   }
 
+  const response = await fetch(src, { credentials: 'include' });
+  return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+}
+
+async function resolveLottieDataUrl(src: string): Promise<string | null> {
   try {
-    const response = await fetch(src, { credentials: 'include' });
-    if (!response.ok) {
-      return null;
-    }
+    const bytes = await loadBytes(src);
+    if (!bytes || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return null;
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
-      return null;
-    }
-
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    const decompressed = await new Response(stream).arrayBuffer();
-    const jsonText = new TextDecoder().decode(decompressed);
-    const json = JSON.parse(jsonText);
-
-    if (json && typeof json === 'object' && 'v' in json) {
-      return `data:application/json;charset=utf-8,${encodeURIComponent(jsonText)}`;
-    }
+    const stream = new Blob([bytes.buffer as ArrayBuffer])
+      .stream()
+      .pipeThrough(new DecompressionStream('gzip'));
+    const jsonText = await new Response(stream).text();
+    const json = sanitizeLottieJson(JSON.parse(jsonText));
+    const safeJsonText = JSON.stringify(json);
+    return json && typeof json === 'object' && 'v' in json && safeJsonText
+      ? `data:application/json;charset=utf-8,${encodeURIComponent(safeJsonText)}`
+      : null;
   } catch {
     return null;
   }
+}
 
-  return null;
+type LottieImageProps = LottieDotProps & {
+  src: string;
+  alt?: string;
+  onLottieLoad?: (canvas?: HTMLCanvasElement) => void;
+  onLottieError?: () => void;
+  pixelated?: boolean;
+};
+
+function LottieImage({
+  alt,
+  className,
+  style,
+  onLottieLoad,
+  onLottieError,
+  pixelated,
+  ...props
+}: Readonly<LottieImageProps>) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const callbacks = useRef({ onLottieLoad, onLottieError });
+  const pixelation = useRef(pixelated);
+  callbacks.current = { onLottieLoad, onLottieError };
+  pixelation.current = pixelated;
+  useEffect(() => {
+    const canvas = wrapperRef.current?.querySelector('canvas');
+    if (canvas) canvas.style.imageRendering = pixelated ? 'pixelated' : 'auto';
+  }, [pixelated]);
+  const handlePlayer = useCallback((player: DotLottieInstance) => {
+    if (!player) return;
+    let didLoad = false;
+    const handleLoad = () => {
+      if (didLoad) return;
+      didLoad = true;
+      (player.canvas as HTMLCanvasElement).style.imageRendering = pixelation.current
+        ? 'pixelated'
+        : 'auto';
+      callbacks.current.onLottieLoad?.(player.canvas as HTMLCanvasElement);
+    };
+    const handleError = () => callbacks.current.onLottieError?.();
+
+    player.addEventListener('load', handleLoad);
+    player.addEventListener('loadError', handleError);
+    if (player.isLoaded) handleLoad();
+  }, []);
+
+  return (
+    <Suspense fallback={null}>
+      <div
+        ref={wrapperRef}
+        className={className}
+        style={{ width: '100%', height: '100%', ...style }}
+      >
+        <DotLottieReact
+          {...props}
+          aria-label={props['aria-label'] ?? alt}
+          backgroundColor="#00000000"
+          dotLottieRefCallback={handlePlayer}
+        />
+      </div>
+    </Suspense>
+  );
 }
 
 export const Image = forwardRef<HTMLImageElement, ImageProps>(
@@ -80,58 +163,78 @@ export const Image = forwardRef<HTMLImageElement, ImageProps>(
       className,
       alt,
       info,
+      mimeType,
+      disablePixelation,
       loading = 'lazy',
       onLoad,
       onPointerDown,
       src,
       style,
       onError,
+      onLottieLoad,
+      onLottieError,
+      pixelated,
       ...props
     },
     ref
   ) => {
     const [pixelatedImageRendering] = useSetting(settingsAtom, 'pixelatedImageRendering');
-    const [resolvedLottieSrc, setResolvedLottieSrc] = useState<string | null | undefined>(
-      undefined
-    );
+    const [lottieResolution, setLottieResolution] = useState<{
+      source: string;
+      resolved: string | null;
+    }>();
 
     const lottieProps = props as LottieDotProps;
+    const isLottieCandidate = isGzippedLottieCandidate(
+      src,
+      mimeType ?? info?.mimetype,
+      typeof props.title === 'string' ? props.title : alt
+    );
+    const resolvedLottieSrc =
+      isLottieCandidate && lottieResolution?.source === src
+        ? lottieResolution.resolved
+        : isLottieCandidate
+          ? undefined
+          : null;
+    const imageClass = classNames(
+      css.Image,
+      !disablePixelation &&
+        (pixelated ?? isPixelatedRendering(pixelatedImageRendering, info)) &&
+        css.ImagePixelated,
+      className
+    );
 
     useEffect(() => {
       let cancelled = false;
 
-      if (typeof src === 'string' && src.length > 0) {
+      if (isLottieCandidate) {
         void resolveLottieDataUrl(src).then((result) => {
           if (!cancelled) {
-            setResolvedLottieSrc(result);
-            if (onLoad) onLoad({} as React.SyntheticEvent<HTMLImageElement, Event>);
+            setLottieResolution({ source: src, resolved: result });
           }
         });
-      } else {
-        setResolvedLottieSrc(null);
       }
 
       return () => {
         cancelled = true;
       };
-    }, [src, onLoad]);
+    }, [isLottieCandidate, src]);
 
     const shouldRenderLottie = typeof resolvedLottieSrc === 'string';
 
     if (shouldRenderLottie) {
       return (
-        <DotLottieReact
+        <LottieImage
           {...lottieProps}
-          height={lottieProps.height}
-          width={lottieProps.height}
-          className={classNames(
-            css.Image,
-            isPixelatedRendering(pixelatedImageRendering, info) && css.ImagePixelated,
-            className
-          )}
+          className={imageClass}
           style={style}
           src={resolvedLottieSrc}
-          aria-hidden={props['aria-hidden']}
+          alt={alt}
+          onLottieLoad={onLottieLoad}
+          onLottieError={onLottieError}
+          pixelated={
+            !disablePixelation && (pixelated ?? isPixelatedRendering(pixelatedImageRendering, info))
+          }
           loop
           autoplay
         />
@@ -140,21 +243,15 @@ export const Image = forwardRef<HTMLImageElement, ImageProps>(
 
     return (
       <img
-        className={classNames(
-          css.Image,
-          isPixelatedRendering(pixelatedImageRendering, info) && css.ImagePixelated,
-          className
-        )}
+        className={imageClass}
         alt={alt}
         loading={loading}
-        src={src}
+        src={resolvedLottieSrc === undefined ? undefined : src}
+        aria-busy={resolvedLottieSrc === undefined ? true : undefined}
         style={style}
         onLoad={onLoad}
         onPointerDown={onPointerDown}
-        onError={(...e) => {
-          // Don't send an error until we know whether the image is a Lottie or an ordinary image.
-          if (resolvedLottieSrc !== undefined && onError) onError(...e);
-        }}
+        onError={onError}
         {...props}
         ref={ref}
       />

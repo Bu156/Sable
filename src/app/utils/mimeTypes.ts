@@ -28,6 +28,7 @@ const AUDIO_MIME_TYPES = [
 const APPLICATION_MIME_TYPES = [
   'application/pdf',
   'application/json',
+  'application/x-tgsticker',
   'application/x-sh',
   'application/ecmascript',
   'application/javascript',
@@ -97,20 +98,43 @@ export const READABLE_EXT_TO_MIME_TYPE: Record<string, string> = {
   sql: 'text/sql',
 };
 
-const ALLOWED_BLOB_MIME_TYPES = [
+const ALLOWED_BLOB_MIME_TYPES = new Set([
   ...IMAGE_MIME_TYPES,
   ...VIDEO_MIME_TYPES,
   ...AUDIO_MIME_TYPES,
   ...APPLICATION_MIME_TYPES,
   ...TEXT_MIME_TYPE,
-];
+]);
 
 export const FALLBACK_MIMETYPE = 'application/octet-stream';
+export const TGS_MIMETYPE = 'application/x-tgsticker';
+
+const GZIP_MIME_TYPES = new Set(['application/gzip', 'application/x-gzip', TGS_MIMETYPE]);
+
+export const isTgsMimeType = (mimeType: string): boolean =>
+  mimeType.split(';', 1)[0]?.toLowerCase() === TGS_MIMETYPE;
+
+export const isImageMimeType = (mimeType: string): boolean =>
+  mimeType.toLowerCase().startsWith('image/') || isTgsMimeType(mimeType);
+
+const isTgsCandidate = (file: File): boolean =>
+  file.name.toLowerCase().endsWith('.tgs') ||
+  GZIP_MIME_TYPES.has(file.type.split(';', 1)[0]?.toLowerCase() ?? '');
+
+export const isTgsFile = async (file: File): Promise<boolean> => {
+  if (!isTgsCandidate(file)) return false;
+  try {
+    const signature = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+    return signature[0] === 0x1f && signature[1] === 0x8b;
+  } catch {
+    return false;
+  }
+};
 
 export const getBlobSafeMimeType = (mimeType: string): string => {
   if (typeof mimeType !== 'string') return FALLBACK_MIMETYPE;
   const [type] = mimeType.split(';');
-  if (!type || !ALLOWED_BLOB_MIME_TYPES.includes(type)) {
+  if (!type || !ALLOWED_BLOB_MIME_TYPES.has(type)) {
     return FALLBACK_MIMETYPE;
   }
   // Required for Chromium browsers
@@ -126,6 +150,21 @@ export const safeFile = (f: File) => {
     return new File([f], f.name, { type: safeType });
   }
   return f;
+};
+
+export const safeUploadFile = async (file: File): Promise<File> => {
+  if (await isTgsFile(file)) {
+    return file.type === TGS_MIMETYPE
+      ? file
+      : new File([file], file.name, { type: TGS_MIMETYPE, lastModified: file.lastModified });
+  }
+  if (isTgsMimeType(file.type)) {
+    return new File([file], file.name, {
+      type: FALLBACK_MIMETYPE,
+      lastModified: file.lastModified,
+    });
+  }
+  return safeFile(file);
 };
 
 export const mimeTypeToExt = (mimeType: string): string => {

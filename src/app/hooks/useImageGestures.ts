@@ -277,6 +277,21 @@ export const useImageGestures = (active: boolean, step = 0.2, min = 0.1, max = 5
     [updateZoom]
   );
 
+  const handleImageDimensions = useCallback(
+    (width: number, height: number) => {
+      const container = containerRef.current;
+      if (!container || width <= 0 || height <= 0) return;
+
+      const heightRatio = container.clientHeight / height;
+      const widthRatio = container.clientWidth / width;
+      const fitZoom = Math.min(heightRatio, widthRatio, 1);
+
+      setFitRatio(fitZoom);
+      updateZoom(fitZoom);
+    },
+    [updateZoom]
+  );
+
   const zoomIn = useCallback(() => {
     disableResizeWithWindow();
     prepareForTransform();
@@ -360,6 +375,7 @@ export const useImageGestures = (active: boolean, step = 0.2, min = 0.1, max = 5
     onPointerDown,
     handleWheel,
     handleImageLoad,
+    handleImageDimensions,
     setZoom,
     setZoomSilently,
     setPan,
