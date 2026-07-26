@@ -1,6 +1,6 @@
 import type { FormEventHandler } from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import { Box, Button, color, Text, toRem } from 'folds';
+import { Box, color, Text, toRem } from 'folds';
 import { ArrowRight, CaretDown, CaretUp, File, menuIcon, X } from '$components/icons/phosphor';
 import { saveFileToDevice } from '$utils/download';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
@@ -9,7 +9,6 @@ import { PasswordInput } from '$components/password-input';
 import { ConfirmPasswordMatch } from '$components/ConfirmPasswordMatch';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import {
   decryptMegolmKeyFile,
   encryptMegolmKeyFile,
@@ -17,6 +16,7 @@ import {
 } from '$utils/MegolmExportEncryption';
 import { useAlive } from '$hooks/useAlive';
 import { useFilePicker } from '$hooks/useFilePicker';
+import { Button } from '$components/button';
 
 type LocalBackupError = Error | FriendlyError;
 
@@ -112,7 +112,7 @@ function ExportKeys() {
               </>
             )}
           </ConfirmPasswordMatch>
-          <AsyncButton
+          <Button
             type="submit"
             size="400"
             variant="Secondary"
@@ -127,7 +127,7 @@ function ExportKeys() {
             <Text as="span" size="B400">
               Export
             </Text>
-          </AsyncButton>
+          </Button>
         </Box>
         {exportState.status === AsyncStatus.Error && (
           <Text size="T200" style={{ color: color.Critical.Main }}>
@@ -237,7 +237,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
               readOnly={decrypting}
             />
           </Box>
-          <AsyncButton
+          <Button
             type="submit"
             size="400"
             variant="Secondary"
@@ -252,7 +252,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
             <Text as="span" size="B400">
               Decrypt
             </Text>
-          </AsyncButton>
+          </Button>
         </Box>
         {decryptState.status === AsyncStatus.Error && (
           <Text size="T200" style={{ color: color.Critical.Main }}>

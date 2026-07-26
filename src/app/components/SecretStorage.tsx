@@ -9,9 +9,9 @@ import type {
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
 import { useAlive } from '$hooks/useAlive';
 import { PasswordInput } from './password-input';
+import { Button } from '$components/button';
 
 type SecretStorageRecoveryPassphraseProps = {
   processing?: boolean;
@@ -93,7 +93,7 @@ export function SecretStorageRecoveryPassphrase({
           />
         </Box>
         <Box shrink="No" gap="200">
-          <AsyncButton
+          <Button
             type="submit"
             variant="Success"
             size="400"
@@ -105,7 +105,7 @@ export function SecretStorageRecoveryPassphrase({
             <Text as="span" size="B400">
               Verify
             </Text>
-          </AsyncButton>
+          </Button>
         </Box>
       </Box>
       <AsyncError state={driveKeyState} bold />
@@ -180,7 +180,7 @@ export function SecretStorageRecoveryKey({
           />
         </Box>
         <Box shrink="No" gap="200">
-          <AsyncButton
+          <Button
             type="submit"
             variant="Success"
             size="400"
@@ -192,7 +192,7 @@ export function SecretStorageRecoveryKey({
             <Text as="span" size="B400">
               Verify
             </Text>
-          </AsyncButton>
+          </Button>
         </Box>
       </Box>
       <AsyncError state={driveKeyState} bold />

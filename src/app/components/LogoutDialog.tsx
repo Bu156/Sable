@@ -1,5 +1,5 @@
 import { forwardRef, useCallback } from 'react';
-import { Dialog, Header, config, Box, Text, Button } from 'folds';
+import { Dialog, Header, config, Box, Text } from 'folds';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { logoutClient } from '$client/initMatrix';
 import { activeSessionIdAtom, sessionsAtom } from '$state/sessions';
@@ -12,7 +12,7 @@ import {
 } from '$hooks/useDeviceVerificationStatus';
 import { InfoCard } from './info-card';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 type LogoutDialogProps = {
   handleClose: () => void;
@@ -82,7 +82,7 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
           <Text priority="400">You’re about to log out. Are you sure?</Text>
           <AsyncError state={logoutState} prefix="Failed to logout" size="T300" />
           <Box direction="Column" gap="200">
-            <AsyncButton
+            <Button
               variant="Critical"
               onClick={logout}
               loading={ongoingLogout}
@@ -90,7 +90,7 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
               spinnerSize="200"
             >
               <Text size="B400">Logout</Text>
-            </AsyncButton>
+            </Button>
             <Button variant="Secondary" fill="Soft" onClick={handleClose} disabled={ongoingLogout}>
               <Text size="B400">Cancel</Text>
             </Button>

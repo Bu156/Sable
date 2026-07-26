@@ -9,7 +9,6 @@ import {
   config,
   TextArea as TextAreaComponent,
   color,
-  Button,
 } from 'folds';
 import { ArrowLeft, composerIcon, menuIcon, X } from '$components/icons/phosphor';
 import type { MatrixError, StateEvents } from '$types/matrix-sdk';
@@ -23,7 +22,6 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useAlive } from '$hooks/useAlive';
 import { Cursor } from '$plugins/text-area';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { syntaxErrorPosition } from '$utils/dom';
 import { SettingTile } from '$components/setting-tile';
@@ -31,6 +29,7 @@ import { usePowerLevels } from '$hooks/usePowerLevels';
 import { useTextAreaCodeEditor } from '$hooks/useTextAreaCodeEditor';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
+import { Button } from '$components/button';
 
 const EDITOR_INTENT_SPACE_COUNT = 2;
 
@@ -130,7 +129,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
             description={stateKey}
             after={
               <Box gap="200">
-                <AsyncButton
+                <Button
                   variant="Success"
                   size="300"
                   radii="300"
@@ -141,7 +140,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
                   spinnerFill="Solid"
                 >
                   <Text size="B300">Save</Text>
-                </AsyncButton>
+                </Button>
                 <Button
                   variant="Secondary"
                   fill="Soft"

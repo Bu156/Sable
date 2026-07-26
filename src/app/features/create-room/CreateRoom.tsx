@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { MatrixError, JoinRule, RoomType } from '$types/matrix-sdk';
 import { Box, Chip, color, config, Input, Switch, Text, TextArea } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
 import { SettingTile } from '$components/setting-tile';
 import { SequenceCard } from '$components/sequence-card';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -42,6 +41,7 @@ import {
   knockRestrictedSupported,
 } from '$utils/roomSupport';
 import { ErrorCode } from '../../cs-errorcode';
+import { Button } from '$components/button';
 
 const debugLog = createDebugLogger('CreateRoom');
 
@@ -347,7 +347,7 @@ export function CreateRoomForm({
         </Box>
       )}
       <Box shrink="No" direction="Column" gap="200">
-        <AsyncButton
+        <Button
           type="submit"
           size="500"
           variant="Primary"
@@ -358,7 +358,7 @@ export function CreateRoomForm({
           spinnerSize="200"
         >
           <Text size="B400">Create Room</Text>
-        </AsyncButton>
+        </Button>
       </Box>
     </Box>
   );

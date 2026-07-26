@@ -12,7 +12,7 @@ import type { RoomPermissionsAPI } from '$hooks/useRoomPermissions';
 import { EventType } from '$types/matrix-sdk';
 import { confirm } from '$components/confirm/confirm';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 const ROOM_ENC_ALGO = 'm.megolm.v1.aes-sha2';
 
@@ -71,7 +71,7 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
               <Text size="L400">Enabled</Text>
             </Badge>
           ) : (
-            <AsyncButton
+            <Button
               size="300"
               variant="Primary"
               fill="Solid"
@@ -83,7 +83,7 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
               spinnerSize="100"
             >
               <Text size="B300">Enable</Text>
-            </AsyncButton>
+            </Button>
           )
         }
       >

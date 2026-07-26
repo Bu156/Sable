@@ -4,7 +4,6 @@ import { useAtom, useAtomValue } from 'jotai';
 import {
   Avatar,
   Box,
-  Button,
   IconButton,
   Line,
   Menu,
@@ -83,7 +82,6 @@ import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { useCallEmbed } from '$hooks/useCallEmbed';
@@ -105,6 +103,7 @@ import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { Button } from '$components/button';
 
 const debugLog = createDebugLogger('Space');
 
@@ -463,7 +462,7 @@ function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProps) {
             <Text size="B300">Open New Space</Text>
           </Button>
         ) : (
-          <AsyncButton
+          <Button
             loading={joinState.status === AsyncStatus.Loading}
             spinnerSize="100"
             spinnerVariant="Primary"
@@ -475,7 +474,7 @@ function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProps) {
             onClick={handleJoin}
           >
             <Text size="B300">Join New Space</Text>
-          </AsyncButton>
+          </Button>
         )}
       </Box>
     </Box>

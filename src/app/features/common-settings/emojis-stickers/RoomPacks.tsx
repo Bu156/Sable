@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   Box,
   Text,
-  Button,
   Avatar,
   AvatarImage,
   AvatarFallback,
@@ -14,7 +13,6 @@ import {
   IconButton,
   Menu,
 } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
 import { composerIcon, menuIcon, Plus, Sticker, X } from '$components/icons/phosphor';
 import type { MatrixError } from '$types/matrix-sdk';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
@@ -36,6 +34,7 @@ import { useAlive } from '$hooks/useAlive';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { CustomStateEvent } from '$types/matrix/room';
+import { Button } from '$components/button';
 
 function PackAvatarImage({ url }: { url: string }) {
   const resolved = useRenderableMediaUrl(url);
@@ -124,7 +123,7 @@ function CreatePackTile({ packs, roomId }: Readonly<CreatePackTileProps>) {
               </Text>
             )}
           </Box>
-          <AsyncButton
+          <Button
             variant="Success"
             radii="300"
             type="submit"
@@ -133,7 +132,7 @@ function CreatePackTile({ packs, roomId }: Readonly<CreatePackTileProps>) {
             spinnerVariant="Success"
           >
             <Text size="B400">Create</Text>
-          </AsyncButton>
+          </Button>
         </Box>
       </SettingTile>
     </SequenceCard>
@@ -335,7 +334,7 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
               >
                 <Text size="B300">Cancel</Text>
               </Button>
-              <AsyncButton
+              <Button
                 size="300"
                 variant="Critical"
                 radii="300"
@@ -346,7 +345,7 @@ export function RoomPacks({ onViewPack }: Readonly<RoomPacksProps>) {
                 onClick={handleApplyChanges}
               >
                 <Text size="B300">Delete</Text>
-              </AsyncButton>
+              </Button>
             </Box>
           </Box>
         </Menu>

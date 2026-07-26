@@ -2,8 +2,7 @@ import type { ShowSasCallbacks, VerificationRequest, Verifier } from '$types/mat
 import { VerificationPhase, VerificationMethod } from '$types/matrix-sdk';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Button, config, Dialog, Header, IconButton, Spinner, Text } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
+import { Box, config, Dialog, Header, IconButton, Spinner, Text } from 'folds';
 import { composerIcon, X } from '$components/icons/phosphor';
 import * as Sentry from '@sentry/react';
 import {
@@ -15,6 +14,7 @@ import {
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import { Button } from '$components/button';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -64,7 +64,7 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
   return (
     <Box direction="Column" gap="400">
       <Text>Click accept to start the verification process.</Text>
-      <AsyncButton
+      <Button
         variant="Primary"
         fill="Solid"
         onClick={accept}
@@ -73,7 +73,7 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
         spinnerVariant="Primary"
       >
         <Text size="B400">Accept</Text>
-      </AsyncButton>
+      </Button>
     </Box>
   );
 }
@@ -138,7 +138,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         ))}
       </Box>
       <Box direction="Column" gap="200">
-        <AsyncButton
+        <Button
           variant="Primary"
           fill="Soft"
           onClick={confirm}
@@ -147,7 +147,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
           spinnerVariant="Primary"
         >
           <Text size="B400">They Match</Text>
-        </AsyncButton>
+        </Button>
         <Button
           variant="Primary"
           fill="Soft"

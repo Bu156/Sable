@@ -27,13 +27,13 @@ import type { UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
 import { useAsyncSearch } from '$hooks/useAsyncSearch';
 import { highlightText, makeHighlightRegex } from '$plugins/react-custom-html-parser';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { composerIcon, X } from '$components/icons/phosphor';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useAlive } from '$hooks/useAlive';
 import { getMxIdServer } from '$utils/mxIdHelper';
 import { KnownMembership } from '$types/matrix-sdk';
+import { Button } from '$components/button';
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   limit: 1000,
@@ -274,7 +274,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                   />
                 </Box>
                 <AsyncError state={inviteState} bold />
-                <AsyncButton
+                <Button
                   type="submit"
                   loading={inviting}
                   spinnerSize="200"
@@ -283,7 +283,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                   disabled={!validUserId}
                 >
                   <Text size="B400">Invite</Text>
-                </AsyncButton>
+                </Button>
               </Box>
             </Box>
           </Dialog>

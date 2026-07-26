@@ -1,4 +1,4 @@
-import { Avatar, Box, Button, Chip, config, Input, Text, TextArea } from 'folds';
+import { Avatar, Box, Chip, config, Input, Text, TextArea } from 'folds';
 import { ArrowsClockwise, chipIcon, menuIcon, PencilSimple } from '$components/icons/phosphor';
 import type { FormEventHandler } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -35,7 +35,7 @@ import { SettingTile } from '$components/setting-tile';
 import { confirm } from '$components/confirm/confirm';
 import { reportMediaLoadFailure } from '$utils/mediaLoadDiagnostics';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 type RoomProfileEditProps = {
   canEditAvatar: boolean;
@@ -263,7 +263,7 @@ function RoomProfileEdit({
       </Box>
       <AsyncError state={submitState} />
       <Box gap="300">
-        <AsyncButton
+        <Button
           type="submit"
           variant="Success"
           size="300"
@@ -274,7 +274,7 @@ function RoomProfileEdit({
           spinnerSize="100"
         >
           <Text size="B300">Save</Text>
-        </AsyncButton>
+        </Button>
         <Button
           type="reset"
           onClick={onClose}

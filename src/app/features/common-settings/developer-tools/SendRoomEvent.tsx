@@ -18,10 +18,10 @@ import { useRoom } from '$hooks/useRoom';
 import { useAlive } from '$hooks/useAlive';
 import { useTextAreaCodeEditor } from '$hooks/useTextAreaCodeEditor';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { syntaxErrorPosition } from '$utils/dom';
 import { Cursor } from '$plugins/text-area';
+import { Button } from '$components/button';
 
 const EDITOR_INTENT_SPACE_COUNT = 2;
 
@@ -152,7 +152,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
                   required
                 />
               </Box>
-              <AsyncButton
+              <Button
                 variant="Success"
                 size="400"
                 radii="300"
@@ -163,7 +163,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
                 spinnerFill="Solid"
               >
                 <Text size="B400">Send</Text>
-              </AsyncButton>
+              </Button>
             </Box>
 
             <AsyncError state={submitState} bold />

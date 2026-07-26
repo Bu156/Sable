@@ -7,7 +7,7 @@ import { getJoinedSpaceChildrenSummary, getRecursiveSpaceLeaveOrder } from '$uti
 import { rateLimitedActions } from '$utils/matrix';
 import { PromptDialog } from '$components/modal-overlay/PromptDialog';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 type LeaveSpacePromptProps = {
   roomId: string;
@@ -95,7 +95,7 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
           />
         </Box>
         <Box direction="Column" gap="200">
-          <AsyncButton
+          <Button
             type="submit"
             variant="Critical"
             onClick={() => leaveSpace()}
@@ -105,9 +105,9 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
             aria-disabled={isBusy || leaveState.status === AsyncStatus.Success}
           >
             <Text size="B400">{leaving ? 'Leaving...' : 'Leave Space Only'}</Text>
-          </AsyncButton>
+          </Button>
           {joinedChildrenCount > 0 && (
-            <AsyncButton
+            <Button
               variant="Critical"
               fill="Soft"
               onClick={() => leaveAll()}
@@ -119,7 +119,7 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
               <Text size="B400">
                 {formatRecursiveLeaveLabel(leavingAll, roomCount, subspaceCount)}
               </Text>
-            </AsyncButton>
+            </Button>
           )}
         </Box>
       </Box>

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Button, Chip, config, Menu, Text } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
+import { Badge, Box, Chip, config, Menu, Text } from 'folds';
 import { CaretDown, CaretUp, chipIcon } from '$components/icons/phosphor';
 import { produce } from 'immer';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
@@ -17,6 +16,7 @@ import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAlive } from '$hooks/useAlive';
 import type { PermissionGroup } from './types';
 import { EventType } from '$types/matrix-sdk';
+import { Button } from '$components/button';
 
 const USER_DEFAULT_LOCATION: PermissionLocation = {
   user: true,
@@ -266,7 +266,7 @@ export function PermissionGroups({
               >
                 <Text size="B300">Reset</Text>
               </Button>
-              <AsyncButton
+              <Button
                 size="300"
                 variant="Success"
                 radii="300"
@@ -277,7 +277,7 @@ export function PermissionGroups({
                 onClick={handleApplyChanges}
               >
                 <Text size="B300">Apply Changes</Text>
-              </AsyncButton>
+              </Button>
             </Box>
           </Box>
         </Menu>

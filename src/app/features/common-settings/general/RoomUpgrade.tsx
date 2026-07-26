@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, color, Text, Dialog, Header, config, Box, IconButton } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
+import { color, Text, Dialog, Header, config, Box, IconButton } from 'folds';
 import { composerIcon, X } from '$components/icons/phosphor';
 import type { MatrixError, RoomTombstoneEventContent } from '$types/matrix-sdk';
 import { Method, EventType } from '$types/matrix-sdk';
@@ -25,6 +24,7 @@ import { useRoomCreators } from '$hooks/useRoomCreators';
 import { BreakWord } from '$styles/Text.css';
 import { creatorsSupported } from '$utils/roomSupport';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import { Button } from '$components/button';
 
 function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
   const mx = useMatrixClient();
@@ -119,7 +119,7 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
               {(upgradeState.error as MatrixError).message}
             </Text>
           )}
-          <AsyncButton
+          <Button
             onClick={handleUpgradeRoom}
             variant="Secondary"
             loading={upgrading}
@@ -127,7 +127,7 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
             spinnerSize="200"
           >
             <Text size="B400">{room.isSpaceRoom() ? 'Upgrade Space' : 'Upgrade Room'}</Text>
-          </AsyncButton>
+          </Button>
         </Box>
       </Dialog>
     </ModalOverlay>

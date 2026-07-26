@@ -1,6 +1,6 @@
-import { Box, Button, Text, color, config } from 'folds';
+import { Box, Text, color, config } from 'folds';
 import { PromptDialog } from '$components/modal-overlay/PromptDialog';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 type DirectInvitePromptProps = {
   onCancel: () => void;
@@ -32,7 +32,7 @@ export function DirectInvitePrompt({
           )}
         </Box>
         <Box direction="Column" gap="200">
-          <AsyncButton
+          <Button
             variant="Primary"
             onClick={onConvertAndInvite}
             loading={converting}
@@ -43,7 +43,7 @@ export function DirectInvitePrompt({
             <Text size="B400">
               {converting ? 'Converting...' : 'Convert to Group Chat and Invite'}
             </Text>
-          </AsyncButton>
+          </Button>
           <Button variant="Warning" fill="Soft" onClick={onInviteDirect} disabled={converting}>
             <Text size="B400">Invite to Direct Message anyway</Text>
           </Button>

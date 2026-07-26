@@ -1,7 +1,6 @@
 import type { FormEventHandler } from 'react';
 import { forwardRef, useCallback, useState } from 'react';
-import { Dialog, Header, Box, Text, IconButton, config, Button, Chip } from 'folds';
-import { AsyncButton } from '$components/AsyncButton';
+import { Dialog, Header, Box, Text, IconButton, config, Chip } from 'folds';
 import { AsyncError } from '$components/AsyncError';
 import { composerIcon, X } from '$components/icons/phosphor';
 import { saveFileToDevice } from '$utils/download';
@@ -17,6 +16,7 @@ import { useAlive } from '$hooks/useAlive';
 import { PasswordInput } from './password-input';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { UseStateProvider } from './UseStateProvider';
+import { Button } from '$components/button';
 
 type UIACallback<T> = (
   authDict: AuthDict | null
@@ -229,9 +229,9 @@ function SetupVerification({ onComplete, reset }: Readonly<SetupVerificationProp
         <Text size="L400">Passphrase (Optional)</Text>
         <PasswordInput name="passphraseInput" size="400" readOnly={loading} />
       </Box>
-      <AsyncButton type="submit" loading={loading} spinnerSize="200" spinnerVariant="Primary">
+      <Button type="submit" loading={loading} spinnerSize="200" spinnerVariant="Primary">
         <Text size="B400">Continue</Text>
-      </AsyncButton>
+      </Button>
       <AsyncError state={setupState} bold />
       {nextAuthData !== null && uiaAction && (
         <ActionUIAFlowsLoader

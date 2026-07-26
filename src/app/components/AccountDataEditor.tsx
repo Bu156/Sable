@@ -5,7 +5,6 @@ import {
   Text,
   IconButton,
   Input,
-  Button,
   TextArea as TextAreaComponent,
   color,
   Chip,
@@ -17,13 +16,13 @@ import type { MatrixError } from '$types/matrix-sdk';
 import { Cursor } from '$plugins/text-area';
 import { syntaxErrorPosition } from '$utils/dom';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { useAlive } from '$hooks/useAlive';
 import { useTextAreaCodeEditor } from '$hooks/useTextAreaCodeEditor';
 import { Page, PageHeader } from './page';
 import { SequenceCard } from './sequence-card';
 import { TextViewerContent } from './text-viewer';
+import { Button } from '$components/button';
 
 const EDITOR_INTENT_SPACE_COUNT = 2;
 
@@ -135,7 +134,7 @@ function AccountDataEdit({
               required
             />
           </Box>
-          <AsyncButton
+          <Button
             variant="Success"
             size="400"
             radii="300"
@@ -146,7 +145,7 @@ function AccountDataEdit({
             spinnerFill="Solid"
           >
             <Text size="B400">Save</Text>
-          </AsyncButton>
+          </Button>
           <Button
             variant="Secondary"
             fill="Soft"

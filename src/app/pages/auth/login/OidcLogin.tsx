@@ -1,9 +1,8 @@
-import { Box, Button, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text } from 'folds';
+import { Box, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text } from 'folds';
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ValidatedAuthMetadata } from '$types/matrix-sdk';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { useAuthServer } from '$hooks/useAuthServer';
 import { InfoCard } from '$components/info-card';
 import { getLoginPath } from '$pages/pathUtils';
@@ -15,6 +14,7 @@ import {
   completeOidcLogin,
   startOidcLogin,
 } from './oidcLoginUtil';
+import { Button } from '$components/button';
 
 const ERROR_TITLE = 'Single sign-on';
 
@@ -67,7 +67,7 @@ export function OidcLoginButton({
       {errorMessage && (
         <InfoCard variant="Critical" title={ERROR_TITLE} description={errorMessage} />
       )}
-      <AsyncButton
+      <Button
         style={{ width: '100%' }}
         size="500"
         variant="Secondary"
@@ -81,7 +81,7 @@ export function OidcLoginButton({
         <Text align="Center" size="B500" truncate>
           {label}
         </Text>
-      </AsyncButton>
+      </Button>
     </Box>
   );
 }

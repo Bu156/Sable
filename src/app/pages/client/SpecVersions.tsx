@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useCallback, useState } from 'react';
-import { Box, Button, Dialog, config, Text } from 'folds';
+import { Box, Dialog, config, Text } from 'folds';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { SpecVersionsLoader } from '$components/SpecVersionsLoader';
 import { SpecVersionsProvider } from '$hooks/useSpecVersions';
@@ -12,7 +12,7 @@ import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useClientConfig } from '$hooks/useClientConfig';
 import type { SpecVersions } from '../../cs-api';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 const EMPTY_VERSIONS: SpecVersions = { versions: [] };
 
@@ -102,7 +102,7 @@ function HomeserverOfflineError({ baseUrl, onRetry }: HomeserverOfflineErrorProp
                   )}
                 </>
               )}
-              <AsyncButton
+              <Button
                 variant="Critical"
                 fill="None"
                 onClick={logout}
@@ -113,7 +113,7 @@ function HomeserverOfflineError({ baseUrl, onRetry }: HomeserverOfflineErrorProp
                 <Text as="span" size="B400">
                   Logout
                 </Text>
-              </AsyncButton>
+              </Button>
               <AsyncError state={logoutState} prefix="Failed to logout" />
             </Box>
           </Box>

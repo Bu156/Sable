@@ -8,7 +8,7 @@ import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { createDebugLogger } from '$utils/debugLogger';
 import { PromptDialog } from '$components/modal-overlay/PromptDialog';
 import { AsyncError } from '$components/AsyncError';
-import { AsyncButton } from '$components/AsyncButton';
+import { Button } from '$components/button';
 
 const debugLog = createDebugLogger('KnockRoomPrompt');
 
@@ -70,7 +70,7 @@ export function KnockRoomPrompt({ roomId, via, onDone, onCancel }: KnockRoomProp
             <AsyncError state={knockState} prefix="Failed to knock" size="T300" />
           </Box>
         </Box>
-        <AsyncButton
+        <Button
           type="submit"
           variant="Primary"
           loading={knockState.status === AsyncStatus.Loading}
@@ -83,7 +83,7 @@ export function KnockRoomPrompt({ roomId, via, onDone, onCancel }: KnockRoomProp
           <Text size="B400">
             {knockState.status === AsyncStatus.Loading ? 'Knocking...' : 'Knock'}
           </Text>
-        </AsyncButton>
+        </Button>
       </Box>
     </PromptDialog>
   );

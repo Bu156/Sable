@@ -1,9 +1,8 @@
-import { Box, Button, config, Spinner, Text, Input } from 'folds';
+import { Box, config, Spinner, Text, Input } from 'folds';
 import { ArrowLeft, ArrowRight, profileIcon, Prohibit } from '$components/icons/phosphor';
 import { useCallback, useRef } from 'react';
 import { useRoom } from '$hooks/useRoom';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useSetting } from '$state/hooks/settings';
@@ -11,6 +10,7 @@ import { settingsAtom } from '$state/settings';
 import { timeDayMonYear, timeHourMinute } from '$utils/time';
 import { SettingTile } from '$components/setting-tile';
 import { CutoutCard } from '$components/cutout-card';
+import { Button } from '$components/button';
 
 type UserKickAlertProps = {
   reason?: string;
@@ -111,7 +111,7 @@ export function UserBanAlert({ userId, reason, canUnban, bannedBy, ts }: UserBan
           </Box>
           <AsyncError state={unbanState} bold />
           {canUnban && (
-            <AsyncButton
+            <Button
               size="300"
               variant="Critical"
               radii="300"
@@ -122,7 +122,7 @@ export function UserBanAlert({ userId, reason, canUnban, bannedBy, ts }: UserBan
               spinnerFill="Solid"
             >
               <Text size="B300">Unban</Text>
-            </AsyncButton>
+            </Button>
           )}
         </Box>
       </SettingTile>
@@ -183,7 +183,7 @@ export function UserInviteAlert({ userId, reason, canKick, invitedBy, ts }: User
           </Box>
           <AsyncError state={kickState} bold />
           {canKick && (
-            <AsyncButton
+            <Button
               size="300"
               variant="Success"
               fill="Soft"
@@ -196,7 +196,7 @@ export function UserInviteAlert({ userId, reason, canKick, invitedBy, ts }: User
               spinnerFill="Soft"
             >
               <Text size="B300">Cancel Invite</Text>
-            </AsyncButton>
+            </Button>
           )}
         </Box>
       </SettingTile>

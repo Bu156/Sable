@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Avatar, Badge, Box, Button, Chip, IconButton, Scroll, Spinner, Text, config } from 'folds';
+import { Avatar, Badge, Box, Chip, IconButton, Scroll, Spinner, Text, config } from 'folds';
 import { useAtom, useAtomValue } from 'jotai';
 import {
   ArrowLeft,
@@ -54,7 +54,6 @@ import { useElementSizeObserver } from '$hooks/useElementSizeObserver';
 import { onEnterOrSpace } from '$utils/keyboard';
 import { RoomTopicViewer } from '$components/room-topic-viewer';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
-import { AsyncButton } from '$components/AsyncButton';
 import { AsyncError } from '$components/AsyncError';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -72,6 +71,7 @@ import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import { updateInviteList } from '$state/updateInvites';
 import { useDismissedInviteList } from '$hooks/useDismissedInvites';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import { Button } from '$components/button';
 
 const COMPACT_CARD_WIDTH = 548;
 
@@ -318,7 +318,7 @@ function InviteCard({
             >
               <Text size="B300">{isDismissed ? 'Undismiss' : 'Dismiss'}</Text>
             </Button>
-            <AsyncButton
+            <Button
               loading={leaving}
               spinnerSize="100"
               spinnerVariant="Secondary"
@@ -330,8 +330,8 @@ function InviteCard({
               onClick={leave}
             >
               <Text size="B300">Decline</Text>
-            </AsyncButton>
-            <AsyncButton
+            </Button>
+            <Button
               loading={joining}
               spinnerSize="100"
               spinnerVariant="Success"
@@ -345,7 +345,7 @@ function InviteCard({
               onClick={join}
             >
               <Text size="B300">Accept</Text>
-            </AsyncButton>
+            </Button>
           </Box>
         </Box>
       </Box>
@@ -645,7 +645,7 @@ function SpamInvites({
                 subTitle="Some of the following invites may contain harmful content or have been sent by banned users."
               >
                 <Box direction="Row" gap="200" justifyContent="Center" wrap="Wrap">
-                  <AsyncButton
+                  <Button
                     size="300"
                     variant="Critical"
                     fill="Solid"
@@ -660,9 +660,9 @@ function SpamInvites({
                     <Text size="B300" truncate>
                       Decline All
                     </Text>
-                  </AsyncButton>
+                  </Button>
                   {reportRoomSupported && reportAllStatus.status !== AsyncStatus.Success && (
-                    <AsyncButton
+                    <Button
                       size="300"
                       variant="Secondary"
                       fill="Solid"
@@ -677,10 +677,10 @@ function SpamInvites({
                       <Text size="B300" truncate>
                         Report All
                       </Text>
-                    </AsyncButton>
+                    </Button>
                   )}
                   {unignoredUsers.length > 0 && (
-                    <AsyncButton
+                    <Button
                       size="300"
                       variant="Secondary"
                       fill="Solid"
@@ -695,7 +695,7 @@ function SpamInvites({
                       <Text size="B300" truncate>
                         Block All
                       </Text>
-                    </AsyncButton>
+                    </Button>
                   )}
                 </Box>
 
