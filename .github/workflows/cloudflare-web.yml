@@ -74,11 +74,11 @@ jobs:
     environment:
       name: ${{ needs.detect.outputs.environment }}
     env:
-      TF_HTTP_ADDRESS: ${{ secrets.TF_HTTP_ADDRESS }}
-      TF_HTTP_LOCK_ADDRESS: ${{ secrets.TF_HTTP_LOCK_ADDRESS }}
-      TF_HTTP_UNLOCK_ADDRESS: ${{ secrets.TF_HTTP_UNLOCK_ADDRESS }}
-      TF_VAR_custom_domain: ${{ vars.TF_VAR_CUSTOM_DOMAIN || 'app.sable.moe' }}
-      TF_VAR_worker_name: ${{ vars.TF_VAR_WORKER_NAME || 'sable' }}
+      TF_HTTP_ADDRESS: ${{ vars.TF_HTTP_ADDRESS }}
+      TF_HTTP_LOCK_ADDRESS: ${{ vars.TF_HTTP_LOCK_ADDRESS }}
+      TF_HTTP_UNLOCK_ADDRESS: ${{ vars.TF_HTTP_UNLOCK_ADDRESS }}
+      TF_VAR_custom_domain: ${{ vars.TF_VAR_CUSTOM_DOMAIN }}
+      TF_VAR_worker_name: ${{ vars.TF_VAR_WORKER_NAME }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,8 +98,8 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ needs.detect.outputs.sentry_environment }}
           VITE_APP_VERSION: ${{ needs.detect.outputs.version }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
 
       - name: Plan infrastructure
         working-directory: infra/web
@@ -120,13 +120,13 @@ jobs:
       contents: read
     environment:
       name: ${{ needs.detect.outputs.environment }}
-      url: https://${{ vars.TF_VAR_CUSTOM_DOMAIN || 'app.sable.moe' }}
+      url: https://${{ vars.TF_VAR_CUSTOM_DOMAIN }}
     env:
-      TF_HTTP_ADDRESS: ${{ secrets.TF_HTTP_ADDRESS }}
-      TF_HTTP_LOCK_ADDRESS: ${{ secrets.TF_HTTP_LOCK_ADDRESS }}
-      TF_HTTP_UNLOCK_ADDRESS: ${{ secrets.TF_HTTP_UNLOCK_ADDRESS }}
-      TF_VAR_custom_domain: ${{ vars.TF_VAR_CUSTOM_DOMAIN || 'app.sable.moe' }}
-      TF_VAR_worker_name: ${{ vars.TF_VAR_WORKER_NAME || 'sable' }}
+      TF_HTTP_ADDRESS: ${{ vars.TF_HTTP_ADDRESS }}
+      TF_HTTP_LOCK_ADDRESS: ${{ vars.TF_HTTP_LOCK_ADDRESS }}
+      TF_HTTP_UNLOCK_ADDRESS: ${{ vars.TF_HTTP_UNLOCK_ADDRESS }}
+      TF_VAR_custom_domain: ${{ vars.TF_VAR_CUSTOM_DOMAIN }}
+      TF_VAR_worker_name: ${{ vars.TF_VAR_WORKER_NAME }}
     concurrency:
       group: cloudflare-infra-${{ needs.detect.outputs.environment }}
       cancel-in-progress: false
@@ -149,8 +149,8 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ needs.detect.outputs.sentry_environment }}
           VITE_APP_VERSION: ${{ needs.detect.outputs.version }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
 
       - name: Apply infrastructure
         working-directory: infra/web

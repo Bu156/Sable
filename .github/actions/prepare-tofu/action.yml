@@ -10,6 +10,29 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate deployment configuration
+      shell: bash
+      run: |
+        missing=()
+        for name in \
+          TF_HTTP_ADDRESS \
+          TF_HTTP_LOCK_ADDRESS \
+          TF_HTTP_UNLOCK_ADDRESS \
+          TF_VAR_custom_domain \
+          TF_VAR_worker_name \
+          SENTRY_ORG \
+          SENTRY_PROJECT
+        do
+          if [[ -z "${!name:-}" ]]; then
+            missing+=("$name")
+          fi
+        done
+
+        if (( ${#missing[@]} > 0 )); then
+          printf 'Missing required GitHub Environment variables: %s\n' "${missing[*]}" >&2
+          exit 1
+        fi
+
     - name: Setup app and build
       uses: ./.github/actions/setup
       with:
