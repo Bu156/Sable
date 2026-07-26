@@ -457,6 +457,19 @@ export function RoomTimeline({
     [reducedMotion]
   );
 
+  // A jump target is by definition not the bottom. Clear the flag synchronously,
+  // before the async load resolves: the growth-follow is a useLayoutEffect, so it
+  // runs before any passive effect on the render that first paints the new rows.
+  // setAtBottom writes the ref (disarms growth-follow, ResizeObserver repin,
+  // post-pagination repin) and the state (disarms tryAutoMarkAsRead).
+  const jumpToEvent = useCallback(
+    (id: string) => {
+      setAtBottom(false);
+      void timelineSyncRef.current.loadEventTimeline(id);
+    },
+    [setAtBottom]
+  );
+
   const timelineSync = useTimelineSync({
     room,
     mx,
@@ -702,8 +715,8 @@ export function RoomTimeline({
   useEffect(() => {
     if (!eventId) return;
     setIsReady(false);
-    void timelineSyncRef.current.loadEventTimeline(eventId);
-  }, [eventId, room.roomId]);
+    jumpToEvent(eventId);
+  }, [eventId, room.roomId, jumpToEvent]);
 
   useEffect(() => {
     if (eventId) return;
@@ -839,7 +852,7 @@ export function RoomTimeline({
         }
         timelineSync.setFocusItem({ index: focusRawIndex, scrollTo: false, highlight: true });
       } else {
-        void timelineSync.loadEventTimeline(anchorId);
+        jumpToEvent(anchorId);
       }
     },
   });
@@ -1119,7 +1132,7 @@ export function RoomTimeline({
             radii="Pill"
             outlined
             before={chipIcon(ChatTeardropDots)}
-            onClick={() => timelineSync.loadEventTimeline(unreadInfo.readUptoEventId)}
+            onClick={() => jumpToEvent(unreadInfo.readUptoEventId)}
           >
             <Text size="L400">Jump to Unread</Text>
           </Chip>
