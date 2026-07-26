@@ -4,7 +4,7 @@ import type {
   KeyboardEventHandler,
   MouseEventHandler,
 } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { RectCords } from 'folds';
@@ -17,7 +17,6 @@ import {
   IconButton,
   Input,
   Menu,
-  MenuItem,
   PopOut,
   Scroll,
   Switch,
@@ -26,7 +25,6 @@ import {
 } from 'folds';
 import {
   ArrowUp,
-  CaretDown,
   composerIcon,
   DotsSixVerticalIcon,
   Download,
@@ -43,25 +41,26 @@ import {
   draggable,
   dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { PageContent } from '$components/page';
-import { SequenceCard } from '$components/sequence-card';
+import { PageContent, SettingsSectionPage } from '$components/page';
+import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
+import {
+  CAPTION_POSITION_OPTIONS,
+  MESSAGE_LAYOUT_OPTIONS,
+  DATE_FORMATS,
+  MESSAGE_SPACING_OPTIONS,
+  SettingMenuSelector,
+} from '$components/setting-menu-selector';
 import { useSetting } from '$state/hooks/settings';
-import type { DateFormat, EditorButtonId, MessageSpacing, CaptionPosition } from '$state/settings';
+import type { EditorButtonId } from '$state/settings';
 import { MessageLayout, RightSwipeAction, settingsAtom } from '$state/settings';
 import { SettingTile } from '$components/setting-tile';
 import { KeySymbol } from '$utils/key-symbol';
 import { isMacOS, mobileOrTablet } from '$utils/user-agent';
 import { stopPropagation } from '$utils/keyboard';
-import { useMessageLayoutItems } from '$hooks/useMessageLayout';
-import { useCaptionPositionItems } from '$hooks/useCaptionPosition';
-import { useMessageSpacingItems } from '$hooks/useMessageSpacing';
-import { useDateFormatItems } from '$hooks/useDateFormat';
-import { SequenceCardStyle } from '$features/settings/styles.css';
 import { sessionsAtom, activeSessionIdAtom } from '$state/sessions';
 import { isKeyHotkey } from 'is-hotkey';
 import { settingsSyncLastSyncedAtom, settingsSyncStatusAtom } from '$hooks/useSettingsSync';
 import { exportSettingsAsJson, importSettingsFromJson } from '$utils/settingsSync';
-import { SettingsSectionPage } from '../SettingsSectionPage';
 import { CallSoundSettings } from './CallSoundSettings';
 
 type DateHintProps = {
@@ -305,71 +304,16 @@ const getDisplayDate = (format: string): string =>
   format === '' ? 'Custom' : dayjs().format(format);
 
 function PresetDateFormat({ value, onChange }: Readonly<PresetDateFormatProps>) {
-  const [menuCords, setMenuCords] = useState<RectCords>();
-  const dateFormatItems = useDateFormatItems();
+  // A format typed into the custom field is not a preset, but it still has to
+  // label the trigger rather than fall back to the first preset.
+  const options = useMemo(() => {
+    const formats: string[] = DATE_FORMATS.some((preset) => preset === value)
+      ? DATE_FORMATS
+      : [value, ...DATE_FORMATS];
+    return formats.map((format) => ({ value: format, label: getDisplayDate(format) }));
+  }, [value]);
 
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuCords(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleSelect = (format: DateFormat) => {
-    onChange(format);
-    setMenuCords(undefined);
-  };
-
-  return (
-    <>
-      <Button
-        size="300"
-        variant="Secondary"
-        outlined
-        fill="Soft"
-        radii="300"
-        after={composerIcon(CaretDown)}
-        onClick={handleMenu}
-      >
-        <Text size="T300">
-          {getDisplayDate(dateFormatItems.find((i) => i.format === value)?.format ?? value)}
-        </Text>
-      </Button>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="End"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              isKeyForward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-              isKeyBackward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {dateFormatItems.map((item) => (
-                  <MenuItem
-                    key={item.format}
-                    size="300"
-                    variant={value === item.format ? 'Primary' : 'Surface'}
-                    radii="300"
-                    onClick={() => handleSelect(item.format)}
-                  >
-                    <Text size="T300">{getDisplayDate(item.format)}</Text>
-                  </MenuItem>
-                ))}
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </>
-  );
+  return <SettingMenuSelector value={value} options={options} onSelect={onChange} />;
 }
 
 function SelectDateFormat() {
@@ -689,306 +633,67 @@ function Editor() {
 }
 
 function SelectMessageLayout() {
-  const [menuCords, setMenuCords] = useState<RectCords>();
   const [messageLayout, setMessageLayout] = useSetting(settingsAtom, 'messageLayout');
-  const messageLayoutItems = useMessageLayoutItems();
-
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuCords(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleSelect = (layout: MessageLayout) => {
-    setMessageLayout(layout);
-    setMenuCords(undefined);
-  };
 
   return (
-    <>
-      <Button
-        size="300"
-        variant="Secondary"
-        outlined
-        fill="Soft"
-        radii="300"
-        after={composerIcon(CaretDown)}
-        onClick={handleMenu}
-      >
-        <Text size="T300">
-          {messageLayoutItems.find((i) => i.layout === messageLayout)?.name ?? messageLayout}
-        </Text>
-      </Button>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="End"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              isKeyForward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-              isKeyBackward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {messageLayoutItems.map((item) => (
-                  <MenuItem
-                    key={item.layout}
-                    size="300"
-                    variant={messageLayout === item.layout ? 'Primary' : 'Surface'}
-                    radii="300"
-                    onClick={() => handleSelect(item.layout)}
-                  >
-                    <Text size="T300">{item.name}</Text>
-                  </MenuItem>
-                ))}
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </>
+    <SettingMenuSelector
+      value={messageLayout}
+      options={MESSAGE_LAYOUT_OPTIONS}
+      onSelect={setMessageLayout}
+    />
   );
 }
 function SelectCaptionPosition() {
-  const [menuCords, setMenuCords] = useState<RectCords>();
   const [captionPosition, setCaptionPosition] = useSetting(settingsAtom, 'captionPosition');
-  const captionPositionItems = useCaptionPositionItems();
-
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuCords(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleSelect = (position: CaptionPosition) => {
-    setCaptionPosition(position);
-    setMenuCords(undefined);
-  };
 
   return (
-    <>
-      <Button
-        size="300"
-        variant="Secondary"
-        outlined
-        fill="Soft"
-        radii="300"
-        after={composerIcon(CaretDown)}
-        onClick={handleMenu}
-      >
-        <Text size="T300">
-          {captionPositionItems.find((i) => i.layout === captionPosition)?.name ?? captionPosition}
-        </Text>
-      </Button>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="End"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              isKeyForward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-              isKeyBackward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {captionPositionItems.map((item) => (
-                  <MenuItem
-                    key={item.layout}
-                    size="300"
-                    variant={captionPosition === item.layout ? 'Primary' : 'Surface'}
-                    radii="300"
-                    onClick={() => handleSelect(item.layout)}
-                  >
-                    <Text size="T300">{item.name}</Text>
-                  </MenuItem>
-                ))}
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </>
+    <SettingMenuSelector
+      value={captionPosition}
+      options={CAPTION_POSITION_OPTIONS}
+      onSelect={setCaptionPosition}
+    />
   );
 }
 
 function SelectMessageSpacing() {
-  const [menuCords, setMenuCords] = useState<RectCords>();
   const [messageSpacing, setMessageSpacing] = useSetting(settingsAtom, 'messageSpacing');
-  const messageSpacingItems = useMessageSpacingItems();
-
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuCords(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleSelect = (layout: MessageSpacing) => {
-    setMessageSpacing(layout);
-    setMenuCords(undefined);
-  };
 
   return (
-    <>
-      <Button
-        size="300"
-        variant="Secondary"
-        outlined
-        fill="Soft"
-        radii="300"
-        after={composerIcon(CaretDown)}
-        onClick={handleMenu}
-      >
-        <Text size="T300">
-          {messageSpacingItems.find((i) => i.spacing === messageSpacing)?.name ?? messageSpacing}
-        </Text>
-      </Button>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="End"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              isKeyForward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-              isKeyBackward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {messageSpacingItems.map((item) => (
-                  <MenuItem
-                    key={item.spacing}
-                    size="300"
-                    variant={messageSpacing === item.spacing ? 'Primary' : 'Surface'}
-                    radii="300"
-                    onClick={() => handleSelect(item.spacing)}
-                  >
-                    <Text size="T300">{item.name}</Text>
-                  </MenuItem>
-                ))}
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </>
+    <SettingMenuSelector
+      value={messageSpacing}
+      options={MESSAGE_SPACING_OPTIONS}
+      onSelect={setMessageSpacing}
+    />
   );
 }
 
 function SelectRightSwipeAction({ disabled }: Readonly<{ disabled?: boolean }>) {
-  const [menuCords, setMenuCords] = useState<RectCords>();
   const [action, setAction] = useSetting(settingsAtom, 'rightSwipeAction');
 
-  const options = [
-    { id: RightSwipeAction.Reply, name: 'Reply to Message' },
-    { id: RightSwipeAction.Members, name: 'Open Member List' },
-  ];
-
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setMenuCords(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleSelect = (val: RightSwipeAction) => {
-    setAction(val);
-    setMenuCords(undefined);
-  };
-
   return (
-    <>
-      <Button
-        size="300"
-        variant="Secondary"
-        outlined
-        fill="Soft"
-        radii="300"
-        disabled={disabled}
-        after={composerIcon(CaretDown)}
-        onClick={handleMenu}
-      >
-        <Text size="T300">{options.find((o) => o.id === action)?.name ?? action}</Text>
-      </Button>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="End"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {options.map((option) => (
-                  <MenuItem
-                    key={option.id}
-                    size="300"
-                    variant={action === option.id ? 'Primary' : 'Surface'}
-                    radii="300"
-                    onClick={() => handleSelect(option.id)}
-                  >
-                    <Text size="T300">{option.name}</Text>
-                  </MenuItem>
-                ))}
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </>
+    <SettingMenuSelector
+      value={action}
+      options={[
+        { value: RightSwipeAction.Reply, label: 'Reply to Message' },
+        { value: RightSwipeAction.Members, label: 'Open Member List' },
+      ]}
+      onSelect={setAction}
+      disabled={disabled}
+      offset={5}
+    />
   );
 }
 
 function Gestures({ isMobile }: Readonly<{ isMobile: boolean }>) {
-  const [mobileGestures, setMobileGestures] = useSetting(settingsAtom, 'mobileGestures');
-
   return (
     <Box direction="Column" gap="100" style={{ opacity: isMobile ? 1 : 0.5 }}>
       <Text size="L400">Gestures {!isMobile && '(Mobile Only)'}</Text>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
-          title="Enable Swiping"
-          focusId="enable-swiping"
-          description="Swipe left for rooms, swipe right for actions."
-          after={
-            <Switch
-              variant="Primary"
-              value={mobileGestures}
-              onChange={setMobileGestures}
-              disabled={!isMobile}
-            />
-          }
-        />
-      </SequenceCard>
-      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
-        <SettingTile
           title="Right Swipe Action"
           focusId="right-swipe-action"
           description="What happens when you swipe right on a message."
-          after={<SelectRightSwipeAction disabled={!isMobile || !mobileGestures} />}
+          after={<SelectRightSwipeAction disabled={!isMobile} />}
         />
       </SequenceCard>
     </Box>

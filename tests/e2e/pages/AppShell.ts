@@ -14,20 +14,13 @@ export class AppShell {
   }
 
   async open(): Promise<void> {
+    await this.page.addInitScript(() => localStorage.setItem('dismissNotice', 'true'));
     await this.page.goto('/');
     await expect(this.room('General')).toBeVisible({ timeout: CLIENT_READY_TIMEOUT });
-    await this.dismissDeviceBanner();
   }
 
   room(name: string): Locator {
     return this.page.getByText(name).first();
-  }
-
-  async dismissDeviceBanner(): Promise<void> {
-    await this.page
-      .getByRole('button', { name: 'Dismiss' })
-      .click({ timeout: 5_000 })
-      .catch(() => undefined);
   }
 
   async openRoomOptions(name: string): Promise<RoomOptionsMenu> {

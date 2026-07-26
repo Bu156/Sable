@@ -26,6 +26,7 @@ import {
 import type { IRoomCreateContent, RoomToParents, UnreadInfo } from '$types/matrix/room';
 import { NotificationType } from '$types/matrix/room';
 import { getMxIdLocalPart } from '$utils/matrix';
+import { mxcUrlToHttp } from './mediaUrl';
 
 export const getStateEvent = (
   room: Room,
@@ -558,18 +559,26 @@ export const getUnreadInfosForRooms = (
   return { unread, deleted };
 };
 
+/**
+ * The square-cropped avatar conversion every avatar call site repeats. Goes
+ * through `mxcUrlToHttp` so the Tauri media rewrite is never bypassed.
+ */
+export const getAvatarUrl = (
+  mx: MatrixClient,
+  mxcUrl: string | null | undefined,
+  size: number,
+  useAuthentication = false
+): string | undefined =>
+  mxcUrl
+    ? (mxcUrlToHttp(mx, mxcUrl, useAuthentication, size, size, 'crop') ?? undefined)
+    : undefined;
+
 export const getRoomAvatarUrl = (
   mx: MatrixClient,
   room: Room,
   size: 32 | 96 = 32,
   useAuthentication = false
-): string | undefined => {
-  const mxcUrl = room.getMxcAvatarUrl();
-  return mxcUrl
-    ? (mx.mxcUrlToHttp(mxcUrl, size, size, 'crop', undefined, false, useAuthentication) ??
-        undefined)
-    : undefined;
-};
+): string | undefined => getAvatarUrl(mx, room.getMxcAvatarUrl(), size, useAuthentication);
 
 export const getDirectRoomAvatarUrl = (
   mx: MatrixClient,
@@ -583,9 +592,7 @@ export const getDirectRoomAvatarUrl = (
     return getRoomAvatarUrl(mx, room, size, useAuthentication);
   }
 
-  return (
-    mx.mxcUrlToHttp(mxcUrl, size, size, 'crop', undefined, false, useAuthentication) ?? undefined
-  );
+  return getAvatarUrl(mx, mxcUrl, size, useAuthentication);
 };
 
 export const trimReplyFromBody = (body: string): string => {
@@ -601,23 +608,6 @@ export const trimReplyFromFormattedBody = (formattedBody: string): string => {
     return formattedBody;
   }
   return formattedBody.slice(i + suffix.length);
-};
-
-export const parseReplyBody = (userId: string, body: string) =>
-  `> <${userId}> ${body.replace(/\n/g, '\n> ')}\n\n`;
-
-export const parseReplyFormattedBody = (
-  roomId: string,
-  userId: string,
-  eventId: string,
-  formattedBody: string
-): string => {
-  const replyToLink = `<a href="https://matrix.to/#/${encodeURIComponent(
-    roomId
-  )}/${encodeURIComponent(eventId)}">In reply to</a>`;
-  const userLink = `<a href="https://matrix.to/#/${encodeURIComponent(userId)}">${userId}</a>`;
-
-  return `<mx-reply><blockquote>${replyToLink}${userLink}<br />${formattedBody}</blockquote></mx-reply>`;
 };
 
 export const getMemberDisplayName = (
@@ -688,7 +678,7 @@ export const getEventReactions = (timelineSet: EventTimelineSet, eventId: string
 export const getEventEdits = (timelineSet: EventTimelineSet, eventId: string, eventType: string) =>
   timelineSet.relations.getChildEventsForEvent(eventId, RelationType.Replace, eventType);
 
-export const getLatestEdit = (
+const getLatestEdit = (
   targetEvent: MatrixEvent,
   editEvents: MatrixEvent[]
 ): MatrixEvent | undefined => {
@@ -782,11 +772,6 @@ export const getReactionAnnotationTargetId = (reactionEvent: MatrixEvent): strin
   }
 
   return undefined;
-};
-
-export const getRedactionActorId = (mEvent: MatrixEvent): string | undefined => {
-  const sender = mEvent.getUnsigned()?.redacted_because?.sender;
-  return typeof sender === 'string' && sender.length > 0 ? sender : undefined;
 };
 
 export const getRedactionReason = (mEvent: MatrixEvent): string | undefined => {
@@ -984,7 +969,7 @@ export const getPreviousEditId = (
   return allEvents[idx - 1]?.getId();
 };
 
-export const getPreviousEditEvent = (
+const getPreviousEditEvent = (
   currentEditEvent: MatrixEvent,
   chain: { original: MatrixEvent; edits: MatrixEvent[] }
 ): MatrixEvent | undefined => {
@@ -999,7 +984,7 @@ export const getPreviousEditEvent = (
 
 const EDIT_DIFF_MSGTYPES = new Set<string>([MsgType.Text, MsgType.Emote, MsgType.Notice]);
 
-export const getMessageVersionBody = (mEvent: MatrixEvent): string | undefined => {
+const getMessageVersionBody = (mEvent: MatrixEvent): string | undefined => {
   const content = mEvent.getContent();
   const wireContent = mEvent.getWireContent?.() as Record<string, unknown> | undefined;
 
@@ -1076,19 +1061,6 @@ export const canEditEvent = (mx: MatrixClient, mEvent: MatrixEvent) => {
   );
 };
 
-export const getLatestEditableEvt = (
-  timeline: EventTimeline,
-  canEdit: (mEvent: MatrixEvent) => boolean
-): MatrixEvent | undefined => {
-  const events = timeline.getEvents();
-
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const evt = events[i];
-    if (evt && canEdit(evt)) return evt;
-  }
-  return undefined;
-};
-
 export const reactionOrEditEvent = (mEvent: MatrixEvent): boolean => {
   const relType = mEvent.getRelation()?.rel_type;
   if (
@@ -1129,6 +1101,28 @@ export const isThreadRelationEvent = (mEvent: MatrixEvent, threadRootId?: string
 export const hasThreadRootAggregation = (mEvent: MatrixEvent): boolean =>
   (mEvent.getServerAggregatedRelation?.<IThreadBundledRelationship>(RelationType.Thread as string)
     ?.count ?? 0) > 0;
+
+/**
+ * Resolve the list of reply events to show for a thread.
+ *
+ * Prefers events from the SDK Thread object (authoritative, full history) but
+ * falls back to scanning the main room timeline when the Thread object was
+ * created without `initialEvents` (as happens with classic sync).  In that
+ * case `thread.events` contains only the root event, so filtering it yields an
+ * empty array — we must fall back rather than showing nothing.
+ */
+export const getThreadReplyEvents = (room: Room, threadRootId: string): MatrixEvent[] => {
+  const isReply = (ev: MatrixEvent) =>
+    ev.getId() !== threadRootId &&
+    !reactionOrEditEvent(ev) &&
+    isThreadRelationEvent(ev, threadRootId);
+
+  const thread = room.getThread(threadRootId);
+  const fromThread = (thread?.events ?? []).filter(isReply);
+  if (fromThread.length > 0) return fromThread;
+
+  return room.getUnfilteredTimelineSet().getLiveTimeline().getEvents().filter(isReply);
+};
 
 /**
  * Timeline rows skip reactions, edits, and other relation-only events.  When jumping
@@ -1278,7 +1272,7 @@ export const bannedInRooms = (mx: MatrixClient, rooms: string[], otherUserId: st
     return room.hasMembershipState(otherUserId, KnownMembership.Ban);
   });
 
-export const getAllVersionsRoomCreator = (room: Room): Set<string> => {
+const getAllVersionsRoomCreator = (room: Room): Set<string> => {
   const creators = new Set<string>();
 
   const createEvent = getStateEvent(room, EventType.RoomCreate);

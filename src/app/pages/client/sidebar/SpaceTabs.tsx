@@ -2,7 +2,6 @@ import type { FormEventHandler, MouseEventHandler, ReactNode, RefObject, ChangeE
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import type { RectCords } from 'folds';
 import {
   Box,
   Button,
@@ -13,7 +12,6 @@ import {
   Line,
   Menu,
   MenuItem,
-  PopOut,
   Text,
   config,
   toRem,
@@ -44,7 +42,6 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
-import FocusTrap from 'focus-trap-react';
 import {
   useOrphanSpaces,
   useRecursiveChildScopeFactory,
@@ -87,7 +84,6 @@ import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { markAsRead } from '$utils/notifications';
 import { copyToClipboard } from '$utils/dom';
 import { shareText } from '$utils/share';
-import { stopPropagation } from '$utils/keyboard';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
@@ -102,6 +98,8 @@ import { lastVisitedSpaceIdAtom } from '$state/room/lastSpace';
 import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
+import { ResponsiveMenu } from '$components/ResponsiveMenu';
+import { useMenuAnchor } from '$hooks/useMenuAnchor';
 
 type SpaceMenuProps = {
   room: Room;
@@ -563,16 +561,7 @@ function SpaceTab({
   const dropState = useDropTarget(spaceDraggable, targetRef, !isMobile);
   const dropType = dropState?.type;
 
-  const [menuAnchor, setMenuAnchor] = useState<RectCords>();
-
-  const handleContextMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    evt.preventDefault();
-    const cords = evt.currentTarget.getBoundingClientRect();
-    setMenuAnchor((currentState) => {
-      if (currentState) return undefined;
-      return cords;
-    });
-  };
+  const menu = useMenuAnchor<HTMLButtonElement>();
 
   return (
     <RoomUnreadProvider roomId={space.roomId}>
@@ -593,7 +582,11 @@ function SpaceTab({
                 data-id={space.roomId}
                 ref={triggerRef}
                 size={folder ? '300' : '400'}
-                onContextMenu={handleContextMenu}
+                onContextMenu={menu.triggerProps.onContextMenu}
+                onTouchStart={menu.triggerProps.onTouchStart}
+                onTouchEnd={menu.triggerProps.onTouchEnd}
+                onTouchMove={menu.triggerProps.onTouchMove}
+                onTouchCancel={menu.triggerProps.onTouchCancel}
                 {...mobileTapActivation}
               >
                 <SpaceAvatar
@@ -611,32 +604,13 @@ function SpaceTab({
               count={unread.highlight > 0 ? unread.highlight : unread.total}
             />
           )}
-          {menuAnchor && (
-            <PopOut
-              anchor={menuAnchor}
-              position="Right"
-              align="Start"
-              content={
-                <FocusTrap
-                  focusTrapOptions={{
-                    initialFocus: false,
-                    returnFocusOnDeactivate: false,
-                    onDeactivate: () => setMenuAnchor(undefined),
-                    clickOutsideDeactivates: true,
-                    isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
-                    isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
-                    escapeDeactivates: stopPropagation,
-                  }}
-                >
-                  <SpaceMenu
-                    room={space}
-                    requestClose={() => setMenuAnchor(undefined)}
-                    onUnpin={onUnpin}
-                  />
-                </FocusTrap>
-              }
-            />
-          )}
+          <ResponsiveMenu
+            anchor={menu.anchor}
+            position="Right"
+            align="Start"
+            requestClose={menu.close}
+            menu={<SpaceMenu room={space} requestClose={menu.close} onUnpin={onUnpin} />}
+          />
         </SidebarItemLeft>
       )}
     </RoomUnreadProvider>
@@ -785,22 +759,18 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
   const [openedFolder, setOpenedFolder] = useAtom(useOpenedSidebarFolderAtom());
   const setLastSpaceId = useSetAtom(lastVisitedSpaceIdAtom);
   const [draggingItem, setDraggingItem] = useState<SidebarDraggable>();
-  const [folderMenuState, setFolderMenuState] = useState<{
-    folder: ISidebarFolder;
-    anchor: RectCords;
-  }>();
+  const folderMenu = useMenuAnchor<HTMLDivElement>();
+  const [folderMenuTarget, setFolderMenuTarget] = useState<ISidebarFolder>();
   const [renameTargetFolder, setRenameTargetFolder] = useState<ISidebarFolder>();
 
   const handleFolderContextMenu = useCallback(
     (folder: ISidebarFolder): MouseEventHandler =>
       (evt) => {
         evt.preventDefault();
-        setFolderMenuState({
-          folder,
-          anchor: evt.currentTarget.getBoundingClientRect(),
-        });
+        setFolderMenuTarget(folder);
+        folderMenu.openAt(evt.currentTarget as HTMLElement);
       },
-    []
+    [folderMenu]
   );
 
   const handleRenameFolderApply = useCallback(
@@ -851,7 +821,7 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
               const folderContent = item.folder.content.filter((s) => s !== item.spaceId);
               if (folderContent.length === 0) {
                 // remove open state from local storage
-                setOpenedFolder({ type: 'DELETE', id: item.folder.id });
+                setOpenedFolder({ type: 'DELETE', value: item.folder.id });
                 return;
               }
               newItems.push({
@@ -975,7 +945,7 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
 
     setOpenedFolder({
       type: openedFolder.has(targetFolderId) ? 'DELETE' : 'PUT',
-      id: targetFolderId,
+      value: targetFolderId,
     });
   };
 
@@ -994,31 +964,26 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
   if (sidebarItems.length === 0) return null;
   return (
     <>
-      {folderMenuState && (
-        <PopOut
-          anchor={folderMenuState.anchor}
-          position="Right"
-          align="Start"
-          content={
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                returnFocusOnDeactivate: false,
-                onDeactivate: () => setFolderMenuState(undefined),
-                clickOutsideDeactivates: true,
-                isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
-                isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
-                escapeDeactivates: stopPropagation,
+      <ResponsiveMenu
+        anchor={folderMenu.anchor}
+        position="Right"
+        align="Start"
+        requestClose={() => {
+          folderMenu.close();
+          setFolderMenuTarget(undefined);
+        }}
+        menu={
+          folderMenuTarget && (
+            <FolderMenu
+              requestClose={() => {
+                folderMenu.close();
+                setFolderMenuTarget(undefined);
               }}
-            >
-              <FolderMenu
-                requestClose={() => setFolderMenuState(undefined)}
-                onRename={() => setRenameTargetFolder(folderMenuState.folder)}
-              />
-            </FocusTrap>
-          }
-        />
-      )}
+              onRename={() => setRenameTargetFolder(folderMenuTarget)}
+            />
+          )
+        }
+      />
       {renameTargetFolder && (
         <RenameFolderDialog
           mx={mx}

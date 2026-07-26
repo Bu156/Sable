@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text, Scroll, Button, config, toRem, Spinner } from 'folds';
 import { Code, Heart, menuIcon } from '$components/icons/phosphor';
-import { PageContent } from '$components/page';
-import { SequenceCard } from '$components/sequence-card';
+import { PageContent, SettingsSectionPage } from '$components/page';
+import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
 import LogoSVG from '$public/res/svg/logo.svg';
 import { clearCacheAndReload } from '$client/initMatrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { SequenceCardStyle } from '$features/settings/styles.css';
 import { Method } from '$types/matrix-sdk';
 import { useOpenShallowRoute } from '$pages/client/useShallowRoute';
 import { getBugReportPath } from '$pages/pathUtils';
@@ -20,14 +19,13 @@ import {
 } from '$state/desktopUpdate';
 import dayjs from 'dayjs';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { SettingsSectionPage } from '../SettingsSectionPage';
 
 type VersionResult =
   | { error: { message: string } }
   | { server: { name?: string; version?: string; compiler?: string } }
   | undefined;
 
-export function HomeserverInfo() {
+function HomeserverInfo() {
   const mx = useMatrixClient();
   const [federationUrl, setFederationUrl] = useState<string>(mx.baseUrl);
   const [version, setVersion] = useState<VersionResult>(undefined);
