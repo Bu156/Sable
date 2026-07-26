@@ -49,6 +49,9 @@ const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 6;
 const SESSION_WAIT: Duration = Duration::from_secs(5);
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
+// Short: a 4xx stops being true once an unreachable remote server comes back.
+const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(600);
+const MAX_NEGATIVE_CACHE_ENTRIES: usize = 512;
 
 const TEMP_CACHE_SUBDIR: &str = "sable-media-temp";
 const MAX_TEMP_CACHE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
@@ -64,6 +67,7 @@ pub struct MediaSessionState {
     thumbnail_semaphore: Semaphore,
     download_semaphore: Semaphore,
     cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
+    negative_cache: Mutex<HashMap<String, (StatusCode, Instant)>>,
 }
 
 impl Default for MediaSessionState {
@@ -77,6 +81,7 @@ impl Default for MediaSessionState {
             thumbnail_semaphore: Semaphore::new(MAX_CONCURRENT_THUMBNAIL_REQUESTS),
             download_semaphore: Semaphore::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
             cache_miss_gates: Mutex::new(HashMap::new()),
+            negative_cache: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -142,6 +147,45 @@ impl MediaSessionState {
         gates.insert(key.to_owned(), Arc::downgrade(&gate));
         Ok(gate)
     }
+
+    fn recent_client_error(&self, key: &str) -> Option<StatusCode> {
+        let mut cache = self.negative_cache.lock().ok()?;
+        let (status, seen_at) = *cache.get(key)?;
+        if seen_at.elapsed() < NEGATIVE_CACHE_TTL {
+            return Some(status);
+        }
+        cache.remove(key);
+        None
+    }
+
+    /// 5xx and auth/rate-limit failures stay retryable.
+    fn note_client_error(&self, key: &str, status: StatusCode) {
+        let media_specific = status.is_client_error()
+            && !matches!(
+                status,
+                StatusCode::UNAUTHORIZED
+                    | StatusCode::FORBIDDEN
+                    | StatusCode::REQUEST_TIMEOUT
+                    | StatusCode::TOO_MANY_REQUESTS
+            );
+        if !media_specific {
+            return;
+        }
+        let Ok(mut cache) = self.negative_cache.lock() else {
+            return;
+        };
+        cache.retain(|_, (_, seen_at)| seen_at.elapsed() < NEGATIVE_CACHE_TTL);
+        if cache.len() >= MAX_NEGATIVE_CACHE_ENTRIES {
+            return;
+        }
+        cache.insert(key.to_owned(), (status, Instant::now()));
+    }
+
+    fn forget_client_errors(&self) {
+        if let Ok(mut cache) = self.negative_cache.lock() {
+            cache.clear();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -190,6 +234,7 @@ pub fn set_media_session(
         });
     }
 
+    state.forget_client_errors();
     state.session_ever_set.store(true, Ordering::Release);
     state.session_ready.notify_waiters();
     Ok(())
@@ -206,6 +251,7 @@ pub fn clear_media_session<R: Runtime>(
     if let Ok(mut guard) = state.encryption.write() {
         guard.clear();
     }
+    state.forget_client_errors();
     if let Ok(dir) = cache_dir(&app) {
         let _ = fs::remove_dir_all(dir);
     }
@@ -346,6 +392,9 @@ async fn handle_request<R: Runtime>(
     }
 
     let key = cache_key(&session.scope, &target);
+    if let Some(status) = state.recent_client_error(&key) {
+        return Err(status);
+    }
     let dir = cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let temp_dir = temp_cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -483,6 +532,7 @@ async fn ensure_cached_with_limits(
             fetch_res
         }
         Err(status) => {
+            state.note_client_error(key, *status);
             *gate_guard = Some(Err(*status));
             Err(*status)
         }
@@ -1179,6 +1229,58 @@ mod tests {
         .await
         .expect("wait_for_session should fail fast after a clear");
         assert!(waited.is_none());
+    }
+
+    #[test]
+    fn client_errors_are_remembered_but_server_errors_are_not() {
+        let state = MediaSessionState::default();
+
+        state.note_client_error("cannot-thumbnail", StatusCode::BAD_REQUEST);
+        assert_eq!(
+            state.recent_client_error("cannot-thumbnail"),
+            Some(StatusCode::BAD_REQUEST)
+        );
+
+        state.note_client_error("server-down", StatusCode::BAD_GATEWAY);
+        assert_eq!(state.recent_client_error("server-down"), None);
+    }
+
+    #[test]
+    fn auth_and_rate_limit_failures_stay_retryable() {
+        let state = MediaSessionState::default();
+        for status in [
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::REQUEST_TIMEOUT,
+            StatusCode::TOO_MANY_REQUESTS,
+        ] {
+            state.note_client_error("key", status);
+            assert_eq!(
+                state.recent_client_error("key"),
+                None,
+                "{status} must not be cached"
+            );
+        }
+    }
+
+    #[test]
+    fn a_new_session_forgets_remembered_failures() {
+        let state = MediaSessionState::default();
+        state.note_client_error("key", StatusCode::NOT_FOUND);
+        state.forget_client_errors();
+        assert_eq!(state.recent_client_error("key"), None);
+    }
+
+    #[test]
+    fn negative_cache_is_bounded() {
+        let state = MediaSessionState::default();
+        for index in 0..(super::MAX_NEGATIVE_CACHE_ENTRIES + 50) {
+            state.note_client_error(&format!("key-{index}"), StatusCode::NOT_FOUND);
+        }
+        assert_eq!(
+            state.negative_cache.lock().unwrap().len(),
+            super::MAX_NEGATIVE_CACHE_ENTRIES
+        );
     }
 
     #[test]
