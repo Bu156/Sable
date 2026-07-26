@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow, type Window } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
@@ -112,8 +111,12 @@ export function DesktopTitleBar() {
     }
   }, [isWindows]);
 
+  const title = SABLE_PRODUCT_NAME;
+
   useEffect(() => {
     if (!isDesktopTitleBar) return undefined;
+
+    setWindowTitle(title);
 
     const appWindow = getCurrentWindow();
     appWindowRef.current = appWindow;
@@ -121,14 +124,6 @@ export function DesktopTitleBar() {
     let mounted = true;
     let unlistenResize: (() => void) | undefined;
     let unlistenTracking: (() => void) | undefined;
-
-    getVersion()
-      .then((version) => {
-        if (mounted) setWindowTitle(version.includes('-nightly.') ? 'Sable Nightly' : 'Sable');
-      })
-      .catch((error) => {
-        log.warn('Failed to read app version for window title:', error);
-      });
 
     const syncMaximized = async () => {
       try {
@@ -182,7 +177,7 @@ export function DesktopTitleBar() {
       unlistenResize?.();
       unlistenTracking?.();
     };
-  }, [isDesktopTitleBar, isWindows, hideSnapOverlay]);
+  }, [isDesktopTitleBar, isWindows, hideSnapOverlay, title]);
 
   if (!isDesktopTitleBar) return null;
 

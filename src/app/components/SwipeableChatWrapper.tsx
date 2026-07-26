@@ -3,7 +3,7 @@ import { animate, motion, useMotionValue } from 'framer-motion';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom, RightSwipeAction } from '$state/settings';
 import { haptic } from '$utils/haptics';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { useMobileNavDrawer } from '$components/page/MobileNavDrawerContext';
 
 interface SwipeableChatWrapperProps {
@@ -29,6 +29,8 @@ export function SwipeableChatWrapper({
         gestureActiveRef.current = true;
         x.stop();
       }
+
+      if (!isMobileOrTablet()) return;
 
       const canSwipeLeft =
         rightSwipeAction === RightSwipeAction.Members ? !!onOpenMembers : !!onReply;
@@ -56,7 +58,7 @@ export function SwipeableChatWrapper({
 
   useLayoutEffect(() => {
     const element = containerRef.current;
-    if (!drawer || !element || !mobileOrTablet()) return undefined;
+    if (!drawer || !element || !isMobileOrTablet()) return undefined;
 
     return drawer.registerChatSwipe(element, {
       move,
@@ -65,7 +67,7 @@ export function SwipeableChatWrapper({
     });
   }, [drawer, finish, move]);
 
-  if (!mobileOrTablet()) {
+  if (!isMobileOrTablet()) {
     return (
       <div
         style={{

@@ -44,7 +44,7 @@ import * as Sentry from '@sentry/react';
 import { startClient, stopClient } from '$client/initMatrix';
 import { createSessionTokenRefresher } from '$client/oidcTokenRefresher';
 import { isDesktopTauri } from '$utils/platform';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 
 const log = createLogger('BackgroundNotifications');
 const debugLog = createDebugLogger('BackgroundNotifications');
@@ -511,7 +511,7 @@ export function BackgroundNotifications() {
             // Show in-app banner when app is visible, mobile, and in-app notifications enabled
             const canShowInAppBanner =
               document.visibilityState === 'visible' &&
-              mobileOrTablet() &&
+              isMobileOrTablet() &&
               showNotificationsRef.current;
 
             if (canShowInAppBanner) {

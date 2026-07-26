@@ -39,36 +39,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve target
+      - uses: ./.github/actions/resolve-release-meta
         id: meta
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ inputs.tag }}
-          GIT_REF: ${{ github.ref }}
-          GIT_REF_NAME: ${{ github.ref_name }}
-          GIT_SHA: ${{ github.sha }}
-          RUN_NUMBER: ${{ github.run_number }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG="$INPUT_TAG"; REF="$INPUT_TAG"; NIGHTLY=false
-            VERSION="${TAG#v}"
-          elif [ "$GIT_REF" = "refs/heads/dev" ]; then
-            TAG="nightly"; REF="$GIT_SHA"; NIGHTLY=true
-            VERSION="$(node .github/scripts/nightly-version.mjs)"
-          else
-            TAG="$GIT_REF_NAME"; REF="$GIT_REF"; NIGHTLY=false
-            VERSION="${TAG#v}"
-          fi
-          {
-            echo "tag=$TAG"
-            echo "version=$VERSION"
-            echo "ref=$REF"
-            echo "nightly=$NIGHTLY"
-            echo "started_at=$STARTED_AT"
-          } >> "$GITHUB_OUTPUT"
+        with:
+          input-tag: ${{ inputs.tag }}
 
       - name: Wait for release to exist
         if: ${{ steps.meta.outputs.nightly != 'true' }}
@@ -139,7 +113,7 @@ jobs:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
       VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
-      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
+      SABLE_BUILD_FLAVOR: ${{ needs.setup-release.outputs.nightly == 'true' && 'dev' || 'stable' }}
       VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       VITE_SENTRY_ENVIRONMENT: ${{ needs.setup-release.outputs.nightly == 'true' && 'preview' || 'production' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -192,7 +166,7 @@ jobs:
             ARGS="$ARGS --bundles nsis"
           fi
           if [ "$IS_NIGHTLY" = "true" ]; then
-            ARGS="$ARGS --config src-tauri/tauri.nightly.conf.json"
+            echo "SABLE_BUILD_FLAVOR=dev" >> "$GITHUB_ENV"
           fi
           echo "TAURI_BUILD_ARGS=${ARGS# }" >> "$GITHUB_ENV"
 
@@ -326,7 +300,7 @@ jobs:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
       VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
-      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
+      SABLE_BUILD_FLAVOR: ${{ needs.setup-release.outputs.nightly == 'true' && 'dev' || 'stable' }}
       VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       VITE_SENTRY_ENVIRONMENT: ${{ needs.setup-release.outputs.nightly == 'true' && 'preview' || 'production' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -393,11 +367,10 @@ jobs:
         env:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
-          ARGS=()
           if [ "$IS_NIGHTLY" = "true" ]; then
-            ARGS+=(--config src-tauri/tauri.nightly.conf.json)
+            export SABLE_BUILD_FLAVOR=dev
           fi
-          pnpm tauri android build --apk --aab --target aarch64 armv7 "${ARGS[@]}"
+          pnpm tauri android build --apk --aab --target aarch64 armv7
           OUT='src-tauri/gen/android/app/build/outputs'
           APK=$(find "$OUT/apk/universal/release" -name '*.apk' -type f | head -1)
           AAB=$(find "$OUT/bundle/universalRelease" -name '*.aab' -type f | head -1)
@@ -440,7 +413,7 @@ jobs:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
       VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
-      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
+      SABLE_BUILD_FLAVOR: ${{ needs.setup-release.outputs.nightly == 'true' && 'dev' || 'stable' }}
       VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       VITE_SENTRY_ENVIRONMENT: ${{ needs.setup-release.outputs.nightly == 'true' && 'preview' || 'production' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -489,11 +462,10 @@ jobs:
         env:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
-          ARGS=()
           if [ "$IS_NIGHTLY" = "true" ]; then
-            ARGS+=(--config src-tauri/tauri.nightly.conf.json)
+            export SABLE_BUILD_FLAVOR=dev
           fi
-          pnpm tauri ios build --no-sign --ci "${ARGS[@]}"
+          pnpm tauri ios build --no-sign --ci
           IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
           [ -n "$IPA" ] || { echo "IPA not found"; ls -R src-tauri/gen/apple/build 2>/dev/null || true; exit 1; }
           NORMALIZED_IPA="$(dirname "$IPA")/Sable-${VERSION}-ios-arm64.ipa"
@@ -556,7 +528,8 @@ jobs:
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
       VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
-      VITE_IS_RELEASE_TAG: ${{ needs.setup-release.outputs.nightly == 'true' && 'true' || '' }}
+      SABLE_BUILD_FLAVOR: ${{ needs.setup-release.outputs.nightly == 'true' && 'dev' || 'stable' }}
+      SABLE_PRODUCT_NAME: ${{ needs.setup-release.outputs.product_name }}
       REPO: ${{ github.repository }}
       STARTED_AT: ${{ needs.setup-release.outputs.started_at }}
     steps:

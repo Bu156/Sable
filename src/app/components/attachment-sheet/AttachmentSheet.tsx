@@ -4,7 +4,7 @@ import { useDrag } from '@use-gesture/react';
 import FocusTrap from 'focus-trap-react';
 import { useAndroidBackHandler } from '$utils/androidBack';
 import { stopPropagation } from '$utils/keyboard';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { getMobileSheetTiming, useMobileSheetAnimation } from '$components/mobileSheetAnimation';
 import * as animationCss from '$components/mobileSheetAnimation.css';
 import type { Icon } from '@phosphor-icons/react';
@@ -66,7 +66,7 @@ export function AttachmentSheet({
     return true;
   }, open);
 
-  const gesturesEnabled = mobileOrTablet();
+  const gesturesEnabled = isMobileOrTablet();
 
   const bind = useDrag(
     ({ first, active, offset: [, oy], velocity: [, vy], direction: [, dy], event }) => {

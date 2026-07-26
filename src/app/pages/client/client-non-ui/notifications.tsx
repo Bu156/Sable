@@ -52,7 +52,7 @@ import {
   buildRoomMessageNotification,
   resolveNotificationPreviewText,
 } from '$utils/notificationStyle';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { createDebugLogger } from '$utils/debugLogger';
 import { showToast } from '$state/toast';
 import {
@@ -133,7 +133,7 @@ export function InviteNotifications() {
 
     // OS notification for invites — desktop, plus iOS while foregrounded (testing).
     if (
-      (!mobileOrTablet() || isIosTauri()) &&
+      (!isMobileOrTablet() || isIosTauri()) &&
       showSystemNotifications &&
       (isNativeNotificationTauri() || notificationPermission('granted'))
     ) {
@@ -343,7 +343,7 @@ export function MessageNotifications() {
       const withSound = notificationSound && isLoud && (tabVisible || backgroundNotificationSounds);
       let soundOnNotification = false;
       if (
-        (!mobileOrTablet() || isIosTauri()) &&
+        (!isMobileOrTablet() || isIosTauri()) &&
         showSystemNotifications &&
         (isNativeNotificationTauri() || notificationPermission('granted'))
       ) {

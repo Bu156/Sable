@@ -11,7 +11,7 @@ import { Node, Transforms, createEditor } from 'slate';
 import type { RenderLeafProps, RenderElementProps, RenderPlaceholderProps } from 'slate-react';
 import { Slate, Editable, withReact, ReactEditor } from 'slate-react';
 import { withHistory } from 'slate-history';
-import { iosApp, mobileOrTablet } from '$utils/user-agent';
+import { iosApp, isMobileOrTablet } from '$utils/platform';
 import { readClipboardText } from '$utils/dom';
 import { createLogger } from '$utils/debug';
 import { BlockType } from './types';
@@ -490,7 +490,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 // keeps focus after pressing send, but yields to another editor.
                 onBlur={(evt) => {
                   cancelFocusScroll();
-                  if (!mobileOrTablet()) return;
+                  if (!isMobileOrTablet()) return;
                   if (suppressBlurRefocusRef?.current) return;
                   const next = evt.relatedTarget as HTMLElement | null;
                   if (next && next !== editableRef.current && next.isContentEditable) return;
@@ -499,7 +499,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 // Once the virtual keyboard has settled, make sure the composer is
                 // not left hidden behind it.
                 onFocus={() => {
-                  if (!mobileOrTablet()) return;
+                  if (!isMobileOrTablet()) return;
                   cancelFocusScroll();
                   const scrollIn = () => {
                     if (editableRef.current?.contains(document.activeElement)) {

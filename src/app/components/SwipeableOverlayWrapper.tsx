@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { animate, motion, useMotionValue } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 
 interface SwipeableOverlayWrapperProps {
   children: ReactNode;
@@ -25,7 +25,7 @@ export function SwipeableOverlayWrapper({
         }
       }
 
-      if (!mobileOrTablet()) return;
+      if (!isMobileOrTablet()) return;
 
       event.stopPropagation();
 
@@ -65,7 +65,7 @@ export function SwipeableOverlayWrapper({
     }
   );
 
-  if (!mobileOrTablet()) {
+  if (!isMobileOrTablet()) {
     return (
       <div
         style={{

@@ -55,7 +55,7 @@ import { Info, menuIcon, userFallbackIcon } from '$components/icons/phosphor';
 import { getPowerTagIconSrc } from '$hooks/useMemberPowerTag';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { SwipeableMessageWrapper, type SwipeActionMode } from '$components/SwipeableMessageWrapper';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { useSetting } from '$state/hooks/settings';
@@ -233,7 +233,7 @@ export const Pronouns = as<
     selectedLanguages
   );
 
-  const limit = getSettings().pronounPillMaxCount ?? (mobileOrTablet() ? 1 : 3);
+  const limit = getSettings().pronounPillMaxCount ?? (isMobileOrTablet() ? 1 : 3);
   const maxPillLength = getSettings().pronounPillMaxLength ?? 16;
 
   // if language specific pronouns can't be found matching the filter return unfiltered
@@ -503,12 +503,12 @@ function MessageInternal(
   const [isDesktopHover, setIsDesktopHover] = useState(false);
   const { hoverProps } = useHover({
     onHoverChange: (h) => {
-      if (!mobileOrTablet()) setIsDesktopHover(h);
+      if (!isMobileOrTablet()) setIsDesktopHover(h);
     },
   });
   const { focusWithinProps } = useFocusWithin({
     onFocusWithinChange: (f) => {
-      if (!mobileOrTablet()) setIsDesktopHover(f);
+      if (!isMobileOrTablet()) setIsDesktopHover(f);
     },
   });
 
@@ -785,7 +785,7 @@ function MessageInternal(
         </Chip>
       )}
       {reply}
-      {edit && onEditId && !mobileOrTablet() ? (
+      {edit && onEditId && !isMobileOrTablet() ? (
         <MessageEditor
           style={{
             maxWidth: '100%',
@@ -895,7 +895,7 @@ function MessageInternal(
     if (evt.altKey || !window.getSelection()?.isCollapsed || edit) return;
     const tag = (evt.target as HTMLElement).tagName;
     if (typeof tag === 'string' && tag.toLowerCase() === 'a') return;
-    if (mobileOrTablet()) {
+    if (isMobileOrTablet()) {
       evt.preventDefault();
       // The long-press timer already opened the sheet; this is its synthetic follow-up.
       if (menu.consumeLongPressFired()) return;
@@ -959,7 +959,7 @@ function MessageInternal(
       selected={!!menu.anchor || isEmoji || menu.isPressing}
       data-hover={!!menu.anchor || isEmoji || menu.isPressing || undefined}
       isMarked={isMarked}
-      mobile={mobileOrTablet()}
+      mobile={isMobileOrTablet()}
       {...props}
       {...hoverProps}
       {...focusWithinProps}

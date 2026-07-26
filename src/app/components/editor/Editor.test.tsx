@@ -11,7 +11,7 @@ let measurementCacheScrollHeightReads = 0;
 let isIosApp = false;
 let nativeClipboardText = '';
 
-vi.mock(import('$utils/user-agent'), async (importOriginal) => ({
+vi.mock(import('$utils/platform'), async (importOriginal) => ({
   ...(await importOriginal()),
   iosApp: () => isIosApp,
 }));

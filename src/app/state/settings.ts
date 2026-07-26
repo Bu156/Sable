@@ -1,6 +1,7 @@
 import { atom, type WritableAtom } from 'jotai';
 import type { Store } from 'jotai/vanilla/store';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isNightly } from '$utils/platform';
+import { isMobileOrTablet } from '$utils/platform';
 import type {
   NotificationTransportMode,
   NotificationTransportProvider,
@@ -298,7 +299,7 @@ export const defaultSettings: Settings = {
   isPeopleDrawer: true,
   isWidgetDrawer: false,
   memberSortFilterIndex: 0,
-  enterForNewline: mobileOrTablet(),
+  enterForNewline: isMobileOrTablet(),
   editorToolbar: false,
   editorOldAddFile: false,
   editorMicButton: true,
@@ -338,10 +339,10 @@ export const defaultSettings: Settings = {
   // Push notifications (SW/Sygnal): default on for mobile, opt-in on desktop.
   // In-app pill banner: default on for mobile (primary foreground alert), opt-in on desktop.
   // System (OS) notifications: desktop-only; hidden and disabled on mobile.
-  usePushNotifications: mobileOrTablet(),
+  usePushNotifications: isMobileOrTablet(),
   useUnifiedPush: false,
-  useInAppNotifications: mobileOrTablet(),
-  useSystemNotifications: !mobileOrTablet(),
+  useInAppNotifications: isMobileOrTablet(),
+  useSystemNotifications: !isMobileOrTablet(),
   isNotificationSounds: true,
   backgroundNotificationSounds: true,
   showMessageContentInNotifications: false,
@@ -349,7 +350,7 @@ export const defaultSettings: Settings = {
   useRichPushPayloads: true,
   pushNotifyUrlOverride: undefined,
   clearNotificationsOnRead: false,
-  backgroundPushEnabled: mobileOrTablet(),
+  backgroundPushEnabled: isMobileOrTablet(),
   backgroundPushProvider: null,
   pushTransportMode: 'auto',
   pushTransportOverride: {},
@@ -371,7 +372,7 @@ export const defaultSettings: Settings = {
   privacyBlurEmotes: false,
   showPronouns: true,
   parsePronouns: true,
-  pronounPillMaxCount: mobileOrTablet() ? 1 : 3,
+  pronounPillMaxCount: isMobileOrTablet() ? 1 : 3,
   pronounPillMaxLength: 16,
   renderGlobalNameColors: true,
   renderUserCards: 'both',
@@ -771,7 +772,7 @@ export function sanitizeSettingsDefaults(raw: unknown): Partial<Settings> {
     }
   }
 
-  if (import.meta.env.DEV && warnings.length > 0) {
+  if (isNightly() && warnings.length > 0) {
     console.warn(
       '[config.settingsDefaults] ignored unknown or invalid keys:',
       [...new Set(warnings)].slice(0, 25).join(', ')

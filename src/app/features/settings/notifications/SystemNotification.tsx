@@ -26,7 +26,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { pushSubscriptionAtom } from '$state/pushSubscription';
 import { unifiedPushEndpointAtom, type UnifiedPushState } from '$state/unifiedPushEndpoint';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { isIosTauri } from '$features/settings/notifications/TauriNotificationsApiClient';
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
@@ -953,7 +953,7 @@ export function SystemNotification() {
         value={showInAppNotifs}
         onChange={setShowInAppNotifs}
       />
-      {(!mobileOrTablet() || isIosTauri()) && (
+      {(!isMobileOrTablet() || isIosTauri()) && (
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"

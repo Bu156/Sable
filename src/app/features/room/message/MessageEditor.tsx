@@ -64,7 +64,7 @@ import { nicknamesAtom } from '$state/nicknames';
 import { getEditedEvent, getMentionContent } from '$utils/room/relations';
 import { trimReplyFromFormattedBody } from '$utils/room/display';
 import { buildReplacementContent } from '../buildReplacementContent';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { useComposingCheck } from '$hooks/useComposingCheck';
 import { floatingEditor } from '$styles/overrides/Composer.css';
 import { RenderMessageContent } from '$components/RenderMessageContent';
@@ -390,7 +390,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       });
 
       editor.insertFragment(initialValue);
-      if (!mobileOrTablet()) ReactEditor.focus(editor);
+      if (!isMobileOrTablet()) ReactEditor.focus(editor);
     }, [editor, getPrevBodyAndFormattedBody, room, nicknames, mx]);
 
     useEffect(() => {
@@ -560,13 +560,13 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                             <EmojiBoard
                               imagePackRooms={imagePackRooms ?? []}
                               returnFocusOnDeactivate={false}
-                              isFullWidth={mobileOrTablet()}
+                              isFullWidth={isMobileOrTablet()}
                               onEmojiSelect={handleEmoticonSelect}
                               onCustomEmojiSelect={handleEmoticonSelect}
                               requestClose={() => {
                                 setAnchor((v) => {
                                   if (v) {
-                                    if (!mobileOrTablet()) ReactEditor.focus(editor);
+                                    if (!isMobileOrTablet()) ReactEditor.focus(editor);
                                     return undefined;
                                   }
                                   return v;
@@ -593,7 +593,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                               })}
                             </IconButton>
                           );
-                          if (mobileOrTablet()) {
+                          if (isMobileOrTablet()) {
                             return (
                               <>
                                 {trigger}

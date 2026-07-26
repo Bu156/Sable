@@ -16,7 +16,7 @@ import {
 } from '$hooks/usePerMessageProfile';
 import { stopPropagation } from '$utils/keyboard';
 import { mxcUrlToHttp } from '$utils/matrix.ts';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import FocusTrap from 'focus-trap-react';
 import { nameInitials } from '$utils/common';
 import {
@@ -203,7 +203,7 @@ export function PersonaPicker({
                     size="400"
                     placeholder="Search"
                     maxLength={50}
-                    autoFocus={!mobileOrTablet()}
+                    autoFocus={!isMobileOrTablet()}
                     onChange={filter}
                     before={menuIcon(MagnifyingGlass)}
                   />
