@@ -33,6 +33,14 @@ const baseBackupRestoreProgressAtom = atom<IBackupProgress>({
   status: BackupProgressStatus.Idle,
 });
 
+export const backupRestoreErrorAtom = atom<string | undefined>(undefined);
+
+export const isMissingBackupKeyError = (error: unknown): boolean => {
+  if (error === undefined || error === null) return false;
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return message.toLowerCase().includes('no decryption key found');
+};
+
 export const backupRestoreProgressAtom = atom<
   IBackupProgress,
   [ImportRoomKeyProgressData],

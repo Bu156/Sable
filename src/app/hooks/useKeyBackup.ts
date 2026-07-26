@@ -56,6 +56,31 @@ export const useKeyBackupDecryptionKeyCached = (
   useMatrixEvent(mx, CryptoEvent.KeyBackupDecryptionKeyCached, onChange);
 };
 
+/** undefined while the first lookup is in flight. */
+export const useSessionBackupKeyCached = (crypto: CryptoApi): boolean | undefined => {
+  const alive = useAlive();
+  const [cached, setCached] = useState<boolean>();
+
+  const fetchCached = useCallback(() => {
+    crypto
+      .getSessionBackupPrivateKey()
+      .then((key) => {
+        if (alive()) setCached(key !== null);
+      })
+      .catch(() => {
+        if (alive()) setCached(false);
+      });
+  }, [crypto, alive]);
+
+  useEffect(() => {
+    fetchCached();
+  }, [fetchCached]);
+
+  useKeyBackupDecryptionKeyCached(fetchCached);
+
+  return cached;
+};
+
 export const useKeyBackupSync = (): [number, string | undefined] => {
   const [remaining, setRemaining] = useState(0);
   const [failure, setFailure] = useState<string>();
