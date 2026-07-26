@@ -16,7 +16,7 @@ import { fetch } from '$utils/fetch';
 
 type AuthFlowsLoaderProps = {
   fallback?: () => ReactNode;
-  error?: (err: unknown) => ReactNode;
+  error?: (err: unknown, retry: () => void) => ReactNode;
   children: (authFlows: AuthFlows) => ReactNode;
 };
 export function AuthFlowsLoader({ fallback, error, children }: AuthFlowsLoaderProps) {
@@ -72,7 +72,7 @@ export function AuthFlowsLoader({ fallback, error, children }: AuthFlowsLoaderPr
   }
 
   if (state.status === AsyncStatus.Error) {
-    return error?.(state.error);
+    return error?.(state.error, load);
   }
 
   return children(state.data);
