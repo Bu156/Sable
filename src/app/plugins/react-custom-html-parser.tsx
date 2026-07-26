@@ -570,6 +570,7 @@ function FallbackImg({
   return (
     <MediaImage
       {...props}
+      disableDefaultSizing
       src={renderableSrc ?? src}
       className={className}
       style={className === css.EmoticonImg ? { width: 'auto', height: '1em', ...style } : style}
