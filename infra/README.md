@@ -16,14 +16,24 @@ Required GitHub repository secrets:
 - `TF_CLOUDFLARE_API_TOKEN`
 - `TF_VAR_ACCOUNT_ID`
 - `TF_VAR_ZONE_ID`
-- `TF_HTTP_ADDRESS`
-- `TF_HTTP_LOCK_ADDRESS`
-- `TF_HTTP_UNLOCK_ADDRESS`
 - `TF_HTTP_USERNAME`
 - `TF_HTTP_PASSWORD`
 
-The workflows map those secrets onto the actual runtime environment variable names
-that Cloudflare and OpenTofu expect.
+Required variables in both the `development` and `production` GitHub Environments:
+
+- `SENTRY_ORG`
+- `SENTRY_PROJECT`
+- `TF_HTTP_ADDRESS`
+- `TF_HTTP_LOCK_ADDRESS`
+- `TF_HTTP_UNLOCK_ADDRESS`
+- `TF_VAR_CUSTOM_DOMAIN`
+- `TF_VAR_WORKER_NAME`
+
+The HTTP backend addresses must point to distinct OpenTofu states for development
+and production.
+
+The workflows map those secrets and variables onto the runtime environment variable
+names that Cloudflare and OpenTofu expect.
 
 Cloudflare API token permissions:
 
