@@ -1,20 +1,7 @@
 import type { MouseEventHandler } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
-import {
-  Box,
-  Chip,
-  Header,
-  IconButton,
-  Menu,
-  MenuItem,
-  PopOut,
-  type RectCords,
-  Text,
-  as,
-  config,
-  toRem,
-} from 'folds';
+import { Box, Chip, Header, IconButton, Menu, MenuItem, Text, as, config, toRem } from 'folds';
 import {
   ArrowLeft,
   ArrowsClockwise,
@@ -27,6 +14,7 @@ import {
   sizedIcon,
 } from '$components/icons/phosphor';
 import { useImageGestures } from '$hooks/useImageGestures';
+import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { useDismissOnBack } from '$utils/androidBack';
 import { useSetting } from '$state/hooks/settings';
 import { isPixelatedRendering, settingsAtom } from '$state/settings';
@@ -34,10 +22,9 @@ import { downloadMedia } from '$utils/matrix';
 import * as css from './ImageViewer.css';
 import type { IImageInfo } from '$types/matrix/common';
 import { CheckerboardIcon, CopyIcon, DownloadIcon } from '@phosphor-icons/react';
-import FocusTrap from 'focus-trap-react';
-import { stopPropagation } from '$utils/keyboard';
 import { copyImageToClipboard } from '$utils/dom';
 import { getDownloadFilename, saveFileToDevice } from '$utils/download';
+import { ResponsiveMenu } from '$components/ResponsiveMenu';
 
 export type ImageViewerProps = {
   alt: string;
@@ -106,71 +93,55 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       await saveFileToDevice(fileContent, getDownloadFilename(filename, alt, 'image'));
     };
 
-    const [menuAnchor, setMenuAnchor] = useState<RectCords>();
+    const menu = useMenuAnchor<HTMLDivElement>();
 
     const handleContextMenu: MouseEventHandler<HTMLDivElement> = (evt) => {
       if (evt.altKey || !window.getSelection()?.isCollapsed) return;
       const tag = (evt.target as HTMLElement).tagName;
       if (typeof tag === 'string' && tag.toLowerCase() === 'a') return;
-
-      evt.preventDefault();
-      setMenuAnchor({
-        x: evt.clientX,
-        y: evt.clientY,
-        width: 0,
-        height: 0,
-      });
+      menu.triggerProps.onContextMenu(evt);
     };
 
     return (
       <>
-        <PopOut
-          anchor={menuAnchor}
-          align={menuAnchor?.width === 0 ? 'Start' : 'End'}
-          offset={menuAnchor?.width === 0 ? 0 : undefined}
-          content={
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: () => setMenuAnchor(undefined),
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <Menu variant="Surface" style={{ maxWidth: toRem(160), width: '100vw' }}>
-                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                  <MenuItem
-                    as="button"
-                    radii="300"
-                    size="300"
-                    after={menuIcon(CopyIcon)}
-                    onClick={async () => {
-                      setMenuAnchor(undefined);
-                      const fileContent = await downloadMedia(src);
-                      await copyImageToClipboard(fileContent);
-                    }}
-                  >
-                    <Text size="T300" style={{ flexGrow: 1 }}>
-                      Copy image
-                    </Text>
-                  </MenuItem>
-                  <MenuItem
-                    as="button"
-                    radii="300"
-                    size="300"
-                    after={menuIcon(DownloadIcon)}
-                    onClick={() => {
-                      setMenuAnchor(undefined);
-                      handleDownload();
-                    }}
-                  >
-                    <Text size="T300" style={{ flexGrow: 1 }}>
-                      Save image
-                    </Text>
-                  </MenuItem>
-                </Box>
-              </Menu>
-            </FocusTrap>
+        <ResponsiveMenu
+          anchor={menu.anchor}
+          requestClose={menu.close}
+          align="Start"
+          menu={
+            <Menu variant="Surface" style={{ maxWidth: toRem(160), width: '100vw' }}>
+              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                <MenuItem
+                  as="button"
+                  radii="300"
+                  size="300"
+                  after={menuIcon(CopyIcon)}
+                  onClick={async () => {
+                    menu.close();
+                    const fileContent = await downloadMedia(src);
+                    await copyImageToClipboard(fileContent);
+                  }}
+                >
+                  <Text size="T300" style={{ flexGrow: 1 }}>
+                    Copy image
+                  </Text>
+                </MenuItem>
+                <MenuItem
+                  as="button"
+                  radii="300"
+                  size="300"
+                  after={menuIcon(DownloadIcon)}
+                  onClick={() => {
+                    menu.close();
+                    handleDownload();
+                  }}
+                >
+                  <Text size="T300" style={{ flexGrow: 1 }}>
+                    Save image
+                  </Text>
+                </MenuItem>
+              </Box>
+            </Menu>
           }
         />
         <Box
@@ -342,6 +313,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
             style={{ overflow: 'hidden', touchAction: 'none', cursor }}
             onPointerDown={onPointerDown}
             onContextMenu={handleContextMenu}
+            onTouchStart={menu.triggerProps.onTouchStart}
+            onTouchEnd={menu.triggerProps.onTouchEnd}
+            onTouchMove={menu.triggerProps.onTouchMove}
+            onTouchCancel={menu.triggerProps.onTouchCancel}
           >
             <img
               className={classNames(css.ImageViewerImg, isPixelated && css.ImageViewerImgPixelated)}

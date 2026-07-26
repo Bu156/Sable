@@ -1,10 +1,7 @@
-import type { MouseEventHandler } from 'react';
-import { forwardRef, useState } from 'react';
+import { forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { RectCords } from 'folds';
-import { Box, Menu, MenuItem, PopOut, Text, config, toRem } from 'folds';
+import { Box, Menu, MenuItem, Text, config, toRem } from 'folds';
 import { useAtomValue } from 'jotai';
-import FocusTrap from 'focus-trap-react';
 import { useOrphanRooms } from '$state/hooks/roomList';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { mDirectAtom } from '$state/mDirectList';
@@ -19,15 +16,16 @@ import {
   SidebarUnreadBadge,
   SidebarItemTooltip,
 } from '$components/sidebar';
-import { useHomeSelected } from '$hooks/router/useHomeSelected';
+import { useHomeSelected } from '$hooks/router/useRouteSelected';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useNavToActivePathAtom } from '$state/hooks/navToActivePath';
 import { markAsRead } from '$utils/notifications';
-import { stopPropagation } from '$utils/keyboard';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { useHomeRooms } from '$pages/client/home/useHomeRooms';
 import { Checks, House, menuIcon, getPhosphorIconSize } from '$components/icons/phosphor';
+import { ResponsiveMenu } from '$components/ResponsiveMenu';
+import { useMenuAnchor } from '$hooks/useMenuAnchor';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -74,7 +72,7 @@ export function HomeTab() {
   const orphanRooms = useOrphanRooms(mx, allRoomsAtom, mDirects, roomToParents);
   const homeUnread = useRoomsUnread(orphanRooms, roomToUnreadAtom);
   const homeSelected = useHomeSelected();
-  const [menuAnchor, setMenuAnchor] = useState<RectCords>();
+  const menu = useMenuAnchor<HTMLButtonElement>();
 
   const handleHomeClick = () => {
     const activePath = navToActivePath.get('home');
@@ -86,59 +84,40 @@ export function HomeTab() {
     navigate(getHomePath());
   };
 
-  const handleContextMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    evt.preventDefault();
-    const cords = evt.currentTarget.getBoundingClientRect();
-    setMenuAnchor((currentState) => {
-      if (currentState) return undefined;
-      return cords;
-    });
-  };
-
   return (
     <SidebarItemLeft active={homeSelected}>
       <SidebarItemTooltip tooltip="Home">
         {(triggerRef) => (
-          <SidebarAvatar
-            as="button"
-            ref={triggerRef}
-            outlined
-            onClick={handleHomeClick}
-            onContextMenu={handleContextMenu}
+          <ResponsiveMenu
+            anchor={menu.anchor}
+            requestClose={menu.close}
+            position="Right"
+            align="Start"
+            menu={<HomeMenu requestClose={menu.close} />}
           >
-            <House
-              size={getPhosphorIconSize('toolbar')}
-              weight={homeSelected ? 'fill' : 'regular'}
-            />
-          </SidebarAvatar>
+            <SidebarAvatar
+              as="button"
+              ref={triggerRef}
+              outlined
+              onClick={handleHomeClick}
+              onContextMenu={menu.triggerProps.onContextMenu}
+              onTouchStart={menu.triggerProps.onTouchStart}
+              onTouchEnd={menu.triggerProps.onTouchEnd}
+              onTouchMove={menu.triggerProps.onTouchMove}
+              onTouchCancel={menu.triggerProps.onTouchCancel}
+            >
+              <House
+                size={getPhosphorIconSize('toolbar')}
+                weight={homeSelected ? 'fill' : 'regular'}
+              />
+            </SidebarAvatar>
+          </ResponsiveMenu>
         )}
       </SidebarItemTooltip>
       {homeUnread && (
         <SidebarUnreadBadge
           highlight={homeUnread.highlight > 0}
           count={homeUnread.highlight > 0 ? homeUnread.highlight : homeUnread.total}
-        />
-      )}
-      {menuAnchor && (
-        <PopOut
-          anchor={menuAnchor}
-          position="Right"
-          align="Start"
-          content={
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                returnFocusOnDeactivate: false,
-                onDeactivate: () => setMenuAnchor(undefined),
-                clickOutsideDeactivates: true,
-                isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
-                isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <HomeMenu requestClose={() => setMenuAnchor(undefined)} />
-            </FocusTrap>
-          }
         />
       )}
     </SidebarItemLeft>

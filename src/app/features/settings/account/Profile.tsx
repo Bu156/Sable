@@ -1,25 +1,9 @@
 import type { ChangeEventHandler, FormEventHandler } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Box,
-  Text,
-  IconButton,
-  Input,
-  Avatar,
-  Button,
-  Overlay,
-  OverlayBackdrop,
-  OverlayCenter,
-  Modal,
-  Dialog,
-  Header,
-  config,
-  Spinner,
-} from 'folds';
-import { composerIcon, menuIcon, Star, Sun, X } from '$components/icons/phosphor';
-import FocusTrap from 'focus-trap-react';
+import { Box, Text, IconButton, Input, Avatar, Button, Modal, config, Spinner } from 'folds';
+import { menuIcon, Star, Sun, X } from '$components/icons/phosphor';
 import { useSetAtom } from 'jotai';
-import { SequenceCard } from '$components/sequence-card';
+import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import type { SettingMenuOption } from '$components/setting-menu-selector';
 import { SettingMenuSelector } from '$components/setting-menu-selector';
 import { SettingTile } from '$components/setting-tile';
@@ -33,7 +17,6 @@ import { nameInitials } from '$utils/common';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useFilePicker } from '$hooks/useFilePicker';
 import { useObjectURL } from '$hooks/useObjectURL';
-import { stopPropagation } from '$utils/keyboard';
 import { toSettingsFocusIdPart } from '$features/settings/settingsLink';
 import { ImageEditor } from '$components/image-editor';
 import { ModalWide } from '$styles/Modal.css';
@@ -42,7 +25,6 @@ import { createUploadAtom } from '$state/upload';
 import { CompactUploadCardRenderer } from '$components/upload-card';
 import { useCapabilities } from '$hooks/useCapabilities';
 import { profilesCacheAtom } from '$state/userRoomProfile';
-import { SequenceCardStyle } from '$features/settings/styles.css';
 import { useUserPresence } from '$hooks/useUserPresence';
 import { useSpecVersions } from '$hooks/useSpecVersions';
 import { useSetting } from '$state/hooks/settings';
@@ -57,6 +39,8 @@ import { NameColorEditor } from './NameColorEditor';
 import { StatusEditor } from './StatusEditor';
 import { AnimalCosmetics } from './AnimalCosmetics';
 import * as prefix from '$unstable/prefixes';
+import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import { confirm } from '$components/confirm/confirm';
 
 type PronounSet = {
   summary: string;
@@ -73,7 +57,6 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
   const setGlobalProfiles = useSetAtom(profilesCacheAtom);
   const useAuthentication = useMediaAuthentication();
   const capabilities = useCapabilities();
-  const [alertRemove, setAlertRemove] = useState(false);
   const disableSetAvatar = capabilities['m.set_avatar_url']?.enabled === false;
 
   const defaultDisplayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
@@ -108,12 +91,19 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
   );
 
   const handleRemoveAvatar = async () => {
-    await setAvatarUrlWithPropagation(mx, '', propagateTo);
-    setGlobalProfiles((prev) => ({
-      ...prev,
-      [userId]: { ...prev[userId], avatarUrl: undefined },
-    }));
-    setAlertRemove(false);
+    const ok = await confirm({
+      title: 'Remove Avatar',
+      description: 'Are you sure you want to remove profile avatar?',
+      action: 'Remove',
+      variant: 'Critical',
+    });
+    if (ok) {
+      await setAvatarUrlWithPropagation(mx, '', propagateTo);
+      setGlobalProfiles((prev) => ({
+        ...prev,
+        [userId]: { ...prev[userId], avatarUrl: undefined },
+      }));
+    }
   };
 
   return (
@@ -158,7 +148,7 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
               fill="None"
               radii="300"
               disabled={disableSetAvatar}
-              onClick={() => setAlertRemove(true)}
+              onClick={handleRemoveAvatar}
             >
               <Text size="B300">Remove</Text>
             </Button>
@@ -167,66 +157,16 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
       )}
 
       {imageFileURL && (
-        <Overlay open={false} backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: handleRemoveUpload,
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <Modal className={ModalWide} variant="Surface" size="500">
-                <ImageEditor
-                  name={imageFile?.name ?? 'Unnamed'}
-                  url={imageFileURL}
-                  requestClose={handleRemoveUpload}
-                />
-              </Modal>
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
+        <ModalOverlay open={false} requestClose={handleRemoveUpload}>
+          <Modal className={ModalWide} variant="Surface" size="500">
+            <ImageEditor
+              name={imageFile?.name ?? 'Unnamed'}
+              url={imageFileURL}
+              requestClose={handleRemoveUpload}
+            />
+          </Modal>
+        </ModalOverlay>
       )}
-
-      <Overlay open={alertRemove} backdrop={<OverlayBackdrop />}>
-        <OverlayCenter>
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setAlertRemove(false),
-              clickOutsideDeactivates: true,
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Dialog variant="Surface">
-              <Header
-                style={{
-                  padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                  borderBottomWidth: config.borderWidth.B300,
-                }}
-                variant="Surface"
-                size="500"
-              >
-                <Box grow="Yes">
-                  <Text size="H4">Remove Avatar</Text>
-                </Box>
-                <IconButton size="300" onClick={() => setAlertRemove(false)} radii="300">
-                  {composerIcon(X)}
-                </IconButton>
-              </Header>
-              <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
-                <Box direction="Column" gap="200">
-                  <Text priority="400">Are you sure you want to remove profile avatar?</Text>
-                </Box>
-                <Button variant="Critical" onClick={handleRemoveAvatar}>
-                  <Text size="B400">Remove</Text>
-                </Button>
-              </Box>
-            </Dialog>
-          </FocusTrap>
-        </OverlayCenter>
-      </Overlay>
     </SettingTile>
   );
 }
@@ -234,8 +174,6 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
 function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const [alertRemove, setAlertRemove] = useState(false);
-
   const [stagedUrl, setStagedUrl] = useState<string>();
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -282,16 +220,21 @@ function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
   );
 
   const handleRemoveBanner = async () => {
-    setIsRemoving(true);
-    setStagedUrl(undefined);
-    setImageFile(undefined);
-
-    await mx.setExtendedProfileProperty?.(
-      prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
-      null
-    );
-
-    setAlertRemove(false);
+    const ok = await confirm({
+      title: 'Remove Banner',
+      description: 'Are you sure you want to remove profile banner?',
+      action: 'Remove',
+      variant: 'Critical',
+    });
+    if (ok) {
+      setIsRemoving(true);
+      setStagedUrl(undefined);
+      setImageFile(undefined);
+      await mx.setExtendedProfileProperty?.(
+        prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
+        null
+      );
+    }
   };
 
   const previewUrl = isRemoving ? undefined : imageFileURL || stagedUrl || bannerUrl;
@@ -354,7 +297,7 @@ function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
                 variant="Critical"
                 fill="None"
                 radii="300"
-                onClick={() => setAlertRemove(true)}
+                onClick={handleRemoveBanner}
               >
                 <Text size="B300">Remove</Text>
               </Button>
@@ -362,43 +305,6 @@ function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
           </Box>
         )}
       </Box>
-
-      <Overlay open={alertRemove} backdrop={<OverlayBackdrop />}>
-        <OverlayCenter>
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setAlertRemove(false),
-              clickOutsideDeactivates: true,
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Dialog variant="Surface">
-              <Header
-                style={{
-                  padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                  borderBottomWidth: config.borderWidth.B300,
-                }}
-                variant="Surface"
-                size="500"
-              >
-                <Box grow="Yes">
-                  <Text size="H4">Remove Banner</Text>
-                </Box>
-                <IconButton size="300" onClick={() => setAlertRemove(false)} radii="300">
-                  {composerIcon(X)}
-                </IconButton>
-              </Header>
-              <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
-                <Text priority="400">Are you sure you want to remove profile banner?</Text>
-                <Button variant="Critical" onClick={handleRemoveBanner}>
-                  <Text size="B400">Remove</Text>
-                </Button>
-              </Box>
-            </Dialog>
-          </FocusTrap>
-        </OverlayCenter>
-      </Overlay>
     </SettingTile>
   );
 }

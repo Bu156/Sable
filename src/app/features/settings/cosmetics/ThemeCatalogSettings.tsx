@@ -27,8 +27,7 @@ import {
   type ThemeRemoteFavorite,
   type ThemeRemoteTweakFavorite,
 } from '$state/settings';
-import { SequenceCardStyle } from '$features/settings/styles.css';
-import { SequenceCard } from '$components/sequence-card';
+import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
 import { ThemePreviewCard } from '$components/theme/ThemePreviewCard';
 import { usePatchSettings } from './themeSettingsPatch';
@@ -100,12 +99,10 @@ export type LocalTweakRow = ThemeRemoteTweakFavorite & {
   tags: string[];
 };
 
-export type ThemeCatalogSettingsMode = 'full' | 'local' | 'chat' | 'remote' | 'appearance';
-
-export { usePatchSettings } from './themeSettingsPatch';
+export type ThemeCatalogSettingsMode = 'local' | 'appearance';
 
 type ThemeCatalogSettingsProps = {
-  mode?: ThemeCatalogSettingsMode;
+  mode: ThemeCatalogSettingsMode;
   onBrowseOpenChange?: (open: boolean) => void;
 };
 
@@ -226,10 +223,7 @@ function CatalogTweakCard({
   );
 }
 
-export function ThemeCatalogSettings({
-  mode = 'full',
-  onBrowseOpenChange,
-}: ThemeCatalogSettingsProps) {
+export function ThemeCatalogSettings({ mode, onBrowseOpenChange }: ThemeCatalogSettingsProps) {
   const clientConfig = useClientConfig();
   const patchSettings = usePatchSettings();
   const queryClient = useQueryClient();
@@ -250,12 +244,10 @@ export function ThemeCatalogSettings({
     }
   }, [browseOpen, isAppearanceMode, onBrowseOpenChange]);
 
-  const isRemoteMode = mode === 'remote' || mode === 'full' || (isAppearanceMode && browseOpen);
-  const isChatMode = mode === 'chat' || mode === 'full' || (isAppearanceMode && !browseOpen);
-  const showAssignmentChrome =
-    mode === 'full' || mode === 'local' || (isAppearanceMode && !browseOpen);
-  const showSavedLibrary =
-    (mode === 'full' || mode === 'local' || isAppearanceMode) && !(isAppearanceMode && browseOpen);
+  const isRemoteMode = isAppearanceMode && browseOpen;
+  const isChatMode = isAppearanceMode && !browseOpen;
+  const showAssignmentChrome = mode === 'local' || (isAppearanceMode && !browseOpen);
+  const showSavedLibrary = !(isAppearanceMode && browseOpen);
 
   const [getFavorites] = useSetting(settingsAtom, 'themeRemoteFavorites');
   const [favorites, setFavorites] = useState(getFavorites ? getFavorites : []);

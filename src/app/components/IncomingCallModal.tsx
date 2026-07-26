@@ -1,30 +1,14 @@
-import {
-  Avatar,
-  Box,
-  Button,
-  color,
-  Dialog,
-  Header,
-  IconButton,
-  Overlay,
-  OverlayBackdrop,
-  OverlayCenter,
-  Text,
-  config,
-  toRem,
-} from 'folds';
+import { Avatar, Box, Button, color, Dialog, Header, IconButton, Text, config, toRem } from 'folds';
 import { useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Room } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomName } from '$hooks/useRoomMeta';
 import { useCallEmbed } from '$hooks/useCallEmbed';
-import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { getMxIdLocalPart } from '$utils/matrix';
-import { getMemberDisplayName, getRoomAvatarUrl } from '$utils/room';
+import { getAvatarUrl, getMemberDisplayName, getRoomAvatarUrl } from '$utils/room';
 import { webRTCSupported } from '$utils/rtc';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
-import FocusTrap from 'focus-trap-react';
 import * as Sentry from '@sentry/react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
@@ -35,7 +19,6 @@ import {
   type IncomingCall,
 } from '$state/callEmbed';
 import { createDebugLogger } from '$utils/debugLogger';
-import { useDismissOnBack } from '$utils/androidBack';
 import { dismissSystemCallNotifications } from '$features/call/callNotificationBridge';
 import { getIncomingCallBlockers } from '$features/call/getIncomingCallBlockers';
 import { RoomAvatar } from './room-avatar';
@@ -50,6 +33,8 @@ import {
   User,
   sizedIcon,
 } from '$components/icons/phosphor';
+import { ModalOverlay } from './modal-overlay/ModalOverlay';
+import * as css from './IncomingCallModal.css';
 
 const debugLog = createDebugLogger('IncomingCall');
 
@@ -62,8 +47,6 @@ type IncomingCallInternalProps = {
 export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCallInternalProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const screenSize = useScreenSizeContext();
-  const compact = screenSize === ScreenSize.Mobile;
   const roomName = useRoomName(room);
   const callEmbed = useCallEmbed();
   const { navigateRoom } = useRoomNavigate();
@@ -77,10 +60,7 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
     getMxIdLocalPart(incomingCall.senderId) ??
     incomingCall.senderId;
   const callerAvatarMxc = room.getMember(incomingCall.senderId)?.getMxcAvatarUrl();
-  const callerAvatarUrl = callerAvatarMxc
-    ? (mx.mxcUrlToHttp(callerAvatarMxc, 96, 96, 'crop', undefined, undefined, useAuthentication) ??
-      undefined)
-    : undefined;
+  const callerAvatarUrl = getAvatarUrl(mx, callerAvatarMxc, 96, useAuthentication);
 
   const isRingNotification = incomingCall.notificationType === 'ring';
   const isDirectRing = incomingCall.isDirect && incomingCall.notificationType === 'ring';
@@ -236,15 +216,7 @@ export function IncomingCallInternal({ room, incomingCall, onClose }: IncomingCa
         </IconButton>
       </Header>
 
-      <Box
-        style={{
-          padding: compact ? config.space.S400 : config.space.S600,
-          paddingBottom: `max(${compact ? config.space.S500 : config.space.S600}, env(safe-area-inset-bottom))`,
-        }}
-        direction="Column"
-        alignItems="Center"
-        gap={compact ? '400' : '500'}
-      >
+      <Box className={css.Content} direction="Column" alignItems="Center">
         <Avatar size="500">
           {showCallerAvatar ? (
             <UserAvatar
@@ -340,26 +312,13 @@ export function IncomingCallModal() {
 
   const close = () => setIncomingCall(null);
 
-  // Android back dismisses the incoming call modal instead of navigating away.
-  useDismissOnBack(close, !!incomingCall && !!room);
-
   if (!incomingCall || !room) return null;
 
   return (
-    <Overlay open backdrop={<OverlayBackdrop />}>
-      <OverlayCenter>
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: false,
-            clickOutsideDeactivates: false,
-            escapeDeactivates: false,
-          }}
-        >
-          <div>
-            <IncomingCallInternal room={room} incomingCall={incomingCall} onClose={close} />
-          </div>
-        </FocusTrap>
-      </OverlayCenter>
-    </Overlay>
+    <ModalOverlay requestClose={close} dismissOnClickOutside={false} escapeDeactivates={false}>
+      <div>
+        <IncomingCallInternal room={room} incomingCall={incomingCall} onClose={close} />
+      </div>
+    </ModalOverlay>
   );
 }

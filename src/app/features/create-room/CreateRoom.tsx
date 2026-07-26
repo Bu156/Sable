@@ -184,17 +184,15 @@ export function CreateRoomForm({
 
   return (
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
-      {!space && (
-        <Box direction="Column" gap="100">
-          <Text size="L400">Type</Text>
-          <CreateRoomTypeSelector
-            value={type}
-            onSelect={setType}
-            disabled={disabled}
-            getIcon={getCreateRoomTypeToIcon}
-          />
-        </Box>
-      )}
+      <Box direction="Column" gap="100">
+        <Text size="L400">Type</Text>
+        <CreateRoomTypeSelector
+          value={type}
+          onSelect={setType}
+          disabled={disabled}
+          getIcon={getCreateRoomTypeToIcon}
+        />
+      </Box>
       <Box direction="Column" gap="100">
         <Text size="L400">Access</Text>
         <CreateRoomAccessSelector
@@ -211,7 +209,6 @@ export function CreateRoomForm({
           required
           before={getCreateRoomAccessToIcon(access, type, '100')}
           name="nameInput"
-          autoFocus
           size="500"
           variant="SurfaceVariant"
           radii="400"
