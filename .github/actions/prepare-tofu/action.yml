@@ -52,14 +52,14 @@ runs:
     - name: Check formatting
       shell: bash
       working-directory: ${{ github.workspace }}/infra/web
-      run: mise exec opentofu@1.11.5 -- tofu fmt -check
+      run: mise run opentofu -- fmt -check
 
     - name: Initialize OpenTofu
       shell: bash
       working-directory: ${{ github.workspace }}/infra/web
-      run: mise exec opentofu@1.11.5 -- tofu init -input=false -reconfigure
+      run: mise run opentofu -- init -input=false -reconfigure
 
     - name: Validate configuration
       shell: bash
       working-directory: ${{ github.workspace }}/infra/web
-      run: mise exec opentofu@1.11.5 -- tofu validate -no-color
+      run: mise run opentofu -- validate -no-color
