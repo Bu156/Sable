@@ -867,3 +867,62 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" obtainium.json --clobber
+
+  distribute-homebrew:
+    name: Publish Homebrew cask
+    # GoReleaser's homebrew_casks pipe would build the cask from our Linux
+    # archive, since it is the only one it produces. Tauri owns the .dmg and
+    # importing it needs the Pro-only `prebuilt` builder.
+    needs: [setup-release, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Casks track stable releases.
+    if: ${{ needs.setup-release.outputs.nightly != 'true' }}
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.setup-release.outputs.tag }}
+      VERSION: ${{ needs.setup-release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute the DMG checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DMG="Sable-${VERSION}-macos-universal.dmg"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$DMG" --dir dmg
+          echo "SHA256=$(sha256sum "dmg/$DMG" | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Push the cask to the tap
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::notice::HOMEBREW_TAP_TOKEN is not set; skipping the Homebrew publish."
+            exit 0
+          fi
+          git clone --depth 1 \
+            "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/SableClient/homebrew-sable.git" tap
+
+          mkdir -p tap/Casks
+          sed \
+            -e "s/^  version .*/  version \"${VERSION}\"/" \
+            -e "s/^  sha256 .*/  sha256 \"${SHA256}\"/" \
+            packaging/homebrew/sable.rb > tap/Casks/sable.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/sable.rb
+          if git diff --cached --quiet; then
+            echo "Nothing changed; skipping the push."
+            exit 0
+          fi
+          git commit -m "sable ${VERSION}"
+          # The tap may still be an empty repository on the first run.
+          git push origin HEAD:refs/heads/main
