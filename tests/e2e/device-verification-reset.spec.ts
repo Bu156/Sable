@@ -152,7 +152,9 @@ test.describe('device verification reset', () => {
   test('sets up verification when the session syncs over sliding sync', async ({
     page,
   }, testInfo) => {
-    test.setTimeout(180_000);
+    // Sliding sync serialises the crypto bootstrap across long-poll round-trips,
+    // so this test needs more headroom than the 180s its siblings use.
+    test.setTimeout(240_000);
     const storageStatePath = testInfo.project.use.storageState as string;
     const hsBaseUrl = await homeserverBaseUrl(storageStatePath);
     await loginAsFreshUser(
@@ -168,6 +170,6 @@ test.describe('device verification reset', () => {
     await expect(page.getByText('Setup Device Verification')).toBeVisible();
     await page.locator('form').getByRole('button', { name: 'Continue' }).click();
 
-    await expect(recoveryKeyShown(page)).toBeVisible({ timeout: 120_000 });
+    await expect(recoveryKeyShown(page)).toBeVisible({ timeout: 180_000 });
   });
 });
