@@ -35,6 +35,13 @@ const baseBackupRestoreProgressAtom = atom<IBackupProgress>({
 
 export const backupRestoreErrorAtom = atom<string | undefined>(undefined);
 
+// Progress sticks at Fetching if a restore throws after it starts importing, and
+// both atoms outlive an account switch since there is no jotai Provider.
+export const resetBackupRestoreAtom = atom(null, (_get, set) => {
+  set(baseBackupRestoreProgressAtom, { status: BackupProgressStatus.Idle });
+  set(backupRestoreErrorAtom, undefined);
+});
+
 export const isMissingBackupKeyError = (error: unknown): boolean => {
   if (error === undefined || error === null) return false;
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';

@@ -33,7 +33,7 @@ import {
   useKeyBackupStatus,
   useKeyBackupSync,
   useKeyBackupTrust,
-  useSessionBackupKeyCached,
+  useSessionBackupKeyUsable,
 } from '$hooks/useKeyBackup';
 import { SecretStorageKeyMethod, SecretStorageKeyPrompt } from './SecretStorage';
 import { stopPropagation } from '$utils/keyboard';
@@ -233,7 +233,7 @@ export function BackupRestoreTile({
 
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);
-  const backupKeyCached = useSessionBackupKeyCached(crypto);
+  const backupKeyUsable = useSessionBackupKeyUsable(crypto);
   const [remainingSession, syncFailure] = useKeyBackupSync();
 
   const [menuCords, setMenuCords] = useState<RectCords>();
@@ -257,11 +257,12 @@ export function BackupRestoreTile({
     restoreBackup();
   };
 
+  // backupKeyUsable is the structural signal; the error match only covers a
+  // restore that failed for this reason before the lookup settled.
   const needsBackupKey =
     !!backupInfo &&
-    (backupKeyCached === false ||
-      (restoreState.status === AsyncStatus.Error && isMissingBackupKeyError(restoreState.error)) ||
-      isMissingBackupKeyError(autoRestoreError));
+    (backupKeyUsable === false ||
+      (restoreState.status === AsyncStatus.Error && isMissingBackupKeyError(restoreState.error)));
 
   return (
     <InfoCard
