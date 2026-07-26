@@ -319,3 +319,9 @@ export const loadImageElementFromMediaUrl = async (
     URL.revokeObjectURL(objectUrl);
   }
 };
+
+// Can the page be seen? Governs in-app UI and the service-worker push hand-off.
+export const isPageVisible = (): boolean => document.visibilityState === 'visible';
+
+// Stricter than visibility: a second monitor is visible but unfocused.
+export const isWindowFocused = (): boolean => document.hasFocus();
