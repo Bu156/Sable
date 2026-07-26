@@ -35,7 +35,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_tag || '' }}
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -49,6 +48,12 @@ jobs:
         id: release_meta
         with:
           input-tag: ${{ inputs.git_tag }}
+
+      - name: Checkout release target
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ steps.release_meta.outputs.ref }}
 
       - name: Extract metadata
         id: meta
