@@ -27,6 +27,7 @@ import {
   startClient,
   stopClient,
 } from '$client/initMatrix';
+import { clearSecretStorageKeys } from '$client/secretStorageKeys';
 import { SplashScreen } from '$components/splash-screen';
 import { ServerConfigsLoader } from '$components/ServerConfigsLoader';
 import { CapabilitiesProvider } from '$hooks/useCapabilities';
@@ -309,9 +310,14 @@ export function ClientRoot({ children }: ClientRootProps) {
         '— reloading client'
       );
       void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
-      if (mx?.clientRunning) {
+      // Unconditional: stopClient is what stops the crypto backend, and a client
+      // that never reached clientRunning still holds an open crypto store.
+      if (mx) {
         stopClient(mx);
       }
+      // The cache is keyed by 4S key id only, so the previous account's key
+      // would otherwise stay in memory for the next one.
+      clearSecretStorageKeys();
       loadedUserIdRef.current = undefined;
       setLoadState({ status: AsyncStatus.Idle });
       navigate(getHomePath(), { replace: true });
@@ -335,7 +341,7 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   useEffect(
     () => () => {
-      if (mx?.clientRunning) {
+      if (mx) {
         log.log('ClientRoot unmounting — stopping client', mx.getUserId());
         stopClient(mx);
       }

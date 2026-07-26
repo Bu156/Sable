@@ -30,7 +30,7 @@ import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
 import { assertAuthMetadataIssuer, createSessionTokenRefresher } from './oidcTokenRefresher';
 import { revokeOAuthToken } from './oauthTokenRevocation';
-import { cryptoCallbacks } from './secretStorageKeys';
+import { clearSecretStorageKeys, cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
@@ -610,6 +610,7 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
     SlidingSyncSidebarCache.clear(session.userId);
     clearCachedVersions(session.baseUrl, session.userId);
     clearCachedUserProfiles(session.userId);
+    clearSecretStorageKeys();
     const storeName: SessionStoreName = getSessionStoreName(session);
     await mx.clearStores({ cryptoDatabasePrefix: storeName.rustCryptoPrefix });
     await deleteDatabase(storeName.sync);
