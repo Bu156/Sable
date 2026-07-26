@@ -103,7 +103,7 @@ jobs:
 
       - name: Plan infrastructure
         working-directory: infra/web
-        run: mise run opentofu -- plan -input=false -no-color
+        run: mise exec opentofu@1.11.5 -- tofu plan -input=false -no-color
 
       - name: Comment PR plan
         if: github.event_name == 'pull_request'
@@ -154,4 +154,4 @@ jobs:
 
       - name: Apply infrastructure
         working-directory: infra/web
-        run: mise run opentofu -- apply -input=false -auto-approve
+        run: mise exec opentofu@1.11.5 -- tofu apply -input=false -auto-approve
