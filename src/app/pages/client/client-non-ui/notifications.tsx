@@ -15,7 +15,7 @@ import {
 import LogoSVG from '$public/res/svg/logo.svg';
 import NotificationSound from '$public/sound/notification.ogg';
 import InviteSound from '$public/sound/invite.ogg';
-import { notificationPermission } from '$utils/dom';
+import { isPageVisible, isWindowFocused, notificationPermission } from '$utils/dom';
 import { playNotificationSound } from '$utils/notificationSound';
 import {
   getTauriNotificationsApi,
@@ -125,10 +125,9 @@ export function InviteNotifications() {
     if (invites.length <= perviousInviteLen || mx.getSyncState() !== SyncState.Syncing) return;
 
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
-    if (document.visibilityState !== 'visible' && usePushNotifications) return;
+    if (!isPageVisible() && usePushNotifications) return;
 
-    const tabVisible = document.visibilityState === 'visible';
-    const withSound = notificationSound && (tabVisible || backgroundNotificationSounds);
+    const withSound = notificationSound && (isWindowFocused() || backgroundNotificationSounds);
     let soundOnNotification = false;
 
     // OS notification for invites — desktop, plus iOS while foregrounded (testing).
@@ -227,8 +226,7 @@ export function MessageNotifications() {
       }
       const shouldSkipFocusCheck = eventId && skipFocusCheckEvents.has(eventId);
       if (!shouldSkipFocusCheck) {
-        if (document.hasFocus() && (selectedRoomId === room?.roomId || notificationSelected))
-          return;
+        if (isWindowFocused() && (selectedRoomId === room?.roomId || notificationSelected)) return;
       }
 
       // Older sliding sync proxies (e.g. matrix-sliding-sync) omit num_live,
@@ -339,8 +337,9 @@ export function MessageNotifications() {
       // in sandboxed environments, browsers with DnD active, or Electron — and
       // an uncaught exception here would abort the handler before setInAppBanner
       // is reached, causing in-app notifications to silently vanish too.
-      const tabVisible = document.visibilityState === 'visible';
-      const withSound = notificationSound && isLoud && (tabVisible || backgroundNotificationSounds);
+      const tabVisible = isPageVisible();
+      const withSound =
+        notificationSound && isLoud && (isWindowFocused() || backgroundNotificationSounds);
       let soundOnNotification = false;
       if (
         (!isMobileOrTablet() || isIosTauri()) &&
@@ -568,7 +567,7 @@ export function SyncNotificationSettingsWithServiceWorker() {
     if (!('serviceWorker' in navigator)) return undefined;
 
     const postVisibility = () => {
-      const visible = document.visibilityState === 'visible';
+      const visible = isPageVisible();
       const msg = { type: 'setAppVisible', visible };
       navigator.serviceWorker.controller?.postMessage(msg);
       navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage(msg));
@@ -635,7 +634,7 @@ export function HandleDecryptPushEvent() {
         }
 
         const decryptMs = Math.round(performance.now() - decryptStart);
-        const visible = document.visibilityState === 'visible';
+        const visible = isPageVisible();
         pushRelayLog.info('notification', 'Push relay decryption succeeded', {
           eventType: mxEvent.getType(),
           decryptMs,

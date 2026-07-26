@@ -319,3 +319,28 @@ export const loadImageElementFromMediaUrl = async (
     URL.revokeObjectURL(objectUrl);
   }
 };
+
+// Can the page be seen? Governs in-app UI and the service-worker push hand-off.
+export const isPageVisible = (): boolean => document.visibilityState === 'visible';
+
+// Stricter than visibility: a second monitor is visible but unfocused. Desktop
+// overrides it from the OS, which sees app switches that focusin/focusout miss.
+let nativeWindowFocused: boolean | undefined;
+const windowFocusListeners = new Set<(focused: boolean) => void>();
+
+export const isWindowFocused = (): boolean => nativeWindowFocused ?? document.hasFocus();
+
+// undefined releases the override and restores the DOM fallback.
+export const setNativeWindowFocused = (focused: boolean | undefined): void => {
+  if (nativeWindowFocused === focused) return;
+  nativeWindowFocused = focused;
+  const resolved = isWindowFocused();
+  windowFocusListeners.forEach((listener) => listener(resolved));
+};
+
+export const subscribeWindowFocus = (listener: (focused: boolean) => void): (() => void) => {
+  windowFocusListeners.add(listener);
+  return () => {
+    windowFocusListeners.delete(listener);
+  };
+};
