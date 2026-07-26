@@ -12,7 +12,7 @@ import {
 import type { Editor } from 'slate';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import type { Room, MatrixEvent, EventTimelineSet } from '$types/matrix-sdk';
-import { Direction, EventType } from '$types/matrix-sdk';
+import { Direction, EventTimeline, EventType } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import type { VListHandle } from 'virtua';
 import { VList } from 'virtua';
@@ -70,6 +70,8 @@ import { useTimelineEventRenderer } from '$hooks/timeline/useTimelineEventRender
 import { useTimelineRendererContext } from '$hooks/timeline/useTimelineRendererContext';
 import { TimelineScrollingProvider, useScrollActivity } from '$hooks/useTimelineScrollActivity';
 import * as css from './RoomTimeline.css';
+
+const MAX_VIEWPORT_FILL_PAGINATIONS = 5;
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -546,6 +548,7 @@ export function RoomTimeline({
 
   const canPaginateBackRef = useRef(timelineSync.canPaginateBack);
   canPaginateBackRef.current = timelineSync.canPaginateBack;
+  const viewportFillCountRef = useRef(0);
 
   const liveTimelineLinkedRef = useRef(timelineSync.liveTimelineLinked);
   liveTimelineLinkedRef.current = timelineSync.liveTimelineLinked;
@@ -965,7 +968,10 @@ export function RoomTimeline({
     timelineSync.backwardStatus === 'loading' && timelineSync.eventsLength > 0;
   const showFrontPaginationSpinner =
     timelineSync.forwardStatus === 'loading' && timelineSync.eventsLength > 0;
-  const hasPowerLevelState = !!room.currentState.getStateEvents(EventType.RoomPowerLevels, '');
+  const hasPowerLevelState = !!room
+    .getLiveTimeline()
+    ?.getState(EventTimeline.FORWARDS)
+    ?.getStateEvents(EventType.RoomPowerLevels, '');
   const hideTimelineForRoomState = roomSyncLoading && hideMemberInReadOnly && !hasPowerLevelState;
   const timelineBottomFloatLift =
     !atBottomState && isReady ? { bottom: `calc(${config.space.S400} + ${toRem(52)})` } : undefined;
@@ -1030,24 +1036,18 @@ export function RoomTimeline({
   }, [onEditLastMessageRef, mx, actions]);
 
   useEffect(() => {
-    const v = vListRef.current;
-    if (!v) return;
-    if (
-      canPaginateBackRef.current &&
-      backwardStatusRef.current === 'idle' &&
-      v.scrollSize <= v.viewportSize
-    ) {
-      void timelineSyncRef.current.handleTimelinePagination(true);
-    }
-  }, [timelineSync.eventsLength, timelineSync.backwardStatus]);
+    viewportFillCountRef.current = 0;
+  }, [room.roomId]);
 
+  // Re-enters on every length change, so an unfillable viewport pages to the start of the
+  // room. Scrolling up is handled by handleVListScroll.
   useEffect(() => {
     if (!canPaginateBackRef.current) return () => {};
+    if (viewportFillCountRef.current >= MAX_VIEWPORT_FILL_PAGINATIONS) return () => {};
 
     let rafId: number;
     let attempts = 0;
     const MAX_ATTEMPTS = 20;
-    const processedLengthAtEffectStart = processedEvents.length;
 
     const check = () => {
       const v = vListRef.current;
@@ -1062,18 +1062,15 @@ export function RoomTimeline({
       if (!canPaginateBackRef.current) return;
       if (backwardStatusRef.current !== 'idle') return;
 
-      const atTop = v.scrollOffset < 500;
-      const noVisibleGrowth = processedEvents.length === processedLengthAtEffectStart;
-      const hasRealScrollRoom = v.scrollSize > v.viewportSize + 300;
-
-      if (!hasRealScrollRoom || (atTop && noVisibleGrowth)) {
+      if (v.scrollSize <= v.viewportSize + 300) {
+        viewportFillCountRef.current += 1;
         void timelineSyncRef.current.handleTimelinePagination(true);
       }
     };
 
     rafId = requestAnimationFrame(check);
     return () => cancelAnimationFrame(rafId);
-  }, [timelineSync.eventsLength, timelineSync.backwardStatus, processedEvents.length]);
+  }, [room.roomId, timelineSync.eventsLength, timelineSync.backwardStatus]);
 
   return (
     <Box grow="Yes" style={{ position: 'relative' }}>
