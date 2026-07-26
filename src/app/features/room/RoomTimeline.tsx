@@ -398,6 +398,18 @@ export function RoomTimeline({
     atBottomRef.current = val;
   }, []);
 
+  // Resizes move the bottom without emitting a scroll event.
+  const syncAtBottom = useCallback(
+    (offset?: number) => {
+      const v = vListRef.current;
+      if (!v) return;
+      const scrollTop = offset ?? v.scrollOffset;
+      const isNowAtBottom = v.scrollSize - scrollTop - v.viewportSize < 100;
+      if (isNowAtBottom !== atBottomRef.current) setAtBottom(isNowAtBottom);
+    },
+    [setAtBottom]
+  );
+
   const [shift, setShift] = useState(false);
   const [topSpacerHeight, setTopSpacerHeight] = useState(0);
 
@@ -741,18 +753,20 @@ export function RoomTimeline({
       const atBottom = atBottomRef.current;
       const shrank = newHeight < prev;
 
-      if (shrank && atBottom) {
-        const lastIndex = processedEventsRef.current.length - 1;
-        if (lastIndex >= 0) {
-          vListRef.current?.scrollToIndex(lastIndex, { align: 'end' });
-        }
-      }
       prevViewportHeightRef.current = newHeight;
+
+      const lastIndex = processedEventsRef.current.length - 1;
+      if (shrank && atBottom && lastIndex >= 0) {
+        // Geometry is still pre-scroll here; the repin's own scroll event resyncs.
+        vListRef.current?.scrollToIndex(lastIndex, { align: 'end' });
+        return;
+      }
+      syncAtBottom();
     });
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [syncAtBottom]);
 
   const actions = useTimelineActions({
     room,
@@ -889,10 +903,7 @@ export function RoomTimeline({
       if (!v) return;
 
       const distanceFromBottom = v.scrollSize - offset - v.viewportSize;
-      const isNowAtBottom = distanceFromBottom < 100;
-      if (isNowAtBottom !== atBottomRef.current) {
-        setAtBottom(isNowAtBottom);
-      }
+      syncAtBottom(offset);
 
       if (offset < 500 && canPaginateBackRef.current && backwardStatusRef.current === 'idle') {
         void timelineSyncRef.current.handleTimelinePagination(true);
@@ -905,7 +916,7 @@ export function RoomTimeline({
         void timelineSyncRef.current.handleTimelinePagination(false);
       }
     },
-    [notifyScroll, setAtBottom]
+    [notifyScroll, syncAtBottom]
   );
 
   const showLoadingPlaceholders =
@@ -1043,7 +1054,6 @@ export function RoomTimeline({
   // room. Scrolling up is handled by handleVListScroll.
   useEffect(() => {
     if (!canPaginateBackRef.current) return () => {};
-    if (viewportFillCountRef.current >= MAX_VIEWPORT_FILL_PAGINATIONS) return () => {};
 
     let rafId: number;
     let attempts = 0;
@@ -1061,6 +1071,8 @@ export function RoomTimeline({
 
       if (!canPaginateBackRef.current) return;
       if (backwardStatusRef.current !== 'idle') return;
+
+      if (viewportFillCountRef.current >= MAX_VIEWPORT_FILL_PAGINATIONS) return;
 
       if (v.scrollSize <= v.viewportSize + 300) {
         viewportFillCountRef.current += 1;
