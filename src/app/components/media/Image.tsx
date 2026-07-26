@@ -37,6 +37,9 @@ const MAX_DECOMPRESSED_LOTTIE_BYTES = 8 * 1024 * 1024;
 const MAX_LOTTIE_DIMENSION = 4096;
 const MAX_LOTTIE_FRAMES = 10_000;
 const MAX_LOTTIE_LAYERS = 1_000;
+const LOTTIE_PROBE_TIMEOUT_MS = 5_000;
+const MAX_LOTTIE_CACHE_ENTRIES = 32;
+const MAX_CACHED_LOTTIE_DATA_URL_LENGTH = 2 * 1024 * 1024;
 const UNSAFE_LOTTIE_KEYS = new Set([
   'expression',
   'expressions',
@@ -180,6 +183,107 @@ async function resolveLottieDataUrl(src: string, signal: AbortSignal): Promise<s
   } catch {
     return null;
   }
+}
+
+type LottieResolutionEntry = {
+  controller: AbortController;
+  consumers: number;
+  settled: boolean;
+  promise: Promise<string | null>;
+};
+
+const lottieResolutionCache = new Map<string, LottieResolutionEntry>();
+
+function trimLottieResolutionCache(): void {
+  let scanned = 0;
+
+  while (
+    lottieResolutionCache.size > MAX_LOTTIE_CACHE_ENTRIES &&
+    scanned < lottieResolutionCache.size
+  ) {
+    const oldest = lottieResolutionCache.entries().next().value as
+      | [string, LottieResolutionEntry]
+      | undefined;
+    if (!oldest) return;
+    const [source, entry] = oldest;
+
+    if (entry.settled && entry.consumers === 0) {
+      lottieResolutionCache.delete(source);
+      scanned = 0;
+      continue;
+    }
+
+    lottieResolutionCache.delete(source);
+    lottieResolutionCache.set(source, entry);
+    scanned += 1;
+  }
+}
+
+function createLottieResolutionEntry(src: string): LottieResolutionEntry {
+  const controller = new AbortController();
+  const entry = {
+    controller,
+    consumers: 0,
+    settled: false,
+  } as LottieResolutionEntry;
+  const timeout = window.setTimeout(() => controller.abort(), LOTTIE_PROBE_TIMEOUT_MS);
+
+  entry.promise = resolveLottieDataUrl(src, controller.signal).then((result) => {
+    entry.settled = true;
+    window.clearTimeout(timeout);
+    if (
+      controller.signal.aborted ||
+      result === null ||
+      result.length > MAX_CACHED_LOTTIE_DATA_URL_LENGTH
+    ) {
+      if (lottieResolutionCache.get(src) === entry) lottieResolutionCache.delete(src);
+    } else {
+      trimLottieResolutionCache();
+    }
+    return result;
+  });
+  lottieResolutionCache.set(src, entry);
+  return entry;
+}
+
+function resolveCachedLottieDataUrl(src: string, signal: AbortSignal): Promise<string | null> {
+  let entry = lottieResolutionCache.get(src);
+  if (!entry) {
+    entry = createLottieResolutionEntry(src);
+  } else {
+    lottieResolutionCache.delete(src);
+    lottieResolutionCache.set(src, entry);
+  }
+  entry.consumers += 1;
+
+  return new Promise((resolve) => {
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      signal.removeEventListener('abort', handleAbort);
+      entry.consumers -= 1;
+      if (entry.consumers === 0) {
+        if (!entry.settled) {
+          entry.controller.abort();
+          if (lottieResolutionCache.get(src) === entry) lottieResolutionCache.delete(src);
+        } else {
+          trimLottieResolutionCache();
+        }
+      }
+    };
+    const handleAbort = () => {
+      release();
+      resolve(null);
+    };
+
+    signal.addEventListener('abort', handleAbort, { once: true });
+    entry.promise.then((result) => {
+      release();
+      resolve(result);
+    });
+    if (signal.aborted) handleAbort();
+  });
 }
 
 type LottieImageProps = LottieDotProps & {
@@ -327,7 +431,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
       const controller = new AbortController();
 
       if (isLottieCandidate && src) {
-        void resolveLottieDataUrl(src, controller.signal).then((result) => {
+        void resolveCachedLottieDataUrl(src, controller.signal).then((result) => {
           if (!controller.signal.aborted) {
             setLottieResolution({ source: src, resolved: result });
           }

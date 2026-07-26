@@ -107,6 +107,80 @@ describe('Image', () => {
     fetchSpy.mockRestore();
   });
 
+  it('forwards one error for an undeclared broken non-lottie image', async () => {
+    const onError = vi.fn<(event: React.SyntheticEvent<HTMLImageElement>) => void>();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('not a gzip file'));
+    render(
+      <Image
+        src="https://example.com/undeclared-broken-media"
+        alt="undeclared broken image"
+        onError={onError}
+      />
+    );
+
+    const image = screen.getByAltText('undeclared broken image');
+    fireEvent.error(image);
+    expect(image).not.toHaveAttribute('src');
+    expect(onError).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(image).toHaveAttribute('src', 'https://example.com/undeclared-broken-media')
+    );
+    fireEvent.error(image);
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
+  });
+
+  it('shares lottie resolution work for repeated media', async () => {
+    const bytes = Uint8Array.from(gzipSync(lottieJson));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(bytes, { headers: { 'content-length': `${bytes.length}` } }));
+    render(
+      <>
+        <Image src="https://example.com/repeated-sticker.tgs" aria-label="repeated lottie" />
+        <Image src="https://example.com/repeated-sticker.tgs" aria-label="repeated lottie" />
+      </>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('repeated lottie')).toHaveLength(2);
+      expect(
+        screen.getAllByLabelText('repeated lottie').every((item) => item.tagName === 'CANVAS')
+      ).toBe(true);
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
+  });
+
+  it('retries lottie resolution after a transient failure', async () => {
+    const bytes = Uint8Array.from(gzipSync(lottieJson));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('temporary failure'))
+      .mockResolvedValueOnce(
+        new Response(bytes, { headers: { 'content-length': `${bytes.length}` } })
+      );
+    const source = 'https://example.com/transient-sticker.tgs';
+    const firstRender = render(<Image src={source} aria-label="transient lottie" />);
+
+    await waitFor(() => expect(screen.getByLabelText('transient lottie')).toHaveAttribute('src'));
+    expect(screen.getByLabelText('transient lottie').tagName).toBe('IMG');
+    firstRender.unmount();
+
+    render(<Image src={source} aria-label="transient lottie" />);
+    await waitFor(() => {
+      expect(screen.getByLabelText('transient lottie').tagName).toBe('CANVAS');
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    fetchSpy.mockRestore();
+  });
+
   it('aborts an in-flight lottie download when unmounted', async () => {
     let requestSignal: AbortSignal | undefined;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
