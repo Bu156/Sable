@@ -27,12 +27,15 @@ export default defineConfig({
     reducedMotion: 'reduce',
   },
   projects: [
+    // touch.spec.ts drives page.touchscreen, which throws unless hasTouch is set.
     {
       name: 'desktop',
+      testIgnore: /touch\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
     },
     {
       name: 'mobile',
+      testIgnore: /touch\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } },
     },
     // hasTouch + isMobile: covers long-press, swipe-to-dismiss and tap targets,

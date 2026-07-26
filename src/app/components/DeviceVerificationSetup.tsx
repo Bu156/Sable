@@ -1,6 +1,7 @@
 import type { FormEventHandler } from 'react';
 import { forwardRef, useCallback, useState } from 'react';
-import { Dialog, Header, Box, Text, IconButton, config, Button, Chip, color, Spinner } from 'folds';
+import { Dialog, Header, Box, Text, IconButton, config, Chip } from 'folds';
+import { AsyncError } from '$components/AsyncError';
 import { composerIcon, X } from '$components/icons/phosphor';
 import { saveFileToDevice } from '$utils/download';
 import to from 'await-to-js';
@@ -15,6 +16,7 @@ import { useAlive } from '$hooks/useAlive';
 import { PasswordInput } from './password-input';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { UseStateProvider } from './UseStateProvider';
+import { Button } from '$components/button';
 
 type UIACallback<T> = (
   authDict: AuthDict | null
@@ -227,18 +229,10 @@ function SetupVerification({ onComplete, reset }: Readonly<SetupVerificationProp
         <Text size="L400">Passphrase (Optional)</Text>
         <PasswordInput name="passphraseInput" size="400" readOnly={loading} />
       </Box>
-      <Button
-        type="submit"
-        disabled={loading}
-        before={loading && <Spinner size="200" variant="Primary" fill="Solid" />}
-      >
+      <Button type="submit" loading={loading} spinnerSize="200" spinnerVariant="Primary">
         <Text size="B400">Continue</Text>
       </Button>
-      {setupState.status === AsyncStatus.Error && (
-        <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>{setupState.error ? setupState.error.message : 'Unexpected Error!'}</b>
-        </Text>
-      )}
+      <AsyncError state={setupState} bold />
       {nextAuthData !== null && uiaAction && (
         <ActionUIAFlowsLoader
           authData={nextAuthData ?? uiaAction.authData}

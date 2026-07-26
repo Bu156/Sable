@@ -6,7 +6,7 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomName } from '$hooks/useRoomMeta';
 import { useCallEmbed } from '$hooks/useCallEmbed';
 import { getMxIdLocalPart } from '$utils/matrix';
-import { getAvatarUrl, getMemberDisplayName, getRoomAvatarUrl } from '$utils/room';
+import { getAvatarUrl, getMemberDisplayName, getRoomAvatarUrl } from '$utils/room/display';
 import { webRTCSupported } from '$utils/rtc';
 import { useRoomNavigate } from '$hooks/useRoomNavigate';
 import * as Sentry from '@sentry/react';
@@ -21,8 +21,8 @@ import {
 import { createDebugLogger } from '$utils/debugLogger';
 import { dismissSystemCallNotifications } from '$features/call/callNotificationBridge';
 import { getIncomingCallBlockers } from '$features/call/getIncomingCallBlockers';
-import { RoomAvatar } from './room-avatar';
-import { UserAvatar } from './user-avatar';
+import { RoomAvatar } from '$components/room-avatar';
+import { UserAvatar } from '$components/user-avatar';
 import {
   composerIcon,
   menuIcon,
@@ -33,7 +33,7 @@ import {
   User,
   sizedIcon,
 } from '$components/icons/phosphor';
-import { ModalOverlay } from './modal-overlay/ModalOverlay';
+import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import * as css from './IncomingCallModal.css';
 
 const debugLog = createDebugLogger('IncomingCall');

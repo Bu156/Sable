@@ -1,6 +1,11 @@
 import type { RoomPinnedEventsEventContent, StateEvents } from '$types/matrix-sdk';
 import { type Room, type MatrixEvent, type Relations, EventType } from '$types/matrix-sdk';
-import { canEditEvent, canForwardEvent, getEventEdits, isThreadRelationEvent } from '$utils/room';
+import {
+  canEditEvent,
+  canForwardEvent,
+  getEventEdits,
+  isThreadRelationEvent,
+} from '$utils/room/relations';
 import { MessageReportItem } from './MessageReport';
 import type { RectCords } from 'folds';
 import { as, Box, config, IconButton, Line, Menu, MenuItem, PopOut, Text } from 'folds';
@@ -323,7 +328,7 @@ const MessageFavoriteGifItem = as<
   );
 });
 
-export type OptionEmojiMenuProps = {
+type OptionEmojiMenuProps = {
   mEvent: MatrixEvent;
   closeMenu: () => void;
   onReactionToggle?: (targetEventId: string, key: string, shortcode?: string) => void;

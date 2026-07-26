@@ -30,7 +30,7 @@ vi.mock('$hooks/useRoomMeta', () => ({
   useRoomName: () => 'Direct Message',
 }));
 
-vi.mock(import('$utils/room'), async (importOriginal) => ({
+vi.mock(import('$utils/room/display'), async (importOriginal) => ({
   ...(await importOriginal()),
   getRoomAvatarUrl: () => undefined,
   getMemberDisplayName: () => 'Alice',
@@ -46,11 +46,11 @@ vi.mock('$utils/rtc', () => ({
   webRTCSupported: () => webRtcSupportedMock(),
 }));
 
-vi.mock('./room-avatar', () => ({
+vi.mock('$components/room-avatar', () => ({
   RoomAvatar: ({ alt }: { alt: string }) => <div>{alt}</div>,
 }));
 
-vi.mock('./user-avatar', () => ({
+vi.mock('$components/user-avatar', () => ({
   UserAvatar: ({ alt }: { alt?: string }) => <div>{alt}</div>,
 }));
 

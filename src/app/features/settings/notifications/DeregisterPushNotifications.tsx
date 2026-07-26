@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Box, Button, color, config, Dialog, Header, IconButton, Spinner, Text } from 'folds';
+import { Box, color, config, Dialog, Header, IconButton, Text } from 'folds';
 import { menuIcon, X } from '$components/icons/phosphor';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useAtom } from 'jotai';
@@ -14,6 +14,7 @@ import { disableNativePush } from './NotificationTransport';
 import { disableUnifiedPush } from './UnifiedPushNotifications';
 import { SettingTile } from '../../../components/setting-tile';
 import { isTauri } from '@tauri-apps/api/core';
+import { Button } from '$components/button';
 
 type ConfirmDeregisterDialogProps = {
   onClose: () => void;
@@ -43,8 +44,9 @@ function ConfirmDeregisterDialog({ onClose, onConfirm, isLoading }: ConfirmDereg
               variant="Critical"
               fill="Solid"
               onClick={onConfirm}
-              disabled={isLoading}
-              before={isLoading && <Spinner size="100" variant="Critical" />}
+              loading={isLoading}
+              spinnerVariant="Critical"
+              spinnerSize="100"
             >
               <Text size="B400">Reset All</Text>
             </Button>

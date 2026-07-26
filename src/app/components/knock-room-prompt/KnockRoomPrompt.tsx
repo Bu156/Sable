@@ -1,12 +1,14 @@
 import type { FormEventHandler } from 'react';
 import { useCallback, useEffect } from 'react';
-import { config, Box, Text, Input, color, Button, Spinner } from 'folds';
+import { config, Box, Text, Input } from 'folds';
 import type { MatrixError } from '$types/matrix-sdk';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { createDebugLogger } from '$utils/debugLogger';
 import { PromptDialog } from '$components/modal-overlay/PromptDialog';
+import { AsyncError } from '$components/AsyncError';
+import { Button } from '$components/button';
 
 const debugLog = createDebugLogger('KnockRoomPrompt');
 
@@ -65,21 +67,15 @@ export function KnockRoomPrompt({ roomId, via, onDone, onCancel }: KnockRoomProp
               </Text>
             </Text>
             <Input name="reasonInput" variant="Background" />
-            {knockState.status === AsyncStatus.Error && (
-              <Text style={{ color: color.Critical.Main }} size="T300">
-                Failed to knock! {knockState.error.message}
-              </Text>
-            )}
+            <AsyncError state={knockState} prefix="Failed to knock" size="T300" />
           </Box>
         </Box>
         <Button
           type="submit"
           variant="Primary"
-          before={
-            knockState.status === AsyncStatus.Loading ? (
-              <Spinner fill="Solid" variant="Primary" size="200" />
-            ) : undefined
-          }
+          loading={knockState.status === AsyncStatus.Loading}
+          spinnerVariant="Primary"
+          spinnerSize="200"
           aria-disabled={
             knockState.status === AsyncStatus.Loading || knockState.status === AsyncStatus.Success
           }

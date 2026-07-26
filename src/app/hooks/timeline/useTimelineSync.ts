@@ -15,6 +15,7 @@ import type {
 import { Direction, RoomEvent, RelationType, ThreadEvent } from '$types/matrix-sdk';
 
 import { useAlive } from '$hooks/useAlive';
+import { useMatrixEvent } from '$hooks/useMatrixEvent';
 import { markAsRead } from '$utils/notifications';
 import {
   getInitialTimeline,
@@ -29,9 +30,9 @@ import {
 
 const EVENT_TIMELINE_LOAD_TIMEOUT_MS = 12000;
 
-export type PaginationStatus = 'idle' | 'loading' | 'error';
+type PaginationStatus = 'idle' | 'loading' | 'error';
 
-export type TimelineState = {
+type TimelineState = {
   linkedTimelines: EventTimeline[];
 };
 
@@ -299,8 +300,8 @@ const useRelationUpdate = (room: Room, onRelation: () => void) => {
   const onRelationRef = useRef(onRelation);
   onRelationRef.current = onRelation;
 
-  useEffect(() => {
-    const handleTimelineEvent: EventTimelineSetHandlerMap[RoomEvent.Timeline] = (
+  const handleTimelineEvent = useCallback(
+    (
       mEvent: MatrixEvent,
       eventRoom: Room | undefined,
       _toStartOfTimeline: boolean | undefined,
@@ -311,12 +312,11 @@ const useRelationUpdate = (room: Room, onRelation: () => void) => {
       if (mEvent.getRelation()?.rel_type === RelationType.Replace) {
         onRelationRef.current();
       }
-    };
-    room.on(RoomEvent.Timeline, handleTimelineEvent);
-    return () => {
-      room.removeListener(RoomEvent.Timeline, handleTimelineEvent);
-    };
-  }, [room]);
+    },
+    [room]
+  );
+
+  useMatrixEvent(room, RoomEvent.Timeline, handleTimelineEvent);
 };
 
 const useLiveTimelineRefresh = (room: Room, onRefresh: () => void) => {
@@ -523,20 +523,15 @@ export function useTimelineSync({
     )
   );
 
-  useEffect(() => {
-    const handleLocalEchoUpdated: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
-      _mEvent: MatrixEvent,
-      eventRoom: Room | undefined
-    ) => {
+  const handleLocalEchoUpdated = useCallback(
+    (_mEvent: MatrixEvent, eventRoom: Room | undefined) => {
       if (eventRoom?.roomId !== room.roomId) return;
       setTimeline((ct) => ({ ...ct }));
-    };
+    },
+    [room, setTimeline]
+  );
 
-    room.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
-    return () => {
-      room.removeListener(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
-    };
-  }, [room, setTimeline]);
+  useMatrixEvent(room, RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
 
   useLiveTimelineRefresh(
     room,

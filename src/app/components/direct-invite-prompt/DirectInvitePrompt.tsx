@@ -1,5 +1,6 @@
-import { Box, Button, Spinner, Text, color, config } from 'folds';
+import { Box, Text, color, config } from 'folds';
 import { PromptDialog } from '$components/modal-overlay/PromptDialog';
+import { Button } from '$components/button';
 
 type DirectInvitePromptProps = {
   onCancel: () => void;
@@ -34,8 +35,9 @@ export function DirectInvitePrompt({
           <Button
             variant="Primary"
             onClick={onConvertAndInvite}
-            disabled={converting}
-            before={converting ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined}
+            loading={converting}
+            spinnerVariant="Primary"
+            spinnerSize="200"
             aria-disabled={converting}
           >
             <Text size="B400">

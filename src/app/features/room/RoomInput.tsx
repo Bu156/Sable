@@ -112,7 +112,7 @@ import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
 import { settingsAtom } from '$state/settings';
 import { matchesShortcut } from '../../keyboard/shortcuts';
-import { getEditedEvent, getMentionContent, getThreadReplyEvents } from '$utils/room';
+import { getEditedEvent, getMentionContent, getThreadReplyEvents } from '$utils/room/relations';
 import { buildReplacementContent } from './buildReplacementContent';
 import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
