@@ -11,6 +11,12 @@
  *
  *   script/tauri cef dev --verbose
  *     → tauri dev --features cef,updater -- --verbose --no-default-features
+ *
+ * Pass `--no-updater` to omit the bundled auto-updater, for distro packagers and
+ * anyone building from source who updates through their own channel:
+ *
+ *   script/tauri wry build --no-updater
+ *     → tauri build --features wry -- --no-default-features
  */
 
 import { run } from '@tauri-apps/cli';
@@ -45,21 +51,34 @@ async function main() {
     return runTauri(cmdlineArgs);
   }
 
-  const [platform, cmd, ...tauriArgs] = cmdlineArgs;
+  const [platform, cmd, ...rawTauriArgs] = cmdlineArgs;
 
   if (!cmd) {
     return runTauri(cmdlineArgs);
   }
 
   if (!['dev', 'build'].includes(cmd)) {
-    return runTauri([cmd, ...tauriArgs]);
+    return runTauri([cmd, ...rawTauriArgs]);
   }
 
-  const args = [cmd, '--features', `${platform},updater`, ...tauriArgs];
+  // Consumed here, not forwarded: the tauri CLI does not know this flag.
+  const noUpdater = rawTauriArgs.includes('--no-updater');
+  const tauriArgs = rawTauriArgs.filter((arg) => arg !== '--no-updater');
+  if (noUpdater) {
+    logger.info('Building without the auto-updater (--no-updater)');
+  }
+
+  const features = noUpdater ? platform : `${platform},updater`;
+  const args = [cmd, '--features', features, ...tauriArgs];
   if (!tauriArgs.includes('--')) {
     args.push('--');
   }
   args.push('--no-default-features');
+
+  if (noUpdater && cmd === 'build') {
+    // Signed updater artifacts would otherwise demand TAURI_SIGNING_PRIVATE_KEY.
+    args.splice(1, 0, '--config', JSON.stringify({ bundle: { createUpdaterArtifacts: false } }));
+  }
 
   if (platform === 'cef' && cmd === 'build' && !tauriArgs.includes('--no-bundle')) {
     args.splice(1, 0, '--no-bundle');

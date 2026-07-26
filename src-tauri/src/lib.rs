@@ -333,7 +333,6 @@ pub fn run() {
         let _ = show_or_create_main_window(app);
     }));
 
-    #[cfg(any(mobile, desktop))]
     let builder = builder.plugin(tauri_plugin_notifications::init());
 
     #[cfg(all(desktop, feature = "updater"))]
