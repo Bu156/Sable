@@ -7,11 +7,13 @@ import type {
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Box, Scroll, Text } from 'folds';
 import type { Descendant, Editor } from 'slate';
-import { Node, createEditor } from 'slate';
+import { Node, Transforms, createEditor } from 'slate';
 import type { RenderLeafProps, RenderElementProps, RenderPlaceholderProps } from 'slate-react';
 import { Slate, Editable, withReact, ReactEditor } from 'slate-react';
 import { withHistory } from 'slate-history';
-import { mobileOrTablet } from '$utils/user-agent';
+import { iosApp, mobileOrTablet } from '$utils/user-agent';
+import { readClipboardText } from '$utils/dom';
+import { createLogger } from '$utils/debug';
 import { BlockType } from './types';
 import { RenderElement, RenderLeaf } from './Elements';
 import type { CustomElement } from './slate';
@@ -44,6 +46,18 @@ const withVoid = (editor: Editor): Editor => {
 export const useEditor = (): Editor => {
   const [editor] = useState(() => withInline(withVoid(withReact(withHistory(createEditor())))));
   return editor;
+};
+
+const log = createLogger('Editor');
+
+const hasPasteData = (data: DataTransfer): boolean =>
+  data.files.length > 0 || data.getData('text/plain') !== '' || data.getData('text/html') !== '';
+
+const insertPastedText = (editor: Editor, text: string): void => {
+  text.split(/\r\n|\r|\n/).forEach((line, index) => {
+    if (index > 0) Transforms.splitNodes(editor, { always: true });
+    Transforms.insertText(editor, line);
+  });
 };
 
 export type EditorChangeHandler = (value: Descendant[]) => void;
@@ -398,6 +412,23 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       [editor, onKeyDown, shortcutOverrides]
     );
 
+    const handlePaste: ClipboardEventHandler = useCallback(
+      (evt) => {
+        onPaste?.(evt);
+        if (evt.isDefaultPrevented() || !iosApp() || hasPasteData(evt.clipboardData)) return;
+
+        evt.preventDefault();
+        readClipboardText()
+          .then((text) => {
+            if (text) insertPastedText(editor, text);
+          })
+          .catch((err: unknown) => {
+            log.warn('Failed to read the native clipboard on paste:', err);
+          });
+      },
+      [editor, onPaste]
+    );
+
     const renderPlaceholder = useCallback(
       ({ attributes, children }: RenderPlaceholderProps) => (
         <span {...attributes} className={css.EditorPlaceholderContainer}>
@@ -451,7 +482,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 renderLeaf={renderLeaf}
                 onKeyDown={handleKeydown}
                 onKeyUp={onKeyUp}
-                onPaste={onPaste}
+                onPaste={handlePaste}
                 // Defer to OS capitalization setting (respects iOS sentence-case toggle).
                 autoCapitalize="sentences"
                 autoCorrect="on"

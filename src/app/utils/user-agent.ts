@@ -27,7 +27,17 @@ const normalizeMacName = (os?: string) => {
 
 const isMac = result.os.name === 'Mac OS' || result.os.name === 'macOS';
 
+const isIosApp = (() => {
+  if (!isTauri()) return false;
+  try {
+    return osType() === 'ios';
+  } catch {
+    return false;
+  }
+})();
+
 export const isMacOS = () => isMac;
+export const iosApp = () => isIosApp;
 export const mobileOrTablet = () => isMobileOrTablet;
 
 export const deviceDisplayName = (): string => {
