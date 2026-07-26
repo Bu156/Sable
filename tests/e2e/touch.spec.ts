@@ -134,8 +134,10 @@ test.describe('touch interactions', () => {
     await expect(sheetContainer).toBeHidden({ timeout: 3_000 });
   });
 
-  // Never passed: the Save click times out on a touch viewport, so the long
-  // status is never persisted and the overflow assertion never runs.
+  // Never passed: the Save click times out on a touch viewport (Save button is
+  // disabled/not-clickable on touch), so the long status is never persisted.
+  // Separate from the ResponsiveMenu tap-swallowing bug — StatusEditor Save is
+  // a regular button on a route, not inside a sheet. Investigate before enabling.
   test.fixme('settings page has no horizontal overflow', async ({ app, page }) => {
     // Confirm the client is loaded (app.open() has already waited for room list)
     await expect(app.room('General')).toBeVisible();
