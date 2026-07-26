@@ -296,6 +296,29 @@ fn normalize_encryption_key(url: &str) -> String {
         .unwrap_or_else(|_| url.to_string())
 }
 
+/// The app's own webview origins, which vary by platform and scheme.
+fn is_webview_origin(origin: &str) -> bool {
+    matches!(
+        origin,
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
+    ) || (cfg!(debug_assertions) && origin.starts_with("http://localhost:"))
+}
+
+/// Grants CORS only to our own webview. A request with no `Origin` (an `<img>`
+/// load) is not a CORS request and needs no grant.
+fn apply_cors_headers(response: &mut Response<Vec<u8>>, request_origin: Option<&str>) {
+    let Some(origin) = request_origin.filter(|origin| is_webview_origin(origin)) else {
+        return;
+    };
+    let Ok(value) = header::HeaderValue::from_str(origin) else {
+        return;
+    };
+    let headers = response.headers_mut();
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
+    // Responses are cached `immutable`, so the cache must key on Origin too.
+    headers.insert(header::VARY, header::HeaderValue::from_static("Origin"));
+}
+
 pub fn respond<R: Runtime>(
     ctx: UriSchemeContext<'_, R>,
     request: Request<Vec<u8>>,
@@ -303,15 +326,20 @@ pub fn respond<R: Runtime>(
 ) {
     let app = ctx.app_handle().clone();
     let uri = request.uri().clone();
-    let range = request
-        .headers()
-        .get(header::RANGE)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned);
+    let header_value = |name: header::HeaderName| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let range = header_value(header::RANGE);
+    let origin = header_value(header::ORIGIN);
     tauri::async_runtime::spawn(async move {
-        let response = handle_request(&app, uri, range)
+        let mut response = handle_request(&app, uri, range)
             .await
             .unwrap_or_else(error_response);
+        apply_cors_headers(&mut response, origin.as_deref());
         responder.respond(response);
     });
 }
@@ -849,11 +877,6 @@ async fn write_cache(
     .unwrap_or(false)
 }
 
-#[allow(dead_code)]
-fn fits_in_cache(len: u64) -> bool {
-    len <= MAX_CACHE_BYTES
-}
-
 // Only a hit when the body file is also present, so a stray `.ct` counts as a miss.
 async fn read_content_type(body_path: PathBuf, content_type_path: PathBuf) -> Option<String> {
     tokio::task::spawn_blocking(move || {
@@ -1021,7 +1044,6 @@ fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBui
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CACHE_CONTROL, cache_control)
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
@@ -1060,7 +1082,6 @@ fn partial_response(
 fn range_not_satisfiable(total: u64) -> Response<Vec<u8>> {
     Response::builder()
         .status(StatusCode::RANGE_NOT_SATISFIABLE)
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header(header::CONTENT_RANGE, format!("bytes */{total}"))
         .body(Vec::new())
         .expect("failed to build range error response")
@@ -1070,7 +1091,6 @@ fn session_unavailable_response() -> Response<Vec<u8>> {
     Response::builder()
         .status(StatusCode::SERVICE_UNAVAILABLE)
         .header(header::RETRY_AFTER, "1")
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(Vec::new())
         .expect("failed to build 503 media response")
 }
@@ -1078,7 +1098,6 @@ fn session_unavailable_response() -> Response<Vec<u8>> {
 fn error_response(status: StatusCode) -> Response<Vec<u8>> {
     Response::builder()
         .status(status)
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(Vec::new())
         .expect("failed to build media error response")
 }
@@ -1113,7 +1132,7 @@ mod tests {
     use tauri::http::{header, StatusCode};
 
     use super::{
-        cache_key, fits_in_cache, ok_response, parse_range, partial_response, serve_range_memory,
+        cache_key, ok_response, parse_range, partial_response, serve_range_memory,
         MediaSessionState,
     };
 
@@ -1269,13 +1288,6 @@ mod tests {
     }
 
     #[test]
-    fn oversized_media_is_not_cacheable() {
-        assert!(fits_in_cache(0));
-        assert!(fits_in_cache(super::MAX_CACHE_BYTES));
-        assert!(!fits_in_cache(super::MAX_CACHE_BYTES + 1));
-    }
-
-    #[test]
     fn serve_range_memory_slices_the_in_memory_body() {
         let body: Vec<u8> = (0..200u8).collect();
         let response = serve_range_memory(&body, "application/octet-stream", "bytes=10-19");
@@ -1375,6 +1387,54 @@ mod tests {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-store"
         );
+    }
+
+    #[test]
+    fn cors_is_granted_only_to_the_apps_own_webview_origins() {
+        for origin in [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ] {
+            let mut response = ok_response(vec![0_u8; 4], "image/png");
+            super::apply_cors_headers(&mut response, Some(origin));
+            assert_eq!(
+                response
+                    .headers()
+                    .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                    .unwrap(),
+                origin,
+                "{origin} should be granted CORS"
+            );
+            assert_eq!(response.headers().get(header::VARY).unwrap(), "Origin");
+        }
+    }
+
+    #[test]
+    fn cors_is_denied_to_foreign_origins() {
+        for origin in [
+            "https://evil.example.org",
+            "https://tauri.localhost.evil.example.org",
+            "null",
+        ] {
+            let mut response = ok_response(vec![0_u8; 4], "image/png");
+            super::apply_cors_headers(&mut response, Some(origin));
+            assert!(
+                !response
+                    .headers()
+                    .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+                "{origin} must not be granted CORS"
+            );
+        }
+    }
+
+    #[test]
+    fn requests_without_an_origin_get_no_cors_header() {
+        let mut response = ok_response(vec![0_u8; 4], "image/png");
+        super::apply_cors_headers(&mut response, None);
+        assert!(!response
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
     }
 
     #[test]
