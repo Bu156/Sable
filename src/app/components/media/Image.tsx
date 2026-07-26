@@ -107,9 +107,7 @@ export function processAndSanitizeLottie(root: unknown): string | null {
       }
     } else if (value && typeof value === 'object') {
       const entries = Object.entries(value as Record<string, unknown>).filter(
-        ([k, child]) =>
-          !UNSAFE_LOTTIE_KEYS.has(k) &&
-          !(k === 'x' && typeof child === 'string')
+        ([k, child]) => !UNSAFE_LOTTIE_KEYS.has(k) && !(k === 'x' && typeof child === 'string')
       );
 
       for (const [k, child] of entries) {
@@ -129,7 +127,9 @@ export function processAndSanitizeLottie(root: unknown): string | null {
       }
 
       for (let i = entries.length - 1; i >= 0; i--) {
-        const [k, child] = entries[i];
+        const entry = entries[i];
+        if (!entry) continue;
+        const [k, child] = entry;
         stack.push({ parent: newObj, key: k, value: child, depth: depth + 1 });
       }
     } else {
@@ -183,7 +183,7 @@ async function readBytes(
       chunks.push(value);
     }
   } finally {
-    if (!completed) await reader.cancel().catch(() => undefined);
+    if (!completed) await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 
@@ -215,9 +215,9 @@ async function resolveLottieJson(src: string, signal: AbortSignal): Promise<stri
     const bytes = await loadBytes(src, signal);
     if (!bytes || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return null;
 
-    const stream = new Blob([bytes.buffer as ArrayBuffer])
-      .stream()
-      .pipeThrough(new DecompressionStream('gzip'));
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
     const decompressed = await readBytes(stream, MAX_DECOMPRESSED_LOTTIE_BYTES, signal);
     const parsed = JSON.parse(new TextDecoder().decode(decompressed));
     return processAndSanitizeLottie(parsed);
@@ -307,10 +307,10 @@ function LottieImage({
     [forwardedRef]
   );
 
-  useEffect(() => {
+  useEffect((): (() => void) | undefined => {
     if (!player) {
       setForwardedRef(null);
-      return;
+      return undefined;
     }
 
     const canvas = player.canvas as HTMLCanvasElement;

@@ -98,8 +98,6 @@ import { ModalWide } from '$styles/Modal.css';
 import { ImageViewer } from '$components/image-viewer';
 import { reportMediaLoadFailure } from '$utils/mediaLoadDiagnostics';
 import * as css from './styles.css';
-import { isResizingSidebarAtom } from '$state/isResizingSidebar';
-import { UserQuickTools } from '../sidebar/UserQuickTools';
 import { Image as MediaImage } from '$components/media';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
