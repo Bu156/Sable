@@ -14,7 +14,7 @@ import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { isTauri } from '@tauri-apps/api/core';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
-import { useRevokeObjectURL } from '$hooks/useObjectURL';
+import { useCreateObjectURL } from '$hooks/useObjectURL';
 import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 
 export type ThumbnailContentProps = {
@@ -35,6 +35,8 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
 
   const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
 
+  const createObjectURL = useCreateObjectURL();
+
   const [thumbSrcState, loadThumbSrc] = useAsyncCallback(
     useCallback(async () => {
       const thumbInfo = info.thumbnail_info;
@@ -52,10 +54,10 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
         const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
           decryptFile(encBuf, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE, encInfo)
         );
-        return URL.createObjectURL(fileContent);
+        return createObjectURL(fileContent);
       }
       return resolvedMediaUrl ?? rawMediaUrl ?? thumbMxcUrl;
-    }, [info, thumbMxcUrl, rawMediaUrl, resolvedMediaUrl, encInfo])
+    }, [info, thumbMxcUrl, rawMediaUrl, resolvedMediaUrl, encInfo, createObjectURL])
   );
 
   useEffect(() => {
@@ -63,10 +65,6 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
     // does not surface as an unhandled promise rejection.
     loadThumbSrc().catch(() => undefined);
   }, [loadThumbSrc]);
-
-  useRevokeObjectURL(
-    encInfo && thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined
-  );
 
   if (thumbSrcState.status === AsyncStatus.Success) return renderImage(thumbSrcState.data);
 

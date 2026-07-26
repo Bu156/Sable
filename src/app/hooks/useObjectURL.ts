@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 export const useObjectURL = (object?: Blob): string | undefined => {
   const url = useMemo(() => {
@@ -16,11 +16,30 @@ export const useObjectURL = (object?: Blob): string | undefined => {
   return url;
 };
 
-export const useRevokeObjectURL = (url?: string): void => {
-  useEffect(
-    () => () => {
-      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
-    },
-    [url]
-  );
+// For blob URLs created inside an async callback, which can resolve after unmount
+// with no effect left to revoke them.  Owns one URL at a time per caller.
+export const useCreateObjectURL = (): ((object: Blob) => string) => {
+  const urlRef = useRef<string | undefined>(undefined);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = undefined;
+    };
+  }, []);
+
+  return useCallback((object: Blob) => {
+    const url = URL.createObjectURL(object);
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    if (!mountedRef.current) {
+      URL.revokeObjectURL(url);
+      urlRef.current = undefined;
+      return url;
+    }
+    urlRef.current = url;
+    return url;
+  }, []);
 };

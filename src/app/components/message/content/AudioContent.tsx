@@ -28,7 +28,7 @@ import {
 } from '$utils/matrix';
 import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useRevokeObjectURL } from '$hooks/useObjectURL';
+import { useCreateObjectURL } from '$hooks/useObjectURL';
 import { MEDIA_VOLUME_KEY } from '$components/media';
 import { hasControllingServiceWorker } from '$utils/platform';
 
@@ -60,6 +60,8 @@ export function AudioContent({
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
+  const createObjectURL = useCreateObjectURL();
+
   const [srcState, loadSrc] = useAsyncCallback(
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
@@ -74,14 +76,12 @@ export function AudioContent({
         const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
           decryptFile(encBuf, mimeType, encInfo)
         );
-        return URL.createObjectURL(fileContent);
+        return createObjectURL(fileContent);
       }
       const fileContent = await downloadMedia(mediaUrl);
-      return URL.createObjectURL(fileContent);
-    }, [mx, url, useAuthentication, mimeType, encInfo])
+      return createObjectURL(fileContent);
+    }, [mx, url, useAuthentication, mimeType, encInfo, createObjectURL])
   );
-
-  useRevokeObjectURL(srcState.status === AsyncStatus.Success ? srcState.data : undefined);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 

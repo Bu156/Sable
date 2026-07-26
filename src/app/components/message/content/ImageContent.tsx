@@ -52,7 +52,7 @@ import {
 } from '../../../../unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
-import { useRevokeObjectURL } from '$hooks/useObjectURL';
+import { useCreateObjectURL } from '$hooks/useObjectURL';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 
 export function checkIfGif(url: string, mimetype?: string, body?: string) {
@@ -155,6 +155,8 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
 
+    const createObjectURL = useCreateObjectURL();
+
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
         if (encInfo) {
@@ -166,10 +168,10 @@ export const ImageContent = as<'div', ImageContentProps>(
           const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
             decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
-          return URL.createObjectURL(fileContent);
+          return createObjectURL(fileContent);
         }
         return resolvedMediaUrl ?? rawMediaUrl ?? url;
-      }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo])
+      }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo, createObjectURL])
     );
 
     useEffect(() => {
@@ -212,10 +214,6 @@ export const ImageContent = as<'div', ImageContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
-
-    useRevokeObjectURL(
-      encInfo && srcState.status === AsyncStatus.Success ? srcState.data : undefined
-    );
 
     const imageW = info?.w;
     const imageH = info?.h;

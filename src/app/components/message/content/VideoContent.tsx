@@ -32,7 +32,7 @@ import {
 } from '$utils/matrix';
 import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useRevokeObjectURL } from '$hooks/useObjectURL';
+import { useCreateObjectURL } from '$hooks/useObjectURL';
 import { validBlurHash } from '$utils/blurHash';
 import * as css from './style.css';
 import { MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME } from '../../../../unstable/prefixes';
@@ -86,6 +86,8 @@ export const VideoContent = as<'div', VideoContentProps>(
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [isHovered, setIsHovered] = useState(false);
 
+    const createObjectURL = useCreateObjectURL();
+
     const [srcState, loadSrc] = useAsyncCallback(
       useCallback(async () => {
         if (url.startsWith('http')) return url;
@@ -102,11 +104,11 @@ export const VideoContent = as<'div', VideoContentProps>(
           const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
             decryptFile(encBuf, mimeType, encInfo)
           );
-          return URL.createObjectURL(fileContent);
+          return createObjectURL(fileContent);
         }
         const fileContent = await downloadMedia(mediaUrl);
-        return URL.createObjectURL(fileContent);
-      }, [mx, url, useAuthentication, mimeType, encInfo])
+        return createObjectURL(fileContent);
+      }, [mx, url, useAuthentication, mimeType, encInfo, createObjectURL])
     );
 
     // When the source download succeeds, reset video-element error state so the
@@ -144,8 +146,6 @@ export const VideoContent = as<'div', VideoContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
-
-    useRevokeObjectURL(srcState.status === AsyncStatus.Success ? srcState.data : undefined);
 
     return (
       <Box
