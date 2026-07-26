@@ -7,6 +7,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
 
 import { TauriFrontendReady } from '$components/tauri/TauriFrontendReady';
+import { TauriWindowFocus } from '$components/tauri/TauriWindowFocus';
 import { DesktopTitleBar } from '$components/tauri/DesktopTitleBar';
 import { MacTitleBar } from '$components/tauri/MacTitleBar';
 import { DesktopUpdater } from '$pages/client/DesktopUpdater';
@@ -80,6 +81,7 @@ function AppShellFrame({ children, portalContainer, onPortalContainerChange }: A
   return (
     <>
       <TauriFrontendReady />
+      <TauriWindowFocus />
       <div
         style={{
           display: 'flex',

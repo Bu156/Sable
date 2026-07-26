@@ -27,6 +27,7 @@ import {
   getRoomUnreadInfo,
   PAGINATION_LIMIT,
 } from '$utils/timeline';
+import { isWindowFocused } from '$utils/dom';
 
 const EVENT_TIMELINE_LOAD_TIMEOUT_MS = 12000;
 
@@ -535,20 +536,20 @@ export function useTimelineSync({
 
         if (isAtBottomRef.current && atLiveEndRef.current) {
           if (
-            document.hasFocus() &&
+            isWindowFocused() &&
             (!unreadInfo?.readUptoEventId || mEvt.getSender() === mx.getUserId())
           ) {
             requestAnimationFrame(() => markAsRead(mx, mEvt.getRoomId()!, hideReadsRef.current));
           }
 
-          if (!document.hasFocus() && !unreadInfo) {
+          if (!isWindowFocused() && !unreadInfo) {
             setUnreadInfo(getRoomUnreadInfo(room));
           }
 
           // Own messages should feel immediate, and unfocused windows throttle
           // scroll animations, which can leave the view stuck mid-scroll.
           pendingAutoScrollBehaviorRef.current =
-            mEvt.getSender() === mx.getUserId() || !document.hasFocus() ? 'instant' : 'smooth';
+            mEvt.getSender() === mx.getUserId() || !isWindowFocused() ? 'instant' : 'smooth';
 
           setTimeline((ct) => ({ ...ct }));
           return;

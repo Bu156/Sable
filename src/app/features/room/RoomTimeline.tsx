@@ -27,6 +27,7 @@ import { useMessageEdit } from '$hooks/useMessageEdit';
 import { useDocumentFocusChange } from '$hooks/useDocumentFocusChange';
 import { useIsInactivePanel } from '$hooks/useRoom';
 import { markAsRead } from '$utils/notifications';
+import { isWindowFocused } from '$utils/dom';
 import { today, yesterday, timeDayMonthYear } from '$utils/time';
 import {
   unwrapRelationJumpTarget,
@@ -887,8 +888,7 @@ export function RoomTimeline({
   );
 
   useEffect(() => {
-    if (atBottomState && document.hasFocus() && timelineSync.liveTimelineLinked)
-      tryAutoMarkAsRead();
+    if (atBottomState && isWindowFocused() && timelineSync.liveTimelineLinked) tryAutoMarkAsRead();
   }, [
     atBottomState,
     timelineSync.liveTimelineLinked,
