@@ -55,14 +55,6 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
   const shouldCanonicalizeTrailingSlash =
     location.pathname.length > canonicalPathname.length &&
     canonicalPathname.startsWith('/settings');
-  const browserHistoryIndex =
-    typeof window !== 'undefined' && typeof window.history.state?.idx === 'number'
-      ? window.history.state.idx
-      : null;
-  const hasPreviousEntry =
-    (typeof browserHistoryIndex === 'number' && browserHistoryIndex > 0) ||
-    location.key !== 'default';
-
   const activeSection = resolveSettingsSection(section, screenSize, showPersona, showDesktop);
   const shouldRedirectToGeneral = section === undefined && screenSize !== ScreenSize.Mobile;
   const shouldRedirectToIndex = section !== undefined && activeSection === null;
@@ -110,18 +102,7 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
     if (section === undefined) return;
 
     if (screenSize === ScreenSize.Mobile) {
-      if (routeState?.backgroundLocation) {
-        const backTarget = getShallowCloseTarget(routeState);
-        navigate(backTarget.to, { replace: true, state: backTarget.state });
-        return;
-      }
-
-      if (hasPreviousEntry) {
-        navigate(-1);
-        return;
-      }
-
-      navigate(getSettingsPath(), { replace: true });
+      navigate(getSettingsPath(), { replace: true, state: routeState });
       return;
     }
 

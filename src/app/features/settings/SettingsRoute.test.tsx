@@ -634,7 +634,7 @@ describe('SettingsRoute', () => {
     expect(screen.getByTestId('location-probe')).not.toHaveTextContent('PUSH');
   });
 
-  it('uses history back semantics when a section back button is clicked', async () => {
+  it('returns to the settings menu instead of the previous page when a section back button is clicked', async () => {
     const user = userEvent.setup();
 
     renderSettingsRoute('/settings/devices', ScreenSize.Mobile, {
@@ -644,7 +644,9 @@ describe('SettingsRoute', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
-    await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('POP'));
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(getSettingsPath())
+    );
     expect(screen.getByText('Settings')).toBeInTheDocument();
   });
 });
