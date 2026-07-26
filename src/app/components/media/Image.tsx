@@ -10,6 +10,7 @@ import type { IImageInfo } from '$types/matrix/common';
 type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'onPointerDown'> & {
   info?: IImageInfo;
   mimeType?: string;
+  disableDefaultSizing?: boolean;
   disablePixelation?: boolean;
   pixelated?: boolean;
   onLottieLoad?: (canvas?: HTMLCanvasElement) => void;
@@ -274,6 +275,7 @@ function resolveCachedLottieJson(src: string): Promise<string | null> {
 type LottieImageProps = LottieDotProps & {
   data: string;
   alt?: string;
+  emoticon?: boolean;
   onLottieLoad?: (canvas?: HTMLCanvasElement) => void;
   onLottieError?: () => void;
   pixelated?: boolean;
@@ -284,6 +286,7 @@ type LottieImageProps = LottieDotProps & {
 function LottieImage({
   data,
   alt,
+  emoticon,
   className,
   style,
   onLottieLoad,
@@ -353,7 +356,12 @@ function LottieImage({
     <Suspense fallback={null}>
       <div
         className={className}
-        style={{ width: '100%', height: '100%', ...style }}
+        style={{
+          width: '100%',
+          height: '100%',
+          ...style,
+          ...(emoticon ? { width: '1em', height: '1em' } : undefined),
+        }}
         onPointerDown={onPointerDown}
       >
         <DotLottieReact
@@ -375,6 +383,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
       alt,
       info,
       mimeType,
+      disableDefaultSizing,
       disablePixelation,
       loading = 'lazy',
       onLoad,
@@ -397,6 +406,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
     const [fallbackSource, setFallbackSource] = useState<string>();
 
     const lottieProps = props as LottieDotProps;
+    const emoticon = 'data-mx-emoticon' in props;
     const declaredLottieCandidate = isGzippedLottieCandidate(
       src,
       mimeType ?? info?.mimetype,
@@ -410,7 +420,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
           ? undefined
           : null;
     const imageClass = classNames(
-      css.Image,
+      !disableDefaultSizing && css.Image,
       !disablePixelation &&
         (pixelated ?? isPixelatedRendering(pixelatedImageRendering, info)) &&
         css.ImagePixelated,
@@ -446,6 +456,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
           className={imageClass}
           style={style}
           data={resolvedLottieJson}
+          emoticon={emoticon}
           alt={alt}
           onLottieLoad={onLottieLoad}
           onLottieError={onLottieError}

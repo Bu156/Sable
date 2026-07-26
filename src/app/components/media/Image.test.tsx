@@ -64,6 +64,22 @@ describe('Image', () => {
     expect(rendered).toHaveAttribute('height', '123');
   });
 
+  it('keeps lottie emoticons at inline-emoticon size', async () => {
+    const gzipped = Buffer.from(gzipSync(lottieJson)).toString('base64');
+    render(
+      <Image
+        src={`data:application/gzip;base64,${gzipped}`}
+        aria-label="emoticon"
+        data-mx-emoticon
+        style={{ width: 'auto', height: '1em' }}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByLabelText('emoticon').tagName).toBe('CANVAS'));
+    const canvas = screen.getByLabelText('emoticon');
+    expect(canvas.parentElement).toHaveStyle({ width: '1em', height: '1em' });
+  });
+
   it('forwards the canvas ref and pointer events for lottie images', async () => {
     const gzipped = Buffer.from(gzipSync(lottieJson)).toString('base64');
     const ref = createRef<HTMLImageElement | HTMLCanvasElement>();
