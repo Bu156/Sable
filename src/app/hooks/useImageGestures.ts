@@ -33,7 +33,7 @@ export const useImageGestures = (active: boolean, step = 0.2, min = 0.1, max = 5
   const shouldResizeWithWindowRef = useRef(true);
   const [fitRatio, setFitRatio] = useState(1);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
 
   const setShouldResizeWithWindow = useCallback((next: boolean) => {
     shouldResizeWithWindowRef.current = next;
@@ -229,13 +229,15 @@ export const useImageGestures = (active: boolean, step = 0.2, min = 0.1, max = 5
       if (
         !img || // Image not loaded
         !shouldResizeWithWindowRef.current || // Resizing disabled
-        !img.naturalWidth ||
-        !img.naturalHeight // Invalid image dimensions
+        !(img instanceof HTMLCanvasElement ? img.width : img.naturalWidth) ||
+        !(img instanceof HTMLCanvasElement ? img.height : img.naturalHeight) // Invalid dimensions
       ) {
         return;
       }
-      const heightRatio = height / img.naturalHeight;
-      const widthRatio = width / img.naturalWidth;
+      const imageHeight = img instanceof HTMLCanvasElement ? img.height : img.naturalHeight;
+      const imageWidth = img instanceof HTMLCanvasElement ? img.width : img.naturalWidth;
+      const heightRatio = height / imageHeight;
+      const widthRatio = width / imageWidth;
       const fitZoom = Math.min(heightRatio, widthRatio);
 
       img.style.transition = 'none';

@@ -66,6 +66,15 @@ describe('TGS uploads', () => {
     expect(upload.type).toBe(FALLBACK_MIMETYPE);
     expect(isImageMimeType(upload.type)).toBe(false);
   });
+
+  it('does not treat an ordinary gzip archive as a TGS image', async () => {
+    const archive = new File([tgsBytes], 'archive.tar.gz', { type: 'application/gzip' });
+    const upload = await safeUploadFile(archive);
+
+    expect(await isTgsFile(archive)).toBe(false);
+    expect(upload.type).toBe(FALLBACK_MIMETYPE);
+    expect(isImageMimeType(upload.type)).toBe(false);
+  });
 });
 
 describe('mimeTypeToExt', () => {

@@ -322,6 +322,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
             onTouchCancel={menu.triggerProps.onTouchCancel}
           >
             <MediaImage
+              ref={imageRef}
               className={classNames(css.ImageViewerImg, isPixelated && css.ImageViewerImgPixelated)}
               draggable={false}
               data-gestures="ignore"

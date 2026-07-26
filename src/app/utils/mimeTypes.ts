@@ -109,8 +109,6 @@ const ALLOWED_BLOB_MIME_TYPES = new Set([
 export const FALLBACK_MIMETYPE = 'application/octet-stream';
 export const TGS_MIMETYPE = 'application/x-tgsticker';
 
-const GZIP_MIME_TYPES = new Set(['application/gzip', 'application/x-gzip', TGS_MIMETYPE]);
-
 export const isTgsMimeType = (mimeType: string): boolean =>
   mimeType.split(';', 1)[0]?.toLowerCase() === TGS_MIMETYPE;
 
@@ -118,8 +116,7 @@ export const isImageMimeType = (mimeType: string): boolean =>
   mimeType.toLowerCase().startsWith('image/') || isTgsMimeType(mimeType);
 
 const isTgsCandidate = (file: File): boolean =>
-  file.name.toLowerCase().endsWith('.tgs') ||
-  GZIP_MIME_TYPES.has(file.type.split(';', 1)[0]?.toLowerCase() ?? '');
+  file.name.toLowerCase().endsWith('.tgs') || isTgsMimeType(file.type);
 
 export const isTgsFile = async (file: File): Promise<boolean> => {
   if (!isTgsCandidate(file)) return false;

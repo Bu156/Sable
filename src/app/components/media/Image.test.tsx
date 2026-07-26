@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { Image, sanitizeLottieJson } from './Image';
 import { Blob as NodeBlob } from 'node:buffer';
 import { gzipSync } from 'node:zlib';
@@ -62,6 +63,84 @@ describe('Image', () => {
     expect(rendered).toBeInTheDocument();
     expect(rendered).toHaveAttribute('width', '321');
     expect(rendered).toHaveAttribute('height', '123');
+  });
+
+  it('forwards the canvas ref and pointer events for lottie images', async () => {
+    const gzipped = Buffer.from(gzipSync(lottieJson)).toString('base64');
+    const ref = createRef<HTMLImageElement | HTMLCanvasElement>();
+    const onPointerDown = vi.fn<(event: React.PointerEvent<HTMLElement>) => void>();
+    render(
+      <Image
+        ref={ref}
+        src={`data:application/gzip;base64,${gzipped}`}
+        aria-label="interactive lottie"
+        onPointerDown={onPointerDown}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('interactive lottie').tagName).toBe('CANVAS');
+    });
+    const canvas = screen.getByLabelText('interactive lottie');
+    fireEvent.pointerDown(canvas);
+
+    expect(canvas.tagName).toBe('CANVAS');
+    await waitFor(() => expect(ref.current).toBe(canvas));
+    expect(onPointerDown).toHaveBeenCalledOnce();
+  });
+
+  it('probes an undeclared lottie only after native image decoding fails', async () => {
+    const bytes = Uint8Array.from(gzipSync(lottieJson));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(bytes, { headers: { 'content-length': `${bytes.length}` } }));
+    render(<Image src="https://example.com/extensionless-media" alt="undeclared lottie" />);
+
+    const image = screen.getByAltText('undeclared lottie');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fireEvent.error(image);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('undeclared lottie').tagName).toBe('CANVAS');
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
+  });
+
+  it('aborts an in-flight lottie download when unmounted', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    });
+    const { unmount } = render(
+      <Image src="https://example.com/sticker.tgs" alt="loading lottie" />
+    );
+
+    await waitFor(() => expect(requestSignal).toBeDefined());
+    unmount();
+
+    expect(requestSignal?.aborted).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it('rejects lottie data that exceeds the decompressed size limit', async () => {
+    const oversizedJson = JSON.stringify({
+      v: '5.11.0',
+      padding: 'a'.repeat(8 * 1024 * 1024),
+    });
+    const gzipped = Buffer.from(gzipSync(oversizedJson)).toString('base64');
+    render(
+      <Image
+        src={`data:application/gzip;base64,${gzipped}`}
+        alt="oversized lottie"
+        onError={() => {}}
+      />
+    );
+
+    const image = screen.getByAltText('oversized lottie');
+    await waitFor(() => expect(image).toHaveAttribute('src'));
+    expect(image.tagName).toBe('IMG');
   });
 
   it('forwards a candidate fallback error after detection fails', async () => {
