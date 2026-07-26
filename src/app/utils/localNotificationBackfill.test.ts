@@ -1,18 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { backfillLocalNotifications, scheduleLiveTimelineScan } from './localNotificationBackfill';
+import { backfillLocalNotifications, runLiveTimelineScan } from './localNotificationBackfill';
 import {
   getLocalNotificationCache,
   clearLocalNotificationCache,
 } from '$client/localNotificationCache';
 import { MAX_BACKFILL_ROOMS } from './localNotifications';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const ROOM_ID = '!active:example.com';
 const USER_ID = '@test:example.com';
+const CONTENT = { storeContent: true, storeEncryptedContent: true };
 
 type RoomOverrides = Omit<Partial<Room>, 'isSpaceRoom'> & {
   lastActiveTs?: number;
@@ -50,17 +47,77 @@ const createEvent = (ts: number, id?: string): Partial<MatrixEvent> =>
     getRelation: () => undefined,
   }) as unknown as Partial<MatrixEvent>;
 
-// ---------------------------------------------------------------------------
-// Setup / teardown
-// ---------------------------------------------------------------------------
+
+type FakeEncryptedEvent = Partial<MatrixEvent> & {
+  decryptTo: (content: Record<string, unknown>) => void;
+  failDecryption: () => void;
+};
+
+const createEncryptedEvent = (ts: number, id: string): FakeEncryptedEvent => {
+  const listeners: (() => void)[] = [];
+  let type = 'm.room.encrypted';
+  let content: Record<string, unknown> = { algorithm: 'm.megolm.v1.aes-sha2', ciphertext: 'AAA' };
+  let failed = false;
+
+  const event = {
+    getId: () => id,
+    getTs: () => ts,
+    getSender: () => '@other:example.com',
+    getType: () => type,
+    getContent: () => content,
+    isEncrypted: () => true,
+    isDecryptionFailure: () => failed,
+    isRedacted: () => false,
+    isSending: () => false,
+    getRelation: () => undefined,
+    on: (_event: string, listener: () => void) => {
+      listeners.push(listener);
+      return event;
+    },
+    off: (_event: string, listener: () => void) => {
+      const index = listeners.indexOf(listener);
+      if (index !== -1) listeners.splice(index, 1);
+      return event;
+    },
+    decryptTo: (clear: Record<string, unknown>) => {
+      failed = false;
+      type = 'm.room.message';
+      content = clear;
+      for (const listener of listeners.slice()) listener();
+    },
+    failDecryption: () => {
+      failed = true;
+      type = 'm.room.message';
+      content = { msgtype: 'm.bad.encrypted', body: '** Unable to decrypt **' };
+      for (const listener of listeners.slice()) listener();
+    },
+  };
+
+  return event as unknown as FakeEncryptedEvent;
+};
+
+const encryptedClient = (room: Room, notifyFor: (mEvent: MatrixEvent) => boolean): MatrixClient =>
+  ({
+    getRooms: () => [room],
+    getRoom: () => room,
+    scrollback: async (r: Room) => r,
+    getAccountData: (type: unknown) =>
+      type === 'm.direct' ? ({ getContent: () => ({}) } as unknown) : undefined,
+    getRoomPushRule: () => {
+      throw new Error('no rule');
+    },
+    getSafeUserId: () => USER_ID,
+    pushRules: { global: { override: [], content: [], room: [], sender: [], underride: [] } },
+    getUserId: () => USER_ID,
+    pushProcessor: {
+      actionsForEvent: (mEvent: MatrixEvent) => ({ notify: notifyFor(mEvent), tweaks: {} }),
+    },
+  }) as unknown as MatrixClient;
 
 beforeEach(() => {
   clearLocalNotificationCache(USER_ID);
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('backfillLocalNotifications', () => {
   it('no watermark (new device) → no backfill', async () => {
@@ -84,7 +141,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    const recorded = await backfillLocalNotifications(mx, USER_ID);
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT);
 
     expect(recorded).toBe(0);
     expect(scrollback).not.toHaveBeenCalled();
@@ -115,7 +172,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    const recorded = await backfillLocalNotifications(mx, USER_ID, now);
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(recorded).toBe(0);
     expect(scrollback).not.toHaveBeenCalled();
@@ -188,7 +245,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    const recorded = await backfillLocalNotifications(mx, USER_ID, now);
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(recorded).toBeGreaterThanOrEqual(0);
     // Only the active (non-space, non-muted) room should be scrolled
@@ -235,7 +292,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    await backfillLocalNotifications(mx, USER_ID, now);
+    await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     // (30 rooms × up to 2 pages = up to 60 calls, but unique rooms ≤ 30.)
     const scrollbackRoomIds = scrollback.mock.calls.map((call) => (call[0] as Room).roomId);
@@ -284,7 +341,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    await backfillLocalNotifications(mx, USER_ID, now);
+    await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(scrollback).toHaveBeenCalledTimes(1);
   });
@@ -329,7 +386,7 @@ describe('backfillLocalNotifications', () => {
         },
       } as unknown as MatrixClient;
 
-      await backfillLocalNotifications(mx, uid, now);
+      await backfillLocalNotifications(mx, uid, CONTENT, now);
       expect(scrollback).toHaveBeenCalledTimes(1);
       clearLocalNotificationCache(uid);
     }
@@ -369,7 +426,7 @@ describe('backfillLocalNotifications', () => {
         },
       } as unknown as MatrixClient;
 
-      await backfillLocalNotifications(mx, uid, now);
+      await backfillLocalNotifications(mx, uid, CONTENT, now);
       expect(scrollback).toHaveBeenCalledTimes(2);
       clearLocalNotificationCache(uid);
     }
@@ -420,7 +477,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    await backfillLocalNotifications(mx, USER_ID, now);
+    await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(scrollback).not.toHaveBeenCalled();
   });
@@ -469,7 +526,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    await backfillLocalNotifications(mx, USER_ID, now);
+    await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(maxInFlight).toBe(1);
   });
@@ -515,7 +572,7 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    const recorded = await backfillLocalNotifications(mx, USER_ID, now);
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(recorded).toBe(3);
   });
@@ -561,19 +618,87 @@ describe('backfillLocalNotifications', () => {
       },
     } as unknown as MatrixClient;
 
-    const recorded = await backfillLocalNotifications(mx, USER_ID, now);
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
 
     expect(recorded).toBe(1);
   });
 });
 
-// ---------------------------------------------------------------------------
-// recordLiveTimelines — recovers what was dropped before push rules synced
-// ---------------------------------------------------------------------------
 
-describe('scheduleLiveTimelineScan', () => {
-  const CONTENT = { storeContent: true, storeEncryptedContent: true };
+describe('backfillLocalNotifications in encrypted rooms', () => {
+  const encryptedRoom = (events: Partial<MatrixEvent>[], now: number): Room =>
+    createRoom(ROOM_ID, {
+      lastActiveTs: now - 5 * 1000,
+      _events: events,
+      getLiveTimeline: () =>
+        ({
+          getEvents: () => events as MatrixEvent[],
+          getState: () => ({ getStateEvents: () => ({}) }),
+        }) as unknown as ReturnType<Room['getLiveTimeline']>,
+    });
 
+  it('records a mention that only becomes visible after decryption', async () => {
+    const now = Date.now();
+    getLocalNotificationCache(USER_ID).updateLastSeenTs(now - 2 * 60 * 60 * 1000);
+
+    const mEvent = createEncryptedEvent(now - 10 * 1000, '$enc');
+    const room = encryptedRoom([mEvent], now);
+    // Ciphertext matches no rule; the mention only shows once decrypted.
+    const mx = encryptedClient(room, (e) => e.getType() === 'm.room.message');
+
+    const recorded = await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
+    expect(recorded).toBe(0);
+
+    mEvent.decryptTo({ msgtype: 'm.text', body: 'hey @test' });
+
+    const entries = getLocalNotificationCache(USER_ID).getEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.event.content.body).toBe('hey @test');
+  });
+
+  it('keeps the placeholder when decryption fails', async () => {
+    const now = Date.now();
+    getLocalNotificationCache(USER_ID).updateLastSeenTs(now - 2 * 60 * 60 * 1000);
+
+    const mEvent = createEncryptedEvent(now - 10 * 1000, '$enc');
+    const room = encryptedRoom([mEvent], now);
+    const mx = encryptedClient(room, () => true);
+
+    await backfillLocalNotifications(mx, USER_ID, CONTENT, now);
+    expect(getLocalNotificationCache(USER_ID).getEntries()).toHaveLength(1);
+
+    mEvent.failDecryption();
+    expect(getLocalNotificationCache(USER_ID).getEntries()).toHaveLength(1);
+
+    // The SDK retries once the megolm key arrives.
+    mEvent.decryptTo({ msgtype: 'm.text', body: 'recovered' });
+    const entries = getLocalNotificationCache(USER_ID).getEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.event.content.body).toBe('recovered');
+  });
+
+  it('omits the body when encrypted content must not be persisted', async () => {
+    const now = Date.now();
+    getLocalNotificationCache(USER_ID).updateLastSeenTs(now - 2 * 60 * 60 * 1000);
+
+    const mEvent = createEvent(now - 10 * 1000, '$clear');
+    const room = encryptedRoom([mEvent], now);
+    const mx = encryptedClient(room, () => true);
+
+    await backfillLocalNotifications(
+      mx,
+      USER_ID,
+      { storeContent: true, storeEncryptedContent: false },
+      now
+    );
+
+    const entry = getLocalNotificationCache(USER_ID).getEntries()[0]!;
+    expect(entry.event.content.body).toBeUndefined();
+    expect(entry.event.content.msgtype).toBe('m.text');
+  });
+});
+
+describe('runLiveTimelineScan', () => {
   const clientWith = (rooms: Room[], withPushRules = true): MatrixClient =>
     ({
       getRooms: () => rooms,
@@ -597,7 +722,7 @@ describe('scheduleLiveTimelineScan', () => {
       _events: [createEvent(1000, '$a'), createEvent(2000, '$b')],
     });
 
-    const recorded = await scheduleLiveTimelineScan(
+    const recorded = await runLiveTimelineScan(
       clientWith([room]),
       USER_ID,
       new Set(),
@@ -612,8 +737,8 @@ describe('scheduleLiveTimelineScan', () => {
     const room = createRoom(ROOM_ID, { _events: [createEvent(1000, '$a')] });
     const mx = clientWith([room]);
 
-    await scheduleLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
-    await scheduleLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
+    await runLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
+    await runLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
 
     expect(getLocalNotificationCache(USER_ID).getEntries()).toHaveLength(1);
   });
@@ -623,9 +748,9 @@ describe('scheduleLiveTimelineScan', () => {
     const mx = clientWith([room]);
     const cache = getLocalNotificationCache(USER_ID);
 
-    await scheduleLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
+    await runLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
     cache.dismiss('$a');
-    await scheduleLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
+    await runLiveTimelineScan(mx, USER_ID, new Set(), CONTENT);
 
     expect(cache.getEntries()[0]!.dismissed).toBe(true);
   });
@@ -633,7 +758,7 @@ describe('scheduleLiveTimelineScan', () => {
   it('records nothing while push rules are still missing', async () => {
     const room = createRoom(ROOM_ID, { _events: [createEvent(1000, '$a')] });
 
-    const recorded = await scheduleLiveTimelineScan(
+    const recorded = await runLiveTimelineScan(
       clientWith([room], false),
       USER_ID,
       new Set(),
@@ -649,15 +774,13 @@ describe('scheduleLiveTimelineScan', () => {
       _events: [createEvent(1000, '$a')],
     });
 
-    expect(await scheduleLiveTimelineScan(clientWith([space]), USER_ID, new Set(), CONTENT)).toBe(
-      0
-    );
+    expect(await runLiveTimelineScan(clientWith([space]), USER_ID, new Set(), CONTENT)).toBe(0);
   });
 
   it('omits the body when content must not be persisted', async () => {
     const room = createRoom(ROOM_ID, { _events: [createEvent(1000, '$a')] });
 
-    await scheduleLiveTimelineScan(clientWith([room]), USER_ID, new Set(), {
+    await runLiveTimelineScan(clientWith([room]), USER_ID, new Set(), {
       storeContent: false,
       storeEncryptedContent: false,
     });

@@ -17,9 +17,6 @@ const USER_ID = '@user:example.com';
 const OTHER_USER = '@other:example.com';
 const EVENT_ID = '$event1';
 
-// ---------------------------------------------------------------------------
-// Mock helpers — follow the hand-rolled pattern from room.unread.test.ts
-// ---------------------------------------------------------------------------
 
 const createEvent = (overrides: Partial<MatrixEvent> = {}): MatrixEvent =>
   ({
@@ -71,9 +68,6 @@ const createClient = (
     },
   }) as unknown as MatrixClient;
 
-// ---------------------------------------------------------------------------
-// evaluateNotification exclusions
-// ---------------------------------------------------------------------------
 
 describe('arePushRulesReady', () => {
   it('is false before push rules have synced', () => {
@@ -218,9 +212,6 @@ describe('evaluateNotification exclusions', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// evaluateNotification inclusions
-// ---------------------------------------------------------------------------
 
 describe('evaluateNotification inclusions', () => {
   it('returns StoredNotification for normal message with notify=true', () => {
@@ -349,9 +340,6 @@ describe('evaluateNotification inclusions', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// sliceNotificationPage
-// ---------------------------------------------------------------------------
 
 describe('sliceNotificationPage', () => {
   const makeItem = (
@@ -449,10 +437,6 @@ describe('sliceNotificationPage', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// isStoredNotificationRead
-// ---------------------------------------------------------------------------
-
 describe('isStoredNotificationRead', () => {
   const entry = (ts = 1000): StoredNotification =>
     ({ room_id: ROOM_ID, event: { event_id: EVENT_ID }, ts }) as StoredNotification;
@@ -497,8 +481,6 @@ describe('isStoredNotificationRead', () => {
     expect(isStoredNotificationRead(room, USER_ID, entry(9000))).toBe(false);
   });
 
-  // Under sliding sync an entry outside the loaded window is the normal case,
-  // so it must not be hidden just because nothing resolves.
   it('treats an unresolvable entry as unread', () => {
     const room = readStateRoom({});
 

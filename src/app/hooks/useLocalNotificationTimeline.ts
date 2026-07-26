@@ -6,6 +6,7 @@ import { allRoomsAtom } from '$state/room-list/roomList';
 import { getLocalNotificationCache } from '$client/localNotificationCache';
 import { sliceNotificationPage, type StoredNotification } from '$utils/localNotifications';
 import { groupNotifications } from '$utils/groupNotifications';
+import { throttleTrailing } from '$utils/throttleTrailing';
 
 type RoomNotificationsGroup = {
   roomId: string;
@@ -18,7 +19,6 @@ type NotificationTimeline = {
 const RELOAD_THROTTLE_MS = 500;
 
 type LoadTimeline = (from?: string) => Promise<void>;
-type SilentReloadTimeline = () => Promise<void>;
 
 export const sameNotificationTimeline = (
   a: NotificationTimeline,
@@ -49,7 +49,7 @@ export const useLocalNotificationTimeline = (
   paginationLimit: number,
   filterMode: 'all' | 'mentions' = 'mentions',
   includeDone?: boolean
-): [NotificationTimeline, LoadTimeline, SilentReloadTimeline] => {
+): [NotificationTimeline, LoadTimeline] => {
   const mx = useMatrixClient();
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
@@ -96,32 +96,11 @@ export const useLocalNotificationTimeline = (
     [applyUpTo, paginationLimit]
   );
 
-  const silentReloadTimeline: SilentReloadTimeline = useCallback(async () => {
-    applyUpTo(loadedLimitRef.current);
-  }, [applyUpTo]);
-
   useEffect(() => {
-    let trailing: ReturnType<typeof setTimeout> | undefined;
-    let lastRun = 0;
-
-    const run = () => {
-      lastRun = Date.now();
+    const reload = throttleTrailing(() => {
       applyUpTo(loadedLimitRef.current);
       bumpReceiptVersion((v) => v + 1);
-    };
-
-    const reload = () => {
-      const elapsed = Date.now() - lastRun;
-      if (elapsed >= RELOAD_THROTTLE_MS) {
-        run();
-        return;
-      }
-      if (trailing !== undefined) return;
-      trailing = setTimeout(() => {
-        trailing = undefined;
-        run();
-      }, RELOAD_THROTTLE_MS - elapsed);
-    };
+    }, RELOAD_THROTTLE_MS);
 
     const unsubscribe = cache.subscribe(reload);
     mx.on(RoomEvent.Receipt, reload);
@@ -129,9 +108,9 @@ export const useLocalNotificationTimeline = (
     return () => {
       unsubscribe();
       mx.off(RoomEvent.Receipt, reload);
-      clearTimeout(trailing);
+      reload.cancel();
     };
   }, [mx, cache, applyUpTo]);
 
-  return [notificationTimeline, loadTimeline, silentReloadTimeline];
+  return [notificationTimeline, loadTimeline];
 };

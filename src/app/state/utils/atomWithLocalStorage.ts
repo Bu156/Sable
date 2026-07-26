@@ -1,6 +1,8 @@
 import { atom } from 'jotai';
+import { NOTIFICATION_CACHE_KEY_PREFIX } from '$client/localNotificationCache';
+import { SIDEBAR_CACHE_KEY_PREFIX } from '$client/slidingSyncSidebarCache';
 
-const EVICTABLE_KEY_PREFIXES = ['sable.notificationCache.', 'sable.slidingSyncSidebar.'];
+const EVICTABLE_KEY_PREFIXES = [NOTIFICATION_CACHE_KEY_PREFIX, SIDEBAR_CACHE_KEY_PREFIX];
 
 export const getLocalStorageItem = <T>(key: string, defaultValue: T): T => {
   const item = localStorage.getItem(key);

@@ -4,6 +4,7 @@ import { RoomEvent } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getLocalNotificationCache } from '$client/localNotificationCache';
 import { isStoredNotificationRead, type StoredNotification } from '$utils/localNotifications';
+import { throttleTrailing, type Throttled } from '$utils/throttleTrailing';
 
 const RECOMPUTE_THROTTLE_MS = 500;
 
@@ -14,14 +15,15 @@ type ReceiptContent = Record<string, Record<string, Record<string, unknown>>>;
 class InboxCountStore {
   private count = 0;
   private readonly subscribers = new Set<() => void>();
-  private trailing: ReturnType<typeof setTimeout> | undefined;
-  private lastRun = 0;
+  private readonly schedule: Throttled;
   private detach: (() => void) | undefined;
 
   constructor(
     readonly mx: MatrixClient,
     private readonly userId: string
-  ) {}
+  ) {
+    this.schedule = throttleTrailing(this.recompute, RECOMPUTE_THROTTLE_MS);
+  }
 
   getSnapshot = (): number => this.count;
 
@@ -35,7 +37,7 @@ class InboxCountStore {
     };
   };
 
-  private counts = (entry: StoredNotification): boolean => {
+  private isUnreadMention = (entry: StoredNotification): boolean => {
     if (entry.dismissed) return false;
     if (!entry.highlight && !entry.isDM) return false;
 
@@ -46,24 +48,10 @@ class InboxCountStore {
   };
 
   private recompute = (): void => {
-    this.lastRun = Date.now();
-    const next = getLocalNotificationCache(this.userId).countEntries(this.counts);
+    const next = getLocalNotificationCache(this.userId).countEntries(this.isUnreadMention);
     if (next === this.count) return;
     this.count = next;
     for (const onChange of this.subscribers) onChange();
-  };
-
-  private schedule = (): void => {
-    const elapsed = Date.now() - this.lastRun;
-    if (elapsed >= RECOMPUTE_THROTTLE_MS) {
-      this.recompute();
-      return;
-    }
-    if (this.trailing !== undefined) return;
-    this.trailing = setTimeout(() => {
-      this.trailing = undefined;
-      this.recompute();
-    }, RECOMPUTE_THROTTLE_MS - elapsed);
   };
 
   private onReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (event) => {
@@ -87,10 +75,7 @@ class InboxCountStore {
   private teardown(): void {
     this.detach?.();
     this.detach = undefined;
-    if (this.trailing !== undefined) {
-      clearTimeout(this.trailing);
-      this.trailing = undefined;
-    }
+    this.schedule.cancel();
     stores.delete(this.userId);
   }
 }

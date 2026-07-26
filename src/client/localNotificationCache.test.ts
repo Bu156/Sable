@@ -28,11 +28,6 @@ const makeEntry = (
   dismissed,
 });
 
-/**
- * Every cache instance registers a `storage` listener and can hold a pending
- * debounced write, both of which would bleed into later tests under the same
- * storage key. Track them and tear them down.
- */
 const caches: LocalNotificationCache[] = [];
 const openCache = (id: string): LocalNotificationCache => {
   const cache = new LocalNotificationCache(id);
@@ -255,10 +250,6 @@ describe('LocalNotificationCache', () => {
     expect(restored.getLastSeenTs()).toBe(12345);
   });
 });
-
-// ---------------------------------------------------------------------------
-// mergeMany / countEntries — a batched scan must not notify per entry
-// ---------------------------------------------------------------------------
 
 describe('LocalNotificationCache batching', () => {
   it('notifies once for a whole batch', () => {

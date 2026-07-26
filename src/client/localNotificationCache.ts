@@ -1,5 +1,7 @@
 import type { StoredNotification } from '$utils/localNotifications';
 
+export const NOTIFICATION_CACHE_KEY_PREFIX = 'sable.notificationCache.';
+
 const CACHE_VERSION = 1;
 const MAX_ENTRIES = 300;
 const CACHE_WRITE_DELAY_MS = 500;
@@ -11,6 +13,9 @@ type CacheData = {
   entries: StoredNotification[];
   lastSeenTs?: number;
 };
+
+const storageKeyFor = (userId: string): string =>
+  `${NOTIFICATION_CACHE_KEY_PREFIX}v${CACHE_VERSION}.${encodeURIComponent(userId)}`;
 
 const emptyCache = (): CacheData => ({ version: CACHE_VERSION, entries: [] });
 
@@ -55,7 +60,7 @@ export class LocalNotificationCache {
 
   constructor(userId: string) {
     this.userId = userId;
-    this.storageKey = `sable.notificationCache.v1.${encodeURIComponent(userId)}`;
+    this.storageKey = storageKeyFor(userId);
     this.data = this.readStored();
     window.addEventListener('storage', this.onStorageEvent);
   }
@@ -297,7 +302,7 @@ export class LocalNotificationCache {
 
 export function clearLocalNotificationCache(userId: string): void {
   try {
-    globalThis.localStorage?.removeItem(`sable.notificationCache.v1.${encodeURIComponent(userId)}`);
+    globalThis.localStorage?.removeItem(storageKeyFor(userId));
   } catch {
     // Storage can be disabled for this origin; logout must continue regardless.
   }

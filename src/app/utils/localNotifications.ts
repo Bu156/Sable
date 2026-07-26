@@ -1,5 +1,6 @@
+
 import type { IContent, IEvent, MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { ReceiptType } from '$types/matrix-sdk';
+import { EventType, MatrixEventEvent, ReceiptType } from '$types/matrix-sdk';
 import { NotificationType } from '$types/matrix/room';
 import { isDMRoom, isNotificationEvent } from './room/unread';
 
@@ -14,9 +15,6 @@ export type StoredNotification = {
 
 export const MAX_BODY_LENGTH = 120;
 
-// HTML cannot be sliced without breaking tags, so oversized messages lose it.
-// Ciphertext is dropped: multi-KB, shares the session's localStorage budget, and
-// is never rendered. Always copies — the SDK mutates `content` in place.
 const truncateContent = (content: IContent, storeContent: boolean): IContent => {
   if (content.ciphertext !== undefined) {
     return typeof content.algorithm === 'string' ? { algorithm: content.algorithm } : {};
@@ -42,8 +40,6 @@ const truncateContent = (content: IContent, storeContent: boolean): IContent => 
   return truncated;
 };
 
-// Defaults to public receipts only, and markAsRead sends a private one when
-// hideReads is on.
 const latestReceiptTs = (room: Room, userId: string): number | undefined => {
   const timestamps = [ReceiptType.Read, ReceiptType.ReadPrivate]
     .map((type) => room.getReadReceiptForUserId(userId, false, type)?.data?.ts)
@@ -57,26 +53,17 @@ export const isStoredNotificationRead = (
   userId: string,
   entry: StoredNotification
 ): boolean => {
-  // hasUserReadEvent warns for events missing from the timeline, so only
-  // consult it while the event is known.
   if (room.findEventById(entry.event.event_id)) {
     return room.hasUserReadEvent(userId, entry.event.event_id);
   }
 
-  // Outside the loaded window, which under sliding sync is routine. Compare
-  // against the receipt timestamp and default to UNREAD, so a notification is
-  // never hidden just because its event is not in memory.
   const receiptTs = latestReceiptTs(room, userId);
   if (receiptTs === undefined) return false;
   return entry.ts <= receiptTs;
 };
 
-// actionsForEvent returns {} rather than throwing before push rules sync, which
-// reads as "do not notify".
 export const arePushRulesReady = (mx: MatrixClient): boolean => mx.pushRules?.global !== undefined;
 
-// The DM override below force-notifies anything in a DM. These types are
-// explicitly dont_notify by push rule and must not be resurrected by it.
 const DM_OVERRIDE_EXCLUDED = new Set(['m.reaction', 'm.room.create']);
 
 export type EvaluateOptions = {
@@ -152,6 +139,29 @@ export const evaluateNotification = (
   };
 };
 
+export const DECRYPT_WAIT_MS = 30_000;
+
+export const isAwaitingDecryption = (mEvent: MatrixEvent): boolean =>
+  mEvent.getType() === (EventType.RoomMessageEncrypted as string) && mEvent.isEncrypted();
+
+export const watchDecryption = (
+  mEvent: MatrixEvent,
+  onDecrypted: () => void,
+  onGiveUp?: () => void
+): (() => void) => {
+  const listener = () => {
+    if (mEvent.isDecryptionFailure()) return;
+    onDecrypted();
+  };
+  mEvent.on(MatrixEventEvent.Decrypted, listener);
+  const giveUpId = onGiveUp && setTimeout(onGiveUp, DECRYPT_WAIT_MS);
+
+  return () => {
+    if (giveUpId !== undefined) clearTimeout(giveUpId);
+    mEvent.off(MatrixEventEvent.Decrypted, listener);
+  };
+};
+
 export const sliceNotificationPage = (
   all: StoredNotification[],
   offset: number,
@@ -169,9 +179,6 @@ export const sliceNotificationPage = (
   return { page, nextToken };
 };
 
-// ---------------------------------------------------------------------------
-// Gap backfill — pure decision logic. Testable without network.
-// ---------------------------------------------------------------------------
 
 export const GAP_THRESHOLD_MS = 5 * 60 * 1000;
 export const MAX_BACKFILL_ROOMS = 30;

@@ -6,10 +6,10 @@ import { MatrixRTCSessionProvider } from '$hooks/useMatrixRTCSession';
 import { BackgroundNotifications } from './BackgroundNotifications';
 import { WebUpdater } from './WebUpdater';
 import { NotificationTransportRuntimeFeature } from '$features/settings/notifications/NotificationTransportRuntimeFeature';
+import { NotificationRecorder } from './client-non-ui/notificationRecorder';
 import {
   InviteNotifications,
   MessageNotifications,
-  NotificationRecorder,
   HandleNotificationClick,
   SyncNotificationSettingsWithServiceWorker,
   HandleDecryptPushEvent,

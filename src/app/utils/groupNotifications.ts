@@ -1,26 +1,22 @@
 import { EventType } from '$types/matrix-sdk';
+import type { StoredNotification } from './localNotifications';
 
-type NotificationEntry = {
-  event: { type: string };
-  room_id: string;
-};
-
-type RoomNotificationsGroup<N extends NotificationEntry = NotificationEntry> = {
+type RoomNotificationsGroup = {
   roomId: string;
-  notifications: N[];
+  notifications: StoredNotification[];
 };
 
-export const groupNotifications = <N extends NotificationEntry>(
-  notifications: N[],
+export const groupNotifications = (
+  notifications: StoredNotification[],
   allowRooms: Set<string>
-): RoomNotificationsGroup<N>[] => {
-  const groups: RoomNotificationsGroup<N>[] = [];
+): RoomNotificationsGroup[] => {
+  const groups: RoomNotificationsGroup[] = [];
   notifications.forEach((notification) => {
     if (notification.event.type === (EventType.RoomMember as string)) return;
     if (!allowRooms.has(notification.room_id)) return;
 
     const groupIndex = groups.length - 1;
-    const lastAddedGroup: RoomNotificationsGroup<N> | undefined = groups[groupIndex];
+    const lastAddedGroup: RoomNotificationsGroup | undefined = groups[groupIndex];
     if (notification.room_id === lastAddedGroup?.roomId) {
       lastAddedGroup.notifications.push(notification);
       return;

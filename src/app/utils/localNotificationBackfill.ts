@@ -1,14 +1,16 @@
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { ClientEvent, Direction, EventType, MatrixEventEvent } from '$types/matrix-sdk';
+import { ClientEvent, EventType } from '$types/matrix-sdk';
 import { NotificationType } from '$types/matrix/room';
 import { getLocalNotificationCache } from '$client/localNotificationCache';
 import { createLogger } from '$utils/debug';
-import { getAccountData } from '$utils/room/hierarchy';
+import { getAccountData, getStateEvent } from '$utils/room/hierarchy';
 import { getMDirects, getNotificationType } from '$utils/room/unread';
 import {
   evaluateNotification,
+  isAwaitingDecryption,
   selectBackfillRooms,
   shouldBackfill,
+  watchDecryption,
   backfillPageCount,
   type BackfillRoomInfo,
   type StoredNotification,
@@ -17,7 +19,6 @@ import {
 const logger = createLogger('localNotificationBackfill');
 const SCROLLBACK_LIMIT = 50;
 
-const DECRYPT_TIMEOUT_MS = 30_000;
 // Bounds the transient batch; the cache only keeps MAX_ENTRIES anyway.
 const SCAN_FLUSH_BATCH = 200;
 
@@ -27,15 +28,9 @@ export type ScanContentOptions = {
 };
 
 const isEncryptedRoom = (room: Room): boolean =>
-  room
-    .getLiveTimeline()
-    .getState(Direction.Forward)
-    ?.getStateEvents(EventType.RoomEncryption, '') !== null;
+  getStateEvent(room, EventType.RoomEncryption) !== undefined;
 
-// Recovers events that arrived before push rules synced. Reads only what the
-// client already holds — no network — and yields between rooms so a large
-// account cannot block the main thread through a whole scan.
-export const scheduleLiveTimelineScan = async (
+export const runLiveTimelineScan = async (
   mx: MatrixClient,
   userId: string,
   mDirects: Set<string>,
@@ -81,6 +76,7 @@ export const scheduleLiveTimelineScan = async (
 export const backfillLocalNotifications = async (
   mx: MatrixClient,
   userId: string,
+  content: ScanContentOptions,
   now: number = Date.now(),
   signal?: AbortSignal
 ): Promise<number> => {
@@ -94,7 +90,6 @@ export const backfillLocalNotifications = async (
     return 0;
   }
 
-  // Build BackfillRoomInfo from all rooms the client knows about.
   const allRooms = mx.getRooms();
   const roomInfos: BackfillRoomInfo[] = allRooms.map((room) => ({
     roomId: room.roomId,
@@ -104,9 +99,13 @@ export const backfillLocalNotifications = async (
   }));
   const selectedRoomIds = selectBackfillRooms(roomInfos, watermark);
   const pages = backfillPageCount(watermark, now);
+  const activeRooms = roomInfos.filter(
+    (r) => !r.isSpaceRoom && !r.isMuted && r.lastActiveTs > watermark
+  ).length;
 
   logger.log('backfill starting', {
     rooms: selectedRoomIds.length,
+    skippedRooms: activeRooms - selectedRoomIds.length,
     pages,
     gapMs: now - watermark,
   });
@@ -134,12 +133,22 @@ export const backfillLocalNotifications = async (
 
   let recorded = 0;
   const processed = new Set<string>();
+  const stopWatchers: (() => void)[] = [];
+  const releaseWatchers = () => {
+    for (const stop of stopWatchers) stop();
+    stopWatchers.length = 0;
+  };
+  signal?.addEventListener('abort', releaseWatchers, { once: true });
+
   for (const roomId of selectedRoomIds) {
     if (signal?.aborted) return recorded;
     const room = mx.getRoom(roomId);
     if (!room) continue;
     const notificationType = getNotificationType(mx, roomId);
     if (notificationType === NotificationType.Mute) continue;
+    const storeContent = isEncryptedRoom(room)
+      ? content.storeEncryptedContent
+      : content.storeContent;
 
     try {
       for (let page = 0; page < pages; page += 1) {
@@ -154,33 +163,24 @@ export const backfillLocalNotifications = async (
           const eventId = mEvent.getId();
           if (!eventId || processed.has(eventId)) continue;
           processed.add(eventId);
-          const stored = evaluateNotification(mx, room, mEvent, mDirects, notificationType);
+          const evaluate = () =>
+            evaluateNotification(mx, room, mEvent, mDirects, notificationType, { storeContent });
+
+          const stored = evaluate();
           if (stored) {
             cache.merge(stored);
             recorded += 1;
-            if (mEvent.getType() === 'm.room.encrypted' && mEvent.isEncrypted()) {
-              const handleDecrypted = () => {
-                const upgraded = evaluateNotification(mx, room, mEvent, mDirects, notificationType);
+          }
+
+          // Also watch events that did not notify as ciphertext: a mention is
+          // only visible once the clear event arrives.
+          if (isAwaitingDecryption(mEvent)) {
+            stopWatchers.push(
+              watchDecryption(mEvent, () => {
+                const upgraded = evaluate();
                 if (upgraded) cache.merge(upgraded);
-                else cache.remove(eventId);
-              };
-              mEvent.once(MatrixEventEvent.Decrypted, handleDecrypted);
-              const timeoutId = setTimeout(() => {
-                mEvent.off(MatrixEventEvent.Decrypted, handleDecrypted);
-              }, DECRYPT_TIMEOUT_MS);
-              if (signal) {
-                if (signal.aborted) mEvent.off(MatrixEventEvent.Decrypted, handleDecrypted);
-                else
-                  signal.addEventListener(
-                    'abort',
-                    () => {
-                      clearTimeout(timeoutId);
-                      mEvent.off(MatrixEventEvent.Decrypted, handleDecrypted);
-                    },
-                    { once: true }
-                  );
-              }
-            }
+              })
+            );
           }
         }
 
