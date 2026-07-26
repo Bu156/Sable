@@ -27,6 +27,7 @@ export function useMobileSheetClose() {
 export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDownModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef<number | null>(null);
+  const backdropTouchRef = useRef(false);
   const touchYDiff = useRef(0);
   const startTime = useRef(0);
   const [mounted, setMounted] = useState(false);
@@ -116,6 +117,16 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
     touchStartY.current = null;
   };
 
+  // A sheet opened by a long press mounts under the finger, and releasing it
+  // synthesises a click on the backdrop. Only a touch that started on the
+  // backdrop is a dismiss.
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    const fromTouch =
+      e.nativeEvent instanceof PointerEvent && e.nativeEvent.pointerType === 'touch';
+    if (fromTouch && !backdropTouchRef.current) return;
+    closeWithAnimation();
+  };
+
   const dragHandlers = {
     onTouchStart: handleTouchStart,
     onTouchMove: handleTouchMove,
@@ -135,8 +146,11 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
       className={css.MessageMobileOptionsWrapped}
       data-gestures="ignore"
       style={closing ? { opacity: 0, transition: 'opacity 100ms ease-out' } : undefined}
-      onClick={closeWithAnimation}
-      onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+      onClick={handleBackdropClick}
+      onTouchStart={(e: React.TouchEvent) => {
+        backdropTouchRef.current = e.target === e.currentTarget;
+        e.stopPropagation();
+      }}
       onTouchMove={(e: React.TouchEvent) => e.stopPropagation()}
       onTouchEnd={(e: React.TouchEvent) => e.stopPropagation()}
     >
