@@ -3,6 +3,8 @@
 
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export function computeNightlyVersion(baseVersion, timestamp = new Date()) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(baseVersion);
@@ -84,8 +86,7 @@ export function resolveReleaseMeta({
   };
 }
 
-const isMain =
-  process.argv[1] && import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`;
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   try {
     const meta = resolveReleaseMeta({
