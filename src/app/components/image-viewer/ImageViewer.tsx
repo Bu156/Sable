@@ -13,6 +13,7 @@ import {
   phosphorSizeRem,
   sizedIcon,
 } from '$components/icons/phosphor';
+import { Image as MediaImage } from '$components/media';
 import { useImageGestures } from '$hooks/useImageGestures';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { useDismissOnBack } from '$utils/androidBack';
@@ -62,6 +63,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       imageRef,
       containerRef,
       handleImageLoad,
+      handleImageDimensions,
       enableResizeWithWindow,
     } = useImageGestures(true, 0.2, 0.1);
     useEffect(() => {
@@ -319,7 +321,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
             onTouchMove={menu.triggerProps.onTouchMove}
             onTouchCancel={menu.triggerProps.onTouchCancel}
           >
-            <img
+            <MediaImage
+              ref={imageRef}
               className={classNames(css.ImageViewerImg, isPixelated && css.ImageViewerImgPixelated)}
               draggable={false}
               data-gestures="ignore"
@@ -330,9 +333,18 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               }}
               src={src}
               alt={alt}
+              info={info}
+              pixelated={isPixelated}
               onPointerDown={onPointerDown}
               onLoad={(event: React.SyntheticEvent<HTMLImageElement>) => {
                 handleImageLoad(event);
+                setIsImageReady(true);
+              }}
+              onLottieLoad={(canvas) => {
+                handleImageDimensions(
+                  info?.w ?? canvas?.width ?? 0,
+                  info?.h ?? canvas?.height ?? 0
+                );
                 setIsImageReady(true);
               }}
             />

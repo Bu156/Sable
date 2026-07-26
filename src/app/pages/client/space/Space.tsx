@@ -98,6 +98,7 @@ import { ModalWide } from '$styles/Modal.css';
 import { ImageViewer } from '$components/image-viewer';
 import { reportMediaLoadFailure } from '$utils/mediaLoadDiagnostics';
 import * as css from './styles.css';
+import { Image as MediaImage } from '$components/media';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
@@ -377,7 +378,7 @@ function SpaceHeader({ hideText, mx }: { hideText?: boolean; mx: MatrixClient })
                   }
                 }}
               >
-                <img
+                <MediaImage
                   className={css.RoomCoverImage}
                   src={bannerURI}
                   alt=""

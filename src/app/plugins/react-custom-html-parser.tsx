@@ -37,6 +37,7 @@ import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { getSettingsLinkChipLabel, parseSettingsLink } from '$features/settings/settingsLink';
 import { ClientSideHoverFreeze } from '$components/ClientSideHoverFreeze';
 import { CodeHighlightRenderer } from '$components/code-highlight';
+import { Image as MediaImage } from '$components/media';
 import {
   isRedundantMatrixToAnchorText,
   parseMatrixToRoom,
@@ -559,12 +560,23 @@ export function CodeBlock({
 function FallbackImg({
   fallback,
   src,
+  className,
+  style,
   ...props
-}: ComponentPropsWithoutRef<'img'> & { fallback: ReactNode }) {
+}: ComponentPropsWithoutRef<typeof MediaImage> & { fallback: ReactNode }) {
   const [failed, setFailed] = useState(false);
   const renderableSrc = useRenderableMediaUrl(typeof src === 'string' ? src : undefined);
   if (failed) return <>{fallback}</>;
-  return <img {...props} src={renderableSrc ?? src} onError={() => setFailed(true)} />;
+  return (
+    <MediaImage
+      {...props}
+      src={renderableSrc ?? src}
+      className={className}
+      style={className === css.EmoticonImg ? { width: 'auto', height: '1em', ...style } : style}
+      onError={() => setFailed(true)}
+      onLottieError={() => setFailed(true)}
+    />
+  );
 }
 
 export const getReactCustomHtmlParser = (

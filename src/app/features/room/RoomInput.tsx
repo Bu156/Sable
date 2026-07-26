@@ -106,7 +106,7 @@ import { UploadBoard, UploadBoardContent, UploadBoardHeader } from '$components/
 import type { Upload, UploadSuccess } from '$state/upload';
 import { UploadStatus, createUploadFamilyObserverAtom } from '$state/upload';
 import { loadImageElementFromMediaUrl } from '$utils/dom';
-import { safeFile } from '$utils/mimeTypes';
+import { isImageMimeType, safeUploadFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
@@ -427,7 +427,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleFiles = useCallback(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
         setUploadBoard(true);
-        const safeFiles = files.map(safeFile);
+        const safeFiles = await Promise.all(files.map(safeUploadFile));
         // Eager-read to avoid Android content URI expiry after SAF picker
         const blobbedFiles = mobileOrTablet()
           ? await Promise.all(
@@ -915,7 +915,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const fileItem = selectedFiles.find((f) => f.file === upload.file);
       if (!fileItem) throw new Error('Broken upload');
 
-      if (fileItem.file.type.startsWith('image')) {
+      if (isImageMimeType(fileItem.file.type)) {
         return getImageMsgContent(mx, fileItem, upload.mxc);
       }
       if (fileItem.file.type.startsWith('video')) {
@@ -2052,7 +2052,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     open={showAttachmentSheet}
                     onClose={() => setShowAttachmentSheet(false)}
                     onPickPhotos={() => {
-                      pickFile('image/*');
+                      pickFile('image/*,.tgs');
                       setShowAttachmentSheet(false);
                     }}
                     onPickFile={() => {
@@ -2114,7 +2114,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                               size="300"
                               radii="300"
                               onClick={() => {
-                                pickFile('image/*');
+                                pickFile('image/*,.tgs');
                                 setAddMenuAnchor(undefined);
                               }}
                               before={menuIcon(ImageIcon)}

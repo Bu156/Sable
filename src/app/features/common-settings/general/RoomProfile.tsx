@@ -8,6 +8,7 @@ import classNames from 'classnames';
 import type { StateEvents } from '$types/matrix-sdk';
 import { JoinRule, EventType } from '$types/matrix-sdk';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
+import { Image as MediaImage } from '$components/media';
 import { useRoom } from '$hooks/useRoom';
 import { useRoomAvatar, useRoomJoinRule, useRoomName, useRoomTopic } from '$hooks/useRoomMeta';
 import { mDirectAtom } from '$state/mDirectList';
@@ -377,7 +378,7 @@ function RoomBannerEdit({ bannerURI, permissions }: Readonly<ProfileProps>) {
           }}
         >
           {previewUrl ? (
-            <img
+            <MediaImage
               src={previewUrl}
               key={previewUrl}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}

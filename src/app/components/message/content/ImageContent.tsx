@@ -84,8 +84,11 @@ type RenderImageProps = {
   alt: string;
   title: string;
   src: string;
+  info?: IImageInfo;
   onLoad: () => void;
   onError: () => void;
+  onLottieLoad: () => void;
+  onLottieError: () => void;
   onClick: () => void;
   tabIndex: number;
 };
@@ -314,8 +317,11 @@ export const ImageContent = as<'div', ImageContentProps>(
               alt: body ?? '',
               title: body ?? '',
               src: srcState.data,
+              info,
               onLoad: handleLoad,
               onError: handleError,
+              onLottieLoad: handleLoad,
+              onLottieError: handleError,
               onClick: () => {
                 setIsHovered(false);
                 setViewer(true);

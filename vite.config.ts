@@ -200,7 +200,7 @@ export default defineConfig(({ command }) => ({
       injectManifest: {
         // element-call is a self-contained embedded app; exclude its large assets
         // from the SW precache manifest (they are not part of the Sable shell).
-        globIgnores: ['public/element-call/**'],
+        globIgnores: ['public/element-call/**', 'assets/lottie-*.js'],
         // The app's own crypto WASM and main bundle exceed the 2 MiB default.
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MiB
       },
@@ -297,6 +297,10 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] }) as PluginOption],
       output: {
+        chunkFileNames: (chunk) =>
+          chunk.moduleIds.some((id) => id.includes('@lottiefiles/dotlottie'))
+            ? 'assets/lottie-[hash].js'
+            : 'assets/[name]-[hash].js',
         manualChunks: (id) => {
           if (id.includes('@matrix-org') || id.includes('matrix-js-sdk')) return 'matrix';
           return undefined;
