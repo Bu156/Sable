@@ -130,9 +130,15 @@ export type RoomSearchModalProps = {
   requestClose?: () => void;
   pickRoom?: RoomSearchPickRoomConfig;
   isMobile?: boolean;
+  onNavigate?: () => void;
 };
 
-export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearchModalProps) {
+export function RoomSearchModal({
+  requestClose,
+  pickRoom,
+  isMobile,
+  onNavigate,
+}: RoomSearchModalProps) {
   const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -209,9 +215,9 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
       pickRoom.onPickRoom(roomId);
       return;
     }
+    onNavigate?.();
     if (isSpace) navigateSpace(roomId);
     else navigateRoom(roomId);
-    requestClose?.();
   };
 
   const handleInputChange: ChangeEventHandler<HTMLInputElement> = (evt) => {
@@ -503,6 +509,8 @@ export function RoomSearchModal({ requestClose, pickRoom, isMobile }: RoomSearch
 }
 
 export function SearchWrapper({ requestClose, pickRoom }: RoomSearchModalProps) {
+  const skipCloseOnDeactivate = useRef(false);
+
   return (
     <Overlay open>
       <OverlayCenter>
@@ -511,7 +519,9 @@ export function SearchWrapper({ requestClose, pickRoom }: RoomSearchModalProps) 
             returnFocusOnDeactivate: true,
             allowOutsideClick: true,
             clickOutsideDeactivates: true,
-            onDeactivate: requestClose,
+            onDeactivate: () => {
+              if (!skipCloseOnDeactivate.current) requestClose?.();
+            },
             escapeDeactivates: (evt: KeyboardEvent) => {
               evt.stopPropagation();
               return true;
@@ -526,7 +536,13 @@ export function SearchWrapper({ requestClose, pickRoom }: RoomSearchModalProps) 
               background: color.SurfaceVariant.Container,
             }}
           >
-            <RoomSearchModal requestClose={requestClose} pickRoom={pickRoom} />
+            <RoomSearchModal
+              requestClose={requestClose}
+              pickRoom={pickRoom}
+              onNavigate={() => {
+                skipCloseOnDeactivate.current = true;
+              }}
+            />
           </Modal>
         </FocusTrap>
       </OverlayCenter>
