@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
-import { Image, sanitizeLottieJson } from './Image';
+import { Image, processAndSanitizeLottie } from './Image';
 import { Blob as NodeBlob } from 'node:buffer';
 import { gzipSync } from 'node:zlib';
 import { DecompressionStream as NodeDecompressionStream } from 'node:stream/web';
@@ -15,14 +15,13 @@ const lottieJson =
 
 describe('Image', () => {
   it('removes executable-looking fields from Lottie JSON', () => {
-    expect(
-      sanitizeLottieJson({
-        v: '5.11.0',
-        x: 'this should not run',
-        expression: 'alert(1)',
-        layers: [{ script: 'alert(2)', x: 'wiggle()' }],
-      })
-    ).toEqual({ v: '5.11.0', layers: [{}] });
+    const processed = processAndSanitizeLottie({
+      v: '5.11.0',
+      x: 'this should not run',
+      expression: 'alert(1)',
+      layers: [{ script: 'alert(2)', x: 'wiggle()' }],
+    });
+    expect(processed ? JSON.parse(processed) : null).toEqual({ v: '5.11.0', layers: [{}] });
   });
 
   it('renders a regular img without probing its source', () => {
@@ -181,7 +180,7 @@ describe('Image', () => {
     fetchSpy.mockRestore();
   });
 
-  it('aborts an in-flight lottie download when unmounted', async () => {
+  it('bounds in-flight lottie downloads with a timeout signal', async () => {
     let requestSignal: AbortSignal | undefined;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
       requestSignal = init?.signal ?? undefined;
@@ -192,9 +191,9 @@ describe('Image', () => {
     );
 
     await waitFor(() => expect(requestSignal).toBeDefined());
+    expect(requestSignal?.aborted).toBe(false);
     unmount();
 
-    expect(requestSignal?.aborted).toBe(true);
     fetchSpy.mockRestore();
   });
 

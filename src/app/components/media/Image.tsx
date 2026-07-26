@@ -19,7 +19,7 @@ type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'onPointerDown'> & {
 
 type LottieDotProps = Omit<
   ComponentProps<typeof DotLottieReactComponent>,
-  'src' | 'alt' | 'loading' | 'onPointerDown'
+  'src' | 'data' | 'alt' | 'loading' | 'onPointerDown'
 >;
 type DotLottieInstance = Parameters<
   NonNullable<ComponentProps<typeof DotLottieReactComponent>['dotLottieRefCallback']>
@@ -37,9 +37,11 @@ const MAX_DECOMPRESSED_LOTTIE_BYTES = 8 * 1024 * 1024;
 const MAX_LOTTIE_DIMENSION = 4096;
 const MAX_LOTTIE_FRAMES = 10_000;
 const MAX_LOTTIE_LAYERS = 1_000;
+const MAX_LOTTIE_NODES = 50_000;
+const MAX_LOTTIE_DEPTH = 64;
 const LOTTIE_PROBE_TIMEOUT_MS = 5_000;
 const MAX_LOTTIE_CACHE_ENTRIES = 32;
-const MAX_CACHED_LOTTIE_DATA_URL_LENGTH = 2 * 1024 * 1024;
+const MAX_CACHED_LOTTIE_JSON_LENGTH = 2 * 1024 * 1024;
 const UNSAFE_LOTTIE_KEYS = new Set([
   'expression',
   'expressions',
@@ -50,16 +52,97 @@ const UNSAFE_LOTTIE_KEYS = new Set([
   'onclick',
 ]);
 
-export function sanitizeLottieJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeLottieJson);
-  if (!value || typeof value !== 'object') return value;
+export function processAndSanitizeLottie(root: unknown): string | null {
+  if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
+  const lottie = root as Record<string, unknown>;
 
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, child]) => {
-      if (UNSAFE_LOTTIE_KEYS.has(key) || (key === 'x' && typeof child === 'string')) return [];
-      return [[key, sanitizeLottieJson(child)]];
-    })
-  );
+  if (!('v' in lottie)) return null;
+  const width = Number(lottie.w);
+  const height = Number(lottie.h);
+  const firstFrame = Number(lottie.ip);
+  const lastFrame = Number(lottie.op);
+  if (
+    (Number.isFinite(width) && (width <= 0 || width > MAX_LOTTIE_DIMENSION)) ||
+    (Number.isFinite(height) && (height <= 0 || height > MAX_LOTTIE_DIMENSION)) ||
+    (Number.isFinite(firstFrame) &&
+      Number.isFinite(lastFrame) &&
+      (lastFrame <= firstFrame || lastFrame - firstFrame > MAX_LOTTIE_FRAMES))
+  ) {
+    return null;
+  }
+
+  let totalNodes = 0;
+  let layerCount = 0;
+
+  const rootClone = Object.create(null) as Record<string, unknown>;
+  const stack: {
+    parent: Record<string, unknown> | unknown[];
+    key: string | number;
+    value: unknown;
+    depth: number;
+  }[] = [{ parent: rootClone, key: 'root', value: root, depth: 0 }];
+
+  const canEnqueue = (count: number): boolean =>
+    totalNodes + stack.length + count <= MAX_LOTTIE_NODES;
+
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (!item) continue;
+    const { parent, key, value, depth } = item;
+
+    totalNodes++;
+    if (totalNodes > MAX_LOTTIE_NODES || depth > MAX_LOTTIE_DEPTH) return null;
+
+    if (Array.isArray(value)) {
+      if (!canEnqueue(value.length)) return null;
+
+      const newArray: unknown[] = [];
+      if (Array.isArray(parent)) {
+        parent[key as number] = newArray;
+      } else {
+        (parent as Record<string, unknown>)[key as string] = newArray;
+      }
+      for (let i = value.length - 1; i >= 0; i--) {
+        stack.push({ parent: newArray, key: i, value: value[i], depth: depth + 1 });
+      }
+    } else if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>).filter(
+        ([k, child]) =>
+          !UNSAFE_LOTTIE_KEYS.has(k) &&
+          !(k === 'x' && typeof child === 'string')
+      );
+
+      for (const [k, child] of entries) {
+        if (k === 'layers' && Array.isArray(child)) {
+          layerCount += child.length;
+          if (layerCount > MAX_LOTTIE_LAYERS) return null;
+        }
+      }
+
+      if (!canEnqueue(entries.length)) return null;
+
+      const newObj = Object.create(null) as Record<string, unknown>;
+      if (Array.isArray(parent)) {
+        parent[key as number] = newObj;
+      } else {
+        (parent as Record<string, unknown>)[key as string] = newObj;
+      }
+
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const [k, child] = entries[i];
+        stack.push({ parent: newObj, key: k, value: child, depth: depth + 1 });
+      }
+    } else {
+      if (Array.isArray(parent)) {
+        parent[key as number] = value;
+      } else {
+        (parent as Record<string, unknown>)[key as string] = value;
+      }
+    }
+  }
+
+  const sanitized = rootClone.root;
+  return JSON.stringify(sanitized);
 }
 
 function isGzippedLottieCandidate(
@@ -127,44 +210,7 @@ async function loadBytes(src: string, signal: AbortSignal): Promise<Uint8Array |
   return readBytes(response.body, MAX_COMPRESSED_LOTTIE_BYTES, signal);
 }
 
-function hasSafeLottieComplexity(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || !('v' in value)) return false;
-  const lottie = value as Record<string, unknown>;
-  const width = Number(lottie.w);
-  const height = Number(lottie.h);
-  const firstFrame = Number(lottie.ip);
-  const lastFrame = Number(lottie.op);
-  if (
-    (Number.isFinite(width) && (width <= 0 || width > MAX_LOTTIE_DIMENSION)) ||
-    (Number.isFinite(height) && (height <= 0 || height > MAX_LOTTIE_DIMENSION)) ||
-    (Number.isFinite(firstFrame) &&
-      Number.isFinite(lastFrame) &&
-      (lastFrame <= firstFrame || lastFrame - firstFrame > MAX_LOTTIE_FRAMES))
-  ) {
-    return false;
-  }
-
-  let layerCount = 0;
-  const pending: unknown[] = [value];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current || typeof current !== 'object') continue;
-    if (Array.isArray(current)) {
-      pending.push(...current);
-      continue;
-    }
-    Object.entries(current).forEach(([key, child]) => {
-      if (key === 'layers' && Array.isArray(child)) {
-        layerCount += child.length;
-      }
-      pending.push(child);
-    });
-    if (layerCount > MAX_LOTTIE_LAYERS) return false;
-  }
-  return true;
-}
-
-async function resolveLottieDataUrl(src: string, signal: AbortSignal): Promise<string | null> {
+async function resolveLottieJson(src: string, signal: AbortSignal): Promise<string | null> {
   try {
     const bytes = await loadBytes(src, signal);
     if (!bytes || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return null;
@@ -174,120 +220,59 @@ async function resolveLottieDataUrl(src: string, signal: AbortSignal): Promise<s
       .pipeThrough(new DecompressionStream('gzip'));
     const decompressed = await readBytes(stream, MAX_DECOMPRESSED_LOTTIE_BYTES, signal);
     const parsed = JSON.parse(new TextDecoder().decode(decompressed));
-    if (!hasSafeLottieComplexity(parsed)) return null;
-    const json = sanitizeLottieJson(parsed);
-    const safeJsonText = JSON.stringify(json);
-    return safeJsonText
-      ? `data:application/json;charset=utf-8,${encodeURIComponent(safeJsonText)}`
-      : null;
+    return processAndSanitizeLottie(parsed);
   } catch {
     return null;
   }
 }
 
-type LottieResolutionEntry = {
-  controller: AbortController;
-  consumers: number;
-  settled: boolean;
-  promise: Promise<string | null>;
-};
+const resolvedLottieCache = new Map<string, string>();
+const inFlightLottieLoads = new Map<string, Promise<string | null>>();
 
-const lottieResolutionCache = new Map<string, LottieResolutionEntry>();
-
-function trimLottieResolutionCache(): void {
-  let scanned = 0;
-
-  while (
-    lottieResolutionCache.size > MAX_LOTTIE_CACHE_ENTRIES &&
-    scanned < lottieResolutionCache.size
-  ) {
-    const oldest = lottieResolutionCache.entries().next().value as
-      | [string, LottieResolutionEntry]
-      | undefined;
-    if (!oldest) return;
-    const [source, entry] = oldest;
-
-    if (entry.settled && entry.consumers === 0) {
-      lottieResolutionCache.delete(source);
-      scanned = 0;
-      continue;
+function trimResolvedCache(): void {
+  while (resolvedLottieCache.size > MAX_LOTTIE_CACHE_ENTRIES) {
+    const oldest = resolvedLottieCache.keys().next().value;
+    if (oldest !== undefined) {
+      resolvedLottieCache.delete(oldest);
+    } else {
+      break;
     }
-
-    lottieResolutionCache.delete(source);
-    lottieResolutionCache.set(source, entry);
-    scanned += 1;
   }
 }
 
-function createLottieResolutionEntry(src: string): LottieResolutionEntry {
+function resolveCachedLottieJson(src: string): Promise<string | null> {
+  const cached = resolvedLottieCache.get(src);
+  if (cached !== undefined) {
+    resolvedLottieCache.delete(src);
+    resolvedLottieCache.set(src, cached);
+    return Promise.resolve(cached);
+  }
+
+  const existing = inFlightLottieLoads.get(src);
+  if (existing) return existing;
+
   const controller = new AbortController();
-  const entry = {
-    controller,
-    consumers: 0,
-    settled: false,
-  } as LottieResolutionEntry;
   const timeout = window.setTimeout(() => controller.abort(), LOTTIE_PROBE_TIMEOUT_MS);
 
-  entry.promise = resolveLottieDataUrl(src, controller.signal).then((result) => {
-    entry.settled = true;
-    window.clearTimeout(timeout);
-    if (
-      controller.signal.aborted ||
-      result === null ||
-      result.length > MAX_CACHED_LOTTIE_DATA_URL_LENGTH
-    ) {
-      if (lottieResolutionCache.get(src) === entry) lottieResolutionCache.delete(src);
-    } else {
-      trimLottieResolutionCache();
-    }
-    return result;
-  });
-  lottieResolutionCache.set(src, entry);
-  return entry;
-}
-
-function resolveCachedLottieDataUrl(src: string, signal: AbortSignal): Promise<string | null> {
-  let entry = lottieResolutionCache.get(src);
-  if (!entry) {
-    entry = createLottieResolutionEntry(src);
-  } else {
-    lottieResolutionCache.delete(src);
-    lottieResolutionCache.set(src, entry);
-  }
-  entry.consumers += 1;
-
-  return new Promise((resolve) => {
-    let released = false;
-    const release = () => {
-      if (released) return;
-      released = true;
-      signal.removeEventListener('abort', handleAbort);
-      entry.consumers -= 1;
-      if (entry.consumers === 0) {
-        if (!entry.settled) {
-          entry.controller.abort();
-          if (lottieResolutionCache.get(src) === entry) lottieResolutionCache.delete(src);
-        } else {
-          trimLottieResolutionCache();
-        }
+  const promise = resolveLottieJson(src, controller.signal)
+    .then((result) => {
+      if (result !== null && result.length <= MAX_CACHED_LOTTIE_JSON_LENGTH) {
+        resolvedLottieCache.set(src, result);
+        trimResolvedCache();
       }
-    };
-    const handleAbort = () => {
-      release();
-      resolve(null);
-    };
-
-    signal.addEventListener('abort', handleAbort, { once: true });
-    entry.promise.then((result) => {
-      release();
-      resolve(result);
+      return result;
+    })
+    .finally(() => {
+      window.clearTimeout(timeout);
+      inFlightLottieLoads.delete(src);
     });
-    if (signal.aborted) handleAbort();
-  });
+
+  inFlightLottieLoads.set(src, promise);
+  return promise;
 }
 
 type LottieImageProps = LottieDotProps & {
-  src: string;
+  data: string;
   alt?: string;
   onLottieLoad?: (canvas?: HTMLCanvasElement) => void;
   onLottieError?: () => void;
@@ -297,6 +282,7 @@ type LottieImageProps = LottieDotProps & {
 };
 
 function LottieImage({
+  data,
   alt,
   className,
   style,
@@ -307,11 +293,12 @@ function LottieImage({
   onPointerDown,
   ...props
 }: Readonly<LottieImageProps>) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [player, setPlayer] = useState<DotLottieInstance>(null);
   const callbacks = useRef({ onLottieLoad, onLottieError });
   const pixelation = useRef(pixelated);
   callbacks.current = { onLottieLoad, onLottieError };
   pixelation.current = pixelated;
+
   const setForwardedRef = useCallback(
     (canvas: HTMLCanvasElement | null) => {
       if (typeof forwardedRef === 'function') forwardedRef(canvas);
@@ -319,59 +306,62 @@ function LottieImage({
     },
     [forwardedRef]
   );
+
   useEffect(() => {
-    const updateRef = () => {
-      const canvas = wrapperRef.current?.querySelector('canvas') ?? null;
-      if (canvas) setForwardedRef(canvas);
+    if (!player) {
+      setForwardedRef(null);
+      return;
+    }
+
+    const canvas = player.canvas as HTMLCanvasElement;
+    if (canvas) {
+      setForwardedRef(canvas);
+    }
+
+    const handleLoad = () => {
+      if (canvas) {
+        canvas.style.imageRendering = pixelation.current ? 'pixelated' : 'auto';
+      }
+      callbacks.current.onLottieLoad?.(canvas);
     };
-    updateRef();
-    const observer = new MutationObserver(updateRef);
-    if (wrapperRef.current)
-      observer.observe(wrapperRef.current, { childList: true, subtree: true });
+
+    const handleError = () => {
+      callbacks.current.onLottieError?.();
+    };
+
+    player.addEventListener('load', handleLoad);
+    player.addEventListener('loadError', handleError);
+
+    if (player.isLoaded) {
+      handleLoad();
+    }
+
     return () => {
-      observer.disconnect();
+      player.removeEventListener('load', handleLoad);
+      player.removeEventListener('loadError', handleError);
       setForwardedRef(null);
     };
-  }, [setForwardedRef]);
-  useEffect(() => {
-    const canvas = wrapperRef.current?.querySelector('canvas');
-    if (canvas) canvas.style.imageRendering = pixelated ? 'pixelated' : 'auto';
-  }, [pixelated]);
-  const handlePlayer = useCallback(
-    (player: DotLottieInstance) => {
-      if (!player) return;
-      let didLoad = false;
-      const handleLoad = () => {
-        if (didLoad) return;
-        didLoad = true;
-        (player.canvas as HTMLCanvasElement).style.imageRendering = pixelation.current
-          ? 'pixelated'
-          : 'auto';
-        callbacks.current.onLottieLoad?.(player.canvas as HTMLCanvasElement);
-        setForwardedRef(player.canvas as HTMLCanvasElement);
-      };
-      const handleError = () => callbacks.current.onLottieError?.();
+  }, [player, setForwardedRef]);
 
-      player.addEventListener('load', handleLoad);
-      player.addEventListener('loadError', handleError);
-      if (player.isLoaded) handleLoad();
-    },
-    [setForwardedRef]
-  );
+  useEffect(() => {
+    if (player?.canvas) {
+      (player.canvas as HTMLCanvasElement).style.imageRendering = pixelated ? 'pixelated' : 'auto';
+    }
+  }, [player, pixelated]);
 
   return (
     <Suspense fallback={null}>
       <div
-        ref={wrapperRef}
         className={className}
         style={{ width: '100%', height: '100%', ...style }}
         onPointerDown={onPointerDown}
       >
         <DotLottieReact
           {...props}
+          data={data}
           aria-label={props['aria-label'] ?? alt}
           backgroundColor="#00000000"
-          dotLottieRefCallback={handlePlayer}
+          dotLottieRefCallback={setPlayer}
         />
       </div>
     </Suspense>
@@ -413,7 +403,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
       typeof props.title === 'string' ? props.title : alt
     );
     const isLottieCandidate = declaredLottieCandidate || fallbackSource === src;
-    const resolvedLottieSrc =
+    const resolvedLottieJson =
       isLottieCandidate && lottieResolution?.source === src
         ? (lottieResolution?.resolved ?? null)
         : isLottieCandidate
@@ -428,24 +418,26 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
     );
 
     useEffect(() => {
-      const controller = new AbortController();
+      let active = true;
 
       if (isLottieCandidate && src) {
-        void resolveCachedLottieDataUrl(src, controller.signal).then((result) => {
-          if (!controller.signal.aborted) {
+        void resolveCachedLottieJson(src).then((result) => {
+          if (active) {
             setLottieResolution({ source: src, resolved: result });
           }
         });
       }
 
-      return () => controller.abort();
+      return () => {
+        active = false;
+      };
     }, [isLottieCandidate, src]);
 
     useEffect(() => {
       setFallbackSource(undefined);
     }, [src]);
 
-    const shouldRenderLottie = typeof resolvedLottieSrc === 'string';
+    const shouldRenderLottie = typeof resolvedLottieJson === 'string';
 
     if (shouldRenderLottie) {
       return (
@@ -453,7 +445,7 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
           {...lottieProps}
           className={imageClass}
           style={style}
-          src={resolvedLottieSrc}
+          data={resolvedLottieJson}
           alt={alt}
           onLottieLoad={onLottieLoad}
           onLottieError={onLottieError}
@@ -473,8 +465,8 @@ export const Image = forwardRef<HTMLImageElement | HTMLCanvasElement, ImageProps
         className={imageClass}
         alt={alt}
         loading={loading}
-        src={resolvedLottieSrc === undefined ? undefined : src}
-        aria-busy={resolvedLottieSrc === undefined ? true : undefined}
+        src={resolvedLottieJson === undefined ? undefined : src}
+        aria-busy={resolvedLottieJson === undefined ? true : undefined}
         style={style}
         onLoad={onLoad}
         onPointerDown={onPointerDown}
