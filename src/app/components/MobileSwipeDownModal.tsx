@@ -1,11 +1,4 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useRef,
-  useState,
-  useEffect,
-} from 'react';
+import React, { createContext, useCallback, useContext, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Box } from 'folds';
 import * as css from '$features/room/message/styles.css';
@@ -59,10 +52,7 @@ export function MobileSwipeDownModal({ children, requestClose }: MobileSwipeDown
 
     container.getAnimations().forEach((animation) => animation.cancel());
     const animation = container.animate(
-      [
-        { transform: 'translate3d(0, 0, 0)' },
-        { transform: 'translate3d(0, 100%, 0)' },
-      ],
+      [{ transform: 'translate3d(0, 0, 0)' }, { transform: 'translate3d(0, 100%, 0)' }],
       {
         ...getMobileSheetTiming(shouldReduceMotion),
         duration: shouldReduceMotion ? 0 : 140,

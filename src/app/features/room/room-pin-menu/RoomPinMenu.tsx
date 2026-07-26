@@ -218,21 +218,14 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
     };
 
     return (
-      <Menu
-        ref={ref}
-        className={css.PinMenu}
-      >
+      <Menu ref={ref} className={css.PinMenu}>
         <Box grow="Yes" direction="Column">
           <Header className={css.PinMenuHeader} size="500">
             <Box grow="Yes">
               <Text size="H5">Pinned Messages</Text>
             </Box>
             <Box shrink="No">
-              <IconButton
-                size="300"
-                onClick={mobileSheetClose ?? requestClose}
-                radii="300"
-              >
+              <IconButton size="300" onClick={mobileSheetClose ?? requestClose} radii="300">
                 {composerIcon(X)}
               </IconButton>
             </Box>
