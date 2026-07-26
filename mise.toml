@@ -130,7 +130,7 @@ tools = { "pinact" = "latest" }
 
 [tasks.opentofu]
 run = "tofu"
-dir = "{{cwd}}"
+dir = "infra/web"
 raw_args = true
 hide = true
 tools = { "opentofu" = "1.11.5" }
