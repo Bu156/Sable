@@ -367,6 +367,11 @@ function LottieImage({
         <DotLottieReact
           {...props}
           data={data}
+          style={{
+            width: '100%',
+            height: '100%',
+            ...(emoticon ? { width: '1em', height: '1em' } : undefined),
+          }}
           aria-label={props['aria-label'] ?? alt}
           backgroundColor="#00000000"
           dotLottieRefCallback={setPlayer}
