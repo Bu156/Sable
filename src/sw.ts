@@ -775,16 +775,6 @@ function respondWithInflightMedia(
   );
 }
 
-async function isUnknownTokenError(response: Response): Promise<boolean> {
-  if (response.status !== 401) return false;
-  try {
-    const data = await response.clone().json();
-    return data?.errcode === 'M_UNKNOWN_TOKEN';
-  } catch {
-    return false;
-  }
-}
-
 async function respondWithMediaAuthRecovery(
   request: Request,
   session: SessionInfo,
@@ -793,7 +783,6 @@ async function respondWithMediaAuthRecovery(
 ): Promise<Response> {
   const response = await respondWithInflightMedia(request, session.accessToken, redirect);
   if ((response.status !== 401 && response.status !== 403) || !clientId) return response;
-  if (await isUnknownTokenError(response)) return response;
 
   // One exact-client retry; concurrent recoveries share this request.
   const refreshed = await requestSessionWithTimeout(clientId);

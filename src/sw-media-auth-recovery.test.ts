@@ -49,8 +49,9 @@ describe('service worker media auth recovery', () => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const headers = new Headers(init?.headers);
       ranges.push({ authorization: headers.get('authorization'), range: headers.get('range') });
-      return new Response('', {
-        status: headers.get('authorization') === 'Bearer old-token' ? 401 : 206,
+      const isOldToken = headers.get('authorization') === 'Bearer old-token';
+      return new Response(isOldToken ? JSON.stringify({ errcode: 'M_UNKNOWN_TOKEN' }) : '', {
+        status: isOldToken ? 401 : 206,
       });
     });
 
