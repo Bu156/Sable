@@ -92,6 +92,8 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
+    outputs:
+      dmg_sha256: ${{ steps.dmg_sha.outputs.sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -230,6 +232,18 @@ jobs:
                 echo "Uploading $path"
                 gh release upload "$TAG" "$path" --clobber
           done
+
+      - name: Compute DMG checksum
+        id: dmg_sha
+        if: ${{ matrix.name == 'macOS' }}
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ matrix.bundle_path }}
+        run: |
+          DMG="$(find "$BUNDLE_PATH" -name "Sable-${VERSION}-macos-universal.dmg" -type f | head -1)"
+          [ -n "$DMG" ] || { echo "DMG not found in $BUNDLE_PATH" >&2; exit 1; }
+          SHA="$(sha256sum "$DMG" | awk '{print $1}')"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
   android:
     name: Build Android
@@ -755,6 +769,7 @@ jobs:
           for f in .goreleaser-dist/Sable-*.deb \
                    .goreleaser-dist/Sable-*.rpm \
                    .goreleaser-dist/Sable-*.pkg.tar.zst \
+                   .goreleaser-dist/Sable-*-linux-x86_64.tar.gz \
                    src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage \
                    src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage.sig; do
             [ -e "$f" ] || continue
@@ -888,14 +903,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Compute the DMG checksum
+      - name: Resolve DMG checksum
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          DMG_SHA256: ${{ needs.build.outputs.dmg_sha256 }}
         run: |
-          DMG="Sable-${VERSION}-macos-universal.dmg"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$DMG" --dir dmg
-          echo "SHA256=$(sha256sum "dmg/$DMG" | awk '{print $1}')" >> "$GITHUB_ENV"
+          [ -n "${DMG_SHA256:-}" ] || { echo "DMG sha256 is empty" >&2; exit 1; }
+          echo "SHA256=$DMG_SHA256" >> "$GITHUB_ENV"
 
       - name: Push the cask to the tap
         shell: bash
