@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    io::{Read, Seek, SeekFrom},
+    io::Read,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -48,7 +48,6 @@ const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 6;
 // may arrive first. `<img>` never retries, so waiting beats answering 503.
 const SESSION_WAIT: Duration = Duration::from_secs(5);
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
-const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
 // Short: a 4xx stops being true once an unreachable remote server comes back.
 const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(600);
 const MAX_NEGATIVE_CACHE_ENTRIES: usize = 512;
@@ -379,10 +378,9 @@ pub fn respond<R: Runtime>(
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned)
     };
-    let range = header_value(header::RANGE);
     let origin = header_value(header::ORIGIN);
     tauri::async_runtime::spawn(async move {
-        let mut response = handle_request(&app, uri, range)
+        let mut response = handle_request(&app, uri)
             .await
             .unwrap_or_else(error_response);
         apply_cors_headers(&mut response, origin.as_deref());
@@ -393,7 +391,6 @@ pub fn respond<R: Runtime>(
 async fn handle_request<R: Runtime>(
     app: &AppHandle<R>,
     uri: Uri,
-    range: Option<String>,
 ) -> Result<Response<Vec<u8>>, StatusCode> {
     let target = percent_encoding::percent_decode_str(uri.path().trim_start_matches('/'))
         .decode_utf8()
@@ -429,16 +426,12 @@ async fn handle_request<R: Runtime>(
     let (content_type, in_memory_body, disk_path) =
         ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
 
-    match (range, in_memory_body) {
-        (Some(range_header), Some(body)) => {
-            Ok(serve_range_memory(&body, &content_type, &range_header))
-        }
-        (Some(range_header), None) => serve_range(disk_path, content_type, range_header).await,
-        (None, Some(body)) => {
+    match in_memory_body {
+        Some(body) => {
             let vec_body = Arc::try_unwrap(body).unwrap_or_else(|b| (*b).clone());
             Ok(ok_response(vec_body, &content_type))
         }
-        (None, None) => Ok(ok_response(read_full(disk_path).await?, &content_type)),
+        None => Ok(ok_response(read_full(disk_path).await?, &content_type)),
     }
 }
 
@@ -974,80 +967,6 @@ async fn read_full(body_path: PathBuf) -> Result<Vec<u8>, StatusCode> {
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-async fn serve_range(
-    body_path: PathBuf,
-    content_type: String,
-    range_header: String,
-) -> Result<Response<Vec<u8>>, StatusCode> {
-    tokio::task::spawn_blocking(move || {
-        let mut file = fs::File::open(&body_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let total = file
-            .metadata()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .len();
-
-        let Some((start, end)) = parse_range(&range_header, total) else {
-            return Ok(range_not_satisfiable(total));
-        };
-
-        let end = end.min(start + MAX_RANGE_CHUNK - 1);
-        let length = end - start + 1;
-
-        let mut buf = vec![0_u8; length as usize];
-        file.seek(SeekFrom::Start(start))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        file.read_exact(&mut buf)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        Ok(partial_response(buf, &content_type, start, end, total))
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-}
-
-// Serve a Range request from an in-memory body. Mirrors serve_range but slices
-// the buffer instead of seeking.
-fn serve_range_memory(body: &[u8], content_type: &str, range_header: &str) -> Response<Vec<u8>> {
-    let total = body.len() as u64;
-    let Some((start, end)) = parse_range(range_header, total) else {
-        return range_not_satisfiable(total);
-    };
-    let end = end.min(start + MAX_RANGE_CHUNK - 1);
-    let buf = body[start as usize..=(end as usize)].to_vec();
-    partial_response(buf, content_type, start, end, total)
-}
-
-// First byte range of a `Range: bytes=...` header as inclusive (start, end); None → 416.
-fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
-    if total == 0 {
-        return None;
-    }
-
-    let spec = header.strip_prefix("bytes=")?;
-    let (start_str, end_str) = spec.split(',').next()?.trim().split_once('-')?;
-
-    let (start, end) = if start_str.is_empty() {
-        let suffix: u64 = end_str.parse().ok()?;
-        if suffix == 0 {
-            return None;
-        }
-        (total.saturating_sub(suffix), total - 1)
-    } else {
-        let start: u64 = start_str.parse().ok()?;
-        let end = if end_str.is_empty() {
-            total - 1
-        } else {
-            end_str.parse::<u64>().ok()?.min(total - 1)
-        };
-        (start, end)
-    };
-
-    if start > end || start >= total {
-        return None;
-    }
-    Some((start, end))
-}
-
 // Trim oldest-first when the cache exceeds its byte budget.
 fn evict_directory_if_needed(dir: &Path, max_bytes: u64) {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -1083,8 +1002,8 @@ fn evict_directory_if_needed(dir: &Path, max_bytes: u64) {
     }
 }
 
-// Shared 200/206 headers. Media is content-addressed and the URL is session-scoped, so
-// it is safe to let the webview cache it as immutable and to advertise Range support.
+// Shared response headers. Media is content-addressed and the URL is session-scoped, so
+// it is safe to let the webview cache it as immutable.
 fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBuilder {
     let cache_control = if content_type == "application/octet-stream" {
         "no-store"
@@ -1094,7 +1013,6 @@ fn media_response_builder(status: StatusCode, content_type: &str) -> ResponseBui
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CACHE_CONTROL, cache_control)
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(
@@ -1109,32 +1027,6 @@ fn ok_response(body: Vec<u8>, content_type: &str) -> Response<Vec<u8>> {
         .header(header::CONTENT_LENGTH, content_length)
         .body(body)
         .expect("failed to build media response")
-}
-
-fn partial_response(
-    body: Vec<u8>,
-    content_type: &str,
-    start: u64,
-    end: u64,
-    total: u64,
-) -> Response<Vec<u8>> {
-    let content_length = body.len();
-    media_response_builder(StatusCode::PARTIAL_CONTENT, content_type)
-        .header(header::CONTENT_LENGTH, content_length)
-        .header(
-            header::CONTENT_RANGE,
-            format!("bytes {start}-{end}/{total}"),
-        )
-        .body(body)
-        .expect("failed to build partial media response")
-}
-
-fn range_not_satisfiable(total: u64) -> Response<Vec<u8>> {
-    Response::builder()
-        .status(StatusCode::RANGE_NOT_SATISFIABLE)
-        .header(header::CONTENT_RANGE, format!("bytes */{total}"))
-        .body(Vec::new())
-        .expect("failed to build range error response")
 }
 
 fn session_unavailable_response() -> Response<Vec<u8>> {
@@ -1181,10 +1073,7 @@ mod tests {
 
     use tauri::http::{header, StatusCode};
 
-    use super::{
-        cache_key, ok_response, parse_range, partial_response, serve_range_memory,
-        MediaSessionState,
-    };
+    use super::{cache_key, ok_response, MediaSessionState};
 
     #[test]
     fn cache_miss_gates_are_reused_and_expired_entries_are_cleaned() {
@@ -1345,79 +1234,6 @@ mod tests {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "private, max-age=31536000, immutable"
         );
-        assert_eq!(
-            response.headers().get(header::ACCEPT_RANGES).unwrap(),
-            "bytes"
-        );
-    }
-
-    #[test]
-    fn parse_range_handles_the_common_forms() {
-        assert_eq!(parse_range("bytes=0-499", 1000), Some((0, 499)));
-        assert_eq!(parse_range("bytes=500-", 1000), Some((500, 999)));
-        assert_eq!(parse_range("bytes=0-", 1000), Some((0, 999)));
-        // End past the file is clamped to the last byte.
-        assert_eq!(parse_range("bytes=990-5000", 1000), Some((990, 999)));
-        // Suffix range: the last N bytes.
-        assert_eq!(parse_range("bytes=-200", 1000), Some((800, 999)));
-    }
-
-    #[test]
-    fn parse_range_rejects_unsatisfiable_and_malformed() {
-        assert_eq!(parse_range("bytes=1000-1001", 1000), None);
-        assert_eq!(parse_range("bytes=500-400", 1000), None);
-        assert_eq!(parse_range("bytes=abc-def", 1000), None);
-        assert_eq!(parse_range("items=0-1", 1000), None);
-        assert_eq!(parse_range("bytes=0-0", 0), None);
-    }
-
-    #[test]
-    fn partial_response_reports_the_served_range() {
-        let response = partial_response(vec![0_u8; 100], "video/mp4", 0, 99, 5000);
-        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-        assert_eq!(
-            response.headers().get(header::CONTENT_LENGTH).unwrap(),
-            "100"
-        );
-        assert_eq!(
-            response.headers().get(header::CONTENT_RANGE).unwrap(),
-            "bytes 0-99/5000"
-        );
-        assert_eq!(
-            response.headers().get(header::ACCEPT_RANGES).unwrap(),
-            "bytes"
-        );
-    }
-
-    #[test]
-    fn serve_range_memory_slices_the_in_memory_body() {
-        let body: Vec<u8> = (0..200u8).collect();
-        let response = serve_range_memory(&body, "application/octet-stream", "bytes=10-19");
-        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-        assert_eq!(response.body(), &body[10..=19]);
-        assert_eq!(
-            response.headers().get(header::CONTENT_RANGE).unwrap(),
-            "bytes 10-19/200"
-        );
-    }
-
-    #[test]
-    fn serve_range_memory_caps_at_max_range_chunk() {
-        let body = vec![7_u8; (super::MAX_RANGE_CHUNK * 2) as usize];
-        let response = serve_range_memory(&body, "application/octet-stream", "bytes=0-");
-        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-        assert_eq!(response.body().len() as u64, super::MAX_RANGE_CHUNK);
-        let total = super::MAX_RANGE_CHUNK * 2;
-        assert_eq!(
-            response.headers().get(header::CONTENT_RANGE).unwrap(),
-            &format!("bytes 0-{}/{total}", super::MAX_RANGE_CHUNK - 1)
-        );
-    }
-
-    #[test]
-    fn serve_range_memory_rejects_unsatisfiable_range() {
-        let response = serve_range_memory(&[], "application/octet-stream", "bytes=0-0");
-        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
     }
 
     #[test]
