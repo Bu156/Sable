@@ -7,6 +7,7 @@ import {
   getProcessedRowIndexForRawTimelineIndex,
   useProcessedTimeline,
 } from './useProcessedTimeline';
+import { M_POLL_START } from 'matrix-js-sdk';
 
 const MY_USER = '@alice:test';
 const OTHER_USER = '@bob:test';
@@ -139,6 +140,21 @@ const dividerIds = (processed: ProcessedEvent[]) =>
   processed.filter((e) => e.willRenderNewDivider).map((e) => e.id);
 
 describe('useProcessedTimeline new-messages divider', () => {
+  it('keeps poll start events with default hidden-event settings', () => {
+    const processed = processTimeline(
+      [
+        createEvent({
+          id: '$poll',
+          type: M_POLL_START.name,
+          content: { 'm.poll.start': {} },
+        }),
+      ],
+      undefined
+    );
+
+    expect(renderedIds(processed)).toEqual(['$poll']);
+  });
+
   it('processes append-only messages without rebuilding existing rows', () => {
     const events = [
       createEvent({ id: '$a', ts: 1_000_000 }),

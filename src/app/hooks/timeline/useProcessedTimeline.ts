@@ -16,6 +16,7 @@ import {
 } from '$utils/room/relations';
 import { inSameDay, minuteDifference } from '$utils/time';
 import type { ResolvedHiddenEventSettings } from '$state/hooks/settings';
+import { M_POLL_START } from 'matrix-js-sdk';
 
 export interface UseProcessedTimelineOptions {
   items: number[];
@@ -79,6 +80,7 @@ export const STANDARD_RENDERED_EVENT_TYPES = new Set([
   'm.room.message',
   'm.room.message.encrypted',
   'm.sticker',
+  M_POLL_START.name,
   'm.room.member',
   'm.room.name',
   'm.room.topic',
