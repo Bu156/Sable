@@ -105,6 +105,7 @@ export function ProfileMobile() {
               radii="300"
               before={menuIcon(PencilSimpleIcon)}
               onClick={() => openSettings('account')}
+              style={{ background: color.Background.Container }}
             >
               <Text style={{ flexGrow: 1 }} size="T300">
                 Edit profile

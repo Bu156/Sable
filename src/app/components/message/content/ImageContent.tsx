@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
@@ -91,6 +91,7 @@ type RenderImageProps = {
   onLottieError: () => void;
   onClick: () => void;
   tabIndex: number;
+  style?: CSSProperties;
 };
 export type ImageContentProps = {
   body?: string;
@@ -317,6 +318,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               title: body ?? '',
               src: srcState.data,
               info,
+              style: { objectFit: isContained ? 'contain' : undefined },
               onLoad: handleLoad,
               onError: handleError,
               onLottieLoad: handleLoad,
