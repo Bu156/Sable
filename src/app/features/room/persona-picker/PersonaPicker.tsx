@@ -100,7 +100,7 @@ export function PersonaPicker({
       setSelectedGlobalPersona(syncedGlobalProfile ?? null);
     };
     syncProfile();
-  }, [mx, roomId]);
+  }, [mx, roomId, profiles]);
 
   const fetchProfiles = async (mx_: MatrixClient) => {
     const fetchedProfiles = await getAllPerMessageProfiles(mx_);
@@ -112,20 +112,23 @@ export function PersonaPicker({
     fetchProfiles(mx);
   }, [mx]);
 
-  const filter = (e: FormEvent) => {
-    const term = (e.target as HTMLInputElement).value.toLocaleLowerCase();
+  const filter = useCallback(
+    (e: FormEvent) => {
+      const term = (e.target as HTMLInputElement).value.toLocaleLowerCase();
 
-    const filtered = term
-      ? profiles?.filter((profile) =>
-          searchInputRef.current
-            ? profile.name.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
-              profile.id.toLocaleLowerCase().includes(searchInputRef.current?.value)
-            : true
-        )
-      : profiles;
+      const filtered = term
+        ? profiles?.filter((profile) =>
+            searchInputRef.current
+              ? profile.name.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
+                profile.id.toLocaleLowerCase().includes(searchInputRef.current?.value)
+              : true
+          )
+        : profiles;
 
-    setFilteredProfiles(filtered);
-  };
+      setFilteredProfiles(filtered);
+    },
+    [profiles]
+  );
 
   const avatarUrl = useCallback(
     (profile: PerMessageProfile) => {
