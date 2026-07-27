@@ -27,6 +27,8 @@ import {
   startClient,
   stopClient,
 } from '$client/initMatrix';
+import { clearSecretStorageKeys } from '$client/secretStorageKeys';
+import { resetBackupRestoreAtom } from '$state/backupRestore';
 import { SplashScreen } from '$components/splash-screen';
 import { ServerConfigsLoader } from '$components/ServerConfigsLoader';
 import { CapabilitiesProvider } from '$hooks/useCapabilities';
@@ -245,6 +247,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const resetBackupRestore = useSetAtom(resetBackupRestoreAtom);
 
   const activeSession: Session | undefined =
     sessions.find((s) => s.userId === activeSessionId) ?? sessions[0];
@@ -309,14 +312,22 @@ export function ClientRoot({ children }: ClientRootProps) {
         '— reloading client'
       );
       void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
-      if (mx?.clientRunning) {
+      // Unconditional: stopClient is what stops the crypto backend, and a client
+      // that never reached clientRunning still holds an open crypto store.
+      if (mx) {
         stopClient(mx);
       }
+      // The cache is keyed by 4S key id only, so the previous account's key
+      // would otherwise stay in memory for the next one.
+      clearSecretStorageKeys();
+      // Jotai atoms live in the default store for the tab's lifetime, so the
+      // previous account's restore state would be read as this one's.
+      resetBackupRestore();
       loadedUserIdRef.current = undefined;
       setLoadState({ status: AsyncStatus.Idle });
       navigate(getHomePath(), { replace: true });
     }
-  }, [activeSession, mx, navigate, setLoadState]);
+  }, [activeSession, mx, navigate, setLoadState, resetBackupRestore]);
 
   const handleLogout = useCallback(async () => {
     if (!mx || !activeSession) return;
@@ -335,7 +346,7 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   useEffect(
     () => () => {
-      if (mx?.clientRunning) {
+      if (mx) {
         log.log('ClientRoot unmounting — stopping client', mx.getUserId());
         stopClient(mx);
       }
