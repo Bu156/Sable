@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import type { RectCords } from 'folds';
 import { Box, Overlay, OverlayBackdrop, OverlayCenter, PopOut } from 'folds';
 import FocusTrap from 'focus-trap-react';
@@ -29,6 +29,7 @@ type ResponsiveMenuProps = {
   /** How the menu shows on mobile: a bottom sheet, or a centred dialog for
    *  option pickers, which a sheet makes look like an action menu. */
   mobile?: 'sheet' | 'dialog';
+  surfaceColor?: string;
 };
 
 function MenuDialog({
@@ -73,6 +74,7 @@ export function ResponsiveMenu({
   returnFocusOnDeactivate = false,
   arrowNavigation = 'vertical',
   mobile = 'sheet',
+  surfaceColor,
 }: ResponsiveMenuProps) {
   // Null outside a provider, where desktop is the safe assumption.
   const isMobile = useScreenSizeOptionally() === ScreenSize.Mobile;
@@ -95,6 +97,13 @@ export function ResponsiveMenu({
   };
 
   if (isMobile) {
+    const sheetStyle: CSSProperties | undefined = surfaceColor
+      ? ({ '--sheet-surface-color': surfaceColor } as CSSProperties)
+      : undefined;
+    const sheetClassName = surfaceColor
+      ? `${css.SheetContent} ${css.SheetContentThemed}`
+      : css.SheetContent;
+
     return (
       <>
         {children}
@@ -120,7 +129,8 @@ export function ResponsiveMenu({
                   direction="Column"
                   role="dialog"
                   aria-modal="true"
-                  className={css.SheetContent}
+                  className={sheetClassName}
+                  style={sheetStyle}
                 >
                   {dragHandle}
                   {menu}

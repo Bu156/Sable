@@ -15,7 +15,7 @@ import type { MatrixClient } from '$types/matrix-sdk';
 import { HttpApiEvent } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
 import type { MouseEventHandler, ReactNode } from 'react';
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -60,6 +60,7 @@ import { SpecVersions } from './SpecVersions';
 import { AutoDiscovery } from './AutoDiscovery';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { SYSTEM_BAR_REFRESH_EVENT } from '$components/app-shell/SystemBarShell';
 
 const log = createLogger('ClientRoot');
 
@@ -245,6 +246,11 @@ type ClientRootProps = {
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  useLayoutEffect(() => {
+    window.dispatchEvent(new Event(SYSTEM_BAR_REFRESH_EVENT));
+  }, [location.key]);
+
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);

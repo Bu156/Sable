@@ -8,8 +8,8 @@ import type { RectCords } from 'folds';
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
 vi.mock('folds', () => ({
-  Box: ({ children, direction }: any) => (
-    <div data-testid="box" data-direction={direction}>
+  Box: ({ children, direction, className, style }: any) => (
+    <div data-testid="box" data-direction={direction} className={className} style={style}>
       {children}
     </div>
   ),
@@ -205,6 +205,39 @@ describe('ResponsiveMenu', () => {
       expect(screen.getByTestId('mobile-swipe-down')).toBeInTheDocument();
       expect(screen.getByTestId('drag-handle')).toBeInTheDocument();
       expect(screen.getByTestId('focus-trap')).toBeInTheDocument();
+    });
+
+    it('applies --sheet-surface-color CSS custom property when surfaceColor is set', () => {
+      render(
+        <ScreenSizeProvider value={ScreenSize.Mobile}>
+          <ResponsiveMenu
+            requestClose={vi.fn<() => void>()}
+            anchor={anchorRect}
+            menu={<SampleMenu />}
+            surfaceColor="#663399"
+          />
+        </ScreenSizeProvider>
+      );
+
+      const box = screen.getByTestId('box');
+      expect(box.style.getPropertyValue('--sheet-surface-color')).toBe('#663399');
+      expect(box.className).toContain('SheetContentThemed');
+    });
+
+    it('does not set surface-color properties when surfaceColor is absent', () => {
+      render(
+        <ScreenSizeProvider value={ScreenSize.Mobile}>
+          <ResponsiveMenu
+            requestClose={vi.fn<() => void>()}
+            anchor={anchorRect}
+            menu={<SampleMenu />}
+          />
+        </ScreenSizeProvider>
+      );
+
+      const box = screen.getByTestId('box');
+      expect(box.style.getPropertyValue('--sheet-surface-color')).toBe('');
+      expect(box.className).not.toContain('SheetContentThemed');
     });
   });
 
