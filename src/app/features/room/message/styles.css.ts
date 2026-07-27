@@ -116,6 +116,7 @@ export const MessageMobileDragHandle = style({
   paddingTop: '6px',
   justifyContent: 'center',
   zIndex: 10,
+  pointerEvents: 'none',
 });
 
 export const MessageMobileDragIndicator = style({
@@ -124,6 +125,7 @@ export const MessageMobileDragIndicator = style({
   borderRadius: '2px',
   backgroundColor: color.SurfaceVariant.OnContainer,
   opacity: 0.5,
+  pointerEvents: 'auto',
 });
 
 export const BubbleAvatarBase = style({
