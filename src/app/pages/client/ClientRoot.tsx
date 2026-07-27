@@ -11,11 +11,11 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import type { HttpApiEventHandlerMap, MatrixClient } from '$types/matrix-sdk';
+import type { MatrixClient } from '$types/matrix-sdk';
 import { HttpApiEvent } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';
 import type { MouseEventHandler, ReactNode } from 'react';
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -27,6 +27,8 @@ import {
   startClient,
   stopClient,
 } from '$client/initMatrix';
+import { clearSecretStorageKeys } from '$client/secretStorageKeys';
+import { resetBackupRestoreAtom } from '$state/backupRestore';
 import { SplashScreen } from '$components/splash-screen';
 import { ServerConfigsLoader } from '$components/ServerConfigsLoader';
 import { CapabilitiesProvider } from '$hooks/useCapabilities';
@@ -34,6 +36,8 @@ import { MediaConfigProvider } from '$hooks/useMediaConfig';
 import { MatrixClientProvider } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useSyncState } from '$hooks/useSyncState';
+import { useCrossSigningResetDetect } from '$hooks/useCrossSigningResetDetect';
+import { useMatrixEvent } from '$hooks/useMatrixEvent';
 import { stopPropagation } from '$utils/keyboard';
 import { AuthMetadataProvider, getSessionAuthMetadata } from '$hooks/useAuthMetadata';
 import {
@@ -45,6 +49,7 @@ import {
 import { createLogger } from '$utils/debug';
 import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
+import { useNetworkRecovery } from '$hooks/useNetworkRecovery';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
 import { DIRECT_ROOM_PATH, HOME_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
@@ -55,6 +60,7 @@ import { SpecVersions } from './SpecVersions';
 import { AutoDiscovery } from './AutoDiscovery';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { SYSTEM_BAR_REFRESH_EVENT } from '$components/app-shell/SystemBarShell';
 
 const log = createLogger('ClientRoot');
 
@@ -219,24 +225,19 @@ function ClientRootOptions({ mx, onLogout }: ClientRootOptionsProps) {
 }
 
 const useLogoutListener = (mx?: MatrixClient) => {
-  useEffect(() => {
-    const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async () => {
-      Sentry.addBreadcrumb({
-        category: 'auth',
-        message: 'Session forcibly logged out by server',
-        level: 'warning',
-      });
-      if (mx) stopClient(mx);
-      await mx?.clearStores();
-      window.localStorage.clear();
-      window.location.reload();
-    };
-
-    mx?.on(HttpApiEvent.SessionLoggedOut, handleLogout);
-    return () => {
-      mx?.removeListener(HttpApiEvent.SessionLoggedOut, handleLogout);
-    };
+  const handleLogout = useCallback(async () => {
+    Sentry.addBreadcrumb({
+      category: 'auth',
+      message: 'Session forcibly logged out by server',
+      level: 'warning',
+    });
+    if (mx) stopClient(mx);
+    await mx?.clearStores();
+    window.localStorage.clear();
+    window.location.reload();
   }, [mx]);
+
+  useMatrixEvent(mx, HttpApiEvent.SessionLoggedOut, handleLogout);
 };
 
 type ClientRootProps = {
@@ -245,9 +246,15 @@ type ClientRootProps = {
 export function ClientRoot({ children }: ClientRootProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  useLayoutEffect(() => {
+    window.dispatchEvent(new Event(SYSTEM_BAR_REFRESH_EVENT));
+  }, [location.key]);
+
   const sessions = useAtomValue(sessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(activeSessionIdAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const resetBackupRestore = useSetAtom(resetBackupRestoreAtom);
 
   const activeSession: Session | undefined =
     sessions.find((s) => s.userId === activeSessionId) ?? sessions[0];
@@ -272,7 +279,7 @@ export function ClientRoot({ children }: ClientRootProps) {
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;
-      await pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
+      await pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
       return newMx;
     }, [activeSession, activeSessionId, setActiveSessionId])
   );
@@ -311,15 +318,23 @@ export function ClientRoot({ children }: ClientRootProps) {
         activeSession.userId,
         '— reloading client'
       );
-      void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken);
-      if (mx?.clientRunning) {
+      void pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
+      // Unconditional: stopClient is what stops the crypto backend, and a client
+      // that never reached clientRunning still holds an open crypto store.
+      if (mx) {
         stopClient(mx);
       }
+      // The cache is keyed by 4S key id only, so the previous account's key
+      // would otherwise stay in memory for the next one.
+      clearSecretStorageKeys();
+      // Jotai atoms live in the default store for the tab's lifetime, so the
+      // previous account's restore state would be read as this one's.
+      resetBackupRestore();
       loadedUserIdRef.current = undefined;
       setLoadState({ status: AsyncStatus.Idle });
       navigate(getHomePath(), { replace: true });
     }
-  }, [activeSession, mx, navigate, setLoadState]);
+  }, [activeSession, mx, navigate, setLoadState, resetBackupRestore]);
 
   const handleLogout = useCallback(async () => {
     if (!mx || !activeSession) return;
@@ -334,10 +349,12 @@ export function ClientRoot({ children }: ClientRootProps) {
   useSyncNicknames(mx);
   useLogoutListener(mx);
   useAppVisibility(mx);
+  useNetworkRecovery(mx);
+  useCrossSigningResetDetect(mx);
 
   useEffect(
     () => () => {
-      if (mx?.clientRunning) {
+      if (mx) {
         log.log('ClientRoot unmounting — stopping client', mx.getUserId());
         stopClient(mx);
       }

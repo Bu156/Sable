@@ -121,25 +121,49 @@ type PerMessageProfileRoomAssociation = {
   validUntil?: number;
 };
 
+type ProxyVariation =
+  | { prefix: string; suffix: undefined }
+  | { prefix: undefined; suffix: string }
+  | { prefix: string; suffix: string };
+
 /**
- * associating a profile by proxy
- * @author Rye
+ * Deprecated in favor of {@link PerMessageProfileProxyAssociationV2}, kept for migration purposes
  */
-export type PerMessageProfileProxyAssociation = {
+export type PerMessageProfileProxyAssociationV1 = {
+  profileId: string;
+  /**
+   * @deprecated regex (string representation of it) to handle the proxy
+   */
+  regexString: string;
+  setAt?: number;
+};
+
+export type PerMessageProfileProxyAssociationV2 = {
   /**
    * the profile associated with the proxy
    */
   profileId: string;
-  /**
-   * regex (string representation of it) to handle the proxy
-   */
-  regexString: string;
+
   /**
    * optional parameter to save when the proxy was added
    */
   setAt?: number;
+
+  prefix: string | undefined;
+  suffix: string | undefined;
 };
 
+/**
+ * associating a profile by proxy
+ * @author Rye
+ */
+export type PerMessageProfileProxyAssociation =
+  | PerMessageProfileProxyAssociationV1
+  | PerMessageProfileProxyAssociationV2;
+
+/**
+ * @deprecated in favor of {@link PerMessageProfileProxyAssociationV2}
+ */
 export type InternalPerMessageProfileProxyAssociation = {
   /**
    * the profile associated with the proxy
@@ -155,8 +179,59 @@ export type InternalPerMessageProfileProxyAssociation = {
   setAt?: number;
 };
 
-export function parsePerMessageProfileProxyAssociation(
+/**
+ * Used to migrate old format proxy tags to new format.
+ * @author Josie F0rest
+ */
+export function extractCircumfixProxyTagsFromKey(proxyId: string): ProxyVariation | null {
+  const [prefix, suffix] = proxyId.split('text');
+
+  /*
+    i tried to do this a smart unpacking way but tsc did not like it. sorry for if-else spam.
+    feel free to clean this up if you can pass tsc
+  */
+  if (!prefix && !suffix) {
+    return null;
+  } else if (prefix && !suffix) {
+    return { prefix, suffix: undefined };
+  } else if (!prefix && suffix) {
+    return { prefix: undefined, suffix };
+  } else {
+    return { prefix: prefix!, suffix: suffix! };
+  }
+}
+
+export function createProxyKey(prefix: string | undefined, suffix: string | undefined) {
+  return `${prefix || ''}text${suffix || ''}`;
+}
+
+export function proxyNeedsMigration(assoc: PerMessageProfileProxyAssociation) {
+  return (assoc as PerMessageProfileProxyAssociationV1).regexString !== undefined;
+}
+
+export function migratePmpProxyAssociation(
+  proxyId: string,
   assoc: PerMessageProfileProxyAssociation
+): PerMessageProfileProxyAssociationV2 | null {
+  /* detect old proxy association */
+  if ((assoc as PerMessageProfileProxyAssociationV1).regexString) {
+    const fixes = extractCircumfixProxyTagsFromKey(proxyId);
+    if (!fixes) return null;
+    return {
+      profileId: assoc.profileId,
+      ...(assoc.setAt && { setAt: assoc.setAt! }),
+      ...fixes,
+    };
+  } else {
+    return assoc as PerMessageProfileProxyAssociationV2;
+  }
+}
+
+/**
+ * @deprecated in favor of {@link PerMessageProfileProxyAssociationV2}
+ */
+export function parsePerMessageProfileProxyAssociation(
+  assoc: PerMessageProfileProxyAssociationV1
 ): InternalPerMessageProfileProxyAssociation {
   const m = assoc.regexString.match(/^\/([\s\S]*)\/([gimsuy]*)$/);
   const source = m?.[1] ?? assoc.regexString;
@@ -195,6 +270,21 @@ type PerMessageProfileRoomAssociationWrapper = {
   associations:
     | Map<string, PerMessageProfileRoomAssociation>
     | Record<string, PerMessageProfileRoomAssociation>;
+  compat?: AccountDataCompatVersion;
+};
+
+/**
+ * the shape of the account data for room associations, which is a wrapper around a list of associations.
+ * This is used to store the associations in account data, and allows us to easily add additional fields in the future if needed without breaking the existing data structure.
+ */
+type PerMessageProfileGlobalAssociationWrapper = {
+  /**
+   * Key-Value pairs of room ids and profile ids, used to apply a profile to all messages in a room without having to set the profile for each message individually.
+   * The key is the room id, and the value is the profile id. The profile id can then be used to fetch the profile data when applying the profile to a message before sending it.
+   *
+   * @type {Map<string, PerMessageProfileRoomAssociation>}
+   */
+  association: PerMessageProfileRoomAssociation;
   compat?: AccountDataCompatVersion;
 };
 
@@ -277,7 +367,7 @@ export async function getAllPerMessageProfiles(mx: MatrixClient): Promise<PerMes
  * @param profile the profile to add/update
  * @returns void
  */
-export function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessageProfile) {
+export async function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessageProfile) {
   const profileListIndex = mx.getAccountData(
     `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
   );
@@ -289,13 +379,13 @@ export function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessa
     } satisfies AccountDataCompatVersion,
   } satisfies PerMessageProfile;
   if (profileListIndex?.getContent()?.profileIds.includes(profile.id)) {
-    return mx.setAccountData(
+    return await mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.${profile.id}` as Parameters<typeof mx.setAccountData>[0],
       profileWithCompat as Parameters<typeof mx.setAccountData>[1]
     );
   }
   const newProfileIds = [...(profileListIndex?.getContent()?.profileIds || []), profile.id];
-  return Promise.all([
+  return await Promise.all([
     mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.setAccountData>[0],
       { profileIds: newProfileIds } as Parameters<typeof mx.setAccountData>[1]
@@ -385,6 +475,33 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
 }
 
 /**
+ * todo
+ */
+export async function setCurrentlyUsedPerMessageProfileIdForAccount(
+  mx: MatrixClient,
+  profileId: string | undefined,
+  validUntil?: number,
+  reset?: boolean
+) {
+  if (reset) {
+    mx.deleteAccountData(
+      `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0]
+    );
+    return;
+  }
+  if (!profileId) {
+    throw new Error("profile Id is empty, yet it isn't a reset");
+  }
+
+  const association: PerMessageProfileRoomAssociation = { profileId, validUntil };
+
+  mx.setAccountData(
+    `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0],
+    { association: association } as Parameters<typeof mx.setAccountData>[1]
+  );
+}
+
+/**
  *
  * @param mx the matrix client
  * @param profileId the profile id which the prefix should be attached to
@@ -395,10 +512,12 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
 export async function associateProxyWithProfile(
   mx: MatrixClient,
   profileId: string | undefined,
-  proxy: string,
-  proxyRegExp: RegExp,
+  prefix: string | undefined,
+  suffix: string | undefined,
   reset: boolean
 ) {
+  if (!(prefix || suffix)) throw new Error('Proxy must have either a prefix, suffix, or both.');
+
   const associations = getProxyAssociationMap(
     mx
       .getAccountData(
@@ -407,41 +526,23 @@ export async function associateProxyWithProfile(
       ?.getContent()
   );
 
+  const proxy = createProxyKey(prefix, suffix);
+
   if (reset) associations.delete(proxy);
 
   if (!profileId) throw new Error('profileId might not be undefined');
   if (profileId)
     associations.set(proxy, {
       profileId,
-      regexString: proxyRegExp.toString(),
-    } satisfies PerMessageProfileProxyAssociation);
-  mx.setAccountData(
+      prefix,
+      suffix,
+    } satisfies PerMessageProfileProxyAssociationV2);
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
     { associations: proxyAssociationsMapToObject(associations) } as Parameters<
       typeof mx.setAccountData
     >[1]
   );
-}
-
-/**
- * get a profile based on a proxy
- * @param mx the matrix client
- * @param proxy the proxy to look for
- * @returns the profile, if any, associated with the prefix
- */
-export async function getProfileAssociatedWithProxy(
-  mx: MatrixClient,
-  proxy: string
-): Promise<PerMessageProfile | undefined> {
-  const profileId = getProxyAssociationMap(
-    mx
-      .getAccountData(
-        `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
-      )
-      ?.getContent()
-  ).get(proxy)?.profileId;
-  if (!profileId) return undefined;
-  return getPerMessageProfileById(mx, profileId);
 }
 
 /**
@@ -453,7 +554,7 @@ export async function getProfileAssociatedWithProxy(
  */
 export async function getAllPerMessageProfileProxies(
   mx: MatrixClient
-): Promise<PerMessageProfileProxyAssociation[]> {
+): Promise<PerMessageProfileProxyAssociationV2[]> {
   const cont: PerMessageProfileProxyAssociationWrapper | undefined = mx
     .getAccountData(
       `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
@@ -461,8 +562,50 @@ export async function getAllPerMessageProfileProxies(
     ?.getContent();
   if (!cont) return [];
   const pmap = getProxyAssociationMap(cont);
-  const parr = new Array<PerMessageProfileProxyAssociation>();
-  pmap.values().forEach((v) => parr.push(v));
+  const parr = new Array<PerMessageProfileProxyAssociationV2>();
+  let needsMigration = false;
+  pmap.entries().forEach(([k, v]) => {
+    if (proxyNeedsMigration(v)) {
+      needsMigration = true;
+      v = migratePmpProxyAssociation(k, v) ?? v;
+    }
+    return parr.push(v as PerMessageProfileProxyAssociationV2);
+  });
+
+  if (needsMigration) {
+    const newPmap = new Map(
+      pmap.entries().map(([k, v]) => [k, migratePmpProxyAssociation(k, v) ?? v])
+    );
+
+    await mx.setAccountData(
+      `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
+      { associations: proxyAssociationsMapToObject(newPmap) } as Parameters<
+        typeof mx.setAccountData
+      >[1]
+    );
+  }
+
+  return parr;
+}
+
+export async function getAllProxiesForPMP(
+  mx: MatrixClient,
+  profileId: string
+): Promise<PerMessageProfileProxyAssociationV2[]> {
+  const cont: PerMessageProfileProxyAssociationWrapper | undefined = mx
+    .getAccountData(
+      `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
+    )
+    ?.getContent();
+  if (!cont) return [];
+
+  const pmap = getProxyAssociationMap(cont);
+  const parr = new Array<PerMessageProfileProxyAssociationV2>();
+  pmap
+    .entries()
+    /* oxlint-disable no-unused-vars */
+    .filter(([_k, v]) => v.profileId === profileId)
+    .forEach(([k, v]) => parr.push(migratePmpProxyAssociation(k, v)!));
   return parr;
 }
 
@@ -476,7 +619,7 @@ export async function dropProxyAssociationForPMP(mx: MatrixClient, proxy: string
   );
   if (!associations) return;
   associations.delete(proxy);
-  mx.setAccountData(
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
     { associations: proxyAssociationsMapToObject(associations) } as Parameters<
       typeof mx.setAccountData
@@ -542,13 +685,6 @@ export async function renamePerMessageProfile(mx: MatrixClient, oldId: string, n
   await deletePerMessageProfile(mx, oldId);
 }
 
-export async function getListOfRoomsUsingProfile(
-  mx: MatrixClient,
-  profileId: string
-): Promise<string[]> {
-  return getRoomsUsingProfile(mx, profileId);
-}
-
 /**
  * gets the per message profile to be used for messages in a room
  * @param mx matrix client
@@ -565,6 +701,21 @@ export async function getCurrentlyUsedPerMessageProfileForRoom(
   const content: PerMessageProfileRoomAssociationWrapper | undefined = accountData?.getContent();
   const associations = getAssociationsMap(content);
   const profileId = associations.get(roomId)?.profileId;
+  const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
+  return profileId ? pmp : undefined;
+}
+
+/**
+ * get the per message profile associated with the account todo
+ */
+export async function getCurrentlyUsedPerMessageProfileForAccount(
+  mx: MatrixClient
+): Promise<PerMessageProfile | undefined> {
+  const accountData = mx.getAccountData(
+    `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.getAccountData>[0]
+  );
+  const content: PerMessageProfileGlobalAssociationWrapper | undefined = accountData?.getContent();
+  const profileId = content?.association.profileId;
   const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
   return profileId ? pmp : undefined;
 }

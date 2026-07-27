@@ -731,12 +731,32 @@ type BufferedMediaResponse = {
 
 const inflightMediaFetches = new Map<string, Promise<BufferedMediaResponse>>();
 
+// Ranged media is streamed straight through: buffering it would hold playback until the whole
+// file had arrived, and sharing an in-flight fetch buys nothing when each request is its own
+// byte range.
+function respondWithStreamedMedia(
+  request: Request,
+  token: string,
+  redirect: RequestRedirect
+): Promise<Response> {
+  return fetch(request.url, { ...fetchConfig(token, request), redirect }).then(
+    (res) =>
+      new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: new Headers(res.headers),
+      })
+  );
+}
+
 function respondWithInflightMedia(
   request: Request,
   token: string,
   redirect: RequestRedirect
 ): Promise<Response> {
   const range = request.headers.get('Range') ?? '';
+  if (range) return respondWithStreamedMedia(request, token, redirect);
+
   const key = `${token}\x00${request.url}\x00${redirect}\x00${range}`;
   const existing = inflightMediaFetches.get(key);
   if (existing) {
@@ -775,16 +795,6 @@ function respondWithInflightMedia(
   );
 }
 
-async function isUnknownTokenError(response: Response): Promise<boolean> {
-  if (response.status !== 401) return false;
-  try {
-    const data = await response.clone().json();
-    return data?.errcode === 'M_UNKNOWN_TOKEN';
-  } catch {
-    return false;
-  }
-}
-
 async function respondWithMediaAuthRecovery(
   request: Request,
   session: SessionInfo,
@@ -793,7 +803,6 @@ async function respondWithMediaAuthRecovery(
 ): Promise<Response> {
   const response = await respondWithInflightMedia(request, session.accessToken, redirect);
   if ((response.status !== 401 && response.status !== 403) || !clientId) return response;
-  if (await isUnknownTokenError(response)) return response;
 
   // One exact-client retry; concurrent recoveries share this request.
   const refreshed = await requestSessionWithTimeout(clientId);
@@ -805,6 +814,8 @@ async function respondWithMediaAuthRecovery(
     return response;
   }
 
+  // The retry replaces this response, so release its body rather than leaving the stream open.
+  await response.body?.cancel().catch(() => undefined);
   return respondWithInflightMedia(request, refreshed.accessToken, redirect);
 }
 

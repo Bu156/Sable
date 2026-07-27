@@ -49,8 +49,9 @@ describe('service worker media auth recovery', () => {
     vi.mocked(fetch).mockImplementation(async (_input, init) => {
       const headers = new Headers(init?.headers);
       ranges.push({ authorization: headers.get('authorization'), range: headers.get('range') });
-      return new Response('', {
-        status: headers.get('authorization') === 'Bearer old-token' ? 401 : 206,
+      const isOldToken = headers.get('authorization') === 'Bearer old-token';
+      return new Response(isOldToken ? JSON.stringify({ errcode: 'M_UNKNOWN_TOKEN' }) : '', {
+        status: isOldToken ? 401 : 206,
       });
     });
 
@@ -83,6 +84,33 @@ describe('service worker media auth recovery', () => {
       { authorization: 'Bearer new-token', range: 'bytes=0-99' },
       { authorization: 'Bearer new-token', range: 'bytes=100-199' },
     ]);
+  });
+
+  it('streams a ranged response without waiting for the whole body', async () => {
+    const session = { accessToken: 'token', baseUrl: 'https://matrix.example.org' };
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        bodyController = controller;
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(body, { status: 206, headers: { 'Content-Range': 'bytes 0-1/2' } })
+    );
+
+    const request = new Request(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/media-id',
+      { headers: { Range: 'bytes=0-' } }
+    );
+
+    // Buffering the body would hang here: the stream is still open.
+    const response = await swTestHooks.respondWithMediaAuthRecovery(request, session, 'follow');
+    expect(response.status).toBe(206);
+    expect(response.headers.get('Content-Range')).toBe('bytes 0-1/2');
+
+    bodyController?.enqueue(new Uint8Array([1, 2]));
+    bodyController?.close();
+    await expect(response.arrayBuffer()).resolves.toHaveProperty('byteLength', 2);
   });
 
   it('posts a new session request after a previous request times out', async () => {

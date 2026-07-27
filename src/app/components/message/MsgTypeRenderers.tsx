@@ -1,9 +1,9 @@
-import { type CSSProperties, type ReactNode, useMemo } from 'react';
+import { lazy, Suspense, type CSSProperties, type ReactNode, useMemo } from 'react';
 import { ArrowSquareOut, sizedIcon, Link } from '$components/icons/phosphor';
 import { Box, Chip, Text, toRem } from 'folds';
 import { type IContent, type IPreviewUrlResponse, type MatrixClient } from '$types/matrix-sdk';
 import { isJumboEmojiText } from '$utils/emojiDetection';
-import { trimReplyFromBody } from '$utils/room';
+import { trimReplyFromBody } from '$utils/room/display';
 import type {
   IAudioContent,
   IAudioInfo,
@@ -38,13 +38,12 @@ import { LINKINPUTREGEX } from '$components/editor';
 import { MATRIX_TO_BASE } from '$plugins/matrix-to';
 import { copyToClipboard } from '$utils/dom';
 import { getAttachmentFilename } from '$utils/download';
-import { MapContainer, Marker, TileLayer } from 'react-leaflet';
-import type { LatLngExpression } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
 import * as css from './MsgTypeRenderers.css';
-import { markerIcon } from '$features/room/location-modal/LocationDialog';
 import { isNumber } from 'matrix-js-sdk/lib/utils';
+
+const LocationMap = lazy(() =>
+  import('./LocationMap').then((module) => ({ default: module.LocationMap }))
+);
 
 export interface BundleContent extends IPreviewUrlResponse {
   matched_url: string;
@@ -109,7 +108,7 @@ export function UnsupportedContent({ body }: BrokenContentProps) {
   );
 }
 
-export function BrokenContent({ body }: BrokenContentProps) {
+function BrokenContent({ body }: BrokenContentProps) {
   return (
     <Text>
       <MessageBrokenContent body={body} />
@@ -446,31 +445,40 @@ export function MImage({ content, renderImageContent, outlined, fitParent }: MIm
   if (!mxcUrl) {
     return <BrokenContent body={content.body ?? content.filename} />;
   }
+  const MIN_SIZE = 150;
   const MAX_SIZE = 400;
-  const imgW = imgInfo?.w ?? MAX_SIZE;
-  const imgH = imgInfo?.h ?? MAX_SIZE;
-  const aspectRatio = imgInfo?.w && imgInfo?.h ? `${imgW} / ${imgH}` : undefined;
-  // this garbage is for portrait images, we cap the width so the card doesn't exceed the bounds of the image
-  const displayWidth = imgH > imgW ? Math.round(MAX_SIZE * (imgW / imgH)) : MAX_SIZE;
-  const height = scaleYDimension(imgInfo?.w || 400, displayWidth, imgInfo?.h || 400);
   const filename = getAttachmentFilename(content.filename, content.body, 'Image');
+
+  // lazy approach to make sure that both horizontal and vertical images fit
+  // checks whether the image has width and height and if it does it sets a width that matches the aspect ratio
+  const hasIntrinsicSize =
+    isNumber(imgInfo?.w) && imgInfo.w > 0 && isNumber(imgInfo?.h) && imgInfo.h > 0;
+  const portraitWidth =
+    !imgInfo || !imgInfo.w || !imgInfo.h || imgInfo.w > imgInfo.h
+      ? undefined
+      : toRem((MAX_SIZE * imgInfo.w) / imgInfo.h);
 
   return (
     <Attachment
       style={{
-        flexGrow: 1,
         flexShrink: 0,
-        width: fitParent ? '100%' : toRem(displayWidth),
-        height: fitParent ? '100%' : 'auto',
+        width: fitParent ? '100%' : portraitWidth,
+        height: fitParent ? '100%' : undefined,
+        // A bare MAX_SIZE cap would drop the container's own `max-width: 100%`.
+        maxWidth: fitParent ? undefined : `min(100%, ${toRem(MAX_SIZE)})`,
+        maxHeight: fitParent ? undefined : toRem(MAX_SIZE),
+        // ImageContent's aspect-ratio box already reserves the space when the
+        // dimensions are known; a square floor on top of it letterboxes wide images.
+        minWidth: fitParent || hasIntrinsicSize ? undefined : MIN_SIZE,
+        minHeight: fitParent || hasIntrinsicSize ? undefined : MIN_SIZE,
       }}
       outlined={outlined}
     >
       <AttachmentBox
         style={{
           flexGrow: 1,
-          aspectRatio: fitParent ? undefined : aspectRatio,
-          width: fitParent ? '100%' : toRem(displayWidth),
-          height: fitParent ? '100%' : toRem(height < 48 ? 48 : height),
+          width: fitParent ? '100%' : portraitWidth,
+          height: fitParent ? '100%' : undefined,
         }}
       >
         {renderImageContent({
@@ -707,7 +715,7 @@ export function MLocation({ content, showMaps }: MLocationProps) {
   const location = parseGeoUri(geoUri);
   if (!location) return <BrokenContent />;
   const isValid = isNumber(Number(location.latitude)) && isNumber(Number(location.longitude));
-  const coords: LatLngExpression = [Number(location.latitude), Number(location.longitude)];
+  const coordinates: [number, number] = [Number(location.latitude), Number(location.longitude)];
 
   return (
     <Box
@@ -752,28 +760,9 @@ export function MLocation({ content, showMaps }: MLocationProps) {
         </Chip>
       </Box>
       {showMaps && isValid && (
-        <MapContainer
-          center={coords}
-          zoom={16}
-          scrollWheelZoom={true}
-          className={css.LocationMapContainer}
-          attributionControl
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <Marker
-            position={coords}
-            eventHandlers={{
-              mousedown: (e) => {
-                e.originalEvent.preventDefault();
-                e.originalEvent.stopPropagation();
-              },
-            }}
-            icon={markerIcon}
-          />
-        </MapContainer>
+        <Suspense fallback={null}>
+          <LocationMap coordinates={coordinates} className={css.LocationMapContainer} />
+        </Suspense>
       )}
     </Box>
   );

@@ -193,6 +193,74 @@ describe('SlidingSyncManager initial request', () => {
     ]);
   });
 
+  it('excludes account_data rooms with no events from the dirty set', async () => {
+    const manager = makeManager(makeMockMx());
+    const settled = vi.fn<(dirtyRoomIds: ReadonlySet<string>) => void>();
+    manager.subscribeToResponseSettled(settled);
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.RequestFinished, {});
+    fireLifecycle(SlidingSyncState.Complete, {
+      rooms: {},
+      extensions: {
+        account_data: {
+          rooms: {
+            '!unchanged:example.com': [],
+            '!changed:example.com': [
+              {
+                type: EventType.FullyRead,
+                content: { event_id: '$event' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(settled).toHaveBeenCalledOnce();
+    expect([...settled.mock.calls[0]![0]]).toEqual(['!changed:example.com']);
+  });
+
+  it('marks only rooms with real data dirty across a full sync response', async () => {
+    const manager = makeManager(makeMockMx());
+    const settled = vi.fn<(dirtyRoomIds: ReadonlySet<string>) => void>();
+    manager.subscribeToResponseSettled(settled);
+    manager.attach();
+
+    fireLifecycle(SlidingSyncState.RequestFinished, {});
+    fireRoomData('!real:example.com', { initial: false });
+    fireLifecycle(SlidingSyncState.Complete, {
+      rooms: {
+        '!real:example.com': { name: 'Real Room', notification_count: 0, highlight_count: 0 },
+      },
+      extensions: {
+        account_data: {
+          rooms: Object.fromEntries(
+            Array.from({ length: 50 }, (_, i) => [`!empty${i}:example.com`, []])
+          ),
+        },
+        receipts: {
+          rooms: {
+            '!real:example.com': {
+              type: 'm.receipt',
+              content: {},
+            },
+          },
+        },
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(settled).toHaveBeenCalledOnce();
+    const dirty = [...settled.mock.calls[0]![0]];
+    // Only the room that actually received data — not the 50 empty echoes.
+    expect(dirty).toEqual(['!real:example.com']);
+    expect(dirty).toHaveLength(1);
+  });
+
   it('does not fan out member requests for users referenced by startup sync', async () => {
     const getStateEvent = vi.fn<() => Promise<Record<string, unknown>>>().mockResolvedValue({
       membership: KnownMembership.Join,
@@ -735,6 +803,33 @@ describe('SlidingSyncManager local membership reconciliation', () => {
     await vi.waitFor(() => expect(getJoinedRooms).toHaveBeenCalledOnce());
 
     expect(reconcileRooms).not.toHaveBeenCalled();
+  });
+
+  it('re-asserts join for a joined room hydrated from cache as invite', async () => {
+    const updateMyMembership = vi.fn<(m: string) => void>();
+    const room = {
+      getMyMembership: vi.fn<() => string>().mockReturnValue(KnownMembership.Invite),
+      updateMyMembership,
+    };
+    const getJoinedRooms = vi
+      .fn<() => Promise<{ joined_rooms: string[] }>>()
+      .mockResolvedValue({ joined_rooms: ['!joined:example.com'] });
+    const manager = makeManager(
+      makeMockMx({
+        getJoinedRooms,
+        getRoom: vi.fn<() => typeof room>().mockReturnValue(room),
+      })
+    );
+    const internals = manager as unknown as {
+      reconcileSidebarCacheMembership: () => void;
+      sidebarCache: { reconcileRooms: (roomIds: ReadonlySet<string>) => string[] };
+    };
+    vi.spyOn(internals.sidebarCache, 'reconcileRooms').mockReturnValue([]);
+
+    internals.reconcileSidebarCacheMembership();
+    await vi.waitFor(() => expect(getJoinedRooms).toHaveBeenCalledOnce());
+
+    expect(updateMyMembership).toHaveBeenCalledWith(KnownMembership.Join);
   });
 
   it('subscribes an optimistically joined room and tracks it for re-assertion', () => {

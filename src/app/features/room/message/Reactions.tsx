@@ -22,11 +22,12 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { factoryEventSentBy } from '$utils/matrix';
 import { Reaction, ReactionTooltipMsg } from '$components/message';
 import { EmojiBoard } from '$components/emoji-board';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { sizedIcon, Smiley } from '$components/icons/phosphor';
 import { useRelations } from '$hooks/useRelations';
 import { stopPropagation } from '$utils/keyboard';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import { useDismissOnBack } from '$utils/androidBack';
 import { ReactionViewer } from '$features/room/reaction-viewer';
 import * as css from './styles.css';
 
@@ -58,6 +59,8 @@ export const Reactions = as<'div', ReactionsProps>(
     const useAuthentication = useMediaAuthentication();
     const [viewer, setViewer] = useState<boolean | string>(false);
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+    // Android back closes the mobile emoji board instead of navigating away.
+    useDismissOnBack(() => setEmojiBoardAnchor(undefined), emojiBoardAnchor !== undefined);
     const myUserId = mx.getUserId();
     const reactions = useRelations(
       relations,
@@ -131,7 +134,7 @@ export const Reactions = as<'div', ReactionsProps>(
                 imagePackRooms={imagePackRooms ?? []}
                 returnFocusOnDeactivate={false}
                 allowTextCustomEmoji
-                isFullWidth={mobileOrTablet()}
+                isFullWidth={isMobileOrTablet()}
                 onEmojiSelect={(key) => {
                   onReactionToggle(mEventId, key);
                   setEmojiBoardAnchor(undefined);
@@ -167,7 +170,7 @@ export const Reactions = as<'div', ReactionsProps>(
                 )}
               </TooltipProvider>
             );
-            if (mobileOrTablet()) {
+            if (isMobileOrTablet()) {
               return (
                 <>
                   {trigger}

@@ -1,4 +1,10 @@
-import { composerIcon, User as UserIcon } from '$components/icons/phosphor';
+import {
+  composerIcon,
+  MagnifyingGlass,
+  menuIcon,
+  User as UserIcon,
+} from '$components/icons/phosphor';
+import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { UserAvatar } from '$components/user-avatar/UserAvatar.tsx';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication.ts';
 import {
@@ -6,11 +12,11 @@ import {
   getAllPerMessageProfiles,
   type PerMessageProfile,
   setCurrentlyUsedPerMessageProfileIdForRoom,
+  getCurrentlyUsedPerMessageProfileForAccount,
+  setCurrentlyUsedPerMessageProfileIdForAccount,
 } from '$hooks/usePerMessageProfile';
-import { stopPropagation } from '$utils/keyboard';
 import { mxcUrlToHttp } from '$utils/matrix.ts';
-import { mobileOrTablet } from '$utils/user-agent';
-import FocusTrap from 'focus-trap-react';
+import { isMobileOrTablet } from '$utils/platform';
 import { nameInitials } from '$utils/common';
 import {
   Avatar,
@@ -20,35 +26,60 @@ import {
   Input,
   Menu,
   MenuItem,
-  PopOut,
   type RectCords,
   Scroll,
   Text,
   toRem,
+  Badge,
 } from 'folds';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import * as css from './PersonaPicker.css.ts';
+import { InfoCard } from '$components/info-card/InfoCard.tsx';
+import { InfoIcon } from '@phosphor-icons/react';
+
+const pillStyles = {
+  cursor: 'pointer',
+} as const;
+
+export enum PersonaPickerTab {
+  Global = 'Global',
+  PerRoom = 'PerRoom',
+}
 
 type PersonaPickerProps = {
+  tab?: PersonaPickerTab;
   mx: MatrixClient;
   roomId: string;
   suppressEditorRefocus: () => void;
+  onTabChange: (tab: PersonaPickerTab) => void;
 };
 
-export function PersonaPicker({ mx, roomId, suppressEditorRefocus }: PersonaPickerProps) {
+export function PersonaPicker({
+  tab = PersonaPickerTab.Global,
+  mx,
+  roomId,
+  suppressEditorRefocus,
+  onTabChange,
+}: PersonaPickerProps) {
   const useAuthentication = useMediaAuthentication();
   const [AddPersonaMenuAnchor, setAddPersonaMenuAnchor] = useState<RectCords>();
   const [profiles, setProfiles] = useState<PerMessageProfile[] | undefined>(undefined);
-  const [selectedPersona, setSelectedPersona] = useState<PerMessageProfile | null>(null);
-  const isPickerMenuItemSelected = (persona: PerMessageProfile) =>
-    persona.id === selectedPersona?.id ? true : undefined;
+  const [selectedGlobalPersona, setSelectedGlobalPersona] = useState<PerMessageProfile | null>(
+    null
+  );
+  const [selectedRoomPersona, setSelectedRoomPersona] = useState<PerMessageProfile | null>(null);
+  const isPickerMenuItemSelected = (persona: PerMessageProfile) => {
+    const selectedPersona =
+      tab === PersonaPickerTab.Global ? selectedGlobalPersona : selectedRoomPersona;
+    return persona.id === selectedPersona?.id ? true : undefined;
+  };
+
+  const defactoPersona = () => selectedRoomPersona ?? selectedGlobalPersona;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
-
   const [filteredProfiles, setFilteredProfiles] = useState<PerMessageProfile[] | undefined>(
     undefined
   );
@@ -62,11 +93,14 @@ export function PersonaPicker({ mx, roomId, suppressEditorRefocus }: PersonaPick
 
   useEffect(() => {
     const syncProfile = async () => {
-      const syncedProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
-      setSelectedPersona(syncedProfile ?? null);
+      const syncedRoomProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      setSelectedRoomPersona(syncedRoomProfile ?? null);
+
+      const syncedGlobalProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      setSelectedGlobalPersona(syncedGlobalProfile ?? null);
     };
     syncProfile();
-  }, [mx, roomId]);
+  }, [mx, roomId, profiles]);
 
   const fetchProfiles = async (mx_: MatrixClient) => {
     const fetchedProfiles = await getAllPerMessageProfiles(mx_);
@@ -78,20 +112,23 @@ export function PersonaPicker({ mx, roomId, suppressEditorRefocus }: PersonaPick
     fetchProfiles(mx);
   }, [mx]);
 
-  const filter = (e: FormEvent) => {
-    const term = (e.target as HTMLInputElement).value.toLocaleLowerCase();
+  const filter = useCallback(
+    (e: FormEvent) => {
+      const term = (e.target as HTMLInputElement).value.toLocaleLowerCase();
 
-    const filtered = term
-      ? profiles?.filter((profile) =>
-          searchInputRef.current
-            ? profile.name.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
-              profile.id.toLocaleLowerCase().includes(searchInputRef.current?.value)
-            : true
-        )
-      : profiles;
+      const filtered = term
+        ? profiles?.filter((profile) =>
+            searchInputRef.current
+              ? profile.name.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
+                profile.id.toLocaleLowerCase().includes(searchInputRef.current?.value)
+              : true
+          )
+        : profiles;
 
-    setFilteredProfiles(filtered);
-  };
+      setFilteredProfiles(filtered);
+    },
+    [profiles]
+  );
 
   const avatarUrl = useCallback(
     (profile: PerMessageProfile) => {
@@ -105,61 +142,96 @@ export function PersonaPicker({ mx, roomId, suppressEditorRefocus }: PersonaPick
   );
 
   return (
-    <>
-      <PopOut
-        anchor={AddPersonaMenuAnchor}
-        position="Top"
-        align="Start"
-        offset={5}
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onActivate: () => {
-                // HACK: getAllPerMessageProfiles returns [] on Sable first load.
-                // BUG: On the third render the list returns empty in testing.
-                if (profiles?.length === 0) {
-                  fetchProfiles(mx);
-                }
-              },
-              onDeactivate: () => {
-                setAddPersonaMenuAnchor(undefined);
-                setShowPersonaPicker(false);
-                clearFilterInput();
-              },
-              clickOutsideDeactivates: true,
-              escapeDeactivates: stopPropagation,
-            }}
+    <ResponsiveMenu
+      anchor={AddPersonaMenuAnchor}
+      position="Top"
+      align="Start"
+      offset={16}
+      alignOffset={-44}
+      requestClose={() => {
+        setAddPersonaMenuAnchor(undefined);
+        clearFilterInput();
+      }}
+      menu={
+        <Menu>
+          <Box
+            direction="Column"
+            gap="100"
+            style={{ padding: config.space.S200, minWidth: '18rem' }}
           >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S200 }}>
-                <Text size="H6">Set persona for this room</Text>
-                <Input
-                  ref={searchInputRef}
-                  variant="SurfaceVariant"
-                  size="400"
-                  placeholder="Search"
-                  maxLength={50}
-                  autoFocus={!mobileOrTablet()}
-                  onChange={filter}
-                />
+            <Box gap="100">
+              <Badge
+                style={pillStyles}
+                as="button"
+                variant="Secondary"
+                fill={tab == PersonaPickerTab.Global ? 'Solid' : 'None'}
+                size="500"
+                onClick={() => onTabChange(PersonaPickerTab.Global)}
+              >
+                <Text as="span" size="L400">
+                  Global
+                </Text>
+              </Badge>
+              <Badge
+                style={pillStyles}
+                as="button"
+                variant="Secondary"
+                fill={tab == PersonaPickerTab.PerRoom ? 'Solid' : 'None'}
+                size="500"
+                onClick={() => onTabChange(PersonaPickerTab.PerRoom)}
+              >
+                <Text as="span" size="L400">
+                  Per-room
+                </Text>
+              </Badge>
+            </Box>
 
-                <Scroll ref={scrollRef} size="400" style={{ maxHeight: '14rem' }}>
-                  {filteredProfiles?.map((profile) => (
-                    <MenuItem
-                      key={profile.id}
-                      size="400"
-                      radii="300"
-                      className={css.PersonaPickerMenuItem}
-                      aria-selected={isPickerMenuItemSelected(profile)}
-                      onClick={async () => {
-                        const disabling = profile.id === selectedPersona?.id;
+            <>
+              <Input
+                ref={searchInputRef}
+                variant="SurfaceVariant"
+                size="400"
+                placeholder="Search"
+                maxLength={50}
+                autoFocus={!isMobileOrTablet()}
+                onChange={filter}
+                before={menuIcon(MagnifyingGlass)}
+              />
 
-                        if (!disabling) {
-                          setSelectedPersona(profile);
-                          await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, profile.id);
+              <Scroll hideTrack ref={scrollRef} size="400" style={{ maxHeight: '10rem' }}>
+                {filteredProfiles?.map((profile) => (
+                  <MenuItem
+                    key={profile.id}
+                    size="400"
+                    radii="300"
+                    className={css.PersonaPickerMenuItem}
+                    aria-selected={isPickerMenuItemSelected(profile)}
+                    onClick={async () => {
+                      const isGlobal = tab === PersonaPickerTab.Global;
+                      const selectedPersona = isGlobal
+                        ? selectedGlobalPersona
+                        : selectedRoomPersona;
+                      const disabling = profile.id === selectedPersona?.id;
+
+                      if (!disabling) {
+                        if (isGlobal) {
+                          setSelectedGlobalPersona(profile);
+                          await setCurrentlyUsedPerMessageProfileIdForAccount(mx, profile.id);
                         } else {
-                          setSelectedPersona(null);
+                          setSelectedRoomPersona(profile);
+                          await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, profile.id);
+                        }
+                      } else {
+                        if (isGlobal) {
+                          setSelectedGlobalPersona(null);
+                          await setCurrentlyUsedPerMessageProfileIdForAccount(
+                            mx,
+                            undefined,
+                            undefined,
+                            true
+                          );
+                        } else {
+                          setSelectedRoomPersona(null);
                           await setCurrentlyUsedPerMessageProfileIdForRoom(
                             mx,
                             roomId,
@@ -168,83 +240,103 @@ export function PersonaPicker({ mx, roomId, suppressEditorRefocus }: PersonaPick
                             true
                           );
                         }
-                      }}
-                      before={
-                        <Avatar
-                          size="300"
-                          radii="400"
-                          style={{
-                            width: '2rem',
-                            height: '2rem',
-                          }}
-                          aria-label="Profile avatar"
-                        >
-                          <UserAvatar
-                            userId={profile.id}
-                            src={avatarUrl(profile)}
-                            renderFallback={() => (
-                              <Text as="span" size="H4" aria-label="Avatar fallback">
-                                {nameInitials(profile.name)}
-                              </Text>
-                            )}
-                            alt={`Avatar for profile ${profile.id}`}
-                          />
-                        </Avatar>
                       }
-                    >
-                      <Text truncate style={{ maxWidth: toRem(150) }}>
-                        {profile.name}
-                      </Text>
-                    </MenuItem>
-                  ))}
-                </Scroll>
-              </Box>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-      {
-        <IconButton
-          aria-pressed={showPersonaPicker}
-          onClick={(evt) => {
-            setShowPersonaPicker(true);
-            setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
-          }}
-          onPointerDown={suppressEditorRefocus}
-          variant="SurfaceVariant"
-          size="300"
-          style={{ backgroundColor: 'transparent' }}
-          title="Switch persona"
-          aria-label="Switch persona"
-        >
-          {selectedPersona ? (
-            <Avatar
-              size="200"
-              radii="300"
-              className={
-                showPersonaPicker
-                  ? css.SelectedPersonaPickerButtonAvatar
-                  : css.PersonaPickerButtonAvatar
-              }
-              aria-label="Profile avatar"
-            >
-              <UserAvatar
-                className={css.PersonaPickerButtonAvatarImage}
-                userId={selectedPersona.id}
-                src={avatarUrl(selectedPersona)}
-                renderFallback={() => (
-                  <Text as="span" size="H6" aria-label="Avatar fallback">
-                    {nameInitials(selectedPersona.name)}
-                  </Text>
-                )}
-                alt={`Avatar for profile ${selectedPersona.id}`}
+                    }}
+                    before={
+                      <Avatar
+                        size="300"
+                        radii="400"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          marginLeft: -6,
+                        }}
+                        aria-label="Profile avatar"
+                      >
+                        <UserAvatar
+                          userId={profile.id}
+                          src={avatarUrl(profile)}
+                          renderFallback={() => (
+                            <Text as="span" size="H4" aria-label="Avatar fallback">
+                              {nameInitials(profile.name)}
+                            </Text>
+                          )}
+                          alt={`Avatar for profile ${profile.id}`}
+                        />
+                      </Avatar>
+                    }
+                  >
+                    <Text truncate style={{ maxWidth: toRem(150) }}>
+                      {profile.name}
+                    </Text>
+                  </MenuItem>
+                ))}
+              </Scroll>
+              <InfoCard
+                before={menuIcon(InfoIcon, { weight: 'fill' })}
+                variant="Primary"
+                description={
+                  selectedRoomPersona ? (
+                    <>
+                      Message will use your <em>per-room</em> persona.
+                    </>
+                  ) : selectedGlobalPersona ? (
+                    <>
+                      Message will use your <em>global</em> persona.
+                    </>
+                  ) : (
+                    <>No persona chosen.</>
+                  )
+                }
               />
-            </Avatar>
-          ) : (
-            composerIcon(UserIcon, { weight: showPersonaPicker ? 'fill' : 'regular' })
-          )}
-        </IconButton>
+            </>
+          </Box>
+        </Menu>
       }
-    </>
+    >
+      <IconButton
+        aria-pressed={!!AddPersonaMenuAnchor}
+        onClick={(evt) => {
+          // getAllPerMessageProfiles can return an empty list during initial startup.
+          if (profiles?.length === 0) {
+            fetchProfiles(mx);
+          }
+          setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
+        }}
+        onPointerDown={suppressEditorRefocus}
+        variant="SurfaceVariant"
+        size="300"
+        style={{ backgroundColor: 'transparent' }}
+        title="Switch persona"
+        aria-label="Switch persona"
+      >
+        {(selectedRoomPersona ?? selectedGlobalPersona) ? (
+          <Avatar
+            size="200"
+            radii="300"
+            className={
+              AddPersonaMenuAnchor
+                ? css.SelectedPersonaPickerButtonAvatar
+                : css.PersonaPickerButtonAvatar
+            }
+            aria-label="Profile avatar"
+          >
+            <UserAvatar
+              className={css.PersonaPickerButtonAvatarImage}
+              userId={defactoPersona()!.id}
+              src={avatarUrl(defactoPersona()!)}
+              renderFallback={() => (
+                <Text as="span" size="H6" aria-label="Avatar fallback">
+                  {nameInitials(defactoPersona()!.name)}
+                </Text>
+              )}
+              alt={`Avatar for profile ${defactoPersona()!.id}`}
+            />
+          </Avatar>
+        ) : (
+          composerIcon(UserIcon, { weight: AddPersonaMenuAnchor ? 'fill' : 'regular' })
+        )}
+      </IconButton>
+    </ResponsiveMenu>
   );
 }

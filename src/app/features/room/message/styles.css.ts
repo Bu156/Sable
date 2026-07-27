@@ -1,4 +1,4 @@
-import { keyframes, style } from '@vanilla-extract/css';
+import { style } from '@vanilla-extract/css';
 import { DefaultReset, FocusOutline, color, config, toRem } from 'folds';
 
 export const MessageBase = style({
@@ -11,6 +11,14 @@ export const MessageBaseBubbleCollapsed = style({
 
 export const MessageForceHover = style({
   backgroundColor: `${color.Surface.ContainerHover} !important`,
+});
+
+export const MessageSwipeReply = style({
+  backgroundColor: color.Surface.ContainerHover,
+});
+
+export const MessageSwipeEdit = style({
+  backgroundColor: color.Primary.Container,
 });
 
 export const MessageOptionsBase = style([
@@ -71,17 +79,6 @@ export const PreventSelect = style({
 //I have zero clue where these numbers and vars are from but they should be changed
 //I just copied the hardcoded value in a more correct place
 
-export const MessageNickEditor = style({
-  background: 'var(--mx-c-surface)',
-  color: 'var(--mx-c-on-surface)',
-  border: '1px solid var(--mx-c-outline)',
-  borderRadius: '6px',
-  padding: '4px 8px',
-  fontSize: '14px',
-  width: '100%',
-  outline: 'none',
-});
-
 export const MessageMobileOptionsWrapped = style({
   position: 'fixed',
   top: 0,
@@ -106,15 +103,6 @@ export const MessageMobileOptionsContainer = style({
   flexDirection: 'column',
   justifyContent: 'flex-end',
   overflow: 'visible',
-  animation: `${keyframes({
-    from: { transform: 'translateY(100%)' },
-    to: { transform: 'translateY(0)' },
-  })} 250ms cubic-bezier(0.32, 0.72, 0, 1)`,
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
-      animation: 'none',
-    },
-  },
 });
 
 export const MessageMobileDragHandle = style({
@@ -128,6 +116,7 @@ export const MessageMobileDragHandle = style({
   paddingTop: '6px',
   justifyContent: 'center',
   zIndex: 10,
+  pointerEvents: 'none',
 });
 
 export const MessageMobileDragIndicator = style({
@@ -136,6 +125,7 @@ export const MessageMobileDragIndicator = style({
   borderRadius: '2px',
   backgroundColor: color.SurfaceVariant.OnContainer,
   opacity: 0.5,
+  pointerEvents: 'auto',
 });
 
 export const BubbleAvatarBase = style({

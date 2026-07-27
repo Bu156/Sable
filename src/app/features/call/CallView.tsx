@@ -3,7 +3,7 @@ import { Badge, Box, color, Header, Scroll, Text, toRem } from 'folds';
 import { useAtomValue } from 'jotai';
 import { ContainerColor } from '$styles/ContainerColor.css';
 import { useRoom } from '$hooks/useRoom';
-import { useCallStartCapabilities } from '$hooks/useCallStartCapabilities';
+import { useCallStartCapabilities } from './useCallStartCapabilities';
 
 import { useCallMembers, useCallSession } from '$hooks/useCall';
 import { useCallEmbed, useCallEmbedPlacementSync, useCallJoined } from '$hooks/useCallEmbed';
@@ -295,14 +295,14 @@ export function CallView({ resizable }: CallViewProps) {
           aria-label="Resize call view"
           style={{
             position: 'absolute',
-            bottom: '-12px',
+            bottom: '-20px',
             left: 0,
             right: 0,
-            height: '24px',
+            height: '20px',
             cursor: 'ns-resize',
             zIndex: 100,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             background: 'transparent',
             border: 'none',
@@ -316,6 +316,7 @@ export function CallView({ resizable }: CallViewProps) {
             style={{
               width: '40px',
               height: '4px',
+              marginTop: '2px',
               borderRadius: '2px',
               background: 'var(--sable-surface-container-line)',
               opacity: 0.8,

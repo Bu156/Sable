@@ -4,6 +4,7 @@ import type { MatrixClient } from '$types/matrix-sdk';
 import { menuIcon, Warning } from '$components/icons/phosphor';
 import { scaleSystemEmoji } from '$plugins/react-custom-html-parser';
 import { mxcUrlToHttp } from '$utils/matrix';
+import { Image as MediaImage } from '$components/media';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import * as css from './Reaction.css';
 
@@ -23,7 +24,7 @@ export function ReactionKeyInline({
   const [imgError, setImgError] = useState(false);
   const rawReactionUrl =
     reactionKey && reactionKey.startsWith('mxc://')
-      ? (mxcUrlToHttp(mx, reactionKey, useAuthentication, 32, 32, 'crop') ?? undefined)
+      ? (mxcUrlToHttp(mx, reactionKey, useAuthentication) ?? undefined)
       : undefined;
   const renderableReactionUrl = useRenderableMediaUrl(rawReactionUrl);
 
@@ -48,7 +49,7 @@ export function ReactionKeyInline({
     }
 
     return (
-      <img
+      <MediaImage
         className={css.ReactionImg}
         src={renderableReactionUrl}
         alt={shortcode ?? 'reaction'}

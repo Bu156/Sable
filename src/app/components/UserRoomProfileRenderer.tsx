@@ -1,12 +1,12 @@
-import { Menu, PopOut, toRem } from 'folds';
-import FocusTrap from 'focus-trap-react';
+import { Menu, toRem } from 'folds';
+import { useState } from 'react';
 import { useCloseUserRoomProfile, useUserRoomProfileState } from '$state/hooks/userRoomProfile';
 import type { UserRoomProfileState } from '$state/userRoomProfile';
 import { useAllJoinedRoomsSet, useGetRoom } from '$hooks/useGetRoom';
-import { stopPropagation } from '$utils/keyboard';
 import { SpaceProvider } from '$hooks/useSpace';
 import { RoomProvider } from '$hooks/useRoom';
 import { UserRoomProfile } from './user-profile';
+import { ResponsiveMenu } from './ResponsiveMenu';
 
 function UserRoomProfileContextMenu({ state }: { state: UserRoomProfileState }) {
   const { roomId, spaceId, userId, cords, position, initialProfile } = state;
@@ -15,32 +15,31 @@ function UserRoomProfileContextMenu({ state }: { state: UserRoomProfileState }) 
   const room = getRoom(roomId);
   const space = spaceId ? getRoom(spaceId) : undefined;
 
+  const [surfaceColor, setSurfaceColor] = useState<string | undefined>();
   const close = useCloseUserRoomProfile();
 
   if (!room) return null;
 
   return (
-    <PopOut
+    <ResponsiveMenu
       anchor={cords}
+      requestClose={close}
       position={position ?? 'Top'}
       align={cords.y > window.innerHeight / 2 ? 'End' : 'Start'}
-      content={
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: false,
-            onDeactivate: close,
-            clickOutsideDeactivates: true,
-            escapeDeactivates: stopPropagation,
-          }}
-        >
-          <Menu style={{ width: toRem(340) }}>
-            <SpaceProvider value={space ?? null}>
-              <RoomProvider value={room}>
-                <UserRoomProfile userId={userId} initialProfile={initialProfile} />
-              </RoomProvider>
-            </SpaceProvider>
-          </Menu>
-        </FocusTrap>
+      returnFocusOnDeactivate
+      surfaceColor={surfaceColor}
+      menu={
+        <Menu style={{ width: toRem(340) }}>
+          <SpaceProvider value={space ?? null}>
+            <RoomProvider value={room}>
+              <UserRoomProfile
+                userId={userId}
+                initialProfile={initialProfile}
+                onSurfaceColorChange={setSurfaceColor}
+              />
+            </RoomProvider>
+          </SpaceProvider>
+        </Menu>
       }
     />
   );
@@ -50,5 +49,5 @@ export function UserRoomProfileRenderer() {
   const state = useUserRoomProfileState();
 
   if (!state) return null;
-  return <UserRoomProfileContextMenu state={state} />;
+  return <UserRoomProfileContextMenu key={`${state.roomId}:${state.userId}`} state={state} />;
 }

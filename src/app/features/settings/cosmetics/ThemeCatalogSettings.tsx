@@ -27,9 +27,8 @@ import {
   type ThemeRemoteFavorite,
   type ThemeRemoteTweakFavorite,
 } from '$state/settings';
-import { SequenceCardStyle } from '$features/settings/styles.css';
-import { SequenceCard } from '$components/sequence-card';
-import { SettingTile } from '$components/setting-tile';
+import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
+import { SettingTile, SettingToggle } from '$components/setting-tile';
 import { ThemePreviewCard } from '$components/theme/ThemePreviewCard';
 import { usePatchSettings } from './themeSettingsPatch';
 import { ThemeImportModal } from './ThemeImportModal';
@@ -39,7 +38,12 @@ import {
   type ThemePair,
   type TweakCatalogEntry,
 } from '../../../theme/catalog';
-import { isLocalImportBundledUrl, isLocalImportThemeUrl } from '../../../theme/localImportUrls';
+import {
+  isLocalImportBundledUrl,
+  isLocalImportThemeUrl,
+  isLocalImportTweakUrl,
+} from '../../../theme/localImportUrls';
+import { resolveSavedTweakCss } from '../../../theme/syncedTweakCss';
 import { isThirdPartyThemeUrl } from '../../../theme/themeApproval';
 import { themeCatalogListingBaseUrl } from '../../../theme/catalogDefaults';
 import {
@@ -59,7 +63,7 @@ import {
 import { CssViewerButton } from '$components/theme/CssViewerButton';
 import * as css from './ThemeCatalogSettings.css';
 
-export type CatalogPreviewRow = ThemePair & {
+type CatalogPreviewRow = ThemePair & {
   previewText: string;
   displayName: string;
   author?: string;
@@ -69,7 +73,7 @@ export type CatalogPreviewRow = ThemePair & {
   fullInstallUrl: string;
 };
 
-export type LocalPreviewRow = ThemeRemoteFavorite & {
+type LocalPreviewRow = ThemeRemoteFavorite & {
   previewUrl: string;
   previewText: string;
   fullCssText: string;
@@ -80,7 +84,7 @@ export type LocalPreviewRow = ThemeRemoteFavorite & {
   importedLocal?: boolean;
 };
 
-export type CatalogTweakRow = TweakCatalogEntry & {
+type CatalogTweakRow = TweakCatalogEntry & {
   fullCssText: string;
   displayName: string;
   description?: string;
@@ -88,19 +92,17 @@ export type CatalogTweakRow = TweakCatalogEntry & {
   tags: string[];
 };
 
-export type LocalTweakRow = ThemeRemoteTweakFavorite & {
+type LocalTweakRow = ThemeRemoteTweakFavorite & {
   fullCssText: string;
   description?: string;
   author?: string;
   tags: string[];
 };
 
-export type ThemeCatalogSettingsMode = 'full' | 'local' | 'chat' | 'remote' | 'appearance';
-
-export { usePatchSettings } from './themeSettingsPatch';
+type ThemeCatalogSettingsMode = 'local' | 'appearance';
 
 type ThemeCatalogSettingsProps = {
-  mode?: ThemeCatalogSettingsMode;
+  mode: ThemeCatalogSettingsMode;
   onBrowseOpenChange?: (open: boolean) => void;
 };
 
@@ -221,10 +223,7 @@ function CatalogTweakCard({
   );
 }
 
-export function ThemeCatalogSettings({
-  mode = 'full',
-  onBrowseOpenChange,
-}: ThemeCatalogSettingsProps) {
+export function ThemeCatalogSettings({ mode, onBrowseOpenChange }: ThemeCatalogSettingsProps) {
   const clientConfig = useClientConfig();
   const patchSettings = usePatchSettings();
   const queryClient = useQueryClient();
@@ -245,12 +244,10 @@ export function ThemeCatalogSettings({
     }
   }, [browseOpen, isAppearanceMode, onBrowseOpenChange]);
 
-  const isRemoteMode = mode === 'remote' || mode === 'full' || (isAppearanceMode && browseOpen);
-  const isChatMode = mode === 'chat' || mode === 'full' || (isAppearanceMode && !browseOpen);
-  const showAssignmentChrome =
-    mode === 'full' || mode === 'local' || (isAppearanceMode && !browseOpen);
-  const showSavedLibrary =
-    (mode === 'full' || mode === 'local' || isAppearanceMode) && !(isAppearanceMode && browseOpen);
+  const isRemoteMode = isAppearanceMode && browseOpen;
+  const isChatMode = isAppearanceMode && !browseOpen;
+  const showAssignmentChrome = mode === 'local' || (isAppearanceMode && !browseOpen);
+  const showSavedLibrary = !(isAppearanceMode && browseOpen);
 
   const [getFavorites] = useSetting(settingsAtom, 'themeRemoteFavorites');
   const [favorites, setFavorites] = useState(getFavorites ? getFavorites : []);
@@ -579,14 +576,17 @@ export function ThemeCatalogSettings({
   });
 
   const localTweaksQuery = useQuery({
-    queryKey: ['theme-local-tweaks', tweakFavorites.map((f) => f.fullUrl).join('|')],
+    queryKey: [
+      'theme-local-tweaks',
+      tweakFavorites.map((f) => `${f.fullUrl}:${f.cssText ?? ''}`).join('|'),
+    ],
     enabled: showSavedLibrary && tweakFavorites.length > 0,
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<LocalTweakRow[]> => {
       const rows = await Promise.all(
         tweakFavorites.map(async (fav) => {
           try {
-            let text = (await getCachedThemeCss(fav.fullUrl)) ?? '';
+            let text = await resolveSavedTweakCss(fav);
             if (!isLocalImportBundledUrl(fav.fullUrl)) {
               try {
                 const res = await fetch(fav.fullUrl, { mode: 'cors' });
@@ -616,6 +616,23 @@ export function ThemeCatalogSettings({
       return rows.filter((r): r is LocalTweakRow => Boolean(r));
     },
   });
+  const resolvedTweakUrls = new Set(
+    localTweaksQuery.isSuccess ? localTweaksQuery.data.map((row) => row.fullUrl) : []
+  );
+  const provisionalTweakCount = tweakFavorites.filter(
+    (favorite) => !isLocalImportTweakUrl(favorite.fullUrl) || Boolean(favorite.cssText)
+  ).length;
+  const savedTweakCount = localTweaksQuery.isSuccess
+    ? resolvedTweakUrls.size
+    : provisionalTweakCount;
+  const unresolvedLegacyTweakCount = localTweaksQuery.isSuccess
+    ? tweakFavorites.filter(
+        (favorite) =>
+          isLocalImportTweakUrl(favorite.fullUrl) &&
+          !favorite.cssText &&
+          !resolvedTweakUrls.has(favorite.fullUrl)
+      ).length
+    : 0;
 
   const removeFavorite = useCallback(
     (fullUrl: string) => {
@@ -1103,7 +1120,7 @@ export function ThemeCatalogSettings({
                   radii="Pill"
                   onClick={() => setSavedSection('tweaks')}
                 >
-                  <Text size="B300">Tweaks ({tweakFavorites.length})</Text>
+                  <Text size="B300">Tweaks ({savedTweakCount})</Text>
                 </Chip>
               </Box>
               <Box direction="Row" gap="100" alignItems="Center">
@@ -1263,9 +1280,17 @@ export function ThemeCatalogSettings({
                       paddingRight: toRem(4),
                     }}
                   >
+                    {localTweaksQuery.data.length > 0 && unresolvedLegacyTweakCount > 0 && (
+                      <Text size="T300" priority="300">
+                        {unresolvedLegacyTweakCount} saved local tweak
+                        {unresolvedLegacyTweakCount === 1 ? ' is' : 's are'} waiting to migrate.
+                      </Text>
+                    )}
                     {localTweaksQuery.data.length === 0 ? (
                       <Text size="T300" priority="300">
-                        Could not load tweak CSS. Check the URL or your connection.
+                        {unresolvedLegacyTweakCount === tweakFavorites.length
+                          ? 'Some saved local tweaks are waiting to migrate. Open Sable on a device that still has them to finish syncing.'
+                          : 'Could not load tweak CSS. Check the URL or your connection.'}
                       </Text>
                     ) : (
                       localTweaksQuery.data.map((row) => {
@@ -1725,46 +1750,29 @@ export function ThemeCatalogSettings({
 
       {isChatMode && (
         <>
-          <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
-            <SettingTile
-              title="Theme & tweak cards"
-              focusId="theme-chat-sable-widgets"
-              description="Show interactive Sable CSS cards instead of plain links."
-              after={
-                <Switch variant="Primary" value={sableChatWidgets} onChange={setSableChatWidgets} />
-              }
-            />
-          </SequenceCard>
-          <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
-            <SettingTile
-              title="Auto-load approved URLs"
-              focusId="theme-chat-auto-approved"
-              description="Automatically fetch previews from approved catalog hosts."
-              after={
-                <Switch
-                  variant="Primary"
-                  value={autoPreviewApprovedUrls}
-                  onChange={setAutoPreviewApprovedUrls}
-                  disabled={!sableChatWidgets}
-                />
-              }
-            />
-          </SequenceCard>
-          <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
-            <SettingTile
-              title="Auto-load any URL"
-              focusId="theme-chat-auto-any"
-              description="Not recommended. Automatically fetch potentially unsafe third-party links."
-              after={
-                <Switch
-                  variant="Primary"
-                  value={autoPreviewAnyUrl}
-                  onChange={setAutoPreviewAnyUrl}
-                  disabled={!sableChatWidgets}
-                />
-              }
-            />
-          </SequenceCard>
+          <SettingToggle
+            title="Theme & tweak cards"
+            focusId="theme-chat-sable-widgets"
+            description="Show interactive Sable CSS cards instead of plain links."
+            value={sableChatWidgets}
+            onChange={setSableChatWidgets}
+          />
+          <SettingToggle
+            title="Auto-load approved URLs"
+            focusId="theme-chat-auto-approved"
+            description="Automatically fetch previews from approved catalog hosts."
+            value={autoPreviewApprovedUrls}
+            onChange={setAutoPreviewApprovedUrls}
+            disabled={!sableChatWidgets}
+          />
+          <SettingToggle
+            title="Auto-load any URL"
+            focusId="theme-chat-auto-any"
+            description="Not recommended. Automatically fetch potentially unsafe third-party links."
+            value={autoPreviewAnyUrl}
+            onChange={setAutoPreviewAnyUrl}
+            disabled={!sableChatWidgets}
+          />
         </>
       )}
     </Box>

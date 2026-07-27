@@ -1,4 +1,4 @@
-import type { KeyboardEventHandler, MouseEventHandler } from 'react';
+import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import type { RectCords } from 'folds';
@@ -21,12 +21,11 @@ import type {
   IContent,
   IMentions,
   MatrixEvent,
-  ReplacementEvent,
   Room,
   RoomMessageEventContent,
   RoomMessageTextEventContent,
 } from '$types/matrix-sdk';
-import { RelationType, MsgType } from '$types/matrix-sdk';
+import { MsgType } from '$types/matrix-sdk';
 import { isKeyHotkey } from 'is-hotkey';
 import type { AutocompleteQuery } from '$components/editor';
 import {
@@ -60,9 +59,12 @@ import { UseStateProvider } from '$components/UseStateProvider';
 import { EmojiBoard } from '$components/emoji-board';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useDismissOnBack } from '$utils/androidBack';
 import { nicknamesAtom } from '$state/nicknames';
-import { getEditedEvent, getMentionContent, trimReplyFromFormattedBody } from '$utils/room';
-import { mobileOrTablet } from '$utils/user-agent';
+import { getEditedEvent, getMentionContent } from '$utils/room/relations';
+import { trimReplyFromFormattedBody } from '$utils/room/display';
+import { buildReplacementContent } from '../buildReplacementContent';
+import { isMobileOrTablet } from '$utils/platform';
 import { useComposingCheck } from '$hooks/useComposingCheck';
 import { floatingEditor } from '$styles/overrides/Composer.css';
 import { RenderMessageContent } from '$components/RenderMessageContent';
@@ -74,12 +76,42 @@ import type { HTMLReactParserOptions } from 'html-react-parser';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
 import type { GetContentCallback } from '$types/matrix/room';
-import { sanitizeText } from '$utils/sanitize';
 import type { BundleContent } from '$components/message';
 import {
   readdAngleBracketsForHiddenPreviews,
   stripMarkdownEscapesForHiddenPreviews,
 } from './hiddenLinkPreviews';
+
+// Wraps the mobile emoji-board overlay so the Android back action closes it
+// instead of navigating away. Hooks can't run inside the UseStateProvider
+// render-prop below, so this component holds the back handler.
+function MobileEmojiOverlay({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useDismissOnBack(onClose, open);
+  return (
+    <Overlay open={open} backdrop={<OverlayBackdrop />}>
+      <div
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
+        {children}
+      </div>
+    </Overlay>
+  );
+}
 
 type MessageEditorProps = {
   roomId: string;
@@ -229,11 +261,6 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           }
         }
 
-        const newContent: IContent = {
-          msgtype,
-          body: plainText,
-        };
-
         const evtId = mEvent.getId();
         const evtTimeline = evtId ? room.getTimelineForEvent(evtId) : undefined;
         const editedEvent =
@@ -245,36 +272,6 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           editedEvent?.getContent()?.['m.new_content']?.['com.beeper.per_message_profile'] ??
           mEvent.getContent()?.['com.beeper.per_message_profile'];
 
-        const pmpDisplayname =
-          rawPmp !== null &&
-          typeof rawPmp === 'object' &&
-          'displayname' in rawPmp &&
-          typeof rawPmp.displayname === 'string' &&
-          rawPmp.displayname.length > 0
-            ? (rawPmp.displayname as string)
-            : undefined;
-
-        if (pmpDisplayname) {
-          const bodyPrefix = `${pmpDisplayname}: `;
-          if (!plainText.startsWith(bodyPrefix)) {
-            plainText = bodyPrefix + plainText;
-          }
-
-          const escapedName = sanitizeText(pmpDisplayname);
-          const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
-          if (!customHtml.startsWith(htmlPrefix)) {
-            customHtml = htmlPrefix + customHtml;
-          }
-
-          newContent['com.beeper.per_message_profile'] = rawPmp;
-        }
-
-        const contentBody: IContent & Omit<ReplacementEvent<IContent>, 'm.relates_to'> = {
-          msgtype,
-          body: `* ${plainText}`,
-          'm.new_content': newContent,
-        };
-
         const mentionData = getMentions(mx, roomId, editor);
 
         prevMentions?.user_ids?.forEach((prevMentionId) => {
@@ -282,49 +279,21 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         });
 
         const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
-        newContent['m.mentions'] = mMentions;
-        contentBody['m.mentions'] = mMentions;
 
-        const links = getLinks(editor.children);
+        const linkPreviews =
+          getLinks(editor.children)?.map((matchedUrl) => ({
+            matched_url: matchedUrl,
+          })) ?? [];
 
-        if (pmpDisplayname || !customHtmlEqualsPlainText(customHtml, plainText)) {
-          newContent.format = 'org.matrix.custom.html';
-          newContent.formatted_body = customHtml;
-          contentBody.format = 'org.matrix.custom.html';
-          contentBody.formatted_body = `* ${customHtml}`;
-        }
-
-        const content: IContent = {
-          ...oldContent,
-          'm.relates_to': {
-            event_id: eventId,
-            rel_type: RelationType.Replace,
-          },
-        };
-        content.body = contentBody.body;
-        content.format = contentBody.format;
-        content.formatted_body = contentBody.formatted_body;
-        content['m.new_content'] = newContent;
-        if (oldContent.info !== undefined && oldContent.msgtype !== 'm.text') {
-          content.filename = 'filename' in oldContent ? oldContent.filename : oldContent.body;
-          content['m.new_content'].filename =
-            'filename' in oldContent ? oldContent.filename : oldContent.body;
-          content.info = oldContent.info;
-          content['m.new_content'].info = oldContent.info;
-
-          if (oldContent.file !== undefined) content['m.new_content'].file = oldContent.file;
-          if (oldContent.url !== undefined) content['m.new_content'].url = oldContent.url;
-
-          if (oldContent['page.codeberg.everypizza.msc4193.spoiler'] !== undefined) {
-            content['page.codeberg.everypizza.msc4193.spoiler'] =
-              oldContent['page.codeberg.everypizza.msc4193.spoiler'];
-            content['m.new_content']['page.codeberg.everypizza.msc4193.spoiler'] =
-              oldContent['page.codeberg.everypizza.msc4193.spoiler'];
-          }
-        }
-        content['com.beeper.linkpreviews'] = [];
-        links?.forEach((link) => content['com.beeper.linkpreviews'].push({ matched_url: link }));
-        content['m.new_content']['com.beeper.linkpreviews'] = content['com.beeper.linkpreviews'];
+        const content = buildReplacementContent(
+          oldContent,
+          plainText,
+          customHtml,
+          eventId,
+          mMentions,
+          linkPreviews,
+          rawPmp
+        );
 
         return mx.sendMessage(roomId, content as RoomMessageEventContent);
       }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room])
@@ -421,7 +390,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       });
 
       editor.insertFragment(initialValue);
-      if (!mobileOrTablet()) ReactEditor.focus(editor);
+      if (!isMobileOrTablet()) ReactEditor.focus(editor);
     }, [editor, getPrevBodyAndFormattedBody, room, nicknames, mx]);
 
     useEffect(() => {
@@ -591,13 +560,13 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                             <EmojiBoard
                               imagePackRooms={imagePackRooms ?? []}
                               returnFocusOnDeactivate={false}
-                              isFullWidth={mobileOrTablet()}
+                              isFullWidth={isMobileOrTablet()}
                               onEmojiSelect={handleEmoticonSelect}
                               onCustomEmojiSelect={handleEmoticonSelect}
                               requestClose={() => {
                                 setAnchor((v) => {
                                   if (v) {
-                                    if (!mobileOrTablet()) ReactEditor.focus(editor);
+                                    if (!isMobileOrTablet()) ReactEditor.focus(editor);
                                     return undefined;
                                   }
                                   return v;
@@ -624,24 +593,16 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                               })}
                             </IconButton>
                           );
-                          if (mobileOrTablet()) {
+                          if (isMobileOrTablet()) {
                             return (
                               <>
                                 {trigger}
-                                <Overlay open={anchor !== undefined} backdrop={<OverlayBackdrop />}>
-                                  <div
-                                    style={{
-                                      position: 'fixed',
-                                      left: 0,
-                                      right: 0,
-                                      bottom: 0,
-                                      display: 'flex',
-                                      justifyContent: 'center',
-                                    }}
-                                  >
-                                    {emojiBoard}
-                                  </div>
-                                </Overlay>
+                                <MobileEmojiOverlay
+                                  open={anchor !== undefined}
+                                  onClose={() => setAnchor(undefined)}
+                                >
+                                  {emojiBoard}
+                                </MobileEmojiOverlay>
                               </>
                             );
                           }

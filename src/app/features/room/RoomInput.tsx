@@ -1,5 +1,15 @@
-import type { KeyboardEventHandler, MouseEvent, RefObject } from 'react';
-import { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import type { KeyboardEventHandler, MouseEvent, ReactElement, RefObject } from 'react';
+import {
+  forwardRef,
+  Fragment,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 
 import { isKeyHotkey } from 'is-hotkey';
@@ -35,6 +45,7 @@ import {
 } from 'folds';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useDismissOnBack } from '$utils/androidBack';
 import type { AutocompleteQuery } from '$components/editor';
 import {
   AutocompletePrefix,
@@ -65,6 +76,7 @@ import {
   replaceWithElement,
   BlockType,
 } from '$components/editor';
+import { stripMarkdownEscapesForHiddenPreviews } from './message/hiddenLinkPreviews';
 import { plainToEditorInput } from '$components/editor/input';
 import type { GifData } from '$components/emoji-board';
 import { EmojiBoard, EmojiBoardTab } from '$components/emoji-board';
@@ -94,14 +106,17 @@ import { UploadBoard, UploadBoardContent, UploadBoardHeader } from '$components/
 import type { Upload, UploadSuccess } from '$state/upload';
 import { UploadStatus, createUploadFamilyObserverAtom } from '$state/upload';
 import { loadImageElementFromMediaUrl } from '$utils/dom';
-import { safeFile } from '$utils/mimeTypes';
+import { isImageMimeType, safeUploadFile } from '$utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
+import type { EditorButtonId } from '$state/settings';
 import { settingsAtom } from '$state/settings';
 import { matchesShortcut } from '../../keyboard/shortcuts';
-import { getMentionContent, isThreadRelationEvent, reactionOrEditEvent } from '$utils/room';
+import { getEditedEvent, getMentionContent, getThreadReplyEvents } from '$utils/room/relations';
+import { buildReplacementContent } from './buildReplacementContent';
+import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { nicknamesAtom } from '$state/nicknames';
@@ -134,6 +149,7 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { AutocompleteNotice } from '$components/editor/autocomplete/AutocompleteNotice';
 import {
   convertPerMessageProfileToBeeperFormat,
+  getCurrentlyUsedPerMessageProfileForAccount,
   getCurrentlyUsedPerMessageProfileForRoom,
 } from '$hooks/usePerMessageProfile';
 import {
@@ -145,15 +161,18 @@ import {
   composerIcon,
   dropzoneIcon,
   File as FileIcon,
+  Gif,
   Image as ImageIcon,
   ListBullets,
   MapPinPlusIcon,
   menuIcon,
   Microphone,
   PaperPlaneTilt,
+  PencilSimple,
   getPhosphorIconSize,
   PlusCircle,
   Smiley,
+  Sticker,
   Stop,
   X,
 } from '$components/icons/phosphor';
@@ -168,6 +187,7 @@ import {
   getImagePackReferencesForMxcWrappedInMap,
 } from '$utils/msc4459helper';
 import { ImageUsage } from '$plugins/custom-emoji';
+import { getPackImageInfo } from '$plugins/custom-emoji/utils';
 import { SerializableMap } from '$types/wrapper/SerializableMap';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
 import { AttachmentSheet } from '$components/attachment-sheet/AttachmentSheet';
@@ -192,39 +212,18 @@ import type {
 import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
-import { LocationDialog } from './location-modal';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { PersonaPicker } from './persona-picker/PersonaPicker.tsx';
+import { PersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
+
+const LocationDialog = lazy(() =>
+  import('./location-modal').then((module) => ({ default: module.LocationDialog }))
+);
 
 // Returns the event ID of the most recent non-reaction/non-edit event in a thread,
 // falling back to the thread root if no replies exist yet.
-export const getLatestThreadEventId = (room: Room, threadRootId: string): string => {
-  const thread = room.getThread(threadRootId);
-  const threadEvents: MatrixEvent[] = thread?.events ?? [];
-  const filtered = threadEvents.filter(
-    (ev) =>
-      ev.getId() !== threadRootId &&
-      !reactionOrEditEvent(ev) &&
-      isThreadRelationEvent(ev, threadRootId)
-  );
-  if (filtered.length > 0) {
-    return filtered[filtered.length - 1]!.getId() ?? threadRootId;
-  }
-  // Fall back to the live timeline if the Thread object hasn't been registered yet
-  const liveEvents = room
-    .getUnfilteredTimelineSet()
-    .getLiveTimeline()
-    .getEvents()
-    .filter(
-      (ev) =>
-        ev.getId() !== threadRootId &&
-        !reactionOrEditEvent(ev) &&
-        isThreadRelationEvent(ev, threadRootId)
-    );
-  if (liveEvents.length > 0) {
-    return liveEvents.at(-1)!.getId() ?? threadRootId;
-  }
-  return threadRootId;
+const getLatestThreadEventId = (room: Room, threadRootId: string): string => {
+  const replies = getThreadReplyEvents(room, threadRootId);
+  return replies.at(-1)?.getId() ?? threadRootId;
 };
 
 export const getReplyContent = (
@@ -285,10 +284,24 @@ interface RoomInputProps {
   room: Room;
   threadRootId?: string;
   onEditLastMessage?: () => void;
+  editId?: string;
+  onCancelEdit?: () => void;
 }
 
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
-  ({ editor, fileDropContainerRef, roomId, room, threadRootId, onEditLastMessage }, ref) => {
+  (
+    {
+      editor,
+      fileDropContainerRef,
+      roomId,
+      room,
+      threadRootId,
+      onEditLastMessage,
+      editId,
+      onCancelEdit,
+    },
+    ref
+  ) => {
     // When in thread mode, isolate drafts by thread root ID so thread replies
     // don't clobber the main room draft (and vice versa).
     const draftKey = threadRootId ?? roomId;
@@ -297,6 +310,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
+    const [editorGifButton] = useSetting(settingsAtom, 'editorGifButton');
+    const [editorEmojiButton] = useSetting(settingsAtom, 'editorEmojiButton');
+    const [editorStickerButton] = useSetting(settingsAtom, 'editorStickerButton');
+    const [editorMicButton] = useSetting(settingsAtom, 'editorMicButton');
+    const [editorButtonOrder] = useSetting(settingsAtom, 'editorButtonOrder');
     const [shortcutOverrides] = useSetting(settingsAtom, 'shortcutOverrides');
 
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -321,6 +339,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
 
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
+    const gifBtnRef = useRef<HTMLButtonElement>(null);
+    const stickerBtnRef = useRef<HTMLButtonElement>(null);
     const micBtnRef = useRef<HTMLButtonElement>(null);
     // Preserve stable list keys across metadata/description replacements without
     // storing UI-only IDs in the upload draft state.
@@ -407,9 +427,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleFiles = useCallback(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
         setUploadBoard(true);
-        const safeFiles = files.map(safeFile);
+        const safeFiles = await Promise.all(files.map(safeUploadFile));
         // Eager-read to avoid Android content URI expiry after SAF picker
-        const blobbedFiles = mobileOrTablet()
+        const blobbedFiles = isMobileOrTablet()
           ? await Promise.all(
               safeFiles.map(async (f) => {
                 try {
@@ -494,6 +514,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
+    // Android back closes the mobile emoji board instead of navigating away.
+    useDismissOnBack(() => setEmojiBoardTab(undefined), emojiBoardTab !== undefined);
+
+    const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
+      setEmojiBoardTab((prev) => (prev === tab ? undefined : tab));
+    }, []);
+
+    const [personaPickerTab, setPersonaPickerTab] = useState<PersonaPickerTab | undefined>(
+      undefined
+    );
+
     const [enableMediaGalleries] = useSetting(settingsAtom, 'enableMediaGalleries');
     const [sendIndividualAttachmentAsCaption] = useSetting(
       settingsAtom,
@@ -540,6 +571,138 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [draftKey, editor, setMsgDraft]
     );
 
+    const editingEvent = editId ? room.findEventById(editId) : undefined;
+    const getEditingContent = useCallback(
+      (event: MatrixEvent): IContent => {
+        const eventId = event.getId();
+        const timeline = eventId ? room.getTimelineForEvent(eventId) : undefined;
+        const latestEdit =
+          eventId && timeline
+            ? getEditedEvent(eventId, event, timeline.getTimelineSet())
+            : undefined;
+        return latestEdit?.getContent()['m.new_content'] ?? event.getContent();
+      },
+      [room]
+    );
+
+    const prevEditingEventId = useRef<string>();
+    const preEditDraftRef = useRef<Editor['children']>();
+    useEffect(() => {
+      if (!isMobileOrTablet()) {
+        prevEditingEventId.current = undefined;
+        preEditDraftRef.current = undefined;
+        return;
+      }
+
+      if (editingEvent) {
+        if (editingEvent.getId() !== prevEditingEventId.current) {
+          if (!prevEditingEventId.current) {
+            preEditDraftRef.current = structuredClone(editor.children);
+          }
+          prevEditingEventId.current = editingEvent.getId();
+
+          const content = getEditingContent(editingEvent);
+          let bodyText = (content.body as string | undefined) ?? '';
+          const customHtml = (content.formatted_body as string | undefined) ?? undefined;
+
+          const rawPmp = content['com.beeper.per_message_profile'];
+          const pmpDisplayname =
+            rawPmp !== null &&
+            typeof rawPmp === 'object' &&
+            'displayname' in rawPmp &&
+            typeof rawPmp.displayname === 'string' &&
+            rawPmp.displayname.length > 0
+              ? (rawPmp.displayname as string)
+              : undefined;
+
+          if (pmpDisplayname && typeof bodyText === 'string') {
+            const bodyPrefix = `${pmpDisplayname}: `;
+            if (bodyText.startsWith(bodyPrefix)) {
+              bodyText = bodyText.slice(bodyPrefix.length);
+            }
+          }
+          const editableHtml = pmpDisplayname
+            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+            : customHtml;
+
+          const mentionOptions = {
+            room,
+            nicknames,
+            mxUserId: mx.getUserId() ?? undefined,
+          };
+
+          const initialValue = plainToEditorInput(
+            editableHtml
+              ? stripMarkdownEscapesForHiddenPreviews(htmlToMarkdown(editableHtml))
+              : typeof bodyText === 'string'
+                ? stripMarkdownEscapesForHiddenPreviews(bodyText)
+                : '',
+            mentionOptions
+          );
+
+          resetEditor(editor);
+          resetEditorHistory(editor);
+          Transforms.insertFragment(editor, initialValue);
+
+          requestAnimationFrame(() => {
+            try {
+              ReactEditor.focus(editor);
+              moveCursor(editor);
+            } catch {
+              // Ignore focus error
+            }
+          });
+        }
+      } else {
+        const previousDraft = preEditDraftRef.current;
+        if (prevEditingEventId.current && previousDraft) {
+          resetEditor(editor);
+          resetEditorHistory(editor);
+          Transforms.insertFragment(editor, previousDraft);
+        }
+        preEditDraftRef.current = undefined;
+        if (
+          prevEditingEventId.current &&
+          (!replyDraft?.eventId || replyDraft.eventId === threadRootId)
+        ) {
+          requestAnimationFrame(() => {
+            try {
+              const domNode = ReactEditor.toDOMNode(editor, editor);
+              domNode.blur();
+              (document.activeElement as HTMLElement)?.blur();
+            } catch {
+              // Ignore blur error
+            }
+          });
+        }
+        prevEditingEventId.current = undefined;
+      }
+    }, [
+      editingEvent,
+      editor,
+      getEditingContent,
+      mx,
+      nicknames,
+      room,
+      replyDraft?.eventId,
+      threadRootId,
+    ]);
+
+    useEffect(() => {
+      if (editId && replyDraft?.eventId && replyDraft.eventId !== threadRootId) {
+        if (threadRootId) {
+          setReplyDraft({
+            userId: mx.getUserId() ?? '',
+            eventId: threadRootId,
+            body: '',
+            relation: { rel_type: RelationType.Thread, event_id: threadRootId },
+          });
+        } else {
+          setReplyDraft(undefined);
+        }
+      }
+    }, [editId, threadRootId, setReplyDraft, mx, replyDraft?.eventId]);
+
     useEffect(() => {
       if (replyDraft !== undefined) {
         setSilentReply(replyDraft.userId === mx.getUserId() || !mentionInReplies);
@@ -548,10 +711,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const prevReplyEventId = useRef(replyDraft?.eventId);
     useEffect(() => {
-      if (replyDraft?.eventId !== prevReplyEventId.current) {
-        prevReplyEventId.current = replyDraft?.eventId;
+      const prevId = prevReplyEventId.current;
+      const newId = replyDraft?.eventId;
 
-        if (replyDraft?.eventId) {
+      if (newId !== prevId) {
+        prevReplyEventId.current = newId;
+
+        if (newId && newId !== threadRootId) {
           requestAnimationFrame(() => {
             try {
               ReactEditor.focus(editor);
@@ -560,9 +726,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               // Ignore focus errors
             }
           });
+        } else if (!newId && prevId && prevId !== threadRootId && !editId) {
+          requestAnimationFrame(() => {
+            try {
+              const domNode = ReactEditor.toDOMNode(editor, editor);
+              domNode.blur();
+              (document.activeElement as HTMLElement)?.blur();
+            } catch {
+              // Ignore blur errors
+            }
+          });
         }
       }
-    }, [replyDraft?.eventId, editor]);
+    }, [replyDraft?.eventId, threadRootId, editId, editor]);
 
     const handleFileMetadata = useCallback(
       (fileItem: TUploadItem, metadata: TUploadMetadata) => {
@@ -642,7 +818,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      const perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
 
       if (perMessageProfile) {
         contents.forEach((c) => {
@@ -737,7 +915,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const fileItem = selectedFiles.find((f) => f.file === upload.file);
       if (!fileItem) throw new Error('Broken upload');
 
-      if (fileItem.file.type.startsWith('image')) {
+      if (isImageMimeType(fileItem.file.type)) {
         return getImageMsgContent(mx, fileItem, upload.mxc);
       }
       if (fileItem.file.type.startsWith('video')) {
@@ -856,6 +1034,63 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(async () => {
+      if (editingEvent && isMobileOrTablet()) {
+        let plainText = toPlainText(editor.children).trim();
+        if (!plainText) {
+          onCancelEdit?.();
+          return;
+        }
+
+        let customHtml = trimCustomHtml(
+          toMatrixCustomHTML(editor.children, {
+            forEmote: editingEvent.getContent().msgtype === MsgType.Emote,
+            room,
+          })
+        );
+        const oldContent = editingEvent.getContent();
+        const currentContent = getEditingContent(editingEvent);
+        const eventId = editingEvent.getId();
+        if (!eventId) return;
+
+        const rawPmp =
+          currentContent['com.beeper.per_message_profile'] ??
+          oldContent['com.beeper.per_message_profile'];
+
+        const mentionData = getMentions(mx, roomId, editor);
+        const previousMentions = currentContent['m.mentions'];
+        if (
+          previousMentions &&
+          typeof previousMentions === 'object' &&
+          'user_ids' in previousMentions &&
+          Array.isArray(previousMentions.user_ids)
+        ) {
+          previousMentions.user_ids.forEach((userId) => {
+            if (typeof userId === 'string') mentionData.users.add(userId);
+          });
+        }
+        const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
+
+        const linkPreviews =
+          getLinks(editor.children)?.map((matchedUrl) => ({
+            matched_url: matchedUrl,
+          })) ?? [];
+
+        const content = buildReplacementContent(
+          oldContent,
+          plainText,
+          customHtml,
+          eventId,
+          mMentions,
+          linkPreviews,
+          rawPmp
+        );
+
+        await mx.sendMessage(roomId, content as RoomMessageEventContent);
+        onCancelEdit?.();
+        sendTypingStatus(false);
+        return;
+      }
+
       if (selectedFiles.some((f) => f.encrypting)) return;
       uploadBoardHandlers.current?.handleSend();
       if (
@@ -946,7 +1181,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
       });
 
-      let plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+      let plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
 
       /**
        * the html we will send
@@ -1020,7 +1255,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         proxiedPerMessageProfile =
           await pluralkitProxyMessageHandler.getPmpBasedOnMessage(plainText);
         if (proxiedPerMessageProfile) {
-          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(plainText);
+          // normal plainText has spoilers stripped, but this breaks spoilers with a proxy tag.
+          // here we get a new 'unsanitized' plainText without spoiler stripping
+          let unsanitizedPlainText = toPlainText(
+            serializedChildren,
+            true,
+            false,
+            nicknameReplacement
+          ).trim();
+
+          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(unsanitizedPlainText);
           if (stripped !== undefined) {
             // Re-run the normal outgoing pipeline on the stripped content so the message
             // goes through the same transforms/parsers as any other message.
@@ -1031,7 +1275,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
             });
 
-            plainText = toPlainText(serializedChildren, true, nicknameReplacement).trim();
+            plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
             customHtml = trimCustomHtml(
               toMatrixCustomHTML(serializedChildren, {
                 stripNickname: true,
@@ -1079,7 +1323,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      let perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      let perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
+
       if (pmpProxyingEnable) {
         if (proxiedPerMessageProfile) perMessageProfile = proxiedPerMessageProfile;
       }
@@ -1259,6 +1506,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       selectedFiles,
       enableMediaGalleries,
       sendIndividualAttachmentAsCaption,
+      editingEvent,
+      getEditingContent,
+      onCancelEdit,
     ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
@@ -1316,6 +1566,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         if (isKeyHotkey('escape', evt)) {
           evt.preventDefault();
+          if (editingEvent && isMobileOrTablet()) {
+            onCancelEdit?.();
+            resetEditor(editor);
+            resetEditorHistory(editor);
+            return;
+          }
           if (showAudioRecorder) {
             audioRecorderRef.current?.cancel();
             return;
@@ -1344,6 +1600,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         onEditLastMessage,
         setEmojiBoardTab,
         shortcutOverrides,
+        editingEvent,
+        onCancelEdit,
       ]
     );
 
@@ -1408,16 +1666,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     };
 
     const handleStickerSelect = async (mxc: string, shortcode: string, label: string) => {
-      const stickerUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
-      if (!stickerUrl) return;
+      // Packs declare their own info, so sending does not need the file. Measuring it instead made
+      // the send fail outright whenever the media fetch did.
+      let info = getPackImageInfo(mx, room, ImageUsage.Sticker, mxc);
 
-      const { blob, image } = await loadImageElementFromMediaUrl(stickerUrl);
-      const info = getImageInfo(image, blob);
+      if (!info) {
+        const stickerUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
+        if (stickerUrl) {
+          try {
+            const { blob, image } = await loadImageElementFromMediaUrl(stickerUrl);
+            info = getImageInfo(image, blob);
+          } catch (error) {
+            log.error('failed to measure sticker, sending without info', { mxc }, error);
+          }
+        }
+      }
 
       const content: StickerEventContent & ReplyEventContent & IContent & IGenericMSC4459 = {
         body: label,
         url: mxc,
-        info,
+        info: info ?? {},
       };
 
       // add the image pack reference
@@ -1429,7 +1697,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
        * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
        */
-      const perMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
+      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
+      const perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
 
       if (perMessageProfile) {
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
@@ -1444,7 +1714,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           content['m.mentions'] = { ['user_ids']: [replyDraft.userId] };
         setReplyDraft(replyDraftBase);
       }
-      mx.sendEvent(roomId, EventType.Sticker, content);
+      try {
+        await mx.sendEvent(roomId, EventType.Sticker, content);
+      } catch (error) {
+        log.error('failed to send sticker', { roomId }, error);
+      }
     };
 
     const handleGifSelect = async (gif: GifData, spoiler?: boolean) => {
@@ -1643,6 +1917,45 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </Box>
                 </div>
               )}
+              {editingEvent && isMobileOrTablet() && (
+                <div>
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{
+                      padding: `${config.space.S200} ${config.space.S300} 0`,
+                    }}
+                  >
+                    <IconButton
+                      onClick={() => {
+                        onCancelEdit?.();
+                        resetEditor(editor);
+                        resetEditorHistory(editor);
+                      }}
+                      variant="SurfaceVariant"
+                      style={{ background: 'transparent' }}
+                      size="300"
+                      radii="300"
+                      aria-label="Cancel editing"
+                      title="Cancel editing"
+                    >
+                      {chipIcon(X)}
+                    </IconButton>
+                    <Box
+                      direction="Row"
+                      gap="200"
+                      alignItems="Center"
+                      grow="Yes"
+                      style={{ minWidth: 0 }}
+                    >
+                      {menuIcon(PencilSimple)}
+                      <Text size="T300" truncate>
+                        Editing message: {editingEvent.getContent().body as string}
+                      </Text>
+                    </Box>
+                  </Box>
+                </div>
+              )}
               {replyDraft && (!threadRootId || replyDraft.body) && (
                 <div>
                   <Box
@@ -1721,7 +2034,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           before={
             <>
-              {mobileOrTablet() ? (
+              {isMobileOrTablet() ? (
                 <>
                   <IconButton
                     onClick={() => setShowAttachmentSheet(true)}
@@ -1739,7 +2052,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     open={showAttachmentSheet}
                     onClose={() => setShowAttachmentSheet(false)}
                     onPickPhotos={() => {
-                      pickFile('image/*');
+                      pickFile('image/*,.tgs');
                       setShowAttachmentSheet(false);
                     }}
                     onPickFile={() => {
@@ -1801,7 +2114,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                               size="300"
                               radii="300"
                               onClick={() => {
-                                pickFile('image/*');
+                                pickFile('image/*,.tgs');
                                 setAddMenuAnchor(undefined);
                               }}
                               before={menuIcon(ImageIcon)}
@@ -1844,9 +2157,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               )}
               {pmpPickerEnable && (
                 <PersonaPicker
+                  tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}
                   suppressEditorRefocus={suppressEditorRefocus}
+                  onTabChange={setPersonaPickerTab}
                 />
               )}
             </>
@@ -1861,41 +2176,82 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       onTabChange={setEmojiBoardTab}
                       imagePackRooms={imagePackRooms}
                       returnFocusOnDeactivate={false}
-                      isFullWidth={mobileOrTablet()}
+                      isFullWidth={isMobileOrTablet()}
                       onEmojiSelect={handleEmoticonSelect}
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
                       onGifSelect={handleGifSelect}
-                      requestClose={() => {
-                        setEmojiBoardTab((t) => {
-                          if (t) {
-                            if (!mobileOrTablet()) ReactEditor.focus(editor);
-                            return undefined;
-                          }
-                          return t;
-                        });
-                      }}
+                      requestClose={() => setEmojiBoardTab(undefined)}
                     />
                   );
                   const triggers = (
-                    <IconButton
-                      ref={emojiBtnRef}
-                      aria-pressed={emojiBoardTab !== undefined}
-                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
-                      onPointerDown={suppressEditorRefocus}
-                      variant="SurfaceVariant"
-                      size="300"
-                      radii="300"
-                      style={{ backgroundColor: 'transparent' }}
-                      title="open emoji board"
-                      aria-label="Open emoji board"
-                    >
-                      {composerIcon(Smiley, {
-                        weight: emojiBoardTab !== undefined ? 'fill' : 'regular',
+                    <>
+                      {editorButtonOrder.map((id) => {
+                        let button: ReactElement | null = null;
+                        if (id === 'gif' && editorGifButton) {
+                          button = (
+                            <IconButton
+                              ref={gifBtnRef}
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Gif)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open gif picker"
+                              aria-label="Open gif picker"
+                            >
+                              {composerIcon(Gif, {
+                                weight: emojiBoardTab === EmojiBoardTab.Gif ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        } else if (id === 'sticker' && editorStickerButton) {
+                          button = (
+                            <IconButton
+                              ref={stickerBtnRef}
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open sticker picker"
+                              aria-label="Open sticker picker"
+                            >
+                              {composerIcon(Sticker, {
+                                weight:
+                                  emojiBoardTab === EmojiBoardTab.Sticker ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        } else if (id === 'emoji' && editorEmojiButton) {
+                          button = (
+                            <IconButton
+                              ref={emojiBtnRef}
+                              aria-pressed={emojiBoardTab === EmojiBoardTab.Emoji}
+                              onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
+                              onPointerDown={suppressEditorRefocus}
+                              variant="SurfaceVariant"
+                              size="300"
+                              radii="300"
+                              style={{ backgroundColor: 'transparent' }}
+                              title="open emoji board"
+                              aria-label="Open emoji board"
+                            >
+                              {composerIcon(Smiley, {
+                                weight: emojiBoardTab === EmojiBoardTab.Emoji ? 'fill' : 'regular',
+                              })}
+                            </IconButton>
+                          );
+                        }
+                        return <Fragment key={id}>{button}</Fragment>;
                       })}
-                    </IconButton>
+                    </>
                   );
-                  if (mobileOrTablet()) {
+                  if (isMobileOrTablet()) {
                     return (
                       <>
                         {triggers}
@@ -1922,11 +2278,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       alignOffset={-44}
                       position="Top"
                       align="End"
-                      anchor={
-                        emojiBoardTab === undefined
-                          ? undefined
-                          : (emojiBtnRef.current?.getBoundingClientRect() ?? undefined)
-                      }
+                      anchor={(() => {
+                        if (emojiBoardTab === undefined) return undefined;
+                        const buttonRefs: Record<EditorButtonId, RefObject<HTMLButtonElement>> = {
+                          gif: gifBtnRef,
+                          sticker: stickerBtnRef,
+                          emoji: emojiBtnRef,
+                        };
+                        for (let i = editorButtonOrder.length - 1; i >= 0; i--) {
+                          const id = editorButtonOrder[i];
+                          if (!id) continue;
+                          const btnRef = buttonRefs[id];
+                          if (btnRef?.current) {
+                            return btnRef.current.getBoundingClientRect();
+                          }
+                        }
+                        return undefined;
+                      })()}
                       content={emojiBoard}
                     >
                       {triggers}
@@ -1943,23 +2311,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   showAudioRecorder ? 'Critical' : scheduledTime ? 'Primary' : 'SurfaceVariant'
                 }
                 size="300"
-                radii={hasContent || showAudioRecorder ? '0' : '300'}
+                radii={hasContent || showAudioRecorder || !editorMicButton ? '0' : '300'}
                 title={
                   showAudioRecorder
                     ? 'Stop recording'
-                    : hasContent
+                    : hasContent || !editorMicButton
                       ? 'Send Message'
                       : 'Record audio message'
                 }
                 aria-label={
                   showAudioRecorder
                     ? 'Stop recording'
-                    : hasContent
+                    : hasContent || !editorMicButton
                       ? 'Send your composed Message'
                       : 'Record audio message'
                 }
                 style={{ backgroundColor: 'transparent' }}
-                aria-pressed={!hasContent ? showAudioRecorder : undefined}
+                aria-pressed={!hasContent && editorMicButton ? showAudioRecorder : undefined}
                 onClick={() => {
                   if (showAudioRecorder) {
                     audioRecorderRef.current?.stop();
@@ -1973,7 +2341,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     submit();
                     return;
                   }
-                  if (mobileOrTablet()) return;
+                  if (!editorMicButton) return;
+                  if (isMobileOrTablet()) return;
                   setShowAudioRecorder(true);
                 }}
                 onMouseDown={(e: MouseEvent) => {
@@ -1983,7 +2352,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   if (showAudioRecorder) return;
                   if (hasContent) {
                     isLongPress.current = false;
-                    if (mobileOrTablet() && delayedEventsSupported) {
+                    if (isMobileOrTablet() && delayedEventsSupported) {
                       longPressTimer.current = setTimeout(() => {
                         isLongPress.current = true;
                         setShowSchedulePicker(true);
@@ -1991,7 +2360,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     }
                     return;
                   }
-                  if (!mobileOrTablet()) return;
+                  if (!editorMicButton) return;
+                  if (!isMobileOrTablet()) return;
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
 
@@ -2042,7 +2412,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     weight="fill"
                     style={{ color: color.Critical.Main }}
                   />
-                ) : hasContent ? (
+                ) : hasContent || !editorMicButton ? (
                   sendBusy ? (
                     <Spinner size="300" variant="Secondary" />
                   ) : scheduledTime ? (
@@ -2097,7 +2467,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </FocusTrap>
                 }
               />
-              {delayedEventsSupported && !mobileOrTablet() && (
+              {delayedEventsSupported && !isMobileOrTablet() && (
                 <IconButton
                   onClick={(evt: MouseEvent<HTMLButtonElement>) => {
                     setScheduleMenuAnchor(evt.currentTarget.getBoundingClientRect());
@@ -2139,13 +2509,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           />
         )}
         {showLocationPicker && (
-          <LocationDialog
-            onCancel={() => setShowLocationPicker(false)}
-            mx={mx}
-            room={room}
-            replyDraft={replyDraft}
-            clearReplyDraft={() => setReplyDraft(replyDraftBase)}
-          />
+          <Suspense fallback={null}>
+            <LocationDialog
+              onCancel={() => setShowLocationPicker(false)}
+              mx={mx}
+              room={room}
+              replyDraft={replyDraft}
+              clearReplyDraft={() => setReplyDraft(replyDraftBase)}
+            />
+          </Suspense>
         )}
       </div>
     );

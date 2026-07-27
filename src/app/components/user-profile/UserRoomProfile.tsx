@@ -1,6 +1,6 @@
 import { Box, Button, color, config, Menu, MenuItem, Scroll, Text, toRem } from 'folds';
 import type { CSSProperties, SyntheticEvent } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
@@ -17,7 +17,7 @@ import {
   User,
 } from '$components/icons/phosphor';
 import { mxcUrlToHttp } from '$utils/matrix';
-import { getMemberAvatarMxc, getMemberDisplayName } from '$utils/room';
+import { getMemberAvatarMxc, getMemberDisplayName } from '$utils/room/display';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { usePowerLevels } from '$hooks/usePowerLevels';
@@ -401,8 +401,13 @@ function UserExtendedSection({
 type UserRoomProfileProps = {
   userId: string;
   initialProfile?: Partial<UserProfile>;
+  onSurfaceColorChange?: (color: string) => void;
 };
-export function UserRoomProfile({ userId, initialProfile }: Readonly<UserRoomProfileProps>) {
+export function UserRoomProfile({
+  userId,
+  initialProfile,
+  onSurfaceColorChange,
+}: Readonly<UserRoomProfileProps>) {
   const theme = useTheme();
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -507,6 +512,11 @@ export function UserRoomProfile({ userId, initialProfile }: Readonly<UserRoomPro
   );
 
   const backgroundColor = fetchedProfile.heroColor ?? color.Surface.Container;
+
+  useLayoutEffect(() => {
+    onSurfaceColorChange?.(backgroundColor);
+  }, [backgroundColor, onSurfaceColorChange]);
+
   const fetchedBrightness = fetchedProfile?.heroBrightness;
   const isBackgroundDark = fetchedBrightness ? fetchedBrightness === 'dark' : undefined;
   const innerColor = shadeColor(backgroundColor, isBackgroundDark ? -50 : 50);

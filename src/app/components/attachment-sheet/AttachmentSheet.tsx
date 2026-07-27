@@ -1,13 +1,12 @@
-import { type RefObject, useEffect, useRef } from 'react';
+import { type RefObject, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
 import FocusTrap from 'focus-trap-react';
-import { useSetting } from '$state/hooks/settings';
-import { settingsAtom } from '$state/settings';
 import { useAndroidBackHandler } from '$utils/androidBack';
 import { stopPropagation } from '$utils/keyboard';
-import { mobileOrTablet } from '$utils/user-agent';
+import { isMobileOrTablet } from '$utils/platform';
+import { getMobileSheetTiming, useMobileSheetAnimation } from '$components/mobileSheetAnimation';
+import * as animationCss from '$components/mobileSheetAnimation.css';
 import type { Icon } from '@phosphor-icons/react';
 import {
   Image as ImageIcon,
@@ -46,28 +45,28 @@ export function AttachmentSheet({
   onPickLocation,
   containerRef,
 }: AttachmentSheetProps) {
-  const [mobileGestures] = useSetting(settingsAtom, 'mobileGestures');
-  const [reducedMotion] = useSetting(settingsAtom, 'reducedMotion');
   const containerEl = containerRef.current;
   const sheetRef = useRef<HTMLDivElement>(null);
   const skipReturnFocusRef = useRef(false);
-  const y = useMotionValue(0);
-  const prefersReducedMotion = useReducedMotion() ?? false;
-  const shouldReduceMotion = reducedMotion || prefersReducedMotion;
+  const dragYRef = useRef(0);
+  const resetAnimationRef = useRef<Animation>();
+  const { shouldReduceMotion } = useMobileSheetAnimation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       skipReturnFocusRef.current = false;
-      y.set(0);
+      dragYRef.current = 0;
+      resetAnimationRef.current?.cancel();
+      if (sheetRef.current) sheetRef.current.style.transform = '';
     }
-  }, [open, y]);
+  }, [open]);
 
   useAndroidBackHandler(() => {
     onClose();
     return true;
   }, open);
 
-  const gesturesEnabled = mobileGestures && mobileOrTablet();
+  const gesturesEnabled = isMobileOrTablet();
 
   const bind = useDrag(
     ({ first, active, offset: [, oy], velocity: [, vy], direction: [, dy], event }) => {
@@ -84,17 +83,36 @@ export function AttachmentSheet({
       const val = Math.max(0, oy);
 
       if (active) {
-        if (first) y.stop();
-        y.set(val);
+        if (first) {
+          resetAnimationRef.current?.cancel();
+          sheetRef.current?.getAnimations().forEach((animation) => animation.cancel());
+        }
+        dragYRef.current = val;
+        if (sheetRef.current) {
+          sheetRef.current.style.transform = `translate3d(0, ${val}px, 0)`;
+        }
       } else {
         const swipedDown = val > SWIPE_THRESHOLD || (vy > VELOCITY_THRESHOLD && dy > 0);
 
         if (swipedDown) {
           onClose();
-        } else if (shouldReduceMotion) {
-          y.set(0);
-        } else {
-          animate(y, 0, { type: 'spring', stiffness: 400, damping: 40 });
+        } else if (sheetRef.current) {
+          const sheet = sheetRef.current;
+          resetAnimationRef.current = sheet.animate(
+            [
+              { transform: `translate3d(0, ${dragYRef.current}px, 0)` },
+              { transform: 'translate3d(0, 0, 0)' },
+            ],
+            getMobileSheetTiming(shouldReduceMotion)
+          );
+          resetAnimationRef.current.addEventListener(
+            'finish',
+            () => {
+              dragYRef.current = 0;
+              sheet.style.transform = '';
+            },
+            { once: true }
+          );
         }
       }
     },
@@ -104,7 +122,7 @@ export function AttachmentSheet({
       rubberband: true,
       filterTaps: true,
       pointer: { capture: true },
-      from: () => [0, y.get()],
+      from: () => [0, dragYRef.current],
     }
   );
 
@@ -173,64 +191,51 @@ export function AttachmentSheet({
     </>
   );
 
-  const sheetElement = (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            className={css.Backdrop}
-            initial={shouldReduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
-            onClick={onClose}
-            onPointerDown={(event) => event.stopPropagation()}
-            data-gestures="ignore"
-            aria-hidden="true"
-          />
+  const sheetElement = open ? (
+    <>
+      <div
+        className={`${css.Backdrop} ${animationCss.BackdropEntrance}`}
+        style={shouldReduceMotion ? { animation: 'none' } : undefined}
+        onClick={onClose}
+        onPointerDown={(event) => event.stopPropagation()}
+        data-gestures="ignore"
+        aria-hidden="true"
+      />
 
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: () => sheetRef.current ?? containerEl,
-              fallbackFocus: () => sheetRef.current ?? containerEl,
-              returnFocusOnDeactivate: true,
-              setReturnFocus: (previousActiveElement: HTMLElement) =>
-                skipReturnFocusRef.current ? false : previousActiveElement,
-              allowOutsideClick: true,
-              clickOutsideDeactivates: false,
-              escapeDeactivates: (event: KeyboardEvent) => {
-                if (!stopPropagation(event)) return false;
-                onClose();
-                return false;
-              },
-            }}
-          >
-            <motion.div
-              ref={sheetRef}
-              className={css.Sheet}
-              initial={shouldReduceMotion ? false : { y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={
-                shouldReduceMotion
-                  ? { duration: 0 }
-                  : { type: 'spring', damping: 32, stiffness: 340 }
-              }
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="attachment-sheet-title"
-              tabIndex={-1}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <motion.div style={{ y, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-                {sheetContent}
-              </motion.div>
-            </motion.div>
-          </FocusTrap>
-        </>
-      )}
-    </AnimatePresence>
-  );
+      <FocusTrap
+        focusTrapOptions={{
+          // Moving focus to the bottom sheet makes iOS reposition the visual viewport
+          // and briefly jolts the timeline. Existing mobile sheets leave focus in place.
+          initialFocus: false,
+          fallbackFocus: () => sheetRef.current ?? containerEl,
+          preventScroll: true,
+          returnFocusOnDeactivate: true,
+          setReturnFocus: (previousActiveElement: HTMLElement) =>
+            skipReturnFocusRef.current ? false : previousActiveElement,
+          allowOutsideClick: true,
+          clickOutsideDeactivates: false,
+          escapeDeactivates: (event: KeyboardEvent) => {
+            if (!stopPropagation(event)) return false;
+            onClose();
+            return false;
+          },
+        }}
+      >
+        <div
+          ref={sheetRef}
+          className={`${css.Sheet} ${animationCss.SheetEntrance}`}
+          style={shouldReduceMotion ? { animation: 'none' } : undefined}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="attachment-sheet-title"
+          tabIndex={-1}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {sheetContent}
+        </div>
+      </FocusTrap>
+    </>
+  ) : null;
 
   // Never render inline: without the active pane as a portal target, the sheet
   // could briefly anchor to the room layout and cover the sidebar.

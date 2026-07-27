@@ -7,7 +7,7 @@ export type AndroidBackHandler = () => boolean;
 
 const handlers: AndroidBackHandler[] = [];
 
-export function pushAndroidBackHandler(handler: AndroidBackHandler): () => void {
+function pushAndroidBackHandler(handler: AndroidBackHandler): () => void {
   handlers.push(handler);
   return () => {
     const index = handlers.lastIndexOf(handler);
@@ -50,4 +50,23 @@ export function useAndroidBackHandler(handler: AndroidBackHandler, enabled = tru
     if (!enabled) return undefined;
     return pushAndroidBackHandler(() => handlerRef.current());
   }, [enabled]);
+}
+
+/**
+ * Registers an Android back handler that dismisses the overlay it's bound to.
+ * Returns true so the back event is consumed instead of falling through to
+ * the underlying route. Mirrors the Escape-key / tap-outside dismiss path
+ * by calling `requestClose`.
+ *
+ * For always-mounted components that toggle open via state, pass `enabled`
+ * (e.g. the open state) so the handler only consumes back while the overlay
+ * is actually showing.
+ */
+export function useDismissOnBack(requestClose: () => void, enabled = true): void {
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+  useAndroidBackHandler(() => {
+    requestCloseRef.current();
+    return true;
+  }, enabled);
 }
