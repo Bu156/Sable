@@ -676,6 +676,7 @@ jobs:
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
       IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+      MISE_ENV: tauri
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
@@ -724,15 +725,12 @@ jobs:
           fi
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          # The rust builder needs >= 2.5.
-          version: '~> v2'
-          args: ${{ steps.gr.outputs.args }}
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN || github.token }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: goreleaser ${{ steps.gr.outputs.args }}
 
       - name: Build the AppImage
         shell: bash
