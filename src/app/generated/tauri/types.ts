@@ -73,6 +73,11 @@ export interface AbortNativeUploadParams {
   [key: string]: unknown;
 }
 
+export interface ExportDiagnosticsParams {
+  frontendLogs?: string | null;
+  [key: string]: unknown;
+}
+
 export interface HapticFeedbackParams {
   style: string;
   [key: string]: unknown;

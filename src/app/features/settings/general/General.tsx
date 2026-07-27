@@ -5,6 +5,7 @@ import type {
   MouseEventHandler,
 } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri, invoke } from '@tauri-apps/api/core';
 import dayjs from 'dayjs';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { RectCords } from 'folds';
@@ -54,12 +55,15 @@ import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
 import { MessageLayout, RightSwipeAction, settingsAtom } from '$state/settings';
 import { SettingTile, SettingToggle } from '$components/setting-tile';
+import { downloadJsonFile } from '$utils/common';
+import { getDebugLogger } from '$utils/debugLogger';
 import { KeySymbol } from '$utils/key-symbol';
-import { isMacOS, isMobileOrTablet } from '$utils/platform';
+import { isDesktopTauri, isMacOS, isMobileOrTablet } from '$utils/platform';
 import { stopPropagation } from '$utils/keyboard';
 import { sessionsAtom, activeSessionIdAtom } from '$state/sessions';
 import { isKeyHotkey } from 'is-hotkey';
 import { settingsSyncLastSyncedAtom, settingsSyncStatusAtom } from '$hooks/useSettingsSync';
+import { sanitizeDiagnosticsLogs } from '$utils/sentryScrubbers';
 import { exportSettingsAsJson, importSettingsFromJson } from '$utils/settingsSync';
 import { CallSoundSettings } from './CallSoundSettings';
 
@@ -1265,6 +1269,9 @@ function DiagnosticsAndPrivacy() {
     localStorage.getItem('sable_sentry_replay_enabled') === 'true'
   );
   const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [diagnosticsState, setDiagnosticsState] = useState<
+    'idle' | 'exporting' | 'success' | 'error'
+  >('idle');
 
   const isSentryConfigured = Boolean(import.meta.env.VITE_SENTRY_DSN);
 
@@ -1286,6 +1293,32 @@ function DiagnosticsAndPrivacy() {
       localStorage.removeItem('sable_sentry_replay_enabled');
     }
     setNeedsRefresh(true);
+  };
+
+  const handleDiagnosticsExport = async () => {
+    setDiagnosticsState('exporting');
+    try {
+      const frontendLogs = getDebugLogger().exportLogs();
+      if (isDesktopTauri()) {
+        const outputPath = await invoke<string | null | undefined>('export_diagnostics', {
+          frontendLogs,
+        });
+        if (outputPath == null) {
+          setDiagnosticsState('idle');
+          return;
+        }
+      } else {
+        const sanitizedLogs = sanitizeDiagnosticsLogs(frontendLogs);
+        if (sanitizedLogs === null) {
+          setDiagnosticsState('error');
+          return;
+        }
+        downloadJsonFile(sanitizedLogs, 'sable-web-diagnostics');
+      }
+      setDiagnosticsState('success');
+    } catch {
+      setDiagnosticsState('error');
+    }
   };
 
   return (
@@ -1342,6 +1375,55 @@ function DiagnosticsAndPrivacy() {
           />
         )}
       </SequenceCard>
+      {(!isTauri() || isDesktopTauri()) && (
+        <SequenceCard
+          className={SequenceCardStyle}
+          variant="SurfaceVariant"
+          direction="Column"
+          gap="300"
+        >
+          <SettingTile
+            title="Export Diagnostics"
+            focusId="export-diagnostics"
+            description={
+              isDesktopTauri()
+                ? 'Export a ZIP containing recent app logs and basic system information, redacted where possible. Review the ZIP before sharing it.'
+                : 'Download a frontend-only JSON file containing recent app logs, redacted where possible. Review it before sharing it.'
+            }
+            after={
+              <Button
+                variant="Secondary"
+                fill="Soft"
+                size="300"
+                radii="300"
+                before={menuIcon(Download)}
+                onClick={handleDiagnosticsExport}
+                disabled={diagnosticsState === 'exporting'}
+              >
+                <Text size="B300">
+                  {diagnosticsState === 'exporting'
+                    ? 'Exporting…'
+                    : isDesktopTauri()
+                      ? 'Export ZIP'
+                      : 'Export JSON'}
+                </Text>
+              </Button>
+            }
+          />
+          {diagnosticsState === 'success' && (
+            <Text size="T200" style={{ color: 'var(--mx-color-positive-container-on)' }}>
+              {isDesktopTauri()
+                ? 'Diagnostics ZIP exported with content redacted where possible. Review it before sharing.'
+                : 'Frontend diagnostics downloaded with content redacted where possible. Review it before sharing.'}
+            </Text>
+          )}
+          {diagnosticsState === 'error' && (
+            <Text size="T200" style={{ color: 'var(--mx-color-critical-container-on)' }}>
+              Could not export diagnostics. Please try again.
+            </Text>
+          )}
+        </SequenceCard>
+      )}
       <Box gap="200" wrap="Wrap" style={{ paddingTop: '4px' }}>
         <Button
           as="a"
