@@ -19,6 +19,7 @@ type ResponsiveMenuProps = {
   position?: ComponentPosition;
   align?: ComponentAlign;
   offset?: number;
+  alignOffset?: number;
   /** Set true for menus whose trigger should regain focus when they close. */
   returnFocusOnDeactivate?: boolean;
   /** `both` also maps Left/Right, for menus laid out horizontally. */
@@ -38,6 +39,7 @@ export function ResponsiveMenu({
   position = 'Bottom',
   align = 'End',
   offset,
+  alignOffset,
   returnFocusOnDeactivate = false,
   arrowNavigation = 'vertical',
 }: ResponsiveMenuProps) {
@@ -93,6 +95,7 @@ export function ResponsiveMenu({
       position={position}
       align={align}
       offset={offset}
+      alignOffset={alignOffset}
       content={
         // Gated so a call site that builds its menu inline does that work on open,
         // not on every render of the trigger.
