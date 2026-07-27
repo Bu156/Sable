@@ -25,6 +25,8 @@ export const SheetContent = style({
   flexDirection: 'column',
 });
 
+export const SheetContentThemed = style({});
+
 // Targets the caller's menu element, which may be any component. Reaching it by
 // selector rather than cloneElement keeps it working when the caller does not
 // forward className.
@@ -53,4 +55,12 @@ globalStyle(`${SheetContent} > *:last-child::after`, {
   height: '300px',
   backgroundColor: 'inherit',
   border: 'none',
+});
+
+globalStyle(`${SheetContent}.${SheetContentThemed} > *:last-child`, {
+  backgroundColor: 'var(--sheet-surface-color)',
+});
+
+globalStyle(`${SheetContent}.${SheetContentThemed} > *:last-child::after`, {
+  backgroundColor: 'var(--sheet-surface-color)',
 });
