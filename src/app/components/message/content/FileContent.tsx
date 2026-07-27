@@ -15,7 +15,7 @@ import {
 } from '$utils/mimeTypes';
 import { decryptFile, downloadEncryptedMedia, downloadMedia, mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { useRevokeObjectURL } from '$hooks/useObjectURL';
+import { useCreateObjectURL } from '$hooks/useObjectURL';
 import { useDismissOnBack } from '$utils/androidBack';
 import { ModalWide } from '$styles/Modal.css';
 import { getDownloadFilename, saveFileToDevice } from '$utils/download';
@@ -154,19 +154,20 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
   // Android back closes the PDF viewer instead of navigating away.
   useDismissOnBack(() => setPdfViewer(false), pdfViewer);
 
+  const createObjectURL = useCreateObjectURL();
+
   const [pdfState, loadPdf] = useAsyncCallback(
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
       const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+        ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : downloadMedia(mediaUrl);
+      const fileURL = await createObjectURL(fileContent);
       setPdfViewer(true);
-      return URL.createObjectURL(fileContent);
-    }, [mx, url, useAuthentication, mimeType, encInfo])
+      return fileURL;
+    }, [mx, url, useAuthentication, mimeType, encInfo, createObjectURL])
   );
-
-  useRevokeObjectURL(pdfState.status === AsyncStatus.Success ? pdfState.data : undefined);
 
   return (
     <>
@@ -223,21 +224,22 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
+  const createObjectURL = useCreateObjectURL();
+
   const [downloadState, download] = useAsyncCallback(
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+      const fileContentPromise = encInfo
+        ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : downloadMedia(mediaUrl);
+      const fileURL = await createObjectURL(fileContentPromise);
+      const fileContent = await fileContentPromise;
 
-      const fileURL = URL.createObjectURL(fileContent);
       await saveFileToDevice(fileContent, getDownloadFilename(body), mimeType);
       return fileURL;
-    }, [mx, url, useAuthentication, mimeType, encInfo, body])
+    }, [mx, url, useAuthentication, mimeType, encInfo, body, createObjectURL])
   );
-
-  useRevokeObjectURL(downloadState.status === AsyncStatus.Success ? downloadState.data : undefined);
 
   return downloadState.status === AsyncStatus.Error ? (
     renderErrorButton(download, `Retry Download (${bytesToSize(info.size ?? 0)})`)
