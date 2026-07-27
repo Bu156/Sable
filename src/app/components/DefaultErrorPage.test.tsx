@@ -2,13 +2,15 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorPage } from './DefaultErrorPage';
 
-const { captureFeedback, isInitialized, isMobileTauri, openUrl, showReportDialog } = vi.hoisted(() => ({
-  captureFeedback: vi.fn<(feedback: unknown) => void>(),
-  isInitialized: vi.fn<() => boolean>(),
-  isMobileTauri: vi.fn<() => boolean>(),
-  openUrl: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-  showReportDialog: vi.fn<(options: { eventId?: string }) => void>(),
-}));
+const { captureFeedback, isInitialized, isMobileTauri, openUrl, showReportDialog } = vi.hoisted(
+  () => ({
+    captureFeedback: vi.fn<(feedback: unknown) => void>(),
+    isInitialized: vi.fn<() => boolean>(),
+    isMobileTauri: vi.fn<() => boolean>(),
+    openUrl: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    showReportDialog: vi.fn<(options: { eventId?: string }) => void>(),
+  })
+);
 
 vi.mock('@sentry/react', () => ({
   captureFeedback,
