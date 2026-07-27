@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import * as Sentry from '@sentry/react';
 import {
   Fragment,
   useCallback,
@@ -282,6 +283,8 @@ const MemoizedTimelineItem = memo(
 
     return (
       prev.eventData.id === next.eventData.id &&
+      // A filtered mid-timeline insert shifts this without changing `index`.
+      prev.eventData.itemIndex === next.eventData.itemIndex &&
       prev.eventData.collapsed === next.eventData.collapsed &&
       prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
       prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
@@ -444,18 +447,44 @@ export function RoomTimeline({
   const processedEventsRef = useRef<ProcessedEvent[]>([]);
   const timelineSyncRef = useRef<typeof timelineSync>(null as unknown as typeof timelineSync);
 
+  // VList owns the scroll container and renders it as the wrapper's only child.
+  const scrollElRef = useRef<HTMLElement | null>(null);
+
   const scrollToBottom = useCallback(
     (behavior: 'instant' | 'smooth' = 'instant') => {
-      if (!vListRef.current) return;
+      const v = vListRef.current;
       const lastIndex = processedEventsRef.current.length - 1;
-      if (lastIndex < 0) return;
-      vListRef.current.scrollToIndex(lastIndex, {
+      if (!v || lastIndex < 0) return;
+
+      // virtua aims at the last row's end from its cached item sizes, which
+      // under-report while a just-grown row is still being measured, landing above
+      // the real bottom. Overshoot by the shortfall; the browser clamps it.
+      const scrollEl = scrollElRef.current;
+      let offset = 0;
+      if (scrollEl) {
+        const target = v.getItemOffset(lastIndex) + v.getItemSize(lastIndex) - v.viewportSize;
+        offset = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight - target);
+      }
+
+      v.scrollToIndex(lastIndex, {
         align: 'end',
+        offset,
         smooth: behavior === 'smooth' && !reducedMotion,
       });
     },
     [reducedMotion]
   );
+
+  useLayoutEffect(() => {
+    const scrollEl = messageListRef.current?.firstElementChild;
+    scrollElRef.current = scrollEl instanceof HTMLElement ? scrollEl : null;
+    if (!scrollElRef.current) {
+      Sentry.captureMessage('Timeline: could not resolve the VList scroll container', {
+        level: 'warning',
+        tags: { feature: 'timeline' },
+      });
+    }
+  }, []);
 
   // A jump target is by definition not the bottom. Clear the flag synchronously,
   // before the async load resolves: the growth-follow is a useLayoutEffect, so it
@@ -605,14 +634,14 @@ export function RoomTimeline({
       timelineSync.liveTimelineLinked &&
       vListRef.current
     ) {
-      vListRef.current.scrollToIndex(processedEventsRef.current.length - 1, { align: 'end' });
+      scrollToBottom();
       // Store in a ref rather than a local so subsequent eventsLength changes
       // (e.g. the onLifecycle timeline reset firing within 80 ms) do NOT
       // cancel this timer through the useLayoutEffect cleanup.
       initialScrollTimerRef.current = setTimeout(() => {
         initialScrollTimerRef.current = undefined;
         if (processedEventsRef.current.length > 0) {
-          vListRef.current?.scrollToIndex(processedEventsRef.current.length - 1, { align: 'end' });
+          scrollToBottom();
           // Only mark ready once we've successfully scrolled.  If processedEvents
           // was empty when the timer fired (e.g. the onLifecycle reset cleared the
           // timeline within the 80 ms window), defer setIsReady until the recovery
@@ -626,7 +655,13 @@ export function RoomTimeline({
     }
     // No cleanup return — the timer must survive eventsLength fluctuations.
     // It is cancelled on unmount by the dedicated effect below.
-  }, [timelineSync.eventsLength, timelineSync.liveTimelineLinked, eventId, room.roomId]);
+  }, [
+    timelineSync.eventsLength,
+    timelineSync.liveTimelineLinked,
+    eventId,
+    room.roomId,
+    scrollToBottom,
+  ]);
 
   // Cancel the initial-scroll timer on unmount (the useLayoutEffect above
   // intentionally does not cancel it when deps change).
@@ -658,12 +693,10 @@ export function RoomTimeline({
       topSpacerHeightRef.current = newH;
       setTopSpacerHeight(newH);
       if (prev > 0 && newH === 0 && processedEventsRef.current.length > 0) {
-        requestAnimationFrame(() => {
-          vListRef.current?.scrollToIndex(processedEventsRef.current.length - 1, { align: 'end' });
-        });
+        requestAnimationFrame(() => scrollToBottom());
       }
     }
-  }, []);
+  }, [scrollToBottom]);
 
   useLayoutEffect(() => {
     const id = requestAnimationFrame(recalcTopSpacer);
@@ -682,10 +715,10 @@ export function RoomTimeline({
     } else if (prev === 'loading' && timelineSync.backwardStatus === 'idle') {
       setShift(false);
       if (wasAtBottomBeforePaginationRef.current) {
-        vListRef.current?.scrollToIndex(processedEventsRef.current.length - 1, { align: 'end' });
+        scrollToBottom();
       }
     }
-  }, [timelineSync.backwardStatus]);
+  }, [timelineSync.backwardStatus, scrollToBottom]);
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -769,10 +802,9 @@ export function RoomTimeline({
 
       prevViewportHeightRef.current = newHeight;
 
-      const lastIndex = processedEventsRef.current.length - 1;
-      if (shrank && atBottom && lastIndex >= 0) {
+      if (shrank && atBottom && processedEventsRef.current.length > 0) {
         // Geometry is still pre-scroll here; the repin's own scroll event resyncs.
-        vListRef.current?.scrollToIndex(lastIndex, { align: 'end' });
+        scrollToBottom();
         return;
       }
       syncAtBottom();
@@ -780,7 +812,7 @@ export function RoomTimeline({
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [syncAtBottom]);
+  }, [syncAtBottom, scrollToBottom]);
 
   // Decrypting rows and late-loading images grow without changing eventsLength,
   // so useTimelineSync's auto-scroll never re-fires for them.
@@ -794,8 +826,7 @@ export function RoomTimeline({
 
     if (!grew || !atBottomRef.current || !liveTimelineLinkedRef.current) return;
 
-    const lastIndex = processedEventsRef.current.length - 1;
-    if (lastIndex >= 0) v.scrollToIndex(lastIndex, { align: 'end' });
+    scrollToBottom();
   });
 
   const actions = useTimelineActions({
@@ -1054,9 +1085,9 @@ export function RoomTimeline({
     if (!pendingReadyRef.current) return;
     if (processedEvents.length === 0) return;
     pendingReadyRef.current = false;
-    vListRef.current?.scrollToIndex(processedEvents.length - 1, { align: 'end' });
+    scrollToBottom();
     setIsReady(true);
-  }, [processedEvents.length]);
+  }, [processedEvents.length, scrollToBottom]);
 
   useEffect(() => {
     if (!onEditLastMessageRef) return;
