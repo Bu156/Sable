@@ -45,11 +45,8 @@ vi.mock('focus-trap-react', () => ({
 vi.mock('./MobileSwipeDownModal', () => ({
   MobileSwipeDownModal: ({ children, requestClose }: any) => (
     <div data-testid="mobile-swipe-down" data-request-close={String(!!requestClose)}>
-      {children(<div data-testid="drag-handle">drag-handle</div>, {
-        onTouchStart: vi.fn<() => void>(),
-        onTouchMove: vi.fn<() => void>(),
-        onTouchEnd: vi.fn<() => void>(),
-      })}
+      <div data-testid="drag-handle">drag-handle</div>
+      {children()}
     </div>
   ),
 }));
