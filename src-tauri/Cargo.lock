@@ -785,9 +785,9 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "148.0.0+147.0.10"
+version = "150.2.1+150.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2445d2f1e820efc064c511faa3a07c3ee79e565fdae026ca62ed3c80d0459223"
+checksum = "b912d9d13dd63b4bffa750f1f3c49271dc96d6c91ca2d1c1f68a0172832170c8"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.23.1",
@@ -805,9 +805,9 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "148.0.0+147.0.10"
+version = "150.2.1+150.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d32a7c89af6c77688ad58dc75555c9398c5ded2c328a3ff83554fccc840af57"
+checksum = "31b1059b49a0d5aa3872035f076210a31df6d70e039e12427b41ceba7c650b49"
 dependencies = [
  "anyhow",
  "cmake",
@@ -1585,7 +1585,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -2822,7 +2822,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4798,7 +4798,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -4836,7 +4836,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -6913,7 +6913,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/byeongsu-hong/tauri-runtime-cef?rev=c215d6e52dd507956d9b8cc868906d690dc477c2#c215d6e52dd507956d9b8cc868906d690dc477c2"
+source = "git+https://github.com/SableClient/tauri-runtime-cef?branch=main#23464067ddcfe61239e41faeb26e1ce200ff3242"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -6926,6 +6926,7 @@ dependencies = [
  "html5ever 0.29.1",
  "http 1.4.2",
  "kuchikiki",
+ "libc",
  "log",
  "objc2",
  "objc2-app-kit",
@@ -7025,7 +7026,7 @@ dependencies = [
  "serde_with",
  "swift-rs",
  "thiserror 2.0.19",
- "toml 1.1.3+spec-1.1.0",
+ "toml 0.9.12+spec-1.1.0",
  "url",
  "urlpattern",
  "uuid",

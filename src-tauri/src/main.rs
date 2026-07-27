@@ -7,9 +7,9 @@ fn prompt_cef_permission(message: String, tx: std::sync::mpsc::Sender<bool>) {
     use gtk::prelude::*;
     use gtk::{ButtonsType, DialogFlags, MessageDialog, MessageType, ResponseType};
 
-    // GTK dialogs must run on the main thread's GLib context. Schedule the
-    // dialog as an idle source on the default context, which the winit event
-    // loop services every iteration.
+    // Non-blocking: show() + response signal instead of run().
+    // dialog.run() blocks the GLib main loop, which CEF's message pump
+    // also uses on Linux, freezing the app.
     glib::idle_add_once(move || {
         let dialog = MessageDialog::new(
             None::<&gtk::Window>,
@@ -19,9 +19,17 @@ fn prompt_cef_permission(message: String, tx: std::sync::mpsc::Sender<bool>) {
             &message,
         );
         dialog.set_title("Permission request");
-        let response = dialog.run();
-        dialog.close();
-        let _ = tx.send(matches!(response, ResponseType::Yes));
+
+        let tx = std::cell::RefCell::new(Some(tx));
+        let dialog_ptr = dialog.clone();
+        dialog.connect_response(move |dlg, response| {
+            if let Some(tx) = tx.take() {
+                let _ = tx.send(matches!(response, ResponseType::Yes));
+            }
+            dlg.close();
+        });
+
+        dialog.show();
     });
 }
 
@@ -86,7 +94,13 @@ fn main() {
         }
 
         // Allow call media capture (mic, camera, screen-share) for our webview.
-        tauri_runtime_cef::set_permission_policy(|request, responder| {
+        // Cache granted permissions so we only prompt once per kind.
+        use std::collections::HashSet;
+        use std::sync::{Mutex, OnceLock};
+        static GRANTED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+        let granted = GRANTED.get_or_init(|| Mutex::new(HashSet::new()));
+
+        tauri_runtime_cef::set_permission_policy(move |request, responder| {
             use tauri_runtime_cef::{DenyReason, PermissionKind};
 
             if request.webview_label != "main" {
@@ -113,6 +127,26 @@ fn main() {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
+            // Check cache: if all requested kinds were already granted, allow immediately.
+            let kind_names: Vec<&'static str> = media_kinds
+                .iter()
+                .map(|k| match k {
+                    PermissionKind::Microphone => "mic",
+                    PermissionKind::Camera | PermissionKind::CameraPanTiltZoom => "cam",
+                    PermissionKind::ScreenCapture | PermissionKind::CapturedSurfaceControl => {
+                        "screen"
+                    }
+                    _ => "other",
+                })
+                .collect();
+
+            {
+                let cache = granted.lock().unwrap();
+                if kind_names.iter().all(|k| cache.contains(k)) {
+                    return responder.allow();
+                }
+            }
+
             let msg = match media_kinds.as_slice() {
                 [PermissionKind::Microphone] => "Sable wants to access your microphone.",
                 [PermissionKind::Camera] => "Sable wants to access your camera.",
@@ -132,12 +166,17 @@ fn main() {
             // the answer to a worker thread that waits on the dialog result.
             let deferred = responder.defer(tauri_runtime_cef::DEFAULT_PROMPT_TIMEOUT);
             let (tx, rx) = std::sync::mpsc::channel();
+            let kinds_to_cache = kind_names.clone();
             prompt_cef_permission(msg.to_string(), tx);
             std::thread::spawn(move || {
                 let allowed = rx
                     .recv_timeout(tauri_runtime_cef::DEFAULT_PROMPT_TIMEOUT)
                     .unwrap_or(false);
                 if allowed {
+                    let mut cache = granted.lock().unwrap();
+                    for k in &kinds_to_cache {
+                        cache.insert(k);
+                    }
                     deferred.allow();
                 } else {
                     deferred.deny(DenyReason::PolicyDenied);
