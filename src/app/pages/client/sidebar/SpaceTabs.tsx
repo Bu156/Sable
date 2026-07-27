@@ -540,10 +540,14 @@ function SpaceTab({
 }: Readonly<SpaceTabProps>) {
   const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
   const targetRef = useRef<HTMLDivElement>(null);
+  const menu = useMenuAnchor<HTMLButtonElement>();
   const mobileTapActivation = useMobileTapActivation(
     isMobile,
     () => onSelect(space.roomId),
-    () => onSelect(space.roomId)
+    () => {
+      if (menu.consumeLongPressFired() || menu.anchor) return;
+      onSelect(space.roomId);
+    }
   );
 
   const spaceDraggable: SidebarDraggable = useMemo(
@@ -560,8 +564,6 @@ function SpaceTab({
   useDraggableItem(spaceDraggable, targetRef, onDragging, undefined, !isMobile);
   const dropState = useDropTarget(spaceDraggable, targetRef, !isMobile);
   const dropType = dropState?.type;
-
-  const menu = useMenuAnchor<HTMLButtonElement>();
 
   return (
     <RoomUnreadProvider roomId={space.roomId}>
