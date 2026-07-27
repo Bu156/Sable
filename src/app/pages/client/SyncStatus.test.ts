@@ -93,6 +93,24 @@ describe('useStickyDisconnected (hysteresis)', () => {
     expect(result.current).toBe(SyncState.Reconnecting);
   });
 
+  it('preserves the show timer when the degraded variant changes', () => {
+    const { result, rerender } = renderHook(({ state }) => useStickyDisconnected(state), {
+      initialProps: { state: SyncState.Syncing as SyncState | null },
+    });
+
+    rerender({ state: SyncState.Reconnecting });
+    act(() => {
+      vi.advanceTimersByTime(1_500);
+    });
+
+    rerender({ state: SyncState.Error });
+    act(() => {
+      vi.advanceTimersByTime(501);
+    });
+
+    expect(result.current).toBe(SyncState.Error);
+  });
+
   it('stays shown when healthy for 1s then degraded again (flap regression)', () => {
     const { result, rerender } = renderHook(({ state }) => useStickyDisconnected(state), {
       initialProps: { state: SyncState.Syncing as SyncState | null },

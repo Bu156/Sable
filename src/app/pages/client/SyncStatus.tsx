@@ -34,28 +34,34 @@ export const shouldShowInlineSyncStatus = (hasCustomTitleBar: boolean): boolean 
   !hasCustomTitleBar;
 
 export const useStickyDisconnected = (syncCurrent: SyncState | null): SyncState | null => {
+  const degraded =
+    syncCurrent === SyncState.Reconnecting || syncCurrent === SyncState.Error ? syncCurrent : null;
+  const showStartedAtRef = useRef<number | null>(null);
   const [stickyDisconnected, setStickyDisconnected] = useState<SyncState | null>(null);
 
   useEffect(() => {
-    const degraded =
-      syncCurrent === SyncState.Reconnecting || syncCurrent === SyncState.Error
-        ? syncCurrent
-        : null;
-
     if (degraded) {
-      // Already visible: swap variant in place, don't re-arm the show timer.
       if (stickyDisconnected) {
+        showStartedAtRef.current = null;
         if (stickyDisconnected !== degraded) setStickyDisconnected(degraded);
         return undefined;
       }
-      const id = setTimeout(() => setStickyDisconnected(degraded), DISCONNECTED_SHOW_DELAY_MS);
+
+      const startedAt = showStartedAtRef.current ?? Date.now();
+      showStartedAtRef.current = startedAt;
+      const remaining = Math.max(0, DISCONNECTED_SHOW_DELAY_MS - (Date.now() - startedAt));
+      const id = setTimeout(() => {
+        showStartedAtRef.current = null;
+        setStickyDisconnected(degraded);
+      }, remaining);
       return () => clearTimeout(id);
     }
 
+    showStartedAtRef.current = null;
     if (!stickyDisconnected) return undefined;
     const id = setTimeout(() => setStickyDisconnected(null), DISCONNECTED_HIDE_DELAY_MS);
     return () => clearTimeout(id);
-  }, [syncCurrent, stickyDisconnected]);
+  }, [degraded, stickyDisconnected]);
 
   return stickyDisconnected;
 };
