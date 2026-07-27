@@ -17,9 +17,11 @@ export function computeNightlyVersion(baseVersion, timestamp = new Date()) {
   const d = String(timestamp.getUTCDate()).padStart(2, '0');
   const h = String(timestamp.getUTCHours()).padStart(2, '0');
   const min = String(timestamp.getUTCMinutes()).padStart(2, '0');
+  const sec = String(timestamp.getUTCSeconds()).padStart(2, '0');
 
   const [, major, minor, patch] = match;
-  return `${major}.${minor}.${Number(patch) + 1}-nightly.${y}${m}${d}${h}${min}`;
+  // Second resolution so same-minute commits get distinct build versions.
+  return `${major}.${minor}.${Number(patch) + 1}-nightly.${y}${m}${d}${h}${min}${sec}`;
 }
 
 export function nightlyVersion() {
