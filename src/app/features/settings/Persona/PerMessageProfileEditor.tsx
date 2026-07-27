@@ -17,13 +17,15 @@ import {
   createProxyKey,
   deletePerMessageProfile,
   dropProxyAssociationForPMP,
+  getAllPerMessageProfileProxies,
   getAllProxiesForPMP,
-  getProfileAssociatedWithProxy,
+  getPerMessageProfileById,
   type PerMessageProfileProxyAssociationV2,
   renamePerMessageProfile,
 } from '$hooks/usePerMessageProfile';
 import type { PronounSet } from '$utils/pronouns';
 import { parsePronounsStringToPronounsSetArray } from '$utils/pronouns';
+import { generateShortId } from '$utils/shortIdGen';
 import { SettingTile } from '$components/setting-tile';
 import { type AsyncState, AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 
@@ -32,6 +34,7 @@ const constructProxyString = (s: Shorthand) => {
 };
 
 type Shorthand = { id: string; prefix?: string; suffix?: string };
+type ShorthandRow = Shorthand & { rowId: string };
 
 type ShorthandListItemProps = Shorthand & {
   onDelete: (shorthandId: string) => void;
@@ -168,7 +171,7 @@ type ShorthandEditorProps = {
   profileId: string;
 };
 function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
-  const [shorthands, setShorthands] = useState<Shorthand[]>();
+  const [shorthands, setShorthands] = useState<ShorthandRow[]>();
 
   const containsBlankShorthand = useMemo(
     () => shorthands && shorthands.some((shorthand) => !shorthand.prefix && !shorthand.suffix),
@@ -176,7 +179,9 @@ function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
   );
 
   const handleAddShorthand = () => {
-    if (shorthands !== undefined) setShorthands([...shorthands, { id: 'blank' }]);
+    if (shorthands !== undefined) {
+      setShorthands([...shorthands, { id: 'blank', rowId: generateShortId(16) }]);
+    }
   };
 
   const [deleteShorthandState, handleDeleteShorthand] = useAsyncCallback(
@@ -206,7 +211,12 @@ function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
       async (oldId: string, shorthand: Shorthand) => {
         if (shorthands === undefined) return;
 
-        const shorthandAssociatedProfile = await getProfileAssociatedWithProxy(mx, shorthand.id);
+        const shorthandAssociation = (await getAllPerMessageProfileProxies(mx)).find(
+          (association) => createProxyKey(association.prefix, association.suffix) === shorthand.id
+        );
+        const shorthandAssociatedProfile = shorthandAssociation
+          ? await getPerMessageProfileById(mx, shorthandAssociation.profileId)
+          : undefined;
         if (shorthandAssociatedProfile) {
           throw new Error(
             `Shorthand is already associated with profile ${shorthandAssociatedProfile.name} (${shorthandAssociatedProfile.id})`
@@ -218,9 +228,19 @@ function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
         }
         await associateProxyWithProfile(mx, profileId, shorthand.prefix, shorthand.suffix, false);
 
-        const oldShorthandIdx = shorthands.findIndex((s) => s.id === oldId) ?? -1;
+        setShorthands((currentShorthands) => {
+          if (currentShorthands === undefined) return currentShorthands;
 
-        setShorthands((s) => s?.with(oldShorthandIdx, { ...shorthand }));
+          const oldShorthandIdx = currentShorthands.findIndex((s) => s.id === oldId);
+          if (oldShorthandIdx < 0) return currentShorthands;
+          const oldShorthand = currentShorthands[oldShorthandIdx];
+          if (oldShorthand === undefined) return currentShorthands;
+
+          return currentShorthands.with(oldShorthandIdx, {
+            ...shorthand,
+            rowId: oldShorthand.rowId,
+          });
+        });
       },
       [mx, shorthands, profileId]
     )
@@ -232,8 +252,8 @@ function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
         mx,
         profileId
       );
-      const enumeratedShorthands: Shorthand[] = fetchedShorthands.map((v) => {
-        return { id: createProxyKey(v.prefix, v.suffix), ...v };
+      const enumeratedShorthands: ShorthandRow[] = fetchedShorthands.map((v) => {
+        return { id: createProxyKey(v.prefix, v.suffix), rowId: generateShortId(16), ...v };
       });
       setShorthands(enumeratedShorthands);
     };
@@ -261,9 +281,9 @@ function ShorthandEditor({ mx, profileId }: ShorthandEditorProps) {
           {shorthands === undefined ? (
             <Spinner size="400" />
           ) : (
-            shorthands.map((shorthand: Shorthand) => (
+            shorthands.map((shorthand: ShorthandRow) => (
               <ShorthandListItem
-                key={shorthand.id}
+                key={shorthand.rowId}
                 id={shorthand.id}
                 prefix={shorthand.prefix}
                 suffix={shorthand.suffix}
