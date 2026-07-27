@@ -47,6 +47,11 @@ vi.mock('folds', () => ({
       {children}
     </div>
   ),
+  Modal: ({ children, size }: any) => (
+    <div data-testid="modal" data-size={size}>
+      {children}
+    </div>
+  ),
   Overlay: ({ open, backdrop, children }: any) => (
     <div data-testid="overlay" data-open={String(!!open)}>
       <div data-testid="overlay-backdrop">{backdrop}</div>
@@ -203,6 +208,23 @@ describe('ModalOverlay', () => {
       // Focus-trap wraps the fullscreen content
       expect(screen.getByTestId('focus-trap')).toBeInTheDocument();
       expect(screen.getByTestId('modal-child')).toBeInTheDocument();
+    });
+
+    it('wraps children in a Modal on desktop when size is set', () => {
+      desktop({ size: '500' });
+
+      const modal = screen.getByTestId('modal');
+      expect(modal).toHaveAttribute('data-size', '500');
+      expect(modal).toContainElement(screen.getByTestId('modal-child'));
+    });
+
+    it('does NOT wrap children in a Modal on mobile fullscreen when size is set (fills viewport)', () => {
+      mobile({ mobile: 'fullscreen', size: '500' });
+
+      // Regression (#1410): the fullscreen path must render children bare.
+      expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
+      expect(screen.getByTestId('modal-child')).toBeInTheDocument();
+      expect(screen.getByTestId('focus-trap')).toBeInTheDocument();
     });
 
     it('renders sheet via MobileSwipeDownModal on mobile when mobile="sheet"', () => {
