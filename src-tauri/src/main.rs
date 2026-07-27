@@ -20,15 +20,23 @@ fn main() {
                     ("--disable-gpu-sandbox".into(), None),
                     ("--disable-font-subpixel-positioning".into(), None),
                     ("--enable-font-antialiasing".into(), None),
-                    ("autoplay-policy".into(), Some("no-user-gesture-required".into())),
-                    ("enable-features".into(), Some("SharedArrayBuffer".into())),
+                    (
+                        "autoplay-policy".into(),
+                        Some("no-user-gesture-required".into()),
+                    ),
+                    (
+                        "enable-features".into(),
+                        Some("SharedArrayBuffer".into()),
+                    ),
                     ("--disable-background-timer-throttling".into(), None),
-                    ("--disable-renderer-backgrounding".into(), None),
-                    ("--disable-backgrounding-occluded-windows".into(), None),
-                    ("disable-features".into(), Some(
-                        "SpareRendererForSitePerProcess,IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,AutofillActorMode,GlicActorUi,LensOverlay,LocalNetworkAccessChecks,LocalNetworkAccessChecksWebSocket,LocalNetworkAccessChecksWebRTC".into()
-                    )),
+                    ("--skia-resource-cache-limit-mb".into(), Some("64".into())),
+                    ("--renderer-process-limit".into(), Some("2".into())),
+                    (
+                        "disable-features".into(),
+                        Some("SpareRendererForSitePerProcess,IntensiveWakeUpThrottling,AutofillActorMode,GlicActorUi,LensOverlay,LocalNetworkAccessChecks,LocalNetworkAccessChecksWebSocket,LocalNetworkAccessChecksWebRTC".into()),
+                    ),
                 ];
+
                 // Remote debugging via SABLE_DEVTOOLS=port env var.
                 // Open chrome://inspect in Chrome to connect.
                 if let Ok(port) = std::env::var("SABLE_DEVTOOLS") {
