@@ -165,10 +165,11 @@ export const ImageContent = as<'div', ImageContentProps>(
             await setMediaEncryption(rawMediaUrl, encInfo, mimeType ?? FALLBACK_MIMETYPE);
             return rewriteAuthenticatedMediaUrl(rawMediaUrl)!;
           }
-          const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
-            decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+          return createObjectURL(
+            downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
+              decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+            )
           );
-          return createObjectURL(fileContent);
         }
         return resolvedMediaUrl ?? rawMediaUrl ?? url;
       }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo, createObjectURL])

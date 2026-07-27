@@ -17,10 +17,12 @@ export const useObjectURL = (object?: Blob): string | undefined => {
 };
 
 // For blob URLs created inside an async callback, which can resolve after unmount
-// with no effect left to revoke them.  Owns one URL at a time per caller.
-export const useCreateObjectURL = (): ((object: Blob) => string) => {
+// with no effect left to revoke them. Passing the pending blob reserves ownership
+// so an older request that resolves late cannot replace or revoke the current URL.
+export const useCreateObjectURL = (): ((object: Blob | Promise<Blob>) => Promise<string>) => {
   const urlRef = useRef<string | undefined>(undefined);
   const mountedRef = useRef(true);
+  const requestRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -31,14 +33,17 @@ export const useCreateObjectURL = (): ((object: Blob) => string) => {
     };
   }, []);
 
-  return useCallback((object: Blob) => {
-    const url = URL.createObjectURL(object);
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    if (!mountedRef.current) {
+  return useCallback(async (object: Blob | Promise<Blob>) => {
+    const request = ++requestRef.current;
+    const resolvedObject = await object;
+    const url = URL.createObjectURL(resolvedObject);
+
+    if (!mountedRef.current || request !== requestRef.current) {
       URL.revokeObjectURL(url);
-      urlRef.current = undefined;
       return url;
     }
+
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     urlRef.current = url;
     return url;
   }, []);

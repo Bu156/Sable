@@ -161,10 +161,11 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
       const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+        ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : downloadMedia(mediaUrl);
+      const fileURL = await createObjectURL(fileContent);
       setPdfViewer(true);
-      return createObjectURL(fileContent);
+      return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, createObjectURL])
   );
 
@@ -229,11 +230,12 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
     useCallback(async () => {
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+      const fileContentPromise = encInfo
+        ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : downloadMedia(mediaUrl);
+      const fileURL = await createObjectURL(fileContentPromise);
+      const fileContent = await fileContentPromise;
 
-      const fileURL = createObjectURL(fileContent);
       await saveFileToDevice(fileContent, getDownloadFilename(body), mimeType);
       return fileURL;
     }, [mx, url, useAuthentication, mimeType, encInfo, body, createObjectURL])

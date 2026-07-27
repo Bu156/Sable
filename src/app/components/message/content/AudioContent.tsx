@@ -73,13 +73,11 @@ export function AudioContent({
           await setMediaEncryption(mediaUrl, encInfo, mimeType);
           return rewriteAuthenticatedMediaUrl(mediaUrl)!;
         }
-        const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-          decryptFile(encBuf, mimeType, encInfo)
+        return createObjectURL(
+          downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
         );
-        return createObjectURL(fileContent);
       }
-      const fileContent = await downloadMedia(mediaUrl);
-      return createObjectURL(fileContent);
+      return createObjectURL(downloadMedia(mediaUrl));
     }, [mx, url, useAuthentication, mimeType, encInfo, createObjectURL])
   );
 

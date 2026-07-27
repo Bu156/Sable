@@ -51,10 +51,11 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
           await setMediaEncryption(rawMediaUrl, encInfo, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE);
           return rewriteAuthenticatedMediaUrl(rawMediaUrl)!;
         }
-        const fileContent = await downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
-          decryptFile(encBuf, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE, encInfo)
+        return createObjectURL(
+          downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
+            decryptFile(encBuf, thumbInfo?.mimetype ?? FALLBACK_MIMETYPE, encInfo)
+          )
         );
-        return createObjectURL(fileContent);
       }
       return resolvedMediaUrl ?? rawMediaUrl ?? thumbMxcUrl;
     }, [info, thumbMxcUrl, rawMediaUrl, resolvedMediaUrl, encInfo, createObjectURL])
