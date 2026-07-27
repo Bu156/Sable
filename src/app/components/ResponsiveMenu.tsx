@@ -1,14 +1,16 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { RectCords } from 'folds';
-import { Box, PopOut } from 'folds';
+import { Box, Overlay, OverlayBackdrop, OverlayCenter, PopOut } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
+import { useDismissOnBack } from '$utils/androidBack';
 import { MobileSwipeDownModal } from './MobileSwipeDownModal';
 import * as css from './ResponsiveMenu.css';
 
 type ComponentPosition = 'Top' | 'Right' | 'Bottom' | 'Left';
 type ComponentAlign = 'Start' | 'Center' | 'End';
+type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
 
 type ResponsiveMenuProps = {
   anchor: RectCords | undefined;
@@ -24,7 +26,35 @@ type ResponsiveMenuProps = {
   returnFocusOnDeactivate?: boolean;
   /** `both` also maps Left/Right, for menus laid out horizontally. */
   arrowNavigation?: 'vertical' | 'both';
+  /** How the menu shows on mobile: a bottom sheet, or a centred dialog for
+   *  option pickers, which a sheet makes look like an action menu. */
+  mobile?: 'sheet' | 'dialog';
 };
+
+function MenuDialog({
+  requestClose,
+  focusTrapOptions,
+  children,
+}: {
+  requestClose: () => void;
+  focusTrapOptions: FocusTrapOptions;
+  children: ReactNode;
+}) {
+  // Android back closes the dialog instead of navigating away.
+  useDismissOnBack(requestClose);
+
+  return (
+    <Overlay open backdrop={<OverlayBackdrop />}>
+      <OverlayCenter>
+        <FocusTrap focusTrapOptions={focusTrapOptions}>
+          <Box direction="Column" role="dialog" aria-modal="true" className={css.DialogContent}>
+            {children}
+          </Box>
+        </FocusTrap>
+      </OverlayCenter>
+    </Overlay>
+  );
+}
 
 /**
  * A menu that hangs off its trigger on desktop and rises as a bottom sheet on
@@ -42,6 +72,7 @@ export function ResponsiveMenu({
   alignOffset,
   returnFocusOnDeactivate = false,
   arrowNavigation = 'vertical',
+  mobile = 'sheet',
 }: ResponsiveMenuProps) {
   // Null outside a provider, where desktop is the safe assumption.
   const isMobile = useScreenSizeOptionally() === ScreenSize.Mobile;
@@ -67,10 +98,24 @@ export function ResponsiveMenu({
     return (
       <>
         {children}
-        {anchor && (
+        {anchor && mobile === 'dialog' && (
+          <MenuDialog requestClose={requestClose} focusTrapOptions={focusTrapOptions}>
+            {menu}
+          </MenuDialog>
+        )}
+        {anchor && mobile === 'sheet' && (
           <MobileSwipeDownModal requestClose={requestClose}>
             {(dragHandle) => (
-              <FocusTrap focusTrapOptions={focusTrapOptions}>
+              <FocusTrap
+                focusTrapOptions={{
+                  ...focusTrapOptions,
+                  // The backdrop owns tap-to-dismiss. Left to focus-trap, the
+                  // mousedown synthesised when a long press is released lands on
+                  // the backdrop and reads as a click outside.
+                  clickOutsideDeactivates: false,
+                  allowOutsideClick: true,
+                }}
+              >
                 <Box
                   direction="Column"
                   role="dialog"

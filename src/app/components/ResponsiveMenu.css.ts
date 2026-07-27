@@ -1,6 +1,23 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { config, toRem } from 'folds';
 
+export const DialogContent = style({
+  width: `min(90vw, ${toRem(400)})`,
+  maxHeight: '85vh',
+  display: 'flex',
+  flexDirection: 'column',
+});
+
+// Same reach-by-selector trick as the sheet: neutralise the inline sizing the
+// callers set for their desktop popout so the menu fills the dialog.
+globalStyle(`${DialogContent} > *:last-child`, {
+  width: '100% !important',
+  maxWidth: 'none !important',
+  maxHeight: '100% !important',
+  display: 'flex',
+  flexDirection: 'column',
+});
+
 export const SheetContent = style({
   width: '100%',
   maxHeight: '100%',
