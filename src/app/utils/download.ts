@@ -63,26 +63,54 @@ export async function saveFileToDevice(
   mimeType?: string
 ): Promise<void> {
   if (isTauri()) {
-    const blob = await resolveBlob(input);
-    const bytes = new Uint8Array(await blob.arrayBuffer());
+    try {
+      const blob = await resolveBlob(input);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
 
-    if (osType() === 'android') {
-      const { AndroidFs, AndroidPublicGeneralPurposeDir } =
-        await import('tauri-plugin-android-fs-api');
-      const uri = await AndroidFs.createNewPublicFile(
-        AndroidPublicGeneralPurposeDir.Download,
-        filename,
-        mimeType || blob.type || null,
-        { isPending: true }
-      );
-      await AndroidFs.writeFile(uri, bytes);
-      await AndroidFs.setPublicFilePending(uri, false);
-      showToast('Saved to Downloads');
-      return;
+      if (osType() === 'android') {
+        const { AndroidFs, AndroidPublicGeneralPurposeDir } =
+          await import('tauri-plugin-android-fs-api');
+        let uri: Awaited<ReturnType<typeof AndroidFs.createNewPublicFile>> | undefined;
+        try {
+          if (!(await AndroidFs.checkPublicFilesPermission())) {
+            const granted = await AndroidFs.requestPublicFilesPermission();
+            if (!granted) throw new Error('Storage permission was denied');
+          }
+
+          uri = await AndroidFs.createNewPublicFile(
+            AndroidPublicGeneralPurposeDir.Download,
+            filename,
+            mimeType || blob.type || null,
+            { isPending: true, requestPermission: true }
+          );
+          await AndroidFs.writeFile(uri, bytes);
+          await AndroidFs.setPublicFilePending(uri, false);
+          await AndroidFs.scanPublicFile(uri);
+          showToast('Saved to Downloads');
+          return;
+        } catch (error) {
+          if (uri) await AndroidFs.removeFile(uri).catch(() => undefined);
+          throw error;
+        }
+      }
+
+      if (osType() === 'ios') {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const path = await save({ defaultPath: filename });
+        if (!path) return;
+
+        const { writeFile } = await import('@tauri-apps/plugin-fs');
+        await writeFile(path, bytes);
+        showToast('File saved');
+        return;
+      }
+
+      const saved = await invoke<boolean>('save_download', { filename, bytes: Array.from(bytes) });
+      if (saved) showToast('File saved');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      showToast(`Failed to save file: ${message}`);
     }
-
-    const saved = await invoke<boolean>('save_download', { filename, bytes: Array.from(bytes) });
-    if (saved) showToast('File saved');
     return;
   }
 
