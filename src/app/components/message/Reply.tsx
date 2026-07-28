@@ -32,14 +32,7 @@ import { getReactionKey, getReactionShortcode, getRedactionTargetId } from '$uti
 import { getMxIdLocalPart } from '$utils/matrix';
 import { randomNumberBetween } from '$utils/common';
 import { sanitizeCustomHtml } from '$utils/sanitize';
-import {
-  getReactCustomHtmlParser,
-  scaleSystemEmoji,
-  LINKIFY_OPTS,
-  makeMentionCustomProps,
-  factoryRenderLinkifyWithMention,
-  renderMatrixMention,
-} from '$plugins/react-custom-html-parser';
+import { getReactCustomHtmlParser, scaleSystemEmoji } from '$plugins/react-custom-html-parser';
 import { useRoomEvent } from '$hooks/useRoomEvent';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
@@ -332,24 +325,6 @@ export const Reply = as<'div', ReplyProps>(
     let image: ReactNode | undefined;
     let mentioned = sender != null && (mentions?.user_ids?.includes(sender) ?? false);
 
-    const replyLinkifyOpts = useMemo(
-      () => ({
-        ...LINKIFY_OPTS,
-        render: factoryRenderLinkifyWithMention(
-          settingsLinkBaseUrl,
-          (href) =>
-            renderMatrixMention(
-              mx,
-              room.roomId,
-              href,
-              makeMentionCustomProps(mentionClickHandler),
-              nicknames
-            ),
-          mentionClickHandler
-        ),
-      }),
-      [mx, room.roomId, mentionClickHandler, nicknames, settingsLinkBaseUrl]
-    );
     if (eventType === M_POLL_START.name) {
       const question = (
         replyEvent?.getContent()[M_POLL_START.name] as {
@@ -364,7 +339,7 @@ export const Reply = as<'div', ReplyProps>(
       if (shouldParseReplyFormattedPreview(sanitizedHtml)) {
         const parserOpts = getReactCustomHtmlParser(mx, room.roomId, {
           settingsLinkBaseUrl,
-          linkifyOpts: replyLinkifyOpts,
+          linkifyOpts: undefined,
           useAuthentication,
           nicknames,
           handleMentionClick: mentionClickHandler,
