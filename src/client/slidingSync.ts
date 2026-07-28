@@ -16,6 +16,7 @@ import {
   MSC3575_STATE_KEY_LAZY,
   MSC3575_STATE_KEY_ME,
   EventType,
+  EventTimeline,
   EventEmitterEvents,
   ClientEvent,
 } from '$types/matrix-sdk';
@@ -44,6 +45,7 @@ const SPACE_SUBSCRIPTION_KEY = 'space';
 const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
 const SPACE_IMAGE_PACK_SUBSCRIPTION_KEY = 'space_image_packs';
 const ACTIVE_ROOM_TIMELINE_LIMIT = 50;
+const PRUNE_TIMELINE_THRESHOLD = 150;
 
 export type PartialSlidingSyncRequest = {
   filters?: MSC3575List['filters'];
@@ -1237,6 +1239,28 @@ export class SlidingSyncManager {
     return true;
   }
 
+  // Skips rooms with pending local echoes so unsent messages are never discarded.
+  private maybePruneRoomTimeline(roomId: string): void {
+    if (this.disposed || this.activeRoomSubscriptions.has(roomId)) return;
+    const room = this.mx.getRoom(roomId);
+    if (!room) return;
+
+    const timeline = room.getLiveTimeline();
+    const events = timeline.getEvents();
+    if (events.length <= PRUNE_TIMELINE_THRESHOLD) return;
+    if (events.some((event) => event.status !== null)) return;
+
+    // Preserve the backward pagination token so a quiet room can still
+    // back-paginate if sliding sync does not resend one on reactivation.
+    const backwardPaginationToken = timeline.getPaginationToken(EventTimeline.BACKWARDS);
+    room.resetLiveTimeline(backwardPaginationToken);
+    debugLog.info('sync', 'Pruned inactive room live timeline', {
+      roomId,
+      previousEventCount: events.length,
+      syncCycle: this.syncCount,
+    });
+  }
+
   private removeActiveRoomSubscription(roomId: string): boolean {
     if (!this.activeRoomSubscriptions.has(roomId)) return false;
     const pendingListener = this.pendingRoomDataListeners.get(roomId);
@@ -1247,6 +1271,7 @@ export class SlidingSyncManager {
     this.roomDataAwaitingSyncCompletion.delete(roomId);
     this.notifyRoomSubscriptionStatus(roomId, false);
     this.activeRoomSubscriptions.delete(roomId);
+    this.maybePruneRoomTimeline(roomId);
     log.log(`Sliding Sync active room subscription removed: ${roomId}`);
     debugLog.info('sync', 'Room subscription removed (sliding)', {
       remainingSubscriptions: this.activeRoomSubscriptions.size,
