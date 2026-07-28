@@ -71,6 +71,22 @@ describe('swMediaAuth', () => {
     expect(mod.getCachedSWMediaAuthSupport()).toBe(false);
   }, 10_000);
 
+  it('resolves false when posting to a stale controller throws', async () => {
+    platform.hasServiceWorker.mockReturnValue(true);
+    const postMessage = vi.fn<() => void>(() => {
+      throw new DOMException('The service worker is redundant', 'InvalidStateError');
+    });
+    stubServiceWorker({ postMessage });
+    const mod = await import('./swMediaAuth');
+    const listener = vi.fn<(supported: boolean) => void>();
+    mod.subscribeSWMediaAuthSupport(listener);
+
+    await expect(mod.probeSWMediaAuthSupport()).resolves.toBe(false);
+
+    expect(mod.getCachedSWMediaAuthSupport()).toBe(false);
+    expect(listener).toHaveBeenCalledWith(false);
+  });
+
   it('serves subsequent probes from cache for the same controller', async () => {
     platform.hasServiceWorker.mockReturnValue(true);
     const postMessage = vi.fn<(...args: unknown[]) => void>((...args: unknown[]) => {
