@@ -110,7 +110,7 @@ import { matchesShortcut } from '../../keyboard/shortcuts';
 import { getEditedEvent, getThreadReplyEvents } from '$utils/room/relations';
 import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, useCommands } from '$hooks/useCommands';
-import { isMobileOrTablet } from '$utils/platform';
+import { isMobileOrTablet, isMobileTauri } from '$utils/platform';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { nicknamesAtom } from '$state/nicknames';
@@ -158,9 +158,6 @@ import {
   dropzoneIcon,
   File as FileIcon,
   Gif,
-  Image as ImageIcon,
-  ListBullets,
-  MapPinPlusIcon,
   menuIcon,
   Microphone,
   PaperPlaneTilt,
@@ -211,6 +208,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 import { createComposerController, type ComposerController } from './composerController';
 import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
+import { pickNativeFile } from './nativeFilePicker';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -329,7 +327,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const clientConfig = useClientConfig();
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
-    const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
     const [editorGifButton] = useSetting(settingsAtom, 'editorGifButton');
     const [editorEmojiButton] = useSetting(settingsAtom, 'editorEmojiButton');
     const [editorStickerButton] = useSetting(settingsAtom, 'editorStickerButton');
@@ -596,6 +593,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [room, setSelectedFiles]
     );
     const pickFile = useFilePicker(handleFiles, true);
+    const pickAttachment = useCallback(
+      async (pickerMode: 'media' | 'document', accept: string) => {
+        if (!isMobileTauri()) {
+          await pickFile(accept);
+          return;
+        }
+
+        try {
+          const files = await pickNativeFile(pickerMode, (path, error) => {
+            log.warn('Failed to read native attachment file:', path, error);
+          });
+          if (files.length > 0) await handleFiles(files);
+        } catch (error) {
+          log.error('Failed to open native attachment picker', { roomId }, error);
+        }
+      },
+      [handleFiles, pickFile, roomId]
+    );
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
     const [hasText, setHasText] = useState(false);
@@ -671,7 +686,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       },
       [setRoomEditingScheduledDelayId, threadRootId]
     );
-    const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
     const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
     const attachmentSkipReturnFocusRef = useRef(false);
     const [showPollPicker, setShowPollPicker] = useState(false);
@@ -2205,7 +2219,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           before={
             <>
-              {isMobileOrTablet() ? (
+              {isMobileOrTablet() && (
                 <>
                   <IconButton
                     onClick={() => {
@@ -2233,10 +2247,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       {() => (
                         <AttachmentContent
                           onPickPhotos={() => {
-                            pickFile('image/*,.tgs');
+                            void pickAttachment('media', 'image/*,video/*,.tgs');
                           }}
                           onPickFile={() => {
-                            pickFile('*');
+                            void pickAttachment('document', '*');
                           }}
                           onPickPoll={() => {
                             setShowPollPicker(true);
@@ -2249,90 +2263,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       )}
                     </MobileSwipeDownModal>
                   )}
-                </>
-              ) : (
-                <>
-                  <PopOut
-                    anchor={AddMenuAnchor}
-                    position="Top"
-                    align="Start"
-                    offset={5}
-                    content={
-                      <FocusTrap
-                        focusTrapOptions={{
-                          initialFocus: false,
-                          onDeactivate: () => setAddMenuAnchor(undefined),
-                          clickOutsideDeactivates: true,
-                          escapeDeactivates: stopPropagation,
-                        }}
-                      >
-                        <Menu>
-                          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                            <MenuItem
-                              size="300"
-                              radii="300"
-                              onClick={() => {
-                                setAddMenuAnchor(undefined);
-                                setShowPollPicker(true);
-                              }}
-                              before={menuIcon(ListBullets)}
-                            >
-                              <Text size="B300">Create Poll</Text>
-                            </MenuItem>
-                            <MenuItem
-                              size="300"
-                              radii="300"
-                              onClick={() => {
-                                setAddMenuAnchor(undefined);
-                                setShowLocationPicker(true);
-                              }}
-                              before={menuIcon(MapPinPlusIcon)}
-                            >
-                              <Text size="B300">Add Location</Text>
-                            </MenuItem>
-                            <MenuItem
-                              size="300"
-                              radii="300"
-                              onClick={() => {
-                                pickFile('image/*,.tgs');
-                                setAddMenuAnchor(undefined);
-                              }}
-                              before={menuIcon(ImageIcon)}
-                            >
-                              <Text size="B300">Photos</Text>
-                            </MenuItem>
-                            <MenuItem
-                              size="300"
-                              radii="300"
-                              onClick={() => {
-                                pickFile('*');
-                                setAddMenuAnchor(undefined);
-                              }}
-                              before={menuIcon(PlusCircle)}
-                            >
-                              <Text size="B300">Add File</Text>
-                            </MenuItem>
-                          </Box>
-                        </Menu>
-                      </FocusTrap>
-                    }
-                  />
-                  <IconButton
-                    onClick={(evt) =>
-                      editorOldAddFile
-                        ? pickFile('*')
-                        : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
-                    }
-                    onPointerDown={suppressEditorRefocus}
-                    variant="SurfaceVariant"
-                    size="300"
-                    radii="300"
-                    style={{ backgroundColor: 'transparent' }}
-                    title={editorOldAddFile ? 'Upload File' : 'Add'}
-                    aria-label={editorOldAddFile ? 'Upload and attach a File' : 'Add new Item'}
-                  >
-                    {composerIcon(PlusCircle)}
-                  </IconButton>
                 </>
               )}
               {pmpPickerEnable && (
