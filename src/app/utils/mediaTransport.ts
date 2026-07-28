@@ -12,6 +12,7 @@ export type MediaFetchCacheMode = 'default' | 'reload' | 'bypass';
 
 export type MediaTransportOptions = {
   cache?: MediaFetchCacheMode;
+  forceDirectAuth?: boolean;
   accessToken?: string | null;
   getAccessToken?: () => string | null | undefined;
   sessionScope?: string;
@@ -179,8 +180,13 @@ function getFetchCacheMode(cacheMode: MediaFetchCacheMode): RequestCache {
   return 'default';
 }
 
-function getRequestKey(url: string, cacheMode: MediaFetchCacheMode): string {
-  return `${cacheMode}:${getStableMediaCacheKeyFragment(url)}`;
+function getRequestKey(
+  url: string,
+  cacheMode: MediaFetchCacheMode,
+  forceDirectAuth: boolean
+): string {
+  const transportMode = forceDirectAuth ? 'direct-auth' : 'default';
+  return `${transportMode}:${cacheMode}:${getStableMediaCacheKeyFragment(url)}`;
 }
 
 type MatrixMediaInfo = {
@@ -290,7 +296,9 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
   // Only let the service worker attach the token once it has proven media-auth
   // support; a stale SW build would forward the request bare and get a 4xx.
   const useServiceWorker =
-    getCachedSWMediaAuthSupport() === true && !hasExplicitMediaAuthOverride(options);
+    getCachedSWMediaAuthSupport() === true &&
+    !hasExplicitMediaAuthOverride(options) &&
+    !options?.forceDirectAuth;
   const fetchAndCache = async (response: Response): Promise<Blob> => {
     if (!response.ok) {
       throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
@@ -351,7 +359,8 @@ export async function fetchMediaBlob(url: string, options?: MediaTransportOption
   const cacheMode = options?.cache ?? 'default';
   const requestKey = getRequestKey(
     getScopedMediaCacheKey(url, resolveSessionScope(options)),
-    cacheMode
+    cacheMode,
+    options?.forceDirectAuth === true
   );
 
   const inflight = inflightRequests.get(requestKey);

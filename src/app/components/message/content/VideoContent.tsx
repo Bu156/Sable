@@ -107,7 +107,7 @@ export const VideoContent = as<'div', VideoContentProps>(
           // support; a stale SW build would otherwise serve the bare URL to
           // the homeserver and the element would fail with a 4xx.
           if (!preferBlobRef.current && (await probeSWMediaAuthSupport())) return mediaUrl;
-          return createObjectURL(downloadMedia(mediaUrl));
+          return createObjectURL(downloadMedia(mediaUrl, { forceDirectAuth: true }));
         }
         if (isTauri()) {
           await setMediaEncryption(mediaUrl, encInfo, mimeType);

@@ -68,8 +68,43 @@ describe('swMediaAuth', () => {
     const mod = await import('./swMediaAuth');
 
     await expect(mod.probeSWMediaAuthSupport()).resolves.toBe(false);
-    expect(mod.getCachedSWMediaAuthSupport()).toBe(false);
+    expect(mod.getCachedSWMediaAuthSupport()).toBeUndefined();
   }, 10_000);
+
+  it('retries a timed-out probe for the same controller', async () => {
+    platform.hasServiceWorker.mockReturnValue(true);
+    let probeCount = 0;
+    const postMessage = vi.fn<(...args: unknown[]) => void>((...args: unknown[]) => {
+      probeCount += 1;
+      if (probeCount === 2) {
+        const [port] = args[1] as MessagePort[];
+        port?.postMessage({ type: 'swMediaAuth', supported: true, version: 1 });
+      }
+    });
+    stubServiceWorker({ postMessage });
+    const mod = await import('./swMediaAuth');
+
+    const firstProbe = mod.probeSWMediaAuthSupport();
+    expect(postMessage).toHaveBeenCalledOnce();
+    await expect(firstProbe).resolves.toBe(false);
+    expect(mod.getCachedSWMediaAuthSupport()).toBeUndefined();
+
+    await expect(mod.probeSWMediaAuthSupport()).resolves.toBe(true);
+    expect(postMessage).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
+  it('resolves false when posting the probe throws', async () => {
+    platform.hasServiceWorker.mockReturnValue(true);
+    stubServiceWorker({
+      postMessage: vi.fn<() => void>(() => {
+        throw new Error('postMessage failed');
+      }),
+    });
+    const mod = await import('./swMediaAuth');
+
+    await expect(mod.probeSWMediaAuthSupport()).resolves.toBe(false);
+    expect(mod.getCachedSWMediaAuthSupport()).toBe(false);
+  });
 
   it('resolves false when posting to a stale controller throws', async () => {
     platform.hasServiceWorker.mockReturnValue(true);
