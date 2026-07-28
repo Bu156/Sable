@@ -284,9 +284,36 @@ describe('useMenuAnchor', () => {
         result.current.triggerProps.onTouchEnd();
       });
 
-      // The timer must re-anchor, never toggle the menu the contextmenu opened.
       expect(result.current.anchor).not.toBeUndefined();
-      expect(result.current.anchor!.x).toBe(50);
+      expect(result.current.anchor!.x).toBe(120);
+    });
+
+    it('cancels a pending custom long press when its contextmenu path consumes the event', () => {
+      const onLongPress = vi.fn<() => void>();
+      const { result } = renderHook(() => useMenuAnchor({ onLongPress }));
+      const element = createMockElement();
+
+      act(() => {
+        result.current.triggerProps.onTouchStart({
+          currentTarget: element,
+          touches: [{ clientX: 50, clientY: 100 } as Touch],
+          changedTouches: [{ clientX: 50, clientY: 100 } as Touch],
+          preventDefault: vi.fn<() => void>(),
+          nativeEvent: new TouchEvent('touchstart'),
+        } as unknown as React.TouchEvent<HTMLElement>);
+      });
+
+      let longPressFired: boolean | undefined;
+      act(() => {
+        longPressFired = result.current.consumeLongPressFired();
+      });
+      expect(longPressFired).toBe(false);
+
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+
+      expect(onLongPress).not.toHaveBeenCalled();
     });
   });
 

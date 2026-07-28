@@ -67,6 +67,7 @@ export function useMenuAnchor<T extends HTMLElement = HTMLElement>(
   });
 
   const consumeLongPressFired = useCallback(() => {
+    longPress.onTouchCancel();
     if (!longPress.firedRef.current) return false;
     longPress.firedRef.current = false;
     return true;
@@ -88,6 +89,7 @@ export function useMenuAnchor<T extends HTMLElement = HTMLElement>(
   const onContextMenu: MouseEventHandler<T> = useCallback(
     (evt) => {
       evt.preventDefault();
+      longPress.onTouchCancel();
       // The long-press timer already opened it; a synthetic contextmenu would toggle it shut.
       if (longPress.firedRef.current) {
         longPress.firedRef.current = false;
