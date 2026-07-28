@@ -129,7 +129,7 @@ describe('SlidingSyncManager initial request', () => {
       required_state: [[EventType.RoomMember, '$ME']],
       filters: { is_invite: false },
     });
-    expect(defaultSubscription.timeline_limit).toBe(30);
+    expect(defaultSubscription.timeline_limit).toBe(50);
     expect(defaultSubscription.required_state).toContainEqual([EventType.RoomMember, '$LAZY']);
     expect(defaultSubscription.required_state).not.toContainEqual([EventType.RoomMember, '*']);
     expect(mocks.slidingSyncConstructorArgs?.[4]).toBe(45000);
@@ -588,6 +588,24 @@ describe('SlidingSyncManager room subscription coordination', () => {
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenLastCalledWith(
       new Set([roomId])
     );
+  });
+
+  it('registers a 50-event active room subscription and a single-event sidebar subscription', () => {
+    makeManager(makeMockMx());
+
+    const calls = mocks.slidingSyncInstance.addCustomSubscription.mock.calls as unknown as [
+      string,
+      { timeline_limit: number; required_state: [string, string][] },
+    ][];
+    const activeRoom = calls.find(([name]) => name === 'active_room');
+    const sidebarRoom = calls.find(([name]) => name === 'sidebar_room');
+
+    expect(activeRoom).toBeDefined();
+    expect(activeRoom![1].timeline_limit).toBe(50);
+    expect(activeRoom![1].required_state).toContainEqual([EventType.RoomMember, '$LAZY']);
+
+    expect(sidebarRoom).toBeDefined();
+    expect(sidebarRoom![1].timeline_limit).toBe(1);
   });
 
   it('registers the composite space+image-pack subscription', () => {
