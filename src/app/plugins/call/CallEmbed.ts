@@ -1,5 +1,6 @@
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
 import { ClientEvent, KnownMembership, MatrixEventEvent, RoomStateEvent } from '$types/matrix-sdk';
+import { invoke } from '@tauri-apps/api/core';
 import type { IRoomEvent, IWidget, WidgetDriver } from 'matrix-widget-api';
 import {
   ClientWidgetApi,
@@ -10,7 +11,7 @@ import {
 } from 'matrix-widget-api';
 import { CallWidgetDriver } from './CallWidgetDriver';
 import { trimTrailingSlash } from '../../utils/common';
-import { getWindowOrigin } from '../../utils/platform';
+import { getWindowOrigin, isAndroidTauri } from '../../utils/platform';
 import type { ElementCallThemeKind, ElementMediaStateDetail } from './types';
 import { color, config } from 'folds';
 import { ElementCallIntent, ElementWidgetActions } from './types';
@@ -355,6 +356,7 @@ export class CallEmbed {
    */
   public dispose(): void {
     debugLog.info('call', 'Disposing call widget', { roomId: this.roomId });
+    this.invokeForegroundService('stop_call_foreground_service');
     this.disposables.forEach((disposable) => {
       disposable();
     });
@@ -373,8 +375,16 @@ export class CallEmbed {
     this.call.transport.reply(evt.detail as IWidgetApiRequest, {});
     debugLog.info('call', 'Call joined', { roomId: this.roomId });
     this.joined = true;
+    this.invokeForegroundService('start_call_foreground_service');
     this.applyStyles();
     this.control.startObserving();
+  }
+
+  private invokeForegroundService(
+    command: 'start_call_foreground_service' | 'stop_call_foreground_service'
+  ): void {
+    if (!isAndroidTauri()) return;
+    void invoke(command).catch(() => {});
   }
 
   private applyStyles(): void {

@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import java.io.File
@@ -206,6 +207,25 @@ class MainActivity : TauriActivity() {
           mp.release()
           android.util.Log.w("NotificationSound", "play failed: ${e.message}")
         }
+      }
+    }
+
+    @JvmStatic
+    fun startCallForegroundServiceNative() {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        ContextCompat.startForegroundService(
+          activity,
+          Intent(activity, CallForegroundService::class.java)
+        )
+      }
+    }
+
+    @JvmStatic
+    fun stopCallForegroundServiceNative() {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        activity.stopService(Intent(activity, CallForegroundService::class.java))
       }
     }
   }
