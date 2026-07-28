@@ -28,6 +28,15 @@ const SW_SETTINGS_URL = '/sw-settings-meta';
 const SW_SESSION_CACHE = 'sable-sw-session-v1';
 const SW_SESSION_URL = '/sw-session-meta';
 
+/**
+ * Version of the media-auth interception protocol this service worker supports.
+ * The page probes for it before handing raw authenticated-media URLs to
+ * <img>/<video> elements; a stale SW build without this handler never answers
+ * and the page falls back to token-attached blob fetches instead.
+ * Keep in sync with src/app/utils/swMediaAuth.ts.
+ */
+const SW_MEDIA_AUTH_PROTOCOL_VERSION = 1;
+
 async function persistSettings() {
   try {
     const cache = await self.caches.open(SW_SETTINGS_CACHE);
@@ -571,6 +580,15 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (type === 'setSession') {
     setSession(client.id, accessToken, baseUrl, userId);
     event.waitUntil(cleanupDeadClients());
+  }
+  if (type === 'swMediaAuthProbe') {
+    // Capability handshake: prove this SW intercepts authenticated media so the
+    // page can safely stream raw media URLs through media elements.
+    event.ports?.[0]?.postMessage({
+      type: 'swMediaAuth',
+      supported: true,
+      version: SW_MEDIA_AUTH_PROTOCOL_VERSION,
+    });
   }
   if (type === 'pushDecryptResult') {
     // Resolve a pending decryption request from handleMinimalPushPayload
