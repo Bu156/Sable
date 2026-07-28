@@ -98,8 +98,6 @@ class DebugLoggerService {
     message: string,
     data?: unknown
   ): void {
-    if (!this.enabled && level !== 'error') return;
-
     const entry: LogEntry = {
       timestamp: Date.now(),
       level,
@@ -114,6 +112,8 @@ class DebugLoggerService {
       this.logs.shift(); // Remove oldest entry
     }
     this.logs.push(entry);
+
+    if (!this.enabled && level !== 'error') return;
 
     // Notify listeners
     this.notifyListeners(entry);

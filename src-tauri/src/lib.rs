@@ -2,10 +2,13 @@
 pub mod deep_link_ipc;
 #[cfg(desktop)]
 mod desktop;
+mod diagnostics;
 #[cfg(target_os = "ios")]
 mod ios;
 #[cfg(target_os = "android")]
 mod mobile;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod mobile_diagnostics;
 mod network;
 mod sentry;
 mod share_inbox;
@@ -458,6 +461,8 @@ pub fn run() {
             desktop::download::save_download,
             #[cfg(desktop)]
             desktop::diagnostics::export_diagnostics,
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            mobile_diagnostics::build_diagnostics_archive,
             #[cfg(desktop)]
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]
