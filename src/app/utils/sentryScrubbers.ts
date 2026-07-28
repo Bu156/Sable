@@ -195,7 +195,7 @@ const DIAGNOSTICS_SENSITIVE_VALUE_PATTERN =
   /(["']?(?:authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|access[-_]?token|refresh[-_]?token|id[-_]?token|x[-_]?auth[-_]?token|x[-_]?access[-_]?token|api[-_]?key|client[-_]?secret|password|passwd|secret|credential|token)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi;
 const DIAGNOSTICS_MATRIX_ID_PATTERN = /(?:[@!#$]\S+?:\S+|\$\S+?:\S+)/g;
 const DIAGNOSTICS_ABSOLUTE_PATH_PATTERN =
-  /(?:\/(?:home|Users|tmp|var\/tmp|private\/tmp|var\/folders)\/[^\s<>"']+|[A-Za-z]:[\\\/](?:Users|Temp|Windows[\\/]Temp)[^\s<>"']*)/g;
+  /(?:\/(?:home|Users|tmp|var\/tmp|private\/tmp|var\/folders)\/[^\s<>"']+|[A-Za-z]:[\\/](?:Users|Temp|Windows[\\/]Temp)[^\s<>"']*)/g;
 
 const redactDiagnosticsText = (text: string): string =>
   text
