@@ -412,25 +412,8 @@ pub fn run() {
             #[cfg(desktop)]
             desktop::menu::register_global_shortcuts(app.handle());
 
-            #[cfg(debug_assertions)]
-            {
-                #[cfg(feature = "devtools")]
-                {
-                    let (log_plugin, _level, logger) = tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .split(app.handle())?;
-                    let mut devtools = tauri_plugin_devtools::Builder::default();
-                    devtools.attach_logger(logger);
-                    app.handle().plugin(devtools.init())?;
-                    app.handle().plugin(log_plugin)?;
-                }
-                #[cfg(not(feature = "devtools"))]
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            #[cfg(desktop)]
+            desktop::logging::setup(app.handle())?;
 
             Ok(())
         })
@@ -461,6 +444,8 @@ pub fn run() {
             play_notification_sound,
             #[cfg(desktop)]
             desktop::download::save_download,
+            #[cfg(desktop)]
+            desktop::diagnostics::export_diagnostics,
             #[cfg(desktop)]
             desktop::tray::get_desktop_runtime_state,
             #[cfg(desktop)]
