@@ -585,7 +585,7 @@ export const getReactCustomHtmlParser = (
   roomId: string | undefined,
   params: {
     settingsLinkBaseUrl: string;
-    linkifyOpts: LinkifyOpts;
+    linkifyOpts?: LinkifyOpts;
     highlightRegex?: RegExp;
     handleSpoilerClick?: ReactEventHandler<HTMLElement>;
     handleMentionClick?: ReactEventHandler<HTMLElement>;
@@ -828,6 +828,7 @@ export const getReactCustomHtmlParser = (
             }
           }
 
+          if (!params.linkifyOpts) return <span {...anchorProps}>{renderChildren()}</span>;
           return <a {...anchorProps}>{renderedChildren}</a>;
         }
 
