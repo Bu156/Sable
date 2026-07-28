@@ -37,6 +37,7 @@ import { MatrixClientProvider } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useSyncState } from '$hooks/useSyncState';
 import { useCrossSigningResetDetect } from '$hooks/useCrossSigningResetDetect';
+import { useDeviceDisplayName } from '$hooks/useDeviceDisplayName';
 import { useMatrixEvent } from '$hooks/useMatrixEvent';
 import { stopPropagation } from '$utils/keyboard';
 import { AuthMetadataProvider, getSessionAuthMetadata } from '$hooks/useAuthMetadata';
@@ -351,6 +352,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   useAppVisibility(mx);
   useNetworkRecovery(mx);
   useCrossSigningResetDetect(mx);
+  useDeviceDisplayName(mx);
 
   useEffect(
     () => () => {
