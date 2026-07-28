@@ -96,6 +96,8 @@ export function PerMessageProfileOverview({
             avatarMxcUrl={profile.avatarUrl}
             displayName={profile.name}
             pronouns={profile.pronouns}
+            nameColorLight={profile.nameColorLightTheme}
+            nameColorDark={profile.nameColorDarkTheme}
             onOpenEditor={handleEdit}
           />
         </SequenceCard>

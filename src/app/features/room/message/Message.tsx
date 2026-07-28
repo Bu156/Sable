@@ -131,6 +131,7 @@ export type MessageProps = {
 };
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -367,6 +368,8 @@ function MessageInternal(
   const messageRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => messageRef.current as HTMLDivElement);
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const activeTheme = useActiveTheme();
+  const [renderPersonaColors] = useSetting(settingsAtom, 'renderPersonaColors');
 
   useEffect(() => {
     const element = messageRef.current;
@@ -449,6 +452,14 @@ function MessageInternal(
     if (!pmp) return undefined;
     return convertBeeperFormatToOurPerMessageProfile(pmp);
   }, [pmp]);
+
+  const pmpNameColor = useMemo(() => {
+    if (!renderPersonaColors) return undefined;
+    const pmpNameColorLight = parsedPMPContent?.nameColorLightTheme;
+    const pmpNameColorDark = parsedPMPContent?.nameColorDarkTheme;
+
+    return activeTheme.kind === ThemeKind.Dark ? pmpNameColorDark : pmpNameColorLight;
+  }, [parsedPMPContent, activeTheme, renderPersonaColors]);
 
   /**
    * boolean to indicate wheather we should indicate to the user that it is a pmp
@@ -574,7 +585,7 @@ function MessageInternal(
             <Username
               as="button"
               style={{
-                color: usernameColor,
+                color: pmpNameColor ?? usernameColor,
                 fontFamily: usernameFont,
               }}
               data-user-id={senderId}
@@ -590,7 +601,10 @@ function MessageInternal(
               </Text>
             </Username>
             {showPronouns && (
-              <Pronouns pronouns={mergedPronouns} tagColor={usernameColor ?? 'currentColor'} />
+              <Pronouns
+                pronouns={mergedPronouns}
+                tagColor={pmpNameColor ?? usernameColor ?? 'currentColor'}
+              />
             )}
             {showPmPInfo && (
               <Box>
