@@ -102,16 +102,16 @@ export type PageHeaderVariants = RecipeVariants<typeof PageHeader>;
 export const PageContent = style([
   DefaultReset,
   {
-    paddingTop: config.space.S400,
-    paddingLeft: config.space.S400,
-    paddingBottom: toRem(100),
+    paddingTop: `${config.space.S400} !important`,
+    paddingLeft: `${config.space.S400} !important`,
+    paddingBottom: `${toRem(100)} !important`,
   },
 ]);
 
 export const PageHeroEmpty = style([
   DefaultReset,
   {
-    padding: config.space.S400,
+    padding: `${config.space.S400} !important`,
     borderRadius: config.radii.R400,
     minHeight: toRem(450),
   },
@@ -120,7 +120,7 @@ export const PageHeroEmpty = style([
 export const PageHeroSection = style([
   DefaultReset,
   {
-    padding: '40px 0',
+    padding: '40px 0 !important',
     maxWidth: toRem(466),
     width: '100%',
     margin: 'auto',
@@ -132,7 +132,7 @@ export const PageContentCenter = style([
   {
     maxWidth: toRem(964),
     width: '100%',
-    margin: 'auto',
+    margin: 'auto !important',
   },
 ]);
 

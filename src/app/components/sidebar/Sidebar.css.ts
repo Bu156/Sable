@@ -243,7 +243,7 @@ export const SidebarFolder = recipe({
   base: [
     ContainerColor({ variant: 'Background' }),
     {
-      padding: config.space.S100,
+      padding: `${config.space.S100} !important`,
       width: toRem(42),
       minHeight: toRem(42),
       display: 'flex',
@@ -267,8 +267,8 @@ export const SidebarFolder = recipe({
         borderRadius: config.radii.R400,
       },
       Open: {
-        paddingLeft: 0,
-        paddingRight: 0,
+        paddingLeft: '0 !important',
+        paddingRight: '0 !important',
         flexDirection: 'column',
         alignItems: 'center',
         gap: config.space.S200,
