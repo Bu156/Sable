@@ -192,13 +192,14 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
         .visible(false);
 
     #[cfg(target_os = "macos")]
-    let builder = if desktop_settings.use_custom_title_bar {
+    let builder =
         builder
-            .title("")
-            .title_bar_style(tauri::TitleBarStyle::Transparent)
-    } else {
-        builder.title_bar_style(tauri::TitleBarStyle::Visible)
-    };
+            .hidden_title(true)
+            .title_bar_style(if desktop_settings.use_custom_title_bar {
+                tauri::TitleBarStyle::Overlay
+            } else {
+                tauri::TitleBarStyle::Visible
+            });
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.decorations(!desktop_settings.use_custom_title_bar);
