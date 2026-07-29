@@ -10,7 +10,7 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication.ts';
 import {
   getCurrentlyUsedPerMessageProfileForRoom,
   getAllPerMessageProfiles,
-  type PerMessageProfile,
+  type PerMessageProfileMsc4461,
   setCurrentlyUsedPerMessageProfileIdForRoom,
   getCurrentlyUsedPerMessageProfileForAccount,
   setCurrentlyUsedPerMessageProfileIdForAccount,
@@ -58,9 +58,9 @@ type PersonaPickerProps = {
   roomId?: string;
   suppressEditorRefocus?: () => void;
   onTabChange?: (tab: PersonaPickerTab) => void;
-  latchedPersona?: PerMessageProfile;
+  latchedPersona?: PerMessageProfileMsc4461;
   hideTabs?: boolean;
-  onPersonaSelect?: (persona: PerMessageProfile | undefined) => void;
+  onPersonaSelect?: (persona: PerMessageProfileMsc4461 | undefined) => void;
   requestClose?: () => void;
   showNoneOption?: boolean;
   hideButton?: boolean;
@@ -126,22 +126,26 @@ function PersonaPicker({
   onTabChange,
 }: PersonaPickerProps & { presentation: PersonaPickerPresentation }) {
   const useAuthentication = useMediaAuthentication();
-
   const persistent = presentation === PersonaPickerPresentation.PersistentPicker;
-
   const [tab, setTab] = useState(tabProp);
   const [AddPersonaMenuAnchor, setAddPersonaMenuAnchor] = useState<RectCords | undefined>(anchor);
-  const [profiles, setProfiles] = useState<PerMessageProfile[] | undefined>(undefined);
-  const [selectedGlobalPersona, setSelectedGlobalPersona] = useState<PerMessageProfile | null>(
-    null
-  );
-  const [selectedRoomPersona, setSelectedRoomPersona] = useState<PerMessageProfile | null>(
+  const activeTheme = useActiveTheme();
+  const [profiles, setProfiles] = useState<PerMessageProfileMsc4461[] | undefined>(undefined);
+  const [selectedGlobalPersona, setSelectedGlobalPersona] =
+    useState<PerMessageProfileMsc4461 | null>(null);
+  const [selectedRoomPersona, setSelectedRoomPersona] = useState<PerMessageProfileMsc4461 | null>(
     latchedPersona ?? null
   );
 
-  const defactoPersona = () => selectedRoomPersona ?? selectedGlobalPersona;
+  const nameColor = useCallback(
+    (persona: PerMessageProfileMsc4461) =>
+      activeTheme.kind === ThemeKind.Dark
+        ? persona['eu.she-a.color']?.on_dark
+        : persona['eu.she-a.color']?.on_light,
+    [activeTheme]
+  );
 
-  const activeTheme = useActiveTheme();
+  const defactoPersona = () => selectedRoomPersona ?? selectedGlobalPersona;
 
   useEffect(() => {
     const syncProfile = async () => {
@@ -172,7 +176,7 @@ function PersonaPicker({
       const filtered = term
         ? profiles?.filter((profile) =>
             searchInputRef.current
-              ? profile.name.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
+              ? profile.displayname.toLocaleLowerCase().includes(searchInputRef.current?.value) ||
                 profile.id.toLocaleLowerCase().includes(searchInputRef.current?.value)
               : true
           )
@@ -182,13 +186,8 @@ function PersonaPicker({
     },
     [profiles]
   );
-  const nameColor = useCallback(
-    (persona: PerMessageProfile) =>
-      activeTheme.kind === ThemeKind.Dark ? persona.colors?.on_dark : persona.colors?.on_light,
-    [activeTheme]
-  );
 
-  const isSelected = (persona: PerMessageProfile | undefined) => {
+  const isSelected = (persona: PerMessageProfileMsc4461 | undefined) => {
     if (!persona) return undefined;
     const selected = tab === PersonaPickerTab.Global ? selectedGlobalPersona : selectedRoomPersona;
     return persona.id === selected?.id ? true : undefined;
@@ -201,9 +200,9 @@ function PersonaPicker({
   }, [mx]);
 
   const avatarUrl = useCallback(
-    (profile: PerMessageProfile) => {
-      if (profile.avatarUrl !== undefined) {
-        return mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined;
+    (profile: PerMessageProfileMsc4461) => {
+      if (profile.avatar_url !== undefined) {
+        return mxcUrlToHttp(mx, profile.avatar_url, useAuthentication, 96, 96, 'crop') ?? undefined;
       } else {
         return undefined;
       }
@@ -212,7 +211,7 @@ function PersonaPicker({
   );
 
   const handleSelect = useCallback(
-    async (profile: PerMessageProfile | undefined) => {
+    async (profile: PerMessageProfileMsc4461 | undefined) => {
       if (onPersonaSelect) {
         onPersonaSelect(profile);
         return;
@@ -320,10 +319,10 @@ function PersonaPicker({
                         <UserAvatar
                           userId={profile.id}
                           src={avatarUrl(profile)}
-                          fallbackColor={profile.colors?.on_light ?? undefined}
+                          fallbackColor={profile['eu.she-a.color']?.on_light ?? undefined}
                           renderFallback={() => (
                             <Text as="span" size="H4" aria-label="Avatar fallback">
-                              {nameInitials(profile.name)}
+                              {nameInitials(profile.displayname)}
                             </Text>
                           )}
                           alt={`Avatar for profile ${profile.id}`}
@@ -335,7 +334,7 @@ function PersonaPicker({
                       truncate
                       style={{ color: nameColor(profile) ?? undefined, maxWidth: toRem(150) }}
                     >
-                      {profile.name}
+                      {profile.displayname}
                     </Text>
                   </MenuItem>
                 ))}
@@ -422,7 +421,7 @@ function PersonaPicker({
                 src={avatarUrl(defactoPersona()!)}
                 renderFallback={() => (
                   <Text as="span" size="H6" aria-label="Avatar fallback">
-                    {nameInitials(defactoPersona()!.name)}
+                    {nameInitials(defactoPersona()!.displayname)}
                   </Text>
                 )}
                 alt={`Avatar for profile ${defactoPersona()!.id}`}
