@@ -117,7 +117,6 @@ export function SettingsShell<Id extends string>({
                     key={id}
                     variant="Background"
                     radii="400"
-                    style={{ padding: `0 ${config.space.S400}` }}
                     aria-pressed={isActive}
                     before={settingsNavIcon(IconComponent, isActive)}
                     onClick={() => onSelect(id)}

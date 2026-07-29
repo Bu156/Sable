@@ -37,8 +37,8 @@ export const PageNavBox = style({
 
 export const PageNavHeader = recipe({
   base: {
-    paddingRight: `${config.space.S200} !important`,
-    paddingLeft: `${config.space.S300} !important`,
+    paddingRight: config.space.S200,
+    paddingLeft: config.space.S300,
     flexShrink: 0,
     selectors: {
       'button&': {
@@ -102,16 +102,16 @@ export type PageHeaderVariants = RecipeVariants<typeof PageHeader>;
 export const PageContent = style([
   DefaultReset,
   {
-    paddingTop: `${config.space.S400} !important`,
-    paddingLeft: `${config.space.S400} !important`,
-    paddingBottom: `${toRem(100)} !important`,
+    paddingTop: config.space.S400,
+    paddingLeft: config.space.S400,
+    paddingBottom: toRem(100),
   },
 ]);
 
 export const PageHeroEmpty = style([
   DefaultReset,
   {
-    padding: `${config.space.S400} !important`,
+    padding: config.space.S400,
     borderRadius: config.radii.R400,
     minHeight: toRem(450),
   },
@@ -120,7 +120,7 @@ export const PageHeroEmpty = style([
 export const PageHeroSection = style([
   DefaultReset,
   {
-    padding: '40px 0 !important',
+    padding: '40px 0',
     maxWidth: toRem(466),
     width: '100%',
     margin: 'auto',
@@ -132,7 +132,7 @@ export const PageContentCenter = style([
   {
     maxWidth: toRem(964),
     width: '100%',
-    margin: 'auto !important',
+    margin: 'auto',
   },
 ]);
 

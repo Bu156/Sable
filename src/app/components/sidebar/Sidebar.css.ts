@@ -26,8 +26,8 @@ export const SidebarStack = style([
     justifyContent: 'center',
     alignItems: 'center',
     gap: config.space.S300,
-    padding: `${config.space.S300} 0 !important`,
-    paddingBottom: `${config.space.S200} !important`,
+    padding: `${config.space.S300} 0`,
+    paddingBottom: config.space.S200,
   },
 ]);
 
@@ -229,7 +229,7 @@ export const SidebarAvatar = recipe({
     },
     outlined: {
       true: {
-        border: `${config.borderWidth.B300} solid ${color.Background.ContainerLine} !important`,
+        border: `${config.borderWidth.B300} solid ${color.Background.ContainerLine}`,
       },
     },
   },
@@ -243,7 +243,7 @@ export const SidebarFolder = recipe({
   base: [
     ContainerColor({ variant: 'Background' }),
     {
-      padding: `${config.space.S100} !important`,
+      padding: config.space.S100,
       width: toRem(42),
       minHeight: toRem(42),
       display: 'flex',
@@ -267,8 +267,8 @@ export const SidebarFolder = recipe({
         borderRadius: config.radii.R400,
       },
       Open: {
-        paddingLeft: '0 !important',
-        paddingRight: '0 !important',
+        paddingLeft: 0,
+        paddingRight: 0,
         flexDirection: 'column',
         alignItems: 'center',
         gap: config.space.S200,

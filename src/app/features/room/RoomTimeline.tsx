@@ -1184,7 +1184,7 @@ export function RoomTimeline({
   }, [room.roomId, timelineSync.eventsLength, timelineSync.backwardStatus]);
 
   return (
-    <Box grow="Yes" style={{ position: 'relative', minWidth: 0 }}>
+    <Box grow="Yes" style={{ position: 'relative', minWidth: 0, minHeight: 0, width: '100%' }}>
       {(hideTimelineForRoomState || (roomSyncLoading && timelineSync.eventsLength === 0)) && (
         <Box
           justifyContent="Center"
@@ -1222,6 +1222,7 @@ export function RoomTimeline({
         style={{
           flex: 1,
           minHeight: 0,
+          width: '100%',
           overflow: 'hidden',
           position: 'relative',
           opacity: !hideTimelineForRoomState && (isReady || showLoadingPlaceholders) ? 1 : 0,
@@ -1236,6 +1237,7 @@ export function RoomTimeline({
             style={{
               flex: 1,
               minHeight: 0,
+              width: '100%',
               display: 'flex',
               flexDirection: 'column',
               paddingTop: topSpacerHeight > 0 ? topSpacerHeight : config.space.S600,
