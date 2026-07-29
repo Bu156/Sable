@@ -1,7 +1,7 @@
 @import '@sableclient/twemoji-font';
 @import 'folds/dist/style.css' layer(folds);
 
-@layer folds, sable-reset;
+@layer sable-reset, folds;
 
 @layer sable-reset {
   :root {
