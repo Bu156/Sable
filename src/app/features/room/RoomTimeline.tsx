@@ -794,6 +794,21 @@ export function RoomTimeline({
     const el = messageListRef.current;
     if (!el) return () => {};
 
+    // Async content (e.g. link previews) grows the VList content element
+    // without re-render, so observe it alongside the viewport wrapper.
+    const contentEl = scrollElRef.current?.firstElementChild;
+    let contentObserver: ResizeObserver | undefined;
+    if (contentEl) {
+      contentObserver = new ResizeObserver(() => {
+        if (atBottomRef.current && liveTimelineLinkedRef.current) {
+          if (processedEventsRef.current.length > 0) scrollToBottom();
+        } else {
+          syncAtBottom();
+        }
+      });
+      contentObserver.observe(contentEl);
+    }
+
     const observer = new ResizeObserver((entries) => {
       const newHeight = entries[0]!.contentRect.height;
       const prev = prevViewportHeightRef.current;
@@ -811,7 +826,10 @@ export function RoomTimeline({
     });
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      contentObserver?.disconnect();
+    };
   }, [syncAtBottom, scrollToBottom]);
 
   // Decrypting rows and late-loading images grow without changing eventsLength,
