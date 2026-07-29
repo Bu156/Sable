@@ -78,6 +78,25 @@ function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
   return new SlidingSyncManager(mx, 'https://sliding.example.com');
 }
 
+function makeRoomWithTimeline(
+  eventCount: number,
+  statuses: Array<string | null> = [],
+  backwardPaginationToken: string | null = 'back-token'
+) {
+  const events = Array.from({ length: eventCount }, (_, i) => ({
+    status: statuses[i] ?? null,
+  }));
+  return {
+    getLiveTimeline: vi.fn<
+      () => { getEvents: () => typeof events; getPaginationToken: () => string | null }
+    >(() => ({
+      getEvents: () => events,
+      getPaginationToken: () => backwardPaginationToken,
+    })),
+    resetLiveTimeline: vi.fn<() => void>(),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -984,25 +1003,6 @@ describe('SlidingSyncManager local membership reconciliation', () => {
 });
 
 describe('SlidingSyncManager timeline pruning on room deactivation', () => {
-  function makeRoomWithTimeline(
-    eventCount: number,
-    statuses: Array<string | null> = [],
-    backwardPaginationToken: string | null = 'back-token'
-  ) {
-    const events = Array.from({ length: eventCount }, (_, i) => ({
-      status: statuses[i] ?? null,
-    }));
-    return {
-      getLiveTimeline: vi.fn<
-        () => { getEvents: () => typeof events; getPaginationToken: () => string | null }
-      >(() => ({
-        getEvents: () => events,
-        getPaginationToken: () => backwardPaginationToken,
-      })),
-      resetLiveTimeline: vi.fn<() => void>(),
-    };
-  }
-
   it('prunes the live timeline when it exceeds the threshold, preserving the backward pagination token', () => {
     const roomId = '!over:example.com';
     const room = makeRoomWithTimeline(151);
