@@ -1,25 +1,57 @@
 package moe.sable.client
 
-import android.app.Notification
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 class CallForegroundService : Service() {
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    createNotificationChannel()
-    startForeground(NOTIFICATION_ID, buildNotification())
+  override fun onBind(intent: android.content.Intent?): IBinder? = null
+
+  override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      Log.w(TAG, "Microphone permission is not granted; stopping foreground service")
+      stopSelf(startId)
+      return START_NOT_STICKY
+    }
+
+    try {
+      createNotificationChannel()
+      ServiceCompat.startForeground(
+        this,
+        NOTIFICATION_ID,
+        NotificationCompat.Builder(this, CHANNEL_ID)
+          .setSmallIcon(R.mipmap.ic_launcher)
+          .setContentTitle("Call in progress")
+          .setContentText("Sable is using your microphone")
+          .setCategory(NotificationCompat.CATEGORY_CALL)
+          .setOngoing(true)
+          .setOnlyAlertOnce(true)
+          .build(),
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+          0
+        }
+      )
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to start microphone foreground service", error)
+      stopSelf(startId)
+      return START_NOT_STICKY
+    }
+
     return START_NOT_STICKY
   }
 
-  override fun onBind(intent: Intent?): IBinder? = null
-
   override fun onDestroy() {
-    stopForeground(true)
+    stopForeground(STOP_FOREGROUND_REMOVE)
     super.onDestroy()
   }
 
@@ -34,19 +66,9 @@ class CallForegroundService : Service() {
     getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
   }
 
-  private fun buildNotification(): Notification {
-    return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setSmallIcon(R.mipmap.ic_notification)
-      .setContentTitle("Call in progress")
-      .setContentText("Sable is keeping your call active")
-      .setCategory(Notification.CATEGORY_CALL)
-      .setOngoing(true)
-      .setOnlyAlertOnce(true)
-      .build()
-  }
-
-  companion object {
-    private const val CHANNEL_ID = "call_foreground"
-    private const val NOTIFICATION_ID = 1395
+  private companion object {
+    const val CHANNEL_ID = "call_foreground"
+    const val NOTIFICATION_ID = 1395
+    const val TAG = "CallForegroundService"
   }
 }

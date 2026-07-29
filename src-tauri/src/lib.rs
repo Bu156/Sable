@@ -447,6 +447,10 @@ pub fn run() {
             ios::haptic_feedback,
             #[cfg(any(target_os = "android", target_os = "ios"))]
             play_notification_sound,
+            #[cfg(target_os = "ios")]
+            ios::activate_call_audio_session,
+            #[cfg(target_os = "ios")]
+            ios::deactivate_call_audio_session,
             #[cfg(desktop)]
             desktop::download::save_download,
             #[cfg(desktop)]

@@ -129,6 +129,10 @@ tauri-plugin-sharekit = { git = "https://github.com/Choochmeque/tauri-plugin-sha
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSFileManager", "NSString", "NSURL"] }
 tauri-plugin-fs = "2"
+objc2-avf-audio = { version = "0.3", default-features = false, features = [
+  "AVAudioSession",
+  "AVAudioSessionTypes",
+] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-android-fs = { version = "=28.4.0", features = ["legacy-storage-permission"] }

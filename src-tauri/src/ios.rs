@@ -9,6 +9,9 @@ use std::sync::OnceLock;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
 use objc2::{msg_send, sel};
+use objc2_avf_audio::{
+    AVAudioSession, AVAudioSessionCategoryOptions, AVAudioSessionCategoryPlayAndRecord,
+};
 use tauri::webview::WebviewWindow;
 
 extern "C-unwind" fn input_accessory_view_nil(_this: &AnyObject, _cmd: Sel) -> *mut AnyObject {
@@ -54,6 +57,25 @@ pub fn haptic_feedback(style: String) {
             let _: () = msg_send![&*generator, impactOccurred];
         }
     }
+}
+
+#[tauri::command]
+pub fn activate_call_audio_session() -> Result<(), String> {
+    let session = unsafe { AVAudioSession::sharedInstance() };
+    unsafe {
+        session.setCategory_withOptions_error(
+            AVAudioSessionCategoryPlayAndRecord.expect("PlayAndRecord category is unavailable"),
+            AVAudioSessionCategoryOptions::DefaultToSpeaker,
+        )
+    }
+    .map_err(|error| error.to_string())?;
+    unsafe { session.setActive_error(true) }.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn deactivate_call_audio_session() -> Result<(), String> {
+    let session = unsafe { AVAudioSession::sharedInstance() };
+    unsafe { session.setActive_error(false) }.map_err(|error| error.to_string())
 }
 
 pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {

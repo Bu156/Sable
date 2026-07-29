@@ -92,6 +92,9 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: Sable uses your microphone for calls.
+        NSCameraUsageDescription: Sable uses your camera for video calls.
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
