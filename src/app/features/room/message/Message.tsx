@@ -986,7 +986,14 @@ function MessageInternal(
           WebkitTapHighlightColor: 'transparent',
         }}
         onContextMenu={contextMenuHandler}
-        onTouchStart={menu.triggerProps.onTouchStart}
+        onTouchStart={(evt) => {
+          const target = evt.target instanceof Element ? evt.target : undefined;
+          if (target?.closest('[data-gestures="ignore"]')) {
+            menu.triggerProps.onTouchCancel();
+            return;
+          }
+          menu.triggerProps.onTouchStart(evt);
+        }}
         onTouchEnd={menu.triggerProps.onTouchEnd}
         onTouchMove={menu.triggerProps.onTouchMove}
         onTouchCancel={menu.triggerProps.onTouchCancel}
