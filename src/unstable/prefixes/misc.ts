@@ -19,3 +19,5 @@ export const MATRIX_ELEMENT_UNSTABLE_STATE_ROOM_WIDGET_PROPERTY_NAME = 'im.vecto
 
 export const MATRIX_UNSTABLE_STATE_ROOM_BANNER_PROPERTY_NAME =
   'page.codeberg.everypizza.room.banner';
+
+export const MATRIX_UNSTABLE_ROLE_COLOR = 'eu.she-a.powerlevels_style';

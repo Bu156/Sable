@@ -25,6 +25,11 @@ const inFlightProfiles = new WeakMap<MatrixClient, Map<string, Promise<Record<st
 const activeProfileRequests = new WeakMap<MatrixClient, number>();
 const profileRequestQueues = new WeakMap<MatrixClient, Array<() => void>>();
 
+export type ColorSet = {
+  on_light?: string;
+  on_dark?: string;
+};
+
 const scheduleProfileRequest = (
   mx: MatrixClient,
   task: () => Promise<Record<string, unknown>>
@@ -66,6 +71,7 @@ export type UserProfile = {
   nameColor?: string;
   nameColorDark?: string;
   nameColorLight?: string;
+  nameColors?: ColorSet;
   heroColorScheme?: Record<string, string>;
   isCat?: boolean;
   hasCats?: boolean;
@@ -92,6 +98,7 @@ const normalizeInfo = (info: Record<string, unknown>): UserProfile => {
     prefix.MATRIX_UNSTABLE_PROFILE_BIOGRAPHY_PROPERTY_NAME,
     prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
     prefix.MATRIX_COMMET_UNSTABLE_PROFILE_STATUS_PROPERTY_NAME,
+    prefix.MATRIX_UNSTABLE_COLORS,
     prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME,
     prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_LIGHT_PROPERTY_NAME,
     prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_DARK_PROPERTY_NAME,
@@ -131,6 +138,7 @@ const normalizeInfo = (info: Record<string, unknown>): UserProfile => {
     nameColorLight: info[prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_LIGHT_PROPERTY_NAME] as
       | string
       | undefined,
+    nameColors: info[prefix.MATRIX_UNSTABLE_COLORS] as ColorSet | undefined,
     heroColorScheme: info[prefix.MATRIX_COMMET_UNSTABLE_PROFILE_COLOR_SCHEME_PROPERTY_NAME] as
       | Record<string, string>
       | undefined,
@@ -319,9 +327,12 @@ export const useUserProfile = (
       }
     }
 
+    const colorArray = data.nameColors;
+
     const validGlobalVal = isValidHex(data?.nameColor);
-    const validGlobalValDark = isValidHex(data?.nameColorDark);
-    const validGlobalValLight = isValidHex(data?.nameColorLight);
+    const validGlobalValDark = isValidHex(colorArray?.on_dark) ?? isValidHex(data?.nameColorDark);
+    const validGlobalValLight =
+      isValidHex(colorArray?.on_light) ?? isValidHex(data?.nameColorLight);
 
     const validGlobalGeneral =
       (renderGlobalColors || userId === mx.getUserId()) && !!validGlobalVal
