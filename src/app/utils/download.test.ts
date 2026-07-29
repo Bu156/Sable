@@ -138,9 +138,9 @@ describe('saveMediaToGallery', () => {
   });
 
   it('rejects video media explicitly without touching any backend or falling back', async () => {
-    await expect(
-      saveMediaToGallery(new Blob(['data']), 'clip.mp4', 'video/mp4')
-    ).rejects.toThrow('Only image media can be saved to the gallery');
+    await expect(saveMediaToGallery(new Blob(['data']), 'clip.mp4', 'video/mp4')).rejects.toThrow(
+      'Only image media can be saved to the gallery'
+    );
 
     expect(androidFs.createNewPublicImageFile).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();

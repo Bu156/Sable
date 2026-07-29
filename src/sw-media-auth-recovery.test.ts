@@ -127,4 +127,32 @@ describe('service worker media auth recovery', () => {
     swTestHooks.setSession(client.id, 'new-token', 'https://matrix.example.org');
     await expect(nextRequest).resolves.toMatchObject({ accessToken: 'new-token' });
   });
+
+  it('does not retry when the refreshed session has the same access token', async () => {
+    const client = {
+      id: 'client-same-token',
+      postMessage: vi.fn(),
+    } as unknown as Client;
+    clients.set(client.id, client);
+    const session = { accessToken: 'same-token', baseUrl: 'https://matrix.example.org' };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ errcode: 'M_UNKNOWN_TOKEN' }), { status: 401 })
+    );
+
+    const request = new Request(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/media-id'
+    );
+    const recovery = swTestHooks.respondWithMediaAuthRecovery(
+      request,
+      session,
+      'follow',
+      client.id
+    );
+
+    await vi.waitFor(() => expect(client.postMessage).toHaveBeenCalledTimes(1));
+    swTestHooks.setSession(client.id, 'same-token', session.baseUrl);
+
+    await expect(recovery).resolves.toHaveProperty('status', 401);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

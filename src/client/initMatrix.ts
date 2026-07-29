@@ -35,7 +35,6 @@ import type { SlidingSyncDiagnostics } from './slidingSync';
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
-import { hydrateRoomMember } from './roomMemberHydration';
 import { clearCachedUserProfiles } from './userProfileCache';
 import {
   primeVersionsFromCache,
@@ -124,13 +123,6 @@ const measureStartupPhase = async <T>(
   }
 };
 
-type FetchRoomEventResult = Awaited<ReturnType<MatrixClient['fetchRoomEvent']>>;
-type MatrixClientWithWritableFetchRoomEvent = MatrixClient & {
-  fetchRoomEvent: (roomId: string, eventId: string) => Promise<FetchRoomEventResult>;
-};
-
-const fetchRoomEventStartupCleanupByClient = new WeakMap<MatrixClient, () => void>();
-
 const slidingSyncRequestCleanupByClient = new WeakMap<MatrixClient, () => void>();
 
 type SlidingSyncMethod = (
@@ -170,49 +162,6 @@ function installSlidingSyncRequestPatch(mx: MatrixClient, manager: SlidingSyncMa
     slidingSyncRequestCleanupByClient.delete(mx);
     mxWritable.slidingSync = original;
   });
-}
-
-function installStartupFetchRoomEventPatch(
-  mx: MatrixClient,
-  slidingSyncManager: SlidingSyncManager
-): void {
-  fetchRoomEventStartupCleanupByClient.get(mx)?.();
-
-  const mxWritable = mx as MatrixClientWithWritableFetchRoomEvent;
-  const origFetchRoomEvent = mx.fetchRoomEvent.bind(mx);
-
-  let restored = false;
-  const restore = () => {
-    if (restored) return;
-    restored = true;
-    fetchRoomEventStartupCleanupByClient.delete(mx);
-    mx.removeListener(ClientEvent.Sync, onSync);
-    mxWritable.fetchRoomEvent = origFetchRoomEvent;
-  };
-
-  const onSync = (state: SyncState) => {
-    if (isInitialSyncReady(state)) restore();
-  };
-
-  mxWritable.fetchRoomEvent = (roomId: string, eventId: string) => {
-    if (slidingSyncManager.isRoomActive(roomId)) {
-      return origFetchRoomEvent(roomId, eventId).then((event) => {
-        if (typeof event.sender === 'string') {
-          void hydrateRoomMember(mx, roomId, event.sender);
-        }
-        return event;
-      });
-    }
-    const cachedEvent = mx.getRoom(roomId)?.findEventById(eventId);
-    const payload: FetchRoomEventResult = cachedEvent?.event ?? {
-      event_id: eventId,
-      room_id: roomId,
-    };
-    return Promise.resolve(payload);
-  };
-
-  fetchRoomEventStartupCleanupByClient.set(mx, restore);
-  mx.on(ClientEvent.Sync, onSync);
 }
 
 const deleteDatabase = (name: string): Promise<void> =>
@@ -493,7 +442,6 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       initialRoomIds: config?.initialRoomIds,
     });
 
-    installStartupFetchRoomEventPatch(mx, manager);
     installSlidingSyncRequestPatch(mx, manager);
 
     manager.attach();
@@ -523,7 +471,6 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       baseUrl: useSliding ? baseUrl : undefined,
       stack: err instanceof Error ? err.stack : undefined,
     });
-    fetchRoomEventStartupCleanupByClient.get(mx)?.();
     slidingSyncRequestCleanupByClient.get(mx)?.();
     membershipActionCleanupByClient.get(mx)?.();
     disposeSlidingSync(mx);
@@ -535,7 +482,6 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
 export const stopClient = (mx: MatrixClient): void => {
   log.log('stopClient', mx.getUserId());
   debugLog.info('sync', 'Stopping client', { userId: mx.getUserId() });
-  fetchRoomEventStartupCleanupByClient.get(mx)?.();
   slidingSyncRequestCleanupByClient.get(mx)?.();
   disposeSlidingSync(mx);
   disposePresenceSync(mx);
