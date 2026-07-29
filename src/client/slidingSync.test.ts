@@ -78,20 +78,11 @@ function makeManager(mx: ReturnType<typeof makeMockMx>): SlidingSyncManager {
   return new SlidingSyncManager(mx, 'https://sliding.example.com');
 }
 
-function makeRoomWithTimeline(
-  eventCount: number,
-  statuses: Array<string | null> = [],
-  backwardPaginationToken: string | null = 'back-token'
-) {
-  const events = Array.from({ length: eventCount }, (_, i) => ({
-    status: statuses[i] ?? null,
-  }));
+function makeRoomWithTimeline(eventCount: number) {
+  const events = Array.from({ length: eventCount }, () => ({ status: null }));
   return {
-    getLiveTimeline: vi.fn<
-      () => { getEvents: () => typeof events; getPaginationToken: () => string | null }
-    >(() => ({
+    getLiveTimeline: vi.fn<() => { getEvents: () => typeof events }>(() => ({
       getEvents: () => events,
-      getPaginationToken: () => backwardPaginationToken,
     })),
     resetLiveTimeline: vi.fn<() => void>(),
   };
@@ -1002,9 +993,9 @@ describe('SlidingSyncManager local membership reconciliation', () => {
   });
 });
 
-describe('SlidingSyncManager timeline pruning on room deactivation', () => {
-  it('prunes the live timeline when it exceeds the threshold, preserving the backward pagination token', () => {
-    const roomId = '!over:example.com';
+describe('SlidingSyncManager room deactivation', () => {
+  it('removes the active subscription without resetting the live timeline', () => {
+    const roomId = '!room:example.com';
     const room = makeRoomWithTimeline(151);
     const manager = makeManager(
       makeMockMx({
@@ -1013,89 +1004,13 @@ describe('SlidingSyncManager timeline pruning on room deactivation', () => {
     );
 
     manager.subscribeToRoom(roomId);
+    mocks.slidingSyncInstance.modifyRoomSubscriptions.mockClear();
     manager.unsubscribeFromRoom(roomId);
 
-    expect(room.resetLiveTimeline).toHaveBeenCalledOnce();
-    expect(room.resetLiveTimeline).toHaveBeenCalledWith('back-token');
-  });
-
-  it('keeps the live timeline at the threshold exactly', () => {
-    const roomId = '!at:example.com';
-    const room = makeRoomWithTimeline(150);
-    const manager = makeManager(
-      makeMockMx({
-        getRoom: vi.fn<() => typeof room>().mockReturnValue(room),
-      })
-    );
-
-    manager.subscribeToRoom(roomId);
-    manager.unsubscribeFromRoom(roomId);
-
+    expect(manager.isRoomActive(roomId)).toBe(false);
+    expect(manager.getActiveRoomSubscriptionIds()).toEqual([]);
+    expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).toHaveBeenCalledWith(new Set());
     expect(room.resetLiveTimeline).not.toHaveBeenCalled();
-  });
-
-  it('never prunes while a local echo is pending send', () => {
-    const roomId = '!pending:example.com';
-    const statuses = Array<string | null>(151).fill(null);
-    statuses[100] = 'sending';
-    const room = makeRoomWithTimeline(151, statuses);
-    const manager = makeManager(
-      makeMockMx({
-        getRoom: vi.fn<() => typeof room>().mockReturnValue(room),
-      })
-    );
-
-    manager.subscribeToRoom(roomId);
-    manager.unsubscribeFromRoom(roomId);
-
-    expect(room.resetLiveTimeline).not.toHaveBeenCalled();
-  });
-
-  it('prunes the room left behind on a route switch', () => {
-    const oldRoomId = '!old-route:example.com';
-    const newRoomId = '!new-route:example.com';
-    const oldRoom = makeRoomWithTimeline(200);
-    const newRoom = makeRoomWithTimeline(200);
-    const manager = makeManager(
-      makeMockMx({
-        getRoom: vi
-          .fn<(id: string) => typeof oldRoom | null>()
-          .mockImplementation((id) =>
-            id === oldRoomId ? oldRoom : id === newRoomId ? newRoom : null
-          ),
-      })
-    );
-
-    manager.setActiveRoomSubscriptions([oldRoomId]);
-    manager.setActiveRoomSubscriptions([newRoomId]);
-
-    expect(oldRoom.resetLiveTimeline).toHaveBeenCalledOnce();
-    expect(newRoom.resetLiveTimeline).not.toHaveBeenCalled();
-  });
-
-  it('does not prune a room that is still active after a route change', () => {
-    const roomId = '!still-active:example.com';
-    const room = makeRoomWithTimeline(200);
-    const manager = makeManager(
-      makeMockMx({
-        getRoom: vi.fn<() => typeof room>().mockReturnValue(room),
-      })
-    );
-
-    manager.setActiveRoomSubscriptions([roomId]);
-    manager.setActiveRoomSubscriptions([roomId]);
-
-    expect(manager.isRoomActive(roomId)).toBe(true);
-    expect(room.resetLiveTimeline).not.toHaveBeenCalled();
-  });
-
-  it('skips pruning when the room is unknown', () => {
-    const manager = makeManager(makeMockMx());
-
-    manager.subscribeToRoom('!unknown:example.com');
-
-    expect(() => manager.unsubscribeFromRoom('!unknown:example.com')).not.toThrow();
-    expect(manager.isRoomActive('!unknown:example.com')).toBe(false);
   });
 });
 
