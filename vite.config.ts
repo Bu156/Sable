@@ -91,6 +91,7 @@ const copyFiles = {
     {
       src: 'public/manifest.json',
       dest: '',
+      rename: { name: 'manifest.json', stripBase: true as const },
     },
     {
       src: 'public/res/logo-maskable',

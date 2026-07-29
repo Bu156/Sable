@@ -147,6 +147,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
 
   const routes = createRoutesFromElements(
     <Route
+      HydrateFallback={() => <SplashScreen>{null}</SplashScreen>}
       element={
         <>
           <TauriDeepLinkBridge />

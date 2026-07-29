@@ -114,7 +114,7 @@ export function Room() {
   return (
     <PowerLevelsContextProvider value={powerLevels}>
       <RoomAbbreviationsContext.Provider value={abbreviations}>
-        <Box grow="Yes" style={{ position: 'relative' }}>
+        <Box grow="Yes" style={{ position: 'relative', minWidth: 0 }}>
           {callView && (screenSize === ScreenSize.Desktop || !chat) && (
             <Page>
               <RoomViewHeader callView />
