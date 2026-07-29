@@ -22,7 +22,7 @@ import {
   createUnifiedPushMessageListener,
   parseUnifiedPushMessage,
 } from './UnifiedPushMessageListener';
-import { addPluginListener } from '@tauri-apps/api/core';
+import { addPluginListener, invoke } from '@tauri-apps/api/core';
 import type { PushTransportConfig } from './NotificationTransport';
 import { getTauriNotificationsApi, isMobileTauri } from './TauriNotificationsApiClient';
 import {
@@ -1107,7 +1107,9 @@ async function handleUnifiedPushPayload(
   }
 }
 
-export function listenForUnifiedPushMessages(getSettings: () => NotificationSettings) {
+const SET_PUSH_MESSAGE_LISTENER_ACTIVE = 'plugin:notifications|set_push_message_listener_active';
+
+export async function listenForUnifiedPushMessages(getSettings: () => NotificationSettings) {
   const dispatch = createUnifiedPushMessageListener(
     (notification) => handleUnifiedPushPayload(notification, getSettings),
     (error) => {
@@ -1119,8 +1121,25 @@ export function listenForUnifiedPushMessages(getSettings: () => NotificationSett
     }
   );
 
-  return addPluginListener('notifications', 'push-message', (data: unknown) => {
+  const listener = await addPluginListener('notifications', 'push-message', (data: unknown) => {
     const notification = parseUnifiedPushMessage(data);
     if (notification) dispatch(notification);
   });
+
+  try {
+    await invoke(SET_PUSH_MESSAGE_LISTENER_ACTIVE, { active: true });
+  } catch (error) {
+    await listener.unregister().catch(() => {});
+    throw error;
+  }
+
+  return {
+    unregister: async () => {
+      try {
+        await invoke(SET_PUSH_MESSAGE_LISTENER_ACTIVE, { active: false });
+      } finally {
+        await listener.unregister();
+      }
+    },
+  };
 }

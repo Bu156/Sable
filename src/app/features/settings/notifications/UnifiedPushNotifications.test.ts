@@ -47,8 +47,18 @@ const matrixClient = vi.hoisted(() => ({
   fetchRoomEvent: vi.fn<() => Promise<unknown>>(),
 }));
 
+const invoke = vi.hoisted(() =>
+  vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>()
+);
+
 const addPluginListener = vi.hoisted(() =>
-  vi.fn<(plugin: string, event: string, handler: PluginListenerHandler) => Promise<() => void>>()
+  vi.fn<
+    (
+      plugin: string,
+      event: string,
+      handler: PluginListenerHandler
+    ) => Promise<{ unregister: () => Promise<void> }>
+  >()
 );
 
 vi.mock('./UnifiedPushTransport', () => unifiedPushTransport);
@@ -60,6 +70,7 @@ vi.mock('./TauriNotificationsApiClient', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   addPluginListener,
+  invoke,
 }));
 
 vi.mock('$utils/fetch', () => ({
@@ -102,10 +113,11 @@ describe('UnifiedPushNotifications', () => {
     matrixClient.getPushers.mockResolvedValue({ pushers: [] });
     matrixClient.getCrypto.mockReturnValue(undefined);
     matrixClient.getRoom.mockReturnValue(undefined);
+    invoke.mockResolvedValue(undefined);
     addPluginListener.mockImplementation(
       async (_plugin: string, _event: string, handler: (data: unknown) => void) => {
         pushHandler = handler;
-        return vi.fn<() => void>();
+        return { unregister: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) };
       }
     );
     vi.stubGlobal(
@@ -529,6 +541,42 @@ describe('UnifiedPushNotifications', () => {
     await Promise.resolve();
 
     expect(notificationsApi.sendNotification).toHaveBeenCalledOnce();
+  });
+
+  it('activates the native listener only after registration resolves', async () => {
+    const order: string[] = [];
+    addPluginListener.mockImplementation(async () => {
+      order.push('register');
+      return { unregister: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) };
+    });
+    invoke.mockImplementation(async () => {
+      order.push('activate');
+    });
+
+    await listenForUnifiedPushMessages(() => makeSettings() as never);
+
+    expect(order).toEqual(['register', 'activate']);
+    expect(invoke).toHaveBeenCalledWith('plugin:notifications|set_push_message_listener_active', {
+      active: true,
+    });
+  });
+
+  it('deactivates before unregistering even when deactivation fails', async () => {
+    const order: string[] = [];
+    const unregister = vi.fn<() => Promise<void>>(async () => {
+      order.push('unregister');
+    });
+    addPluginListener.mockImplementation(async () => ({ unregister }));
+
+    const handle = await listenForUnifiedPushMessages(() => makeSettings() as never);
+    invoke.mockImplementation(async () => {
+      order.push('deactivate');
+      throw new Error('deactivation failed');
+    });
+
+    await expect(handle.unregister()).rejects.toThrow('deactivation failed');
+
+    expect(order).toEqual(['deactivate', 'unregister']);
   });
 
   it('registers the Matrix pusher with the resolved UnifiedPush overrides', async () => {
