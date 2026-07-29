@@ -1,11 +1,11 @@
-import type { MatrixClient, Room, RoomMemberEventContent } from '$types/matrix-sdk';
+import type { MatrixClient, Room, CustomRoomMemberEventContent } from '$types/matrix-sdk';
 import { EventType, MatrixEvent } from '$types/matrix-sdk';
 
 /** Send an own-membership profile update and immediately reflect the accepted state locally. */
 export async function setOwnRoomMemberProfile(
   mx: MatrixClient,
   room: Room,
-  content: RoomMemberEventContent
+  content: CustomRoomMemberEventContent
 ): Promise<void> {
   const userId = mx.getSafeUserId();
   const response = await mx.sendStateEvent(room.roomId, EventType.RoomMember, content, userId);

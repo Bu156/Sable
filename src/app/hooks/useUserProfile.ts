@@ -161,7 +161,7 @@ const normalizeInfo = (info: Record<string, unknown>): UserProfile => {
   };
 };
 
-const isValidHex = (c: unknown): string | undefined => {
+export const isValidHex = (c: unknown): string | undefined => {
   if (typeof c !== 'string') return undefined;
   // silly tuwunel smh
   const cleaned = c.replaceAll(/["']/g, '').trim();
@@ -280,8 +280,17 @@ export const useUserProfile = (
       const state = room.getLiveTimeline().getState(EventTimeline.FORWARDS);
 
       if (renderRoomColors) {
+        const roomMemberEvent = state?.getStateEvents(EventType.RoomMember, userId);
+        const roomColorContent = (
+          Array.isArray(roomMemberEvent) ? roomMemberEvent[0] : roomMemberEvent
+        )?.getContent();
+        const roomColorObject = roomColorContent?.[prefix.MATRIX_UNSTABLE_COLORS];
+        const roomColorNew =
+          themeKind === ThemeKind.Light ? roomColorObject?.on_light : roomColorObject?.on_dark;
         const localEvent = state?.getStateEvents(CustomStateEvent.RoomCosmeticsColor, userId);
-        localColor = (Array.isArray(localEvent) ? localEvent[0] : localEvent)?.getContent()?.color;
+        const localColorOld = (Array.isArray(localEvent) ? localEvent[0] : localEvent)?.getContent()
+          ?.color;
+        localColor = roomColorNew ?? localColorOld;
       }
 
       if (renderRoomFonts) {
@@ -305,9 +314,18 @@ export const useUserProfile = (
         const pState = parentSpace?.getLiveTimeline().getState(EventTimeline.FORWARDS);
 
         if (renderRoomColors) {
+          const spaceMemberEvent = pState?.getStateEvents(EventType.RoomMember, userId);
+          const spaceColorContent = (
+            Array.isArray(spaceMemberEvent) ? spaceMemberEvent[0] : spaceMemberEvent
+          )?.getContent();
+          const spaceColorObject = spaceColorContent?.[prefix.MATRIX_UNSTABLE_COLORS];
+          const spaceColorNew =
+            themeKind === ThemeKind.Light ? spaceColorObject?.on_light : spaceColorObject?.on_dark;
           const spaceEvent = pState?.getStateEvents(CustomStateEvent.RoomCosmeticsColor, userId);
-          spaceColor = (Array.isArray(spaceEvent) ? spaceEvent[0] : spaceEvent)?.getContent()
-            ?.color;
+          const spaceColorOld = (
+            Array.isArray(spaceEvent) ? spaceEvent[0] : spaceEvent
+          )?.getContent()?.color;
+          spaceColor = spaceColorNew ?? spaceColorOld;
         }
 
         if (renderRoomFonts) {

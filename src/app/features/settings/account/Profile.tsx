@@ -444,7 +444,7 @@ function ProfileExtended({ profile, userId }: Readonly<ProfileProps>) {
       });
     handleSaveField(prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME, null);
   }
-  
+
   return (
     <Box direction="Column" gap="100">
       <Text size="L400">Extended Profile</Text>
