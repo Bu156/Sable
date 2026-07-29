@@ -74,6 +74,13 @@ fn main() {
                 if let Ok(port) = std::env::var("SABLE_DEVTOOLS") {
                     args.push(("--remote-debugging-port".into(), Some(port)));
                 }
+
+                // Diagnostic escape hatch for GPU/display-resume crashes. Keep
+                // acceleration enabled by default; this is for affected users to
+                // A/B test without rebuilding the application.
+                if std::env::var_os("SABLE_DISABLE_GPU").is_some() {
+                    args.push(("--disable-gpu".into(), None));
+                }
                 args
             },
             ..Default::default()
