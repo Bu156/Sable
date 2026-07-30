@@ -446,6 +446,8 @@ pub fn run() {
             mobile::stop_call_foreground_service,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
+            #[cfg(target_os = "ios")]
+            ios::save_media_to_photos,
             #[cfg(any(target_os = "android", target_os = "ios"))]
             play_notification_sound,
             #[cfg(desktop)]

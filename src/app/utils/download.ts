@@ -54,7 +54,74 @@ export const getDownloadFilename = (
 async function resolveBlob(input: Blob | string): Promise<Blob> {
   if (typeof input !== 'string') return input;
   const response = await fetch(input);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+  }
   return response.blob();
+}
+
+export async function saveMediaToGallery(
+  input: Blob | string,
+  filename: string,
+  mimeType: string
+): Promise<void> {
+  const mediaMimeType = mimeType.trim().toLowerCase();
+  if (!mediaMimeType.startsWith('image/')) {
+    throw new Error(`Only image media can be saved to the gallery (received "${mimeType}")`);
+  }
+  if (!isTauri()) {
+    throw new Error('Saving to the gallery is only available in the Android and iOS apps');
+  }
+
+  const platform = osType();
+  if (platform !== 'android' && platform !== 'ios') {
+    throw new Error(`Saving to the gallery is not supported on ${platform}`);
+  }
+
+  if (platform === 'android') {
+    const { AndroidFs, AndroidPublicImageDir } = await import('tauri-plugin-android-fs-api');
+    let uri: Awaited<ReturnType<typeof AndroidFs.createNewPublicImageFile>> | undefined;
+    try {
+      const blob = await resolveBlob(input);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+
+      if (!(await AndroidFs.checkPublicFilesPermission())) {
+        const granted = await AndroidFs.requestPublicFilesPermission();
+        if (!granted) throw new Error('Storage permission was denied');
+      }
+
+      uri = await AndroidFs.createNewPublicImageFile(
+        AndroidPublicImageDir.Pictures,
+        filename,
+        mediaMimeType,
+        { isPending: true, requestPermission: true }
+      );
+      await AndroidFs.writeFile(uri, bytes);
+      await AndroidFs.setPublicFilePending(uri, false);
+      await AndroidFs.scanPublicFile(uri);
+      showToast('Saved to Gallery');
+    } catch (error) {
+      if (uri) await AndroidFs.removeFile(uri).catch(() => undefined);
+      const message = error instanceof Error ? error.message : 'unknown error';
+      showToast(`Failed to save to gallery: ${message}`);
+    }
+    return;
+  }
+
+  try {
+    const blob = await resolveBlob(input);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    await invoke('save_media_to_photos', {
+      filename,
+      mimeType: mediaMimeType,
+      bytes: Array.from(bytes),
+    });
+    showToast('Saved to Photos');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    showToast(`Failed to save to photos: ${message}`);
+  }
 }
 
 export async function saveFileToDevice(

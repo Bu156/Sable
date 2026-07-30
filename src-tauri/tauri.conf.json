@@ -24,7 +24,7 @@
     },
     "iOS": {
       "template": "src-tauri/ios-project.yml",
-      "frameworks": ["AudioToolbox"]
+      "frameworks": ["AudioToolbox", "Photos"]
     },
     "linux": {
       "deb": {
