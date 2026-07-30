@@ -138,6 +138,21 @@ describe('MobileSwipeDownModal', () => {
     expect(screen.getByTestId('immediate-content')).toBeInTheDocument();
   });
 
+  it('applies sheetStyle to the panel', () => {
+    render(
+      <MobileSwipeDownModal
+        requestClose={vi.fn<() => void>()}
+        sheetClassName="styled-sheet"
+        sheetStyle={{ backgroundColor: '#663399' }}
+      >
+        {() => <div data-testid="styled-content" />}
+      </MobileSwipeDownModal>
+    );
+
+    const panel = screen.getByTestId('styled-content').closest('.styled-sheet');
+    expect(panel).toHaveStyle({ backgroundColor: '#663399' });
+  });
+
   it('lifts the sheet clear of the keyboard with a transition, without resizing it', () => {
     const viewport = mockVisualViewport(800);
     let contentRenderCount = 0;
@@ -412,6 +427,30 @@ describe('MobileSwipeDownModal', () => {
 
         expect(requestClose).not.toHaveBeenCalled();
         expect(panel.style.transform).toBe('');
+      } finally {
+        restore();
+      }
+    });
+
+    it('leaves a marked scroll container to native scrolling at its top', async () => {
+      const requestClose = vi.fn<() => void>();
+      const restore = stubElementAnimations();
+
+      try {
+        render(
+          <MobileSwipeDownModal requestClose={requestClose}>
+            {() => (
+              <div data-mobile-sheet-no-drag="" data-testid="marked-scroller">
+                <div data-testid="marked-scroll-row" />
+              </div>
+            )}
+          </MobileSwipeDownModal>
+        );
+        await act(async () => {});
+
+        dragDown(screen.getByTestId('marked-scroll-row'), 100, 240);
+
+        expect(requestClose).not.toHaveBeenCalled();
       } finally {
         restore();
       }

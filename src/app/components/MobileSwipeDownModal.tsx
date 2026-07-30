@@ -1,4 +1,4 @@
-import type { ComponentProps, RefObject } from 'react';
+import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import React, {
   createContext,
   useCallback,
@@ -26,6 +26,7 @@ interface MobileSwipeDownModalProps {
   dialogLabel?: string;
   skipReturnFocusRef?: RefObject<boolean>;
   sheetClassName?: string;
+  sheetStyle?: CSSProperties;
   keyboardAware?: boolean;
 }
 
@@ -78,6 +79,7 @@ export function MobileSwipeDownModal({
   dialogLabel,
   skipReturnFocusRef,
   sheetClassName,
+  sheetStyle,
   keyboardAware = false,
 }: MobileSwipeDownModalProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -353,7 +355,7 @@ export function MobileSwipeDownModal({
         className={`${css.MessageMobileOptionsContainer} ${sheetClassName ?? ''} ${
           portalRef ? css.MessageMobileOptionsContainerContained : ''
         } ${animationCss.SheetEntrance}`}
-        style={shouldReduceMotion ? { animation: 'none' } : undefined}
+        style={{ ...(shouldReduceMotion ? { animation: 'none' } : undefined), ...sheetStyle }}
         onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
         onPointerMove={(e: React.PointerEvent) => e.stopPropagation()}
         onPointerUp={(e: React.PointerEvent) => e.stopPropagation()}

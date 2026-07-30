@@ -233,6 +233,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
           <Box grow="Yes">
             <Scroll
               ref={scrollRef}
+              data-mobile-sheet-no-drag=""
               size="300"
               hideTrack
               visibility="Hover"
