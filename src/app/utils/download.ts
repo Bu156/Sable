@@ -128,7 +128,7 @@ export async function saveFileToDevice(
   input: Blob | string,
   filename: string,
   mimeType?: string
-): Promise<void> {
+): Promise<'saved' | 'cancelled' | 'failed'> {
   if (isTauri()) {
     try {
       const blob = await resolveBlob(input);
@@ -154,7 +154,7 @@ export async function saveFileToDevice(
           await AndroidFs.setPublicFilePending(uri, false);
           await AndroidFs.scanPublicFile(uri);
           showToast('Saved to Downloads');
-          return;
+          return 'saved';
         } catch (error) {
           if (uri) await AndroidFs.removeFile(uri).catch(() => undefined);
           throw error;
@@ -164,22 +164,24 @@ export async function saveFileToDevice(
       if (osType() === 'ios') {
         const { save } = await import('@tauri-apps/plugin-dialog');
         const path = await save({ defaultPath: filename });
-        if (!path) return;
+        if (!path) return 'cancelled';
 
         const { writeFile } = await import('@tauri-apps/plugin-fs');
         await writeFile(path, bytes);
         showToast('File saved');
-        return;
+        return 'saved';
       }
 
       const saved = await invoke<boolean>('save_download', { filename, bytes: Array.from(bytes) });
       if (saved) showToast('File saved');
+      return saved ? 'saved' : 'cancelled';
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown error';
       showToast(`Failed to save file: ${message}`);
+      return 'failed';
     }
-    return;
   }
 
   FileSaver.saveAs(input, filename);
+  return 'saved';
 }

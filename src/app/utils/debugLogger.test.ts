@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Sentry from '@sentry/react';
 import { createDebugLogger, getDebugLogger } from './debugLogger';
 
 vi.mock('@sentry/react', () => ({
@@ -16,12 +17,13 @@ vi.mock('@sentry/react', () => ({
 
 describe('DebugLoggerService', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     const debugLogger = getDebugLogger();
     debugLogger.clear();
     debugLogger.setEnabled(false);
   });
 
-  it('includes normal events in exports when debug mode is disabled', () => {
+  it('stores normal events for local export without sending them to Sentry when disabled', () => {
     createDebugLogger('test').info('general', 'normal event');
 
     const exported = JSON.parse(getDebugLogger().exportLogs()) as {
@@ -33,5 +35,7 @@ describe('DebugLoggerService', () => {
     expect(exported.logs).toEqual([
       expect.objectContaining({ level: 'info', message: 'normal event' }),
     ]);
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    expect(Sentry.logger.info).not.toHaveBeenCalled();
   });
 });

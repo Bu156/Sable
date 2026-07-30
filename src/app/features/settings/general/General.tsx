@@ -1313,11 +1313,19 @@ function DiagnosticsAndPrivacy() {
           frontendLogs,
         });
         const filename = `sable-diagnostics-${dayjs().format('YYYY-MM-DD-HHmmss')}.zip`;
-        await saveFileToDevice(
+        const saveResult = await saveFileToDevice(
           new Blob([new Uint8Array(zipBytes)], { type: 'application/zip' }),
           filename,
           'application/zip'
         );
+        if (saveResult === 'cancelled') {
+          setDiagnosticsState('idle');
+          return;
+        }
+        if (saveResult === 'failed') {
+          setDiagnosticsState('error');
+          return;
+        }
       } else {
         const sanitizedLogs = sanitizeDiagnosticsLogs(frontendLogs);
         if (sanitizedLogs === null) {
