@@ -889,6 +889,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   if (!mediaPath(url)) return;
 
+  // Direct-auth fallback requests already carry the page's token. Let the
+  // browser send them unchanged instead of routing them back through SW auth.
+  if (event.request.headers.has('Authorization')) return;
+
   const { clientId } = event;
 
   // For browser sub-resource loads (images, video, audio, etc.), 'follow' is

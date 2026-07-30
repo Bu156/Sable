@@ -108,14 +108,13 @@ export function probeSWMediaAuthSupport(): Promise<boolean> {
 
 if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && hasServiceWorker()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    cachedSupport = undefined;
+    const { controller } = navigator.serviceWorker;
+    cachedSupport = controller ? undefined : false;
     inflightProbe = undefined;
     probedController = undefined;
-    if (navigator.serviceWorker.controller) {
+    notify(false);
+    if (controller) {
       void probeSWMediaAuthSupport();
-    } else {
-      cachedSupport = false;
-      notify(false);
     }
   });
 }
