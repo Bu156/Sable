@@ -7,8 +7,8 @@ vi.mock('@sentry/react', () => ({
   captureException: vi.fn<(...args: unknown[]) => void>(),
   captureMessage: vi.fn<(...args: unknown[]) => void>(),
   getCurrentScope: () => ({
-    setExtra: vi.fn(),
-    addAttachment: vi.fn(),
+    setExtra: vi.fn<(...args: unknown[]) => void>(),
+    addAttachment: vi.fn<(...args: unknown[]) => void>(),
   }),
   logger: {
     debug: vi.fn<(...args: unknown[]) => void>(),
@@ -17,7 +17,7 @@ vi.mock('@sentry/react', () => ({
     error: vi.fn<(...args: unknown[]) => void>(),
   },
   metrics: { count: vi.fn<(...args: unknown[]) => void>() },
-  setContext: vi.fn(),
+  setContext: vi.fn<(...args: unknown[]) => void>(),
 }));
 
 describe('DebugLoggerService', () => {
@@ -108,7 +108,6 @@ describe('debug logger diagnostic capture', () => {
   });
 
   it('preserves the original Error for Sentry exception capture', async () => {
-    const Sentry = await import('@sentry/react');
     const error = new Error('original error');
 
     logger.log('error', 'error', 'test', 'request failed', error);
