@@ -1867,8 +1867,14 @@ mod tests {
     fn retry_fragment_gives_a_distinct_cache_identity() {
         let base = "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123";
         let original = cache_key("@a:example.org", base);
-        assert_ne!(original, cache_key("@a:example.org", &format!("{base}#retry=1")));
-        assert_ne!(original, cache_key("@a:example.org", &format!("{base}#retry=2")));
+        assert_ne!(
+            original,
+            cache_key("@a:example.org", &format!("{base}#retry=1"))
+        );
+        assert_ne!(
+            original,
+            cache_key("@a:example.org", &format!("{base}#retry=2"))
+        );
         assert_eq!(
             cache_key("@a:example.org", &format!("{base}#retry=1")),
             cache_key("@a:example.org", &format!("{base}#retry=1"))

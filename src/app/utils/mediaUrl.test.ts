@@ -140,8 +140,7 @@ describe('rewriteAuthenticatedMediaUrl', () => {
 });
 
 describe('addTauriMediaRetryRevision', () => {
-  const INNER =
-    'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
+  const INNER = 'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
   const REWRITTEN = `sable-media://${INNER}?__sable_media_cache=3&__sable_media_session=session_abc`;
 
   afterEach(() => {

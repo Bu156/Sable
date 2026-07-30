@@ -21,8 +21,8 @@ const SABLE_MEDIA_URL =
 vi.mock('$utils/matrix', () => ({
   mxcUrlToHttp: () => SABLE_MEDIA_URL,
   rewriteAuthenticatedMediaUrl: (url: string | null) => url,
-  downloadEncryptedMedia: vi.fn(),
-  decryptFile: vi.fn(),
+  downloadEncryptedMedia: vi.fn<() => Promise<ArrayBuffer>>(),
+  decryptFile: vi.fn<() => Promise<ArrayBuffer>>(),
 }));
 
 vi.mock('$hooks/useMatrixClient', () => ({

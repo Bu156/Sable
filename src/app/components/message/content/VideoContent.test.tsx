@@ -25,9 +25,9 @@ const SABLE_MEDIA_URL =
 vi.mock('$utils/matrix', () => ({
   mxcUrlToHttp: () => SABLE_MEDIA_URL,
   rewriteAuthenticatedMediaUrl: (url: string | null) => url,
-  downloadMedia: vi.fn(),
-  downloadEncryptedMedia: vi.fn(),
-  decryptFile: vi.fn(),
+  downloadMedia: vi.fn<() => Promise<ArrayBuffer>>(),
+  downloadEncryptedMedia: vi.fn<() => Promise<ArrayBuffer>>(),
+  decryptFile: vi.fn<() => Promise<ArrayBuffer>>(),
 }));
 vi.mock('$utils/swMediaAuth', () => ({
   probeSWMediaAuthSupport: async () => true,
@@ -44,7 +44,11 @@ describe('VideoContent', () => {
         info={{ w: 640, h: 360, duration: 1000 }}
         renderVideo={(props) => {
           srcs.push(props.src);
-          return <video data-testid="video" src={props.src} onError={props.onError} />;
+          return (
+            <video data-testid="video" src={props.src} onError={props.onError}>
+              <track kind="captions" />
+            </video>
+          );
         }}
       />
     );
@@ -58,15 +62,15 @@ describe('VideoContent', () => {
     fireEvent.error(video);
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
 
-      await waitFor(() => {
-        const retriedSrc = srcs[srcs.length - 1] ?? '';
-        expect(retriedSrc).not.toBe(initialSrc);
-        // The decoded scheme path is the `target` Rust feeds into cache_key.
-        const schemePath = retriedSrc.replace(/^sable-media:\/\/localhost\//, '').split('?')[0]!;
-        expect(decodeURIComponent(schemePath)).toMatch(
-          /^https:\/\/hs\.example\/_matrix\/client\/v1\/media\/download\/example\.org\/vid123#__sable_media_retry=\d+$/
-        );
-        expect(retriedSrc).toContain('__sable_media_cache=3');
-      });
+    await waitFor(() => {
+      const retriedSrc = srcs[srcs.length - 1] ?? '';
+      expect(retriedSrc).not.toBe(initialSrc);
+      // The decoded scheme path is the `target` Rust feeds into cache_key.
+      const schemePath = retriedSrc.replace(/^sable-media:\/\/localhost\//, '').split('?')[0]!;
+      expect(decodeURIComponent(schemePath)).toMatch(
+        /^https:\/\/hs\.example\/_matrix\/client\/v1\/media\/download\/example\.org\/vid123#__sable_media_retry=\d+$/
+      );
+      expect(retriedSrc).toContain('__sable_media_cache=3');
+    });
   });
 });

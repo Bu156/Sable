@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: (): boolean => true }));
 
-const updateTauriMediaSession = vi.fn(
-  (_baseUrl?: string, _accessToken?: string, _userId?: string) => Promise.resolve()
-);
+const updateTauriMediaSession = vi.fn<
+  (baseUrl?: string, accessToken?: string, userId?: string) => Promise<void>
+>(() => Promise.resolve());
 vi.mock('./app/utils/tauriMediaAuth', () => ({
   updateTauriMediaSession: (baseUrl?: string, accessToken?: string, userId?: string) =>
     updateTauriMediaSession(baseUrl, accessToken, userId),
