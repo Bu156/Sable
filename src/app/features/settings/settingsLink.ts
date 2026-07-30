@@ -51,6 +51,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'right-aligned-bubbles',
     'right-swipe-action',
     'session-replay',
+    'capture-diagnostics',
     'show-hidden-events',
     'hidden-event-edits',
     'show-redacted-message-tombstones',
