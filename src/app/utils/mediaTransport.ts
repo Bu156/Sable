@@ -65,11 +65,24 @@ function parseStoredSessions(): StoredSession[] {
   }
 }
 
+function getStoredActiveSessionId(): string | undefined {
+  const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'string' ? parsed : undefined;
+  } catch {
+    // Keep reading pre-multi-account values written without JSON encoding.
+    return raw;
+  }
+}
+
 function getActiveStoredSession(): StoredSession | undefined {
   if (typeof localStorage === 'undefined') return undefined;
 
   const sessions = parseStoredSessions();
-  const activeSessionId = localStorage.getItem(ACTIVE_SESSION_KEY);
+  const activeSessionId = getStoredActiveSessionId();
   return (
     (activeSessionId
       ? sessions.find((session) => session.userId === activeSessionId)

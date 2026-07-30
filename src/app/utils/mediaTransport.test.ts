@@ -114,6 +114,37 @@ describe('fetchMediaBlob', () => {
     TEST_TIMEOUT
   );
 
+  it('selects the JSON-encoded active session instead of falling back to the first account', async () => {
+    const { getActiveMediaSession, getCurrentMediaSessionScope } =
+      await import('./mediaTransport');
+
+    localStorage.setItem(
+      'matrixSessions',
+      JSON.stringify([
+        {
+          baseUrl: 'https://matrix.example.org',
+          userId: '@alice:example.org',
+          deviceId: 'ALICE',
+          accessToken: 'alice-token',
+        },
+        {
+          baseUrl: 'https://other.example.org',
+          userId: '@bob:example.org',
+          deviceId: 'BOB',
+          accessToken: 'bob-token',
+        },
+      ])
+    );
+    localStorage.setItem('matrixActiveSession', JSON.stringify('@bob:example.org'));
+
+    expect(getActiveMediaSession()).toEqual({
+      baseUrl: 'https://other.example.org',
+      accessToken: 'bob-token',
+      userId: '@bob:example.org',
+    });
+    expect(getCurrentMediaSessionScope()).toBe('@bob:example.org');
+  });
+
   it(
     'uses caller-provided auth and cache scope when present',
     async () => {
