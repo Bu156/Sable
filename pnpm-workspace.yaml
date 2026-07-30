@@ -2,14 +2,14 @@ allowBuilds:
   '@sableclient/tauri-plugin-notifications-api': true
   '@sentry/cli': true
   '@swc/core': true
-  cloudflared: true
+  cloudflared: set this to true or false
   cpu-features: true
   esbuild: true
   protobufjs: true
   sharp: true
   ssh2: true
   unrs-resolver: true
-  workerd: true
+  workerd: set this to true or false
 engineStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:

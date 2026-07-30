@@ -29,7 +29,6 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "knip": "knip",
-    "tunnel": "cloudflared tunnel --url http://localhost:8080",
     "knope": "knope",
     "document-change": "knope document-change",
     "postinstall": "node scripts/install-knope.js",
@@ -121,7 +120,6 @@
     "workbox-precaching": "^7.4.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.48.0",
     "@playwright/test": "^1.62.0",
     "@rollup/plugin-inject": "^5.0.5",
     "@rollup/plugin-wasm": "^6.2.2",
@@ -143,7 +141,6 @@
     "@vitest/coverage-v8": "^4.1.10",
     "@vitest/ui": "^4.1.10",
     "buffer": "^6.0.3",
-    "cloudflared": "^0.7.1",
     "jsdom": "^30.0.1",
     "knip": "6.27.0",
     "oxfmt": "^0.61.0",
@@ -156,8 +153,7 @@
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-static-copy": "^4.1.1",
     "vite-plugin-svgr": "5.2.0",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.115.0"
+    "vitest": "^4.1.10"
   },
   "devEngines": {
     "runtime": {

@@ -13,7 +13,6 @@ import { compression, defineAlgorithm } from 'vite-plugin-compression2';
 import { constants as zlibConstants } from 'zlib';
 import fs from 'fs';
 import path from 'path';
-import { cloudflare } from '@cloudflare/vite-plugin';
 import { createRequire } from 'module';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import buildConfig from './build.config';
@@ -108,6 +107,10 @@ const copyFiles = {
     {
       src: 'public/locales',
       dest: 'public/',
+    },
+    {
+      src: 'wrangler.json',
+      dest: '',
     },
   ],
 };
@@ -226,14 +229,6 @@ export default defineConfig(({ command }) => {
       }),
       ...(!isTauriBuild
         ? [
-            cloudflare({
-              config: {
-                compatibility_date: '2026-03-03',
-                assets: {
-                  not_found_handling: 'single-page-application',
-                },
-              },
-            }),
             compression({
               algorithms: [
                 defineAlgorithm('brotliCompress', {
