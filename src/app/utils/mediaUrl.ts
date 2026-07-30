@@ -40,6 +40,40 @@ export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | n
   return `${mediaUrl}${separator}${TAURI_MEDIA_CACHE_VERSION}&__sable_media_session=${sessionScope}`;
 };
 
+const TAURI_MEDIA_RETRY_FRAGMENT = '__sable_media_retry';
+const TAURI_MEDIA_OUTER_QUERY_PARAMS = ['__sable_media_cache', '__sable_media_session'];
+
+// Embeds a retry revision as a fragment on the inner http(s) target (stripping the
+// outer cache/session markers, which the rewrite re-adds). The fragment makes Rust's
+// cache_key(scope, target) distinct but is stripped natively before the upstream
+// request and the encryption lookup. Undefined for the first attempt, outside Tauri,
+// or when there is no http(s) inner target (e.g. blob: URLs).
+export const getTauriMediaRetryTarget = (
+  mediaUrl: string,
+  revision: number
+): string | undefined => {
+  if (revision <= 0 || !isTauri()) return undefined;
+  const innerTarget = mediaUrl.startsWith('sable-media://')
+    ? mediaUrl.slice('sable-media://'.length)
+    : mediaUrl;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(innerTarget);
+  } catch {
+    return undefined;
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return undefined;
+  TAURI_MEDIA_OUTER_QUERY_PARAMS.forEach((param) => parsedUrl.searchParams.delete(param));
+  parsedUrl.hash = `${TAURI_MEDIA_RETRY_FRAGMENT}=${revision}`;
+  return parsedUrl.toString();
+};
+
+export const addTauriMediaRetryRevision = (mediaUrl: string, revision: number): string => {
+  const target = getTauriMediaRetryTarget(mediaUrl, revision);
+  if (!target) return mediaUrl;
+  return rewriteAuthenticatedMediaUrl(target) ?? mediaUrl;
+};
+
 export const mxcUrlToHttp = (
   mx: MatrixClient,
   mxcUrl: string,

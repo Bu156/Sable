@@ -18,7 +18,11 @@ vi.mock('./mediaTransport', () => ({
   getCurrentMediaSessionScope: hoistedGetSessionScope,
 }));
 
-import { rewriteAuthenticatedMediaUrl } from './mediaUrl';
+import {
+  addTauriMediaRetryRevision,
+  getTauriMediaRetryTarget,
+  rewriteAuthenticatedMediaUrl,
+} from './mediaUrl';
 
 afterEach(() => {
   hoistedIsTauri.mockReset();
@@ -132,5 +136,79 @@ describe('rewriteAuthenticatedMediaUrl', () => {
       const url = 'ftp://matrix.example.com/_matrix/media/v3/download/example.com/abc123';
       expect(rewriteAuthenticatedMediaUrl(url)).toBe(url);
     });
+  });
+});
+
+describe('addTauriMediaRetryRevision', () => {
+  const INNER =
+    'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
+  const REWRITTEN = `sable-media://${INNER}?__sable_media_cache=3&__sable_media_session=session_abc`;
+
+  afterEach(() => {
+    hoistedConvertFileSrc.mockImplementation(
+      (url: string, protocol: string) => `${protocol}://${url}`
+    );
+  });
+
+  it('is a no-op for the first attempt and outside Tauri', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    expect(addTauriMediaRetryRevision(REWRITTEN, 0)).toBe(REWRITTEN);
+    hoistedIsTauri.mockReturnValue(false);
+    expect(addTauriMediaRetryRevision(REWRITTEN, 2)).toBe(REWRITTEN);
+  });
+
+  it('leaves URLs without an http(s) inner target unchanged (e.g. blob: URLs)', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    const blob = 'blob:https://app.local/0000-1111';
+    expect(addTauriMediaRetryRevision(blob, 1)).toBe(blob);
+  });
+
+  it('encodes the retry fragment into the wrapped URI scheme path', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    // Real convertFileSrc percent-encodes the target into the URI path.
+    hoistedConvertFileSrc.mockImplementation(
+      (url, protocol) => `${protocol}://localhost/${encodeURIComponent(url)}`
+    );
+
+    const revised = addTauriMediaRetryRevision(REWRITTEN, 1)!;
+
+    expect(revised).toContain('__sable_media_cache=3');
+    expect(revised).toContain('__sable_media_session=session_abc');
+    // The decoded scheme path is the `target` Rust feeds into cache_key(scope, target).
+    const schemePath = revised.slice('sable-media://localhost/'.length).split('?')[0];
+    expect(decodeURIComponent(schemePath ?? '')).toBe(`${INNER}#__sable_media_retry=1`);
+  });
+
+  it('replaces an existing retry fragment instead of stacking', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    const first = addTauriMediaRetryRevision(REWRITTEN, 1);
+    const second = addTauriMediaRetryRevision(first, 2);
+    expect(second).toBe(addTauriMediaRetryRevision(REWRITTEN, 2));
+  });
+
+  it('keeps rewriteAuthenticatedMediaUrl idempotent over revised URLs', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    const revised = addTauriMediaRetryRevision(REWRITTEN, 1);
+    expect(rewriteAuthenticatedMediaUrl(revised)).toBe(revised);
+    expect(revised).not.toBeUndefined();
+  });
+});
+
+describe('getTauriMediaRetryTarget', () => {
+  const WRAPPED =
+    'sable-media://https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123?__sable_media_cache=3&__sable_media_session=session_abc';
+
+  it('returns undefined for the first attempt and outside Tauri', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    expect(getTauriMediaRetryTarget(WRAPPED, 0)).toBeUndefined();
+    hoistedIsTauri.mockReturnValue(false);
+    expect(getTauriMediaRetryTarget(WRAPPED, 1)).toBeUndefined();
+  });
+
+  it('returns the revised http target for encryption registration', () => {
+    hoistedIsTauri.mockReturnValue(true);
+    expect(getTauriMediaRetryTarget(WRAPPED, 1)).toBe(
+      'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123#__sable_media_retry=1'
+    );
   });
 });
