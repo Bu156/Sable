@@ -24,7 +24,7 @@ const { vListHandle, timelineSync, setUnreadTimelineMock } = vi.hoisted(() => ({
     backwardStatus: 'idle',
     forwardStatus: 'idle',
     canPaginateBack: false,
-    focusItem: undefined,
+    focusItem: undefined as { index: number; scrollTo: boolean; highlight: boolean } | undefined,
     setFocusItem: vi.fn<() => void>(),
     setTimeline: vi.fn<() => void>(),
     loadEventTimeline: vi.fn<() => void>(),
@@ -236,6 +236,8 @@ describe('RoomTimeline content ResizeObserver', () => {
     vListHandle.viewportSize = 600;
     vListHandle.scrollToIndex.mockReset();
     vListHandle.scrollTo.mockReset();
+    timelineSync.focusItem = undefined;
+    (timelineSync.setFocusItem as ReturnType<typeof vi.fn>).mockReset();
     globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
   });
 
@@ -277,5 +279,35 @@ describe('RoomTimeline content ResizeObserver', () => {
     act(() => fireResize(contentEl));
 
     expect(vListHandle.scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it('scrolls to the nearest visible row when the jump target is filtered out', async () => {
+    const { rerender } = renderTimeline();
+
+    // Let the mount-time initial scroll settle, then isolate the focus jump.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+    vListHandle.scrollToIndex.mockClear();
+
+    // The mocked timeline exposes one row (itemIndex 0), so raw index 5 has no
+    // exact row to match.
+    timelineSync.focusItem = { index: 5, scrollTo: true, highlight: true };
+    rerender(<RoomTimeline room={room} editor={{} as Editor} />);
+
+    expect(vListHandle.scrollToIndex).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ align: 'center' })
+    );
+
+    // The highlight is retargeted to the row we actually landed on.
+    const [setFocusItemCall] = (timelineSync.setFocusItem as ReturnType<typeof vi.fn>).mock.calls;
+    type FocusItem = NonNullable<typeof timelineSync.focusItem>;
+    const updater = setFocusItemCall?.[0] as (prev: FocusItem) => FocusItem;
+    expect(updater({ index: 5, scrollTo: true, highlight: true })).toEqual({
+      index: 0,
+      scrollTo: false,
+      highlight: true,
+    });
   });
 });
