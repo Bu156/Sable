@@ -1,5 +1,5 @@
 import type { MouseEventHandler, ReactNode } from 'react';
-import { forwardRef, useCallback, useMemo, useRef } from 'react';
+import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent, Room, RoomPinnedEventsEventContent } from '$types/matrix-sdk';
 import {
   Box,
@@ -210,6 +210,16 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       overscan: 4,
     });
 
+    // Rows re-measure as dynamic content lands (decrypts, lazy media, replies),
+    // nudging the total size back and forth across the sheet's max height. The
+    // sheet sizes itself off this list, so latch the largest size seen: it may
+    // grow as content arrives, but never shrink and jitter while open.
+    const totalSize = virtualizer.getTotalSize();
+    const [latchedSize, setLatchedSize] = useState(0);
+    useLayoutEffect(() => {
+      setLatchedSize((prev) => (totalSize > prev ? totalSize : prev));
+    }, [totalSize]);
+
     const renderMatrixEvent = useRoomMessagePreviewRenderer(room);
 
     const handleOpen = (roomId: string, eventId: string) => {
@@ -237,7 +247,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
               hideTrack
               visibility="Hover"
               style={{
-                minHeight: 0,
+                minHeight: isMobile ? latchedSize : 0,
                 flex: isMobile ? '0 1 auto' : 1,
                 maxHeight: isMobile ? 'calc(85vh - 4rem)' : undefined,
                 overflowY: 'auto',
