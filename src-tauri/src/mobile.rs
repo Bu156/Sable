@@ -54,6 +54,24 @@ pub fn set_navigation_bar_color(color: u32) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn set_immersive_mode(enabled: bool) -> Result<(), String> {
+    let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
+    vm.attach_current_thread(|env| {
+        let result = env.call_static_method(
+            jni_str!("moe/sable/client/MainActivity"),
+            jni_str!("setImmersiveModeNative"),
+            jni_sig!("(Z)V"),
+            &[JValue::Bool(enabled)],
+        );
+        if result.is_err() {
+            let _ = env.exception_clear();
+        }
+        result.map(|_| ())
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn start_call_foreground_service() -> Result<(), String> {
     call_static_method("startCallForegroundServiceNative")
 }
