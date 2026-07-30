@@ -198,6 +198,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
             <>
               <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
               <Text>{' left the room '}</Text>
+              <Text>{reason ? `(${reason})` : null}</Text>
             </>
           ) : (
             <>
