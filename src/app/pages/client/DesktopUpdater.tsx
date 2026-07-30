@@ -206,13 +206,7 @@ export function DesktopUpdater() {
   const handleDismiss = useCallback(() => {
     setDismissed(true);
     setBannerVisible(false);
-    if (!installStartedRef.current) {
-      closePendingUpdate(pendingUpdateRef.current);
-      pendingUpdateRef.current = null;
-      setUpdateInfo(null);
-      setIsDownloaded(false);
-    }
-  }, [closePendingUpdate, setBannerVisible]);
+  }, [setBannerVisible]);
 
   const bannerData = useMemo<GlobalBanner | null>(() => {
     if (!bannerVisible || !updateInfo || dismissed) return null;
