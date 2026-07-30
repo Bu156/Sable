@@ -113,7 +113,7 @@ test.describe('permalink jumps', () => {
     await expect(app.messageByEventId(latestId)).toHaveCount(0);
   });
 
-  test('lands on the nearest visible message when the permalink target is filtered out', async ({
+  test('opens the thread when the permalink target is a thread reply', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'desktop-focused');
@@ -129,17 +129,15 @@ test.describe('permalink jumps', () => {
       preset: 'private_chat',
     });
 
-    // Thread replies are filtered out of the main timeline, so the permalink
-    // has no rendered row: the jump must land on m50, the nearest visible one.
+    // Thread reply permalinks reroute to the thread drawer instead of jumping
+    // the main timeline (Room.tsx opens it for events with a threadRootId).
     let txn = 1;
-    let m50Id = '';
-    let latestId = '';
     let replyId = '';
     for (let i = 1; i <= HISTORY_SIZE; i += 1) {
       const eventId = await sendText(hsBaseUrl, user.accessToken, room, `${tag}-${i}`, txn);
       txn += 1;
       if (i === 50) {
-        m50Id = eventId;
+        const rootId = eventId;
         replyId = await sendMessage(
           hsBaseUrl,
           user.accessToken,
@@ -149,16 +147,15 @@ test.describe('permalink jumps', () => {
             body: `${tag}-thread-reply`,
             'm.relates_to': {
               rel_type: 'm.thread',
-              event_id: m50Id,
+              event_id: rootId,
               is_falling_back: true,
-              'm.in_reply_to': { event_id: m50Id },
+              'm.in_reply_to': { event_id: rootId },
             },
           },
           txn
         );
         txn += 1;
       }
-      latestId = eventId;
     }
     await sendPermalink(hsBaseUrl, user.accessToken, room, replyId, txn);
 
@@ -167,11 +164,12 @@ test.describe('permalink jumps', () => {
     await app.openRoom(`${tag} Room`);
 
     await expect(permalinkLink(page, replyId)).toBeVisible({ timeout: 60_000 });
-    await expect(app.messageByEventId(m50Id)).toHaveCount(0);
 
     await permalinkLink(page, replyId).click();
 
-    await expect(app.messageByEventId(m50Id)).toBeVisible({ timeout: 60_000 });
-    await expect(app.messageByEventId(latestId)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Close thread' })).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.getByText(`${tag}-thread-reply`, { exact: true })).toBeVisible();
   });
 });
