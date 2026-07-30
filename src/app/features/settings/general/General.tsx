@@ -58,13 +58,14 @@ import { SettingTile, SettingToggle } from '$components/setting-tile';
 import { downloadJsonFile } from '$utils/common';
 import { getDebugLogger } from '$utils/debugLogger';
 import { KeySymbol } from '$utils/key-symbol';
-import { isDesktopTauri, isMacOS, isMobileOrTablet } from '$utils/platform';
+import { isDesktopTauri, isMacOS, isMobileOrTablet, isMobileTauri } from '$utils/platform';
 import { stopPropagation } from '$utils/keyboard';
 import { sessionsAtom, activeSessionIdAtom } from '$state/sessions';
 import { isKeyHotkey } from 'is-hotkey';
 import { settingsSyncLastSyncedAtom, settingsSyncStatusAtom } from '$hooks/useSettingsSync';
 import { sanitizeDiagnosticsLogs } from '$utils/sentryScrubbers';
 import { exportSettingsAsJson, importSettingsFromJson } from '$utils/settingsSync';
+import { saveFileToDevice } from '$utils/download';
 import { CallSoundSettings } from './CallSoundSettings';
 
 type DateHintProps = {
@@ -1307,6 +1308,24 @@ function DiagnosticsAndPrivacy() {
           setDiagnosticsState('idle');
           return;
         }
+      } else if (isMobileTauri()) {
+        const zipBytes = await invoke<number[] | Uint8Array>('export_diagnostics', {
+          frontendLogs,
+        });
+        const filename = `sable-diagnostics-${dayjs().format('YYYY-MM-DD-HHmmss')}.zip`;
+        const saveResult = await saveFileToDevice(
+          new Blob([new Uint8Array(zipBytes)], { type: 'application/zip' }),
+          filename,
+          'application/zip'
+        );
+        if (saveResult === 'cancelled') {
+          setDiagnosticsState('idle');
+          return;
+        }
+        if (saveResult === 'failed') {
+          setDiagnosticsState('error');
+          return;
+        }
       } else {
         const sanitizedLogs = sanitizeDiagnosticsLogs(frontendLogs);
         if (sanitizedLogs === null) {
@@ -1375,7 +1394,7 @@ function DiagnosticsAndPrivacy() {
           />
         )}
       </SequenceCard>
-      {(!isTauri() || isDesktopTauri()) && (
+      {(!isTauri() || isDesktopTauri() || isMobileTauri()) && (
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
@@ -1388,7 +1407,9 @@ function DiagnosticsAndPrivacy() {
             description={
               isDesktopTauri()
                 ? 'Export a ZIP containing recent app logs and basic system information, redacted where possible. Review the ZIP before sharing it.'
-                : 'Download a frontend-only JSON file containing recent app logs, redacted where possible. Review it before sharing it.'
+                : isMobileTauri()
+                  ? 'Save a ZIP containing recent app logs and basic system information, redacted where possible. Review the ZIP before sharing it.'
+                  : 'Download a frontend-only JSON file containing recent app logs, redacted where possible. Review it before sharing it.'
             }
             after={
               <Button
@@ -1403,7 +1424,7 @@ function DiagnosticsAndPrivacy() {
                 <Text size="B300">
                   {diagnosticsState === 'exporting'
                     ? 'Exporting…'
-                    : isDesktopTauri()
+                    : isDesktopTauri() || isMobileTauri()
                       ? 'Export ZIP'
                       : 'Export JSON'}
                 </Text>
@@ -1414,7 +1435,9 @@ function DiagnosticsAndPrivacy() {
             <Text size="T200" style={{ color: 'var(--mx-color-positive-container-on)' }}>
               {isDesktopTauri()
                 ? 'Diagnostics ZIP exported with content redacted where possible. Review it before sharing.'
-                : 'Frontend diagnostics downloaded with content redacted where possible. Review it before sharing.'}
+                : isMobileTauri()
+                  ? 'Diagnostics ZIP saved with content redacted where possible. Review it before sharing.'
+                  : 'Frontend diagnostics downloaded with content redacted where possible. Review it before sharing.'}
             </Text>
           )}
           {diagnosticsState === 'error' && (

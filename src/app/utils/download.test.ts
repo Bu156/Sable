@@ -65,8 +65,9 @@ afterEach(() => {
 
 describe('saveFileToDevice', () => {
   it('scans an Android Downloads file after making it public', async () => {
-    await saveFileToDevice(new Blob(['data'], { type: 'text/plain' }), 'file.txt');
+    const result = await saveFileToDevice(new Blob(['data'], { type: 'text/plain' }), 'file.txt');
 
+    expect(result).toBe('saved');
     expect(androidFs.createNewPublicFile).toHaveBeenCalledWith(
       'Download',
       'file.txt',
@@ -82,8 +83,9 @@ describe('saveFileToDevice', () => {
     const error = new Error('write failed');
     androidFs.writeFile.mockRejectedValue(error);
 
-    await saveFileToDevice(new Blob(['data']), 'file.txt');
+    const result = await saveFileToDevice(new Blob(['data']), 'file.txt');
 
+    expect(result).toBe('failed');
     expect(androidFs.removeFile).toHaveBeenCalledWith('content://download/file');
     expect(showToast).toHaveBeenCalledWith('Failed to save file: write failed');
   });
@@ -91,8 +93,9 @@ describe('saveFileToDevice', () => {
   it('does not write or toast when the iOS save picker is cancelled', async () => {
     vi.mocked(osType).mockReturnValue('ios');
 
-    await saveFileToDevice(new Blob(['data']), 'file.txt');
+    const result = await saveFileToDevice(new Blob(['data']), 'file.txt');
 
+    expect(result).toBe('cancelled');
     expect(save).toHaveBeenCalledWith({ defaultPath: 'file.txt' });
     expect(writeFile).not.toHaveBeenCalled();
     expect(showToast).not.toHaveBeenCalled();
@@ -102,8 +105,9 @@ describe('saveFileToDevice', () => {
     vi.mocked(osType).mockReturnValue('ios');
     save.mockResolvedValue('file:///exports/file.txt');
 
-    await saveFileToDevice(new Blob(['data']), 'file.txt');
+    const result = await saveFileToDevice(new Blob(['data']), 'file.txt');
 
+    expect(result).toBe('saved');
     expect(writeFile).toHaveBeenCalledWith('file:///exports/file.txt', expect.any(Uint8Array));
     expect(showToast).toHaveBeenCalledWith('File saved');
     expect(invoke).not.toHaveBeenCalled();
@@ -112,8 +116,9 @@ describe('saveFileToDevice', () => {
   it('keeps browser downloads on FileSaver', async () => {
     vi.mocked(isTauri).mockReturnValue(false);
 
-    await saveFileToDevice(new Blob(['data']), 'file.txt');
+    const result = await saveFileToDevice(new Blob(['data']), 'file.txt');
 
+    expect(result).toBe('saved');
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'file.txt');
   });
 });
