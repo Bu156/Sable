@@ -93,6 +93,18 @@ export class CallEmbed {
     );
   }
 
+  // Widget-mode discovery can't reach a transport (no access token, iframe
+  // fetch restrictions), so forward the ongoing call's own transport.
+  private static getOngoingCallLivekitServiceUrl(mx: MatrixClient, room: Room): string | undefined {
+    const session = mx.matrixRTC.getRoomSession(room);
+    const oldest = session.getOldestMembership();
+    if (!oldest) return undefined;
+    const transport = session.memberships.map((m) => m.getTransport(oldest)).find(Boolean);
+    return transport?.type === 'livekit'
+      ? (transport as { livekit_service_url?: string }).livekit_service_url
+      : undefined;
+  }
+
   static getWidget(
     mx: MatrixClient,
     room: Room,
@@ -122,6 +134,11 @@ export class CallEmbed {
       theme: themeKind,
       header: 'none',
     });
+
+    const ongoingLivekitServiceUrl = CallEmbed.getOngoingCallLivekitServiceUrl(mx, room);
+    if (ongoingLivekitServiceUrl) {
+      params.append('livekitServiceUrl', ongoingLivekitServiceUrl);
+    }
 
     if (!room.isCallRoom() && CallEmbed.startingCall(intent)) {
       params.append('sendNotificationType', CallEmbed.dmCall(intent) ? 'ring' : 'notification');
