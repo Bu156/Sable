@@ -59,7 +59,7 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@sentry/react':
-        specifier: ^10.67.0
+        specifier: ^10.69.0
         version: 10.69.0(react@19.2.8)
       '@tanstack/react-query':
         specifier: ^5.101.3
