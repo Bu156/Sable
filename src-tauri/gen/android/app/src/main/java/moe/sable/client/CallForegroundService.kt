@@ -28,7 +28,7 @@ class CallForegroundService : Service() {
         this,
         NOTIFICATION_ID,
         NotificationCompat.Builder(this, CHANNEL_ID)
-          .setSmallIcon(R.mipmap.ic_launcher)
+          .setSmallIcon(R.mipmap.ic_notification)
           .setContentTitle("Call in progress")
           .setContentText("Sable is using your microphone")
           .setCategory(NotificationCompat.CATEGORY_CALL)

@@ -65,7 +65,8 @@ pub fn activate_call_audio_session() -> Result<(), String> {
     unsafe {
         session.setCategory_withOptions_error(
             AVAudioSessionCategoryPlayAndRecord.expect("PlayAndRecord category is unavailable"),
-            AVAudioSessionCategoryOptions::DefaultToSpeaker,
+            AVAudioSessionCategoryOptions::DefaultToSpeaker
+                | AVAudioSessionCategoryOptions::AllowBluetoothHFP,
         )
     }
     .map_err(|error| error.to_string())?;
