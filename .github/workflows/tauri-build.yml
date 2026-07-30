@@ -555,7 +555,7 @@ jobs:
             git fetch origin dev
             git worktree remove --force "$WT" 2>/dev/null || true
             git worktree add --detach "$WT" origin/dev
-            node "$GITHUB_WORKSPACE/.github/scripts/update-altstore-source.mjs" \
+            node .github/scripts/update-altstore-source.mjs \
               "$WT/$SOURCE_FILE" "${ALTSTORE_VERSION:-$VERSION}" "${ALTSTORE_VERSION_BUILD:-$VERSION}" "${STEPS_IPA_OUTPUTS_SIZE}" "$DOWNLOAD_URL" "$DATE" "Sable $VERSION"
             git -C "$WT" add "$SOURCE_FILE"
             if git -C "$WT" diff --cached --quiet; then
