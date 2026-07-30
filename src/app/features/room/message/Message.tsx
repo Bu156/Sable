@@ -131,6 +131,7 @@ export type MessageProps = {
 };
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { shouldIgnoreMessageLongPress } from './messageTouch';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -988,7 +989,7 @@ function MessageInternal(
         onContextMenu={contextMenuHandler}
         onTouchStart={(evt) => {
           const target = evt.target instanceof Element ? evt.target : undefined;
-          if (target?.closest('[data-gestures="ignore"]')) {
+          if (shouldIgnoreMessageLongPress(target)) {
             menu.triggerProps.onTouchCancel();
             return;
           }
