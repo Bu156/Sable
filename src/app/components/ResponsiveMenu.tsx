@@ -98,11 +98,8 @@ export function ResponsiveMenu({
 
   if (isMobile) {
     const sheetStyle: CSSProperties | undefined = surfaceColor
-      ? ({ '--sheet-surface-color': surfaceColor } as CSSProperties)
+      ? { backgroundColor: surfaceColor }
       : undefined;
-    const sheetClassName = surfaceColor
-      ? `${css.SheetContent} ${css.SheetContentThemed}`
-      : css.SheetContent;
 
     return (
       <>
@@ -113,7 +110,7 @@ export function ResponsiveMenu({
           </MenuDialog>
         )}
         {anchor && mobile === 'sheet' && (
-          <MobileSwipeDownModal requestClose={requestClose}>
+          <MobileSwipeDownModal requestClose={requestClose} sheetStyle={sheetStyle}>
             {() => (
               <FocusTrap
                 focusTrapOptions={{
@@ -129,8 +126,7 @@ export function ResponsiveMenu({
                   direction="Column"
                   role="dialog"
                   aria-modal="true"
-                  className={sheetClassName}
-                  style={sheetStyle}
+                  className={css.SheetContent}
                 >
                   {menu}
                 </Box>
