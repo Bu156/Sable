@@ -172,6 +172,7 @@ export async function getRoomMessages(
 ): Promise<RoomMessage[]> {
   const messages: RoomMessage[] = [];
   let from: string | undefined;
+  /* eslint-disable no-await-in-loop */
   do {
     const params = new URLSearchParams({ dir: 'b', limit: '100' });
     if (from) params.set('from', from);
@@ -198,6 +199,7 @@ export async function getRoomMessages(
     });
     from = data.end;
   } while (from);
+  /* eslint-enable no-await-in-loop */
   messages.reverse();
   return messages;
 }

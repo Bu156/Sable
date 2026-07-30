@@ -67,9 +67,7 @@ async function sendHistory(
   prefix: string,
   bodies: string[]
 ): Promise<void> {
-  for (let i = 0; i < bodies.length; i += 1) {
-    await sendMessage(baseUrl, token, roomId, `${prefix}-${bodies[i]}`);
-  }
+  await Promise.all(bodies.map((body) => sendMessage(baseUrl, token, roomId, `${prefix}-${body}`)));
 }
 
 async function wheelToTopUntilVisible(page: Page, text: string): Promise<void> {
@@ -170,22 +168,26 @@ test.describe('sliding sync timeline', () => {
       timeout: 120_000,
     });
 
+    /* eslint-disable no-await-in-loop */
     for (let i = 0; i < SEND_DELAYS_MS.length; i += 1) {
       if (SEND_DELAYS_MS[i]! > 0) await page.waitForTimeout(SEND_DELAYS_MS[i]!);
       await sendMessage(hsBaseUrl, user.accessToken, room, `${tag}-live-${i + 1}`);
     }
+    /* eslint-enable no-await-in-loop */
 
     await app.openRoom(`${tag} Home`);
     await expect(page.getByText(`${tag}-seed`, { exact: true })).toBeVisible({
       timeout: 120_000,
     });
 
+    /* eslint-disable no-await-in-loop */
     for (let i = 0; i < SEND_DELAYS_MS.length; i += 1) {
       await expect(page.getByText(`${tag}-live-${i + 1}`, { exact: true })).toHaveCount(1, {
         timeout: 120_000,
       });
       await expect(page.getByText(`${tag}-live-${i + 1}`, { exact: true })).toBeVisible();
     }
+    /* eslint-enable no-await-in-loop */
 
     const domOrder = await page.getByText(new RegExp(`^${tag}-live-\\d+$`)).allTextContents();
     expect(domOrder).toEqual(SEND_DELAYS_MS.map((_, i) => `${tag}-live-${i + 1}`));
