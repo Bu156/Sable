@@ -114,7 +114,7 @@ export function ResponsiveMenu({
         )}
         {anchor && mobile === 'sheet' && (
           <MobileSwipeDownModal requestClose={requestClose}>
-            {(dragHandle) => (
+            {() => (
               <FocusTrap
                 focusTrapOptions={{
                   ...focusTrapOptions,
@@ -132,7 +132,6 @@ export function ResponsiveMenu({
                   className={sheetClassName}
                   style={sheetStyle}
                 >
-                  {dragHandle}
                   {menu}
                 </Box>
               </FocusTrap>

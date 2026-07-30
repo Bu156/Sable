@@ -65,11 +65,8 @@ vi.mock('folds', () => ({
 vi.mock('$components/MobileSwipeDownModal', () => ({
   MobileSwipeDownModal: ({ children }: any) => (
     <div data-testid="mobile-swipe-down">
-      {children(<div data-testid="drag-handle">drag-handle</div>, {
-        onTouchStart: vi.fn<() => void>(),
-        onTouchMove: vi.fn<() => void>(),
-        onTouchEnd: vi.fn<() => void>(),
-      })}
+      <div data-testid="drag-handle">drag-handle</div>
+      {children()}
     </div>
   ),
 }));
@@ -84,6 +81,7 @@ vi.mock('$utils/keyboard', () => ({
 
 vi.mock('$features/room/message/styles.css', () => ({
   MessageOptionsMenu: 'mock-message-options-menu',
+  MessageOptionsSheetMenu: 'mock-message-options-sheet-menu',
   MessageMobileDragHandle: 'mock-mobile-drag-handle',
   MessageMobileDragIndicator: 'mock-mobile-drag-indicator',
   MessageMobileOptionsWrapped: 'mock-mobile-options-wrapped',
