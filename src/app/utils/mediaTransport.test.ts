@@ -115,8 +115,7 @@ describe('fetchMediaBlob', () => {
   );
 
   it('selects the JSON-encoded active session instead of falling back to the first account', async () => {
-    const { getActiveMediaSession, getCurrentMediaSessionScope } =
-      await import('./mediaTransport');
+    const { getActiveMediaSession, getCurrentMediaSessionScope } = await import('./mediaTransport');
 
     localStorage.setItem(
       'matrixSessions',

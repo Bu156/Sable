@@ -143,7 +143,7 @@ export default defineConfig(({ command }) => {
     clearScreen: false,
     appType: 'spa',
     publicDir: false,
-    base: buildConfig.base,
+    base: command === 'build' && isTauriBuild ? './' : buildConfig.base,
     envPrefix: ['VITE_', 'TAURI_ENV_*'],
     define: {
       APP_VERSION: JSON.stringify(appVersion),
