@@ -59,8 +59,7 @@ function makeUpdate(version: string) {
   return {
     version,
     body: `changelog ${version}`,
-    download: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    install: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    downloadAndInstall: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 }
@@ -131,5 +130,55 @@ describe('DesktopUpdater', () => {
     fireEvent.click(screen.getByRole('button', { name: 'check' }));
     await waitFor(() => expect(update1.close).toHaveBeenCalledTimes(1));
     expect(update2.close).not.toHaveBeenCalled();
+  });
+
+  it('downloads then installs and prompts to restart', async () => {
+    const update = makeUpdate('3.0.0');
+    checkFn.mockResolvedValue(update);
+
+    render(
+      <Provider>
+        <DesktopUpdatePill />
+        <DesktopUpdater />
+        <BannersProbe />
+      </Provider>
+    );
+
+    const pill = await screen.findByRole('button', { name: 'Update Available' });
+    fireEvent.click(pill);
+    await screen.findByTestId('banner-desktop-update-ready');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }));
+    await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalled());
+    await screen.findByTestId('banner-desktop-update-restart');
+    expect(screen.getByRole('button', { name: 'Restart Now' })).toBeInTheDocument();
+  });
+
+  it('retries when downloadAndInstall fails', async () => {
+    const update = makeUpdate('4.0.0');
+    update.downloadAndInstall.mockRejectedValueOnce(new Error('eacces')).mockResolvedValueOnce(undefined);
+    checkFn.mockResolvedValue(update);
+
+    render(
+      <Provider>
+        <DesktopUpdatePill />
+        <DesktopUpdater />
+        <BannersProbe />
+      </Provider>
+    );
+
+    const pill = await screen.findByRole('button', { name: 'Update Available' });
+    fireEvent.click(pill);
+    await screen.findByTestId('banner-desktop-update-ready');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }));
+    await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Download & Install' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }));
+    await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledTimes(2));
+    await screen.findByTestId('banner-desktop-update-restart');
   });
 });
