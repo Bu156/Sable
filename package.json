@@ -49,6 +49,7 @@
     "@lottiefiles/dotlottie-react": "^0.19.10",
     "@noble/hashes": "^2.2.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@rolldown/plugin-node-polyfills": "^1.0.3",
     "@sableclient/twemoji-font": "^1.0.4",
     "@sentry/react": "^10.67.0",
     "@tanstack/react-query": "^5.101.3",
@@ -121,7 +122,6 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.45.1",
-    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@playwright/test": "^1.61.1",
     "@rollup/plugin-inject": "^5.0.5",
     "@rollup/plugin-wasm": "^6.2.2",

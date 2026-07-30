@@ -1,4 +1,4 @@
-import type { ComponentProps, CSSProperties, RefObject } from "react";
+import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import React, {
   createContext,
   useCallback,
@@ -6,22 +6,22 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { Box } from "folds";
-import FocusTrap from "focus-trap-react";
-import { useDrag } from "@use-gesture/react";
-import * as css from "$features/room/message/styles.css";
-import { useDismissOnBack } from "$utils/androidBack";
-import { stopPropagation } from "$utils/keyboard";
-import { getMobileSheetTiming, useMobileSheetAnimation } from "./mobileSheetAnimation";
-import { MOBILE_SHEET_DURATION_MS, MOBILE_SHEET_EASING } from "./mobileSheetAnimationConstants";
-import * as animationCss from "./mobileSheetAnimation.css";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { Box } from 'folds';
+import { FocusTrap } from 'focus-trap-react';
+import { useDrag } from '@use-gesture/react';
+import * as css from '$features/room/message/styles.css';
+import { useDismissOnBack } from '$utils/androidBack';
+import { stopPropagation } from '$utils/keyboard';
+import { getMobileSheetTiming, useMobileSheetAnimation } from './mobileSheetAnimation';
+import { MOBILE_SHEET_DURATION_MS, MOBILE_SHEET_EASING } from './mobileSheetAnimationConstants';
+import * as animationCss from './mobileSheetAnimation.css';
 
 interface MobileSwipeDownModalProps {
   children: () => React.ReactNode;
   requestClose: () => void;
-  containerRef?: RefObject<HTMLElement>;
+  containerRef?: RefObject<HTMLElement | null>;
   focusTrap?: boolean;
   dialogLabel?: string;
   skipReturnFocusRef?: RefObject<boolean>;
@@ -30,7 +30,7 @@ interface MobileSwipeDownModalProps {
   keyboardAware?: boolean;
 }
 
-type FocusTrapOptions = ComponentProps<typeof FocusTrap>["focusTrapOptions"];
+type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
 
 const MobileSheetCloseContext = createContext<(() => void) | null>(null);
 
@@ -42,8 +42,8 @@ const DISMISS_VELOCITY = 0.5;
 /** Keeps a fling that lands at the top of a list from turning into a sheet drag. */
 const DRAG_BLOCKED_COOLDOWN_MS = 200;
 
-const HANDLE_ATTRIBUTE = "data-mobile-sheet-handle";
-const NO_DRAG_ATTRIBUTE = "data-mobile-sheet-no-drag";
+const HANDLE_ATTRIBUTE = 'data-mobile-sheet-handle';
+const NO_DRAG_ATTRIBUTE = 'data-mobile-sheet-no-drag';
 
 function getKeyboardOverlap(): number {
   const viewport = window.visualViewport;
@@ -57,7 +57,7 @@ function findScroller(from: HTMLElement | null, boundary: HTMLElement): HTMLElem
   while (element && element !== boundary) {
     const { overflowY } = window.getComputedStyle(element);
     if (
-      (overflowY === "auto" || overflowY === "scroll") &&
+      (overflowY === 'auto' || overflowY === 'scroll') &&
       element.scrollHeight > element.clientHeight
     ) {
       return element;
@@ -123,15 +123,15 @@ export function MobileSwipeDownModal({
       sheet.style.transition =
         animate && !shouldReduceMotion
           ? `transform ${MOBILE_SHEET_DURATION_MS}ms ${MOBILE_SHEET_EASING}`
-          : "";
-      sheet.style.transform = y === 0 ? "" : `translate3d(0, ${y}px, 0)`;
+          : '';
+      sheet.style.transform = y === 0 ? '' : `translate3d(0, ${y}px, 0)`;
       // Once lifted above the keyboard the bottom inset is no longer a safe area.
       sheet.style.setProperty(
-        "--mobile-sheet-safe-bottom",
-        keyboardOffset.current > 0 ? "0px" : "",
+        '--mobile-sheet-safe-bottom',
+        keyboardOffset.current > 0 ? '0px' : ''
       );
     },
-    [shouldReduceMotion],
+    [shouldReduceMotion]
   );
 
   useLayoutEffect(() => {
@@ -144,7 +144,7 @@ export function MobileSwipeDownModal({
       const next = Math.max(stableViewportHeight, window.innerHeight);
       if (next === stableViewportHeight) return;
       stableViewportHeight = next;
-      sheetRef.current?.style.setProperty("--mobile-sheet-viewport", `${next}px`);
+      sheetRef.current?.style.setProperty('--mobile-sheet-viewport', `${next}px`);
     };
 
     // The two viewports shrink in separate stages. Mid-way the visual one alone
@@ -157,7 +157,7 @@ export function MobileSwipeDownModal({
       if (closingRef.current) return;
       publishViewportHeight();
       const visible = window.visualViewport?.height ?? window.innerHeight;
-      sheetRef.current?.style.setProperty("--mobile-sheet-visible", `${visible}px`);
+      sheetRef.current?.style.setProperty('--mobile-sheet-visible', `${visible}px`);
 
       const next = getKeyboardOverlap();
       if (next === keyboardOffset.current) return;
@@ -181,19 +181,19 @@ export function MobileSwipeDownModal({
     const viewport = window.visualViewport;
 
     applySettled();
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange);
-    window.addEventListener("orientationchange", handleOrientationChange);
-    viewport?.addEventListener("resize", handleViewportChange);
-    viewport?.addEventListener("scroll", handleViewportChange);
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange);
+    window.addEventListener('orientationchange', handleOrientationChange);
+    viewport?.addEventListener('resize', handleViewportChange);
+    viewport?.addEventListener('scroll', handleViewportChange);
 
     return () => {
       window.clearTimeout(settleTimer);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange);
-      window.removeEventListener("orientationchange", handleOrientationChange);
-      viewport?.removeEventListener("resize", handleViewportChange);
-      viewport?.removeEventListener("scroll", handleViewportChange);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+      viewport?.removeEventListener('resize', handleViewportChange);
+      viewport?.removeEventListener('scroll', handleViewportChange);
     };
   }, [keyboardAware, applySheetOffset]);
 
@@ -209,16 +209,16 @@ export function MobileSwipeDownModal({
     }
 
     container.getAnimations().forEach((animation) => animation.cancel());
-    container.style.transition = "";
+    container.style.transition = '';
     const startY = touchYDiff.current - keyboardOffset.current;
     const animation = container.animate(
-      [{ transform: `translate3d(0, ${startY}px, 0)` }, { transform: "translate3d(0, 100%, 0)" }],
+      [{ transform: `translate3d(0, ${startY}px, 0)` }, { transform: 'translate3d(0, 100%, 0)' }],
       {
         ...getMobileSheetTiming(shouldReduceMotion),
         duration: shouldReduceMotion ? 0 : 140,
-      },
+      }
     );
-    animation.addEventListener("finish", requestClose, { once: true });
+    animation.addEventListener('finish', requestClose, { once: true });
   }, [requestClose, shouldReduceMotion]);
 
   // Android back closes the overlay instead of navigating away.
@@ -285,10 +285,10 @@ export function MobileSwipeDownModal({
       target: sheetRef,
       eventOptions: { passive: false },
       pointer: { capture: false, touch: true },
-      axis: "y",
+      axis: 'y',
       // MobileMenuItem owns tap activation for marked actions; the sheet owns drag arbitration.
       filterTaps: false,
-    },
+    }
   );
 
   // A sheet opened by a long press mounts under the finger, and releasing it
@@ -296,7 +296,7 @@ export function MobileSwipeDownModal({
   // backdrop is a dismiss.
   const handleBackdropClick = (e: React.MouseEvent) => {
     const fromTouch =
-      e.nativeEvent instanceof PointerEvent && e.nativeEvent.pointerType === "touch";
+      e.nativeEvent instanceof PointerEvent && e.nativeEvent.pointerType === 'touch';
     if (fromTouch && !backdropTouchRef.current) return;
     closeWithAnimation();
   };
@@ -306,7 +306,7 @@ export function MobileSwipeDownModal({
       className={css.MessageMobileDragHandle}
       data-gestures="ignore"
       data-testid="mobile-sheet-drag-handle"
-      {...{ [HANDLE_ATTRIBUTE]: "" }}
+      {...{ [HANDLE_ATTRIBUTE]: '' }}
     >
       <div className={css.MessageMobileDragIndicator} />
     </div>
@@ -326,7 +326,7 @@ export function MobileSwipeDownModal({
     fallbackFocus: () => sheetRef.current ?? target,
     preventScroll: true,
     returnFocusOnDeactivate: true,
-    setReturnFocus: (previousActiveElement: HTMLElement) =>
+    setReturnFocus: (previousActiveElement: HTMLElement | SVGElement) =>
       skipReturnFocusRef?.current ? false : previousActiveElement,
     allowOutsideClick: true,
     clickOutsideDeactivates: false,
@@ -356,10 +356,10 @@ export function MobileSwipeDownModal({
   return createPortal(
     <Box
       className={`${css.MessageMobileOptionsWrapped} ${
-        portalRef ? css.MessageMobileOptionsWrappedContained : ""
+        portalRef ? css.MessageMobileOptionsWrappedContained : ''
       }`}
       data-gestures="ignore"
-      style={closing ? { opacity: 0, transition: "opacity 100ms ease-out" } : undefined}
+      style={closing ? { opacity: 0, transition: 'opacity 100ms ease-out' } : undefined}
       onClick={handleBackdropClick}
       // Touch events deliberately propagate: the drag binds them on `document`, and
       // stopping them here would starve it. `data-gestures="ignore"` is what keeps the
@@ -373,10 +373,10 @@ export function MobileSwipeDownModal({
     >
       <Box
         ref={sheetRef}
-        className={`${css.MessageMobileOptionsContainer} ${sheetClassName ?? ""} ${
-          portalRef ? css.MessageMobileOptionsContainerContained : ""
+        className={`${css.MessageMobileOptionsContainer} ${sheetClassName ?? ''} ${
+          portalRef ? css.MessageMobileOptionsContainerContained : ''
         } ${animationCss.SheetEntrance}`}
-        style={{ ...(shouldReduceMotion ? { animation: "none" } : undefined), ...sheetStyle }}
+        style={{ ...(shouldReduceMotion ? { animation: 'none' } : undefined), ...sheetStyle }}
         onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
         onPointerMove={(e: React.PointerEvent) => e.stopPropagation()}
         onPointerUp={(e: React.PointerEvent) => e.stopPropagation()}
@@ -386,6 +386,6 @@ export function MobileSwipeDownModal({
         <div className={css.MessageMobileSheetFill}>{dialog}</div>
       </Box>
     </Box>,
-    target,
+    target
   );
 }

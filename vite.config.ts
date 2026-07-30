@@ -6,7 +6,7 @@ import svgr from 'vite-plugin-svgr';
 import { wasm } from '@rollup/plugin-wasm';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
-import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
+import nodePolyfills from '@rolldown/plugin-node-polyfills';
 import inject from '@rollup/plugin-inject';
 import { VitePWA } from 'vite-plugin-pwa';
 import { compression, defineAlgorithm } from 'vite-plugin-compression2';
@@ -280,17 +280,13 @@ export default defineConfig(({ command }) => {
         '@vanilla-extract/recipes/createRuntimeFn',
       ],
       needsInterop: ['matrix-widget-api'],
-      esbuildOptions: {
-        define: {
-          global: 'globalThis',
+      rolldownOptions: {
+        transform: {
+          define: {
+            global: 'globalThis',
+          },
         },
-        plugins: [
-          // Enable esbuild polyfill plugins
-          NodeGlobalsPolyfillPlugin({
-            process: false,
-            buffer: true,
-          }),
-        ],
+        plugins: [nodePolyfills()],
       },
     },
     build: {
