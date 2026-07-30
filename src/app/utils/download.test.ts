@@ -220,9 +220,25 @@ describe('saveMediaToGallery', () => {
     expect(FileSaver.saveAs).not.toHaveBeenCalled();
   });
 
+  it('does not save an HTTP error response as an Android gallery image', async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      new Response('not found', { status: 404, statusText: 'Not Found' })
+    );
+
+    await saveMediaToGallery('mxc://example/missing.png', 'missing.png', 'image/png');
+
+    expect(showToast).toHaveBeenCalledWith(
+      'Failed to save to gallery: Failed to fetch media: 404 Not Found'
+    );
+    expect(androidFs.createNewPublicImageFile).not.toHaveBeenCalled();
+    expect(androidFs.writeFile).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it('shows exactly one photos failure toast when blob conversion fails on iOS', async () => {
     vi.mocked(osType).mockReturnValue('ios');
     mocks.fetch.mockResolvedValueOnce({
+      ok: true,
       blob: () => Promise.reject(new Error('decode failed')),
     } as unknown as Response);
 

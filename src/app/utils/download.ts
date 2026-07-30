@@ -54,6 +54,9 @@ export const getDownloadFilename = (
 async function resolveBlob(input: Blob | string): Promise<Blob> {
   if (typeof input !== 'string') return input;
   const response = await fetch(input);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+  }
   return response.blob();
 }
 
