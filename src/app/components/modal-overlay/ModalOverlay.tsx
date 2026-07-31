@@ -5,10 +5,7 @@ import { Box, Modal, Overlay, OverlayBackdrop, OverlayCenter } from 'folds';
 import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
 import { useDismissOnBack } from '$utils/androidBack';
-import {
-  MobileSheetFocusTrap,
-  MobileSwipeDownModal,
-} from '$components/MobileSwipeDownModal';
+import { MobileSheetFocusTrap, MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import * as messageCss from '$features/room/message/styles.css';
 
 type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];

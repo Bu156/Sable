@@ -1,9 +1,16 @@
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { animate, motion, useMotionValue } from 'framer-motion';
+import { usePrefersReducedMotion } from '$hooks/usePrefersReducedMotion';
 import { isMobileOrTablet } from '$utils/platform';
+import {
+  getTranslateX,
+  NATIVE_EASE_OUT,
+  setTranslateX,
+  transitionTo,
+} from '$utils/nativeAnimation';
 
 const SETTLE_MS = 220;
+const SETTLE_TRANSITION = `transform ${SETTLE_MS}ms ${NATIVE_EASE_OUT}`;
 const LOCK_THRESHOLD_PX = 8;
 const COMMIT_FRACTION = 0.22;
 const VELOCITY_THRESHOLD = 0.45; // px per ms
@@ -33,9 +40,12 @@ export function SwipeableOverlayWrapper({
   onClose,
   direction,
 }: SwipeableOverlayWrapperProps) {
-  const x = useMotionValue(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const xRef = useRef(0);
   const gestureRef = useRef<ActiveGesture>();
   const closeCommittedRef = useRef(false);
+  const settleRef = useRef<{ cancel: () => void }>();
+  const reduceMotion = usePrefersReducedMotion();
 
   const acceptsLeft = direction !== 'right';
   const acceptsRight = direction !== 'left';
@@ -47,6 +57,37 @@ export function SwipeableOverlayWrapper({
     return Math.max(-viewportWidth, Math.min(viewportWidth, v));
   };
 
+  const setOffset = (value: number) => {
+    xRef.current = value;
+    if (contentRef.current) setTranslateX(contentRef.current, value);
+  };
+
+  const cancelSettle = () => {
+    const element = contentRef.current;
+    const liveOffset = element ? getTranslateX(element, xRef.current) : xRef.current;
+    settleRef.current?.cancel();
+    settleRef.current = undefined;
+    if (element) element.style.transition = 'none';
+    setOffset(liveOffset);
+  };
+
+  const settleTo = (target: number, onComplete?: () => void) => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    cancelSettle();
+    settleRef.current = transitionTo(
+      element,
+      SETTLE_TRANSITION,
+      () => setOffset(target),
+      reduceMotion ? 0 : SETTLE_MS,
+      () => {
+        settleRef.current = undefined;
+        onComplete?.();
+      }
+    );
+  };
+
   const finish = (commitEligible: boolean) => {
     const gesture = gestureRef.current;
     gestureRef.current = undefined;
@@ -54,7 +95,7 @@ export function SwipeableOverlayWrapper({
 
     if (commitEligible) {
       const viewportWidth = getViewportWidth();
-      const val = x.get();
+      const val = xRef.current;
       const swipedLeft =
         acceptsLeft &&
         val < 0 &&
@@ -67,17 +108,17 @@ export function SwipeableOverlayWrapper({
       if (swipedLeft || swipedRight) {
         closeCommittedRef.current = true;
         const target = swipedLeft ? -viewportWidth : viewportWidth;
-        void animate(x, target, { duration: SETTLE_MS / 1000, ease: 'easeOut' }).then(() => {
+        settleTo(target, () => {
           if (!closeCommittedRef.current) return;
           onClose();
           closeCommittedRef.current = false;
-          animate(x, 0, { duration: SETTLE_MS / 1000, ease: 'easeOut' });
+          settleTo(0);
         });
         return;
       }
     }
 
-    animate(x, 0, { duration: SETTLE_MS / 1000, ease: 'easeOut' });
+    settleTo(0);
   };
 
   if (!isMobileOrTablet()) {
@@ -142,12 +183,12 @@ export function SwipeableOverlayWrapper({
             return;
           }
           gesture.mode = 'horizontal';
-          // Take over any settling spring; offset is seeded from the live position.
-          x.stop();
-          gesture.lockOffset = x.get();
+          // Take over any settling transition; offset is seeded from the live position.
+          cancelSettle();
+          gesture.lockOffset = xRef.current;
         }
 
-        x.set(clampOffset(gesture.lockOffset + distanceX, getViewportWidth()));
+        setOffset(clampOffset(gesture.lockOffset + distanceX, getViewportWidth()));
       }}
       onTouchEnd={() => finish(true)}
       onTouchCancel={() => finish(false)}
@@ -162,9 +203,10 @@ export function SwipeableOverlayWrapper({
         overscrollBehaviorX: 'none',
       }}
     >
-      <motion.div
+      <div
+        ref={contentRef}
         style={{
-          x,
+          transform: 'translate3d(0, 0, 0)',
           display: 'flex',
           flexDirection: 'column',
           flexGrow: 1,
@@ -173,7 +215,7 @@ export function SwipeableOverlayWrapper({
         }}
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }
