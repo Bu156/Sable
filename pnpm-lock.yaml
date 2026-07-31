@@ -196,7 +196,7 @@ importers:
         version: 42.0.0
       matrix-widget-api:
         specifier: ^1.17.0
-        version: 1.18.0
+        version: 1.17.0
       pdfjs-dist:
         specifier: ^6.2.108
         version: 6.2.108
@@ -340,7 +340,7 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       vite:
-        specifier: ^8.1.5
+        specifier: ^8.2.0
         version: 8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
       vite-plugin-compression2:
         specifier: ^2.5.3
@@ -4122,6 +4122,9 @@ packages:
   matrix-js-sdk@42.0.0:
     resolution: {integrity: sha512-i3SnhdkgnKA7O0iVlaZCo96GGaIZ0FGD93LQ34N2+Hj/kaC7Ffbch7OEkwYA//mYGCKRAMxduBacoy8WscfqVw==}
     engines: {node: '>=22.0.0'}
+
+  matrix-widget-api@1.17.0:
+    resolution: {integrity: sha512-5FHoo3iEP3Bdlv5jsYPWOqj+pGdFQNLWnJLiB0V7Ygne7bb+Gsj3ibyFyHWC6BVw+Z+tSW4ljHpO17I9TwStwQ==}
 
   matrix-widget-api@1.18.0:
     resolution: {integrity: sha512-4T2f2koWmx05p1BLcT/9YGGGPSXpPT+PA4Oap/5fjhXsWPxMGJiGL97YpANMYLKsnE1sScYFeuyxIgdc1Qo+Ew==}
@@ -8834,6 +8837,11 @@ snapshots:
       p-retry: 8.0.0
       sdp-transform: 3.0.0
       unhomoglyph: 1.0.6
+
+  matrix-widget-api@1.17.0:
+    dependencies:
+      '@types/events': 3.0.3
+      events: 3.3.0
 
   matrix-widget-api@1.18.0:
     dependencies:

@@ -148,7 +148,7 @@
     "oxlint-tsgolint": "^7.0.2001",
     "testcontainers": "^12.0.4",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
+    "vite": "^8.2.0",
     "vite-plugin-compression2": "^2.5.3",
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-static-copy": "^4.1.1",
