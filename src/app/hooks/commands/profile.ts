@@ -132,7 +132,8 @@ export const createProfileCommands = (ctx: CommandContext): Partial<CommandRecor
     },
     [Command.SColor]: {
       name: Command.SColor,
-      description: 'Set your color for the current Space. Example: /scolor #ff00ff | /scolor reset',
+      description:
+        'Set your color for the current Space. Example: /scolor light #ff00ff | /scolor reset',
       exe: async (payload) => {
         const input = payload.trim().toLowerCase().split(' ');
         const userId = mx.getSafeUserId();
@@ -171,8 +172,15 @@ export const createProfileCommands = (ctx: CommandContext): Partial<CommandRecor
             if (completeClear) {
               // Reset
               updatedContent[prefix.MATRIX_UNSTABLE_COLORS] = undefined;
-
-              await mx.sendStateEvent(room.roomId, CustomStateEvent.RoomCosmeticsColor, {}, userId);
+              //This may be ignored since it is to delete the old key when updated
+              try {
+                await mx.sendStateEvent(
+                  room.roomId,
+                  CustomStateEvent.RoomCosmeticsColor,
+                  {},
+                  userId
+                );
+              } catch {}
             } else {
               if (color && !isValidHex(color)) {
                 return;
@@ -189,7 +197,14 @@ export const createProfileCommands = (ctx: CommandContext): Partial<CommandRecor
                 room,
                 userId
               );
-              await mx.sendStateEvent(room.roomId, CustomStateEvent.RoomCosmeticsColor, {}, userId);
+              try {
+                await mx.sendStateEvent(
+                  room.roomId,
+                  CustomStateEvent.RoomCosmeticsColor,
+                  {},
+                  userId
+                );
+              } catch {}
             }
           } else {
             sendFeedback(

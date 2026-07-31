@@ -256,9 +256,15 @@ export function Cosmetics({ requestBack, requestClose }: CosmeticsProps) {
     .getLiveTimeline()
     .getState(EventTimeline.FORWARDS)
     ?.getStateEvents(EventType.RoomMember, mx.getSafeUserId());
+
+  const oldColorState = room.getLiveTimeline().getState(EventTimeline.FORWARDS);
+  const oldColorEvent = oldColorState?.getStateEvents(CustomStateEvent.RoomCosmeticsColor, userId);
+  const localColorOld = (
+    Array.isArray(oldColorEvent) ? oldColorEvent[0] : oldColorEvent
+  )?.getContent()?.color;
   const content = mEvent?.getContent<CustomRoomMemberEventContent>();
-  const colorOnDark = content?.[prefix.MATRIX_UNSTABLE_COLORS]?.on_dark;
-  const colorOnLight = content?.[prefix.MATRIX_UNSTABLE_COLORS]?.on_light;
+  const colorOnDark = content?.[prefix.MATRIX_UNSTABLE_COLORS]?.on_dark ?? localColorOld;
+  const colorOnLight = content?.[prefix.MATRIX_UNSTABLE_COLORS]?.on_light ?? localColorOld;
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canEditPermissions = permissions.stateEvent(EventType.RoomPowerLevels, mx.getSafeUserId());
