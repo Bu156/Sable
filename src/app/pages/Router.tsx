@@ -6,7 +6,7 @@ import {
   createHashRouter,
   createRoutesFromElements,
   redirect,
-} from 'react-router-dom';
+} from 'react-router';
 import * as Sentry from '@sentry/react';
 
 import type { ClientConfig } from '$hooks/useClientConfig';

@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { usePrefersReducedMotion } from '$hooks/usePrefersReducedMotion';
 import {

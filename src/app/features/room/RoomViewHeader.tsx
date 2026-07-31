@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import classNames from 'classnames';
 import { Box, Avatar, Text, IconButton, Tooltip, TooltipProvider, toRem, Badge } from 'folds';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { MatrixEvent } from '$types/matrix-sdk';
 import {
   Direction,

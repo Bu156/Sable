@@ -13,7 +13,7 @@ import {
   color,
   config,
 } from 'folds';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FocusTrap from 'focus-trap-react';
 import type { AuthDict, MatrixError } from '$types/matrix-sdk';
 import { AuthType, createClient } from '$types/matrix-sdk';

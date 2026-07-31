@@ -1,5 +1,5 @@
-import type { Path } from 'react-router-dom';
-import { generatePath, matchPath } from 'react-router-dom';
+import type { Path } from 'react-router';
+import { generatePath, matchPath } from 'react-router';
 import { trimLeadingSlash, trimTrailingSlash } from '$utils/common';
 import { getAppOrigin } from '$utils/platform';
 import type { HashRouterConfig } from '$hooks/useClientConfig';

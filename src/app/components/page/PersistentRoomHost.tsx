@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { matchPath, useLocation } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { Room } from '$features/room';
 import { IsInactivePanelProvider } from '$hooks/useRoom';

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { MobileNavDrawer } from './MobileNavDrawer';
 
 vi.mock('$state/hooks/settings', () => ({

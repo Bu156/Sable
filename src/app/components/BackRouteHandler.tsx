@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useCallback } from 'react';
 import { useSetAtom } from 'jotai';
-import { matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import { resolveSection } from '$pages/pathUtils';
 import { HOME_ROOM_PATH, DIRECT_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';

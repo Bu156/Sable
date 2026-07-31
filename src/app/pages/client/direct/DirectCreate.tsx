@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Box, IconButton, Scroll } from 'folds';
 import { ArrowLeft, At, composerIcon, dropzoneIcon } from '$components/icons/phosphor';
 import { useMatrixClient } from '$hooks/useMatrixClient';

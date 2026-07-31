@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Box, Switch, Text, Tooltip, TooltipProvider, color, config } from 'folds';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { SSOAction } from '$types/matrix-sdk';
 import { isUsableOAuthMetadata, RegisterFlowStatus, useAuthFlows } from '$hooks/useAuthFlows';
 import { useAuthServer } from '$hooks/useAuthServer';

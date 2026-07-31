@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Box } from 'folds';
-import { matchPath, useLocation } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { SETTINGS_PATH } from '../paths';
 import { isShallowRoute } from './shallowRoute';

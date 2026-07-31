@@ -1,6 +1,6 @@
 import type { ReactEventHandler } from 'react';
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { isRoomId, isUserId } from '$utils/matrix';
 import { getHomeRoomPath, withSearchParam } from '$pages/pathUtils';
 import { isSettingsSectionId } from '$features/settings/routes';

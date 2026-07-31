@@ -10,7 +10,7 @@ import {
   useNavigate,
   useParams,
   useSearchParams,
-} from 'react-router-dom';
+} from 'react-router';
 import classNames from 'classnames';
 
 import * as PatternsCss from '$styles/Patterns.css';

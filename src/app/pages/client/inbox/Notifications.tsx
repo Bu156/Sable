@@ -10,7 +10,7 @@ import {
   composerIcon,
   sizedIcon,
 } from '$components/icons/phosphor';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import type { INotification, INotificationsResponse, Room } from '$types/matrix-sdk';
 import { EventType, JoinRule, MatrixEvent, Method } from '$types/matrix-sdk';
 import { useVirtualizer } from '@tanstack/react-virtual';

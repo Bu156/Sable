@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { Box, Line } from 'folds';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { isKeyHotkey } from 'is-hotkey';
 import { useAtom, useAtomValue } from 'jotai';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';

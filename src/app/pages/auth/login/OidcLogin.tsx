@@ -1,6 +1,6 @@
 import { Box, Overlay, OverlayBackdrop, OverlayCenter, Spinner, Text } from 'folds';
 import { useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { ValidatedAuthMetadata } from '$types/matrix-sdk';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useAuthServer } from '$hooks/useAuthServer';
