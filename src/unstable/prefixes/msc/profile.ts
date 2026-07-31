@@ -25,4 +25,4 @@ export const MATRIX_UNSTABLE_MSC4466_PROPAGATE_TO = 'computer.gingershaped.msc44
  *  Unstable prefix for username colors. defined in https://github.com/matrix-org/matrix-spec-proposals/pull/4522
  */
 
-export const MATRIX_UNSTABLE_COLORS = 'eu.she-a.colors';
+export const MATRIX_UNSTABLE_COLORS = 'eu.she-a.color';
