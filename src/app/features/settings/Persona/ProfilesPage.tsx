@@ -29,8 +29,8 @@ export function PerMessageProfilePage({ requestBack, requestClose }: PerMessageP
         avatarMxcUrl={editingProfile.avatarUrl}
         displayName={editingProfile.name}
         pronouns={editingProfile.pronouns}
-        nameColorLightTheme={editingProfile.nameColorLightTheme}
-        nameColorDarkTheme={editingProfile.nameColorDarkTheme}
+        nameColorLightTheme={editingProfile.colors?.on_light}
+        nameColorDarkTheme={editingProfile.colors?.on_dark}
         requestClose={handleEditorClose}
       />
     );

@@ -79,9 +79,7 @@ export function PersonaPicker({
 
   const nameColor = useCallback(
     (persona: PerMessageProfile) =>
-      activeTheme.kind === ThemeKind.Dark
-        ? persona.nameColorDarkTheme
-        : persona.nameColorLightTheme,
+      activeTheme.kind === ThemeKind.Dark ? persona.colors?.on_dark : persona.colors?.on_light,
     [activeTheme]
   );
 
@@ -115,6 +113,7 @@ export function PersonaPicker({
   const fetchProfiles = async (mx_: MatrixClient) => {
     const fetchedProfiles = await getAllPerMessageProfiles(mx_);
     setProfiles(fetchedProfiles);
+    console.log(fetchedProfiles);
     setFilteredProfiles(fetchedProfiles);
   };
 
@@ -266,7 +265,7 @@ export function PersonaPicker({
                         <UserAvatar
                           userId={profile.id}
                           src={avatarUrl(profile)}
-                          fallbackColor={profile.nameColorLightTheme ?? undefined}
+                          fallbackColor={profile.colors?.on_light ?? undefined}
                           renderFallback={() => (
                             <Text as="span" size="H4" aria-label="Avatar fallback">
                               {nameInitials(profile.name)}

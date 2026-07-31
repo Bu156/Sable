@@ -456,8 +456,8 @@ function MessageInternal(
 
   const pmpNameColor = useMemo(() => {
     if (!renderPersonaColors) return undefined;
-    const pmpNameColorLight = parsedPMPContent?.nameColorLightTheme;
-    const pmpNameColorDark = parsedPMPContent?.nameColorDarkTheme;
+    const pmpNameColorLight = parsedPMPContent?.colors?.on_light;
+    const pmpNameColorDark = parsedPMPContent?.colors?.on_dark;
 
     return activeTheme.kind === ThemeKind.Dark ? pmpNameColorDark : pmpNameColorLight;
   }, [parsedPMPContent, activeTheme, renderPersonaColors]);

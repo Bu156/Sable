@@ -3,10 +3,9 @@ import type { AccountDataCompatVersion } from '$types/matrix/accountData';
 import type { PronounSet } from '$utils/pronouns';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
-import {
-  MATRIX_UNSTABLE_PROFILE_NAME_COLOR_PROPERTY_NAME,
-  MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
-} from '$unstable/prefixes';
+import { MATRIX_UNSTABLE_COLORS } from '$unstable/prefixes';
+import { MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME } from '$unstable/prefixes';
+import type { ColorSet } from './useUserProfile';
 
 const ACCOUNT_DATA_PREFIX = CustomAccountDataEvent.SablePerProfileMessageProfiles;
 
@@ -34,10 +33,7 @@ export type PerMessageProfile = {
    */
   pronouns?: PronounSet[];
   compat?: AccountDataCompatVersion;
-
-  /* name colors */
-  nameColorLightTheme?: string;
-  nameColorDarkTheme?: string;
+  colors?: ColorSet;
 };
 
 /**
@@ -63,7 +59,7 @@ export type PerMessageProfileBeeperFormat = {
    */
   [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]?: PronounSet[];
 
-  [MATRIX_UNSTABLE_PROFILE_NAME_COLOR_PROPERTY_NAME]?: { light?: string; dark?: string };
+  [MATRIX_UNSTABLE_COLORS]?: ColorSet;
   has_fallback?: boolean;
 };
 
@@ -83,10 +79,7 @@ export function convertPerMessageProfileToBeeperFormat(
     displayname: profile.name,
     avatar_url: profile.avatarUrl,
     [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]: profile.pronouns,
-    [MATRIX_UNSTABLE_PROFILE_NAME_COLOR_PROPERTY_NAME]: {
-      light: profile.nameColorLightTheme,
-      dark: profile.nameColorDarkTheme,
-    },
+    [MATRIX_UNSTABLE_COLORS]: profile.colors,
     has_fallback,
   };
   // delete empty fields
@@ -115,8 +108,7 @@ export function convertBeeperFormatToOurPerMessageProfile(
     name: beeperProfile.displayname ?? '',
     avatarUrl: beeperProfile.avatar_url,
     pronouns: beeperProfile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME],
-    nameColorLightTheme: beeperProfile[MATRIX_UNSTABLE_PROFILE_NAME_COLOR_PROPERTY_NAME]?.light,
-    nameColorDarkTheme: beeperProfile[MATRIX_UNSTABLE_PROFILE_NAME_COLOR_PROPERTY_NAME]?.dark,
+    colors: beeperProfile[MATRIX_UNSTABLE_COLORS],
   };
 }
 

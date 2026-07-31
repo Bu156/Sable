@@ -450,8 +450,10 @@ export function PerMessageProfileEditor({
         name: newDisplayName,
         avatarUrl: avatarMxc,
         pronouns: newPronouns,
-        nameColorLightTheme: newNameColorLight ?? undefined,
-        nameColorDarkTheme: newNameColorDark ?? undefined,
+        colors: {
+          on_light: newNameColorLight ?? undefined,
+          on_dark: newNameColorDark ?? undefined,
+        },
       });
 
       setCurrentDisplayName(newDisplayName);

@@ -4,6 +4,7 @@ import { menuIcon, X } from '$components/icons/phosphor';
 import { HexColorPicker } from 'react-colorful';
 import { SettingTile } from '$components/setting-tile';
 import { HexColorPickerPopOut } from '$components/HexColorPickerPopOut';
+import { isValidHex } from '$hooks/useUserProfile';
 
 type NameColorEditorProps = {
   title: string;
@@ -20,7 +21,6 @@ const stripQuotes = (str?: string) => {
   // to solve the silly tuwunel
   return str.replaceAll(/^["']|["']$/g, '');
 };
-const colorPattern = /^#[0-9A-F]{6}$/i;
 
 export function NameColorEditor({
   title,
@@ -44,9 +44,10 @@ export function NameColorEditor({
   // It's disruptive to the user to immediately present their input as an error.
   // We should only present an error if they fail the regex test :)
   // (Also this change makes the fallback "undefined" instead of #fff so this is required)
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const validInput = (testColor: string | undefined) => {
     if (!testColor) return true;
-    return colorPattern.test(testColor);
+    return isValidHex(testColor);
   };
 
   const handleUpdate = (newColor: string) => {
@@ -58,7 +59,7 @@ export function NameColorEditor({
   };
 
   const handleSave = () => {
-    if (!!onSave && !!tempColor && colorPattern.test(tempColor)) {
+    if (!!onSave && !!tempColor && isValidHex(tempColor)) {
       onSave(tempColor);
       setHasChanged(false);
     }
@@ -72,7 +73,7 @@ export function NameColorEditor({
   };
 
   useEffect(() => {
-    const validColor = tempColor !== undefined && colorPattern.test(tempColor);
+    const validColor = tempColor !== undefined && isValidHex(tempColor);
     if (onChange) onChange(validColor ? tempColor : null);
   }, [onChange, tempColor]);
 
@@ -100,7 +101,7 @@ export function NameColorEditor({
                   size="300"
                   radii="Pill"
                   onClick={handleSave}
-                  disabled={!tempColor || !colorPattern.test(tempColor)}
+                  disabled={!tempColor || !isValidHex(tempColor)}
                 >
                   <Text size="B300">Save</Text>
                 </Button>
