@@ -375,7 +375,7 @@ const scaleEmojiChunk = (text: string, output: (string | JSX.Element)[]) => {
 
 export const scaleSystemEmoji = (text: string): (string | JSX.Element)[] => {
   const parts: (string | JSX.Element)[] = [];
-  const urlReg = new RegExp(URL_REG);
+  const urlReg = new RegExp(URL_REG, 'g');
   let lastIndex = 0;
 
   [...text.matchAll(urlReg)].forEach((match) => {
