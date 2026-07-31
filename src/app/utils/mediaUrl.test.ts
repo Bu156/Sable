@@ -196,6 +196,14 @@ describe('addTauriMediaRetryRevision', () => {
 describe('getTauriMediaRetryTarget', () => {
   const WRAPPED =
     'sable-media://https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123?__sable_media_cache=3&__sable_media_session=session_abc';
+  const INNER =
+    'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
+  const WRAPPED_TARGETS = [
+    WRAPPED,
+    `sable-media://localhost/${encodeURIComponent(INNER)}?__sable_media_cache=3&__sable_media_session=session_abc`,
+    `https://sable-media.localhost/${encodeURIComponent(INNER)}?__sable_media_cache=3&__sable_media_session=session_abc`,
+    `http://sable-media.localhost/${encodeURIComponent(INNER)}?__sable_media_cache=3&__sable_media_session=session_abc`,
+  ];
 
   it('returns undefined for the first attempt and outside Tauri', () => {
     hoistedIsTauri.mockReturnValue(true);
@@ -204,10 +212,11 @@ describe('getTauriMediaRetryTarget', () => {
     expect(getTauriMediaRetryTarget(WRAPPED, 1)).toBeUndefined();
   });
 
-  it('returns the revised http target for encryption registration', () => {
-    hoistedIsTauri.mockReturnValue(true);
-    expect(getTauriMediaRetryTarget(WRAPPED, 1)).toBe(
-      'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123#__sable_media_retry=1'
-    );
-  });
+  it.each(WRAPPED_TARGETS)(
+    'returns the revised http target for encryption registration: %s',
+    (url) => {
+      hoistedIsTauri.mockReturnValue(true);
+      expect(getTauriMediaRetryTarget(url, 1)).toBe(`${INNER}#__sable_media_retry=1`);
+    }
+  );
 });

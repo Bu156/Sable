@@ -42,6 +42,41 @@ export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | n
 
 const TAURI_MEDIA_RETRY_FRAGMENT = '__sable_media_retry';
 const TAURI_MEDIA_OUTER_QUERY_PARAMS = ['__sable_media_cache', '__sable_media_session'];
+const TAURI_MEDIA_PROTOCOL = 'sable-media://';
+const TAURI_MEDIA_LOCALHOST = 'localhost';
+const TAURI_MEDIA_LOCALHOST_HOST = 'sable-media.localhost';
+
+const getTauriMediaInnerTarget = (mediaUrl: string): string | undefined => {
+  if (mediaUrl.startsWith(TAURI_MEDIA_PROTOCOL)) {
+    const wrappedUrl = mediaUrl.slice(TAURI_MEDIA_PROTOCOL.length);
+
+    if (wrappedUrl.startsWith(`${TAURI_MEDIA_LOCALHOST}/`)) {
+      try {
+        const parsedUrl = new URL(mediaUrl);
+        if (parsedUrl.hostname !== TAURI_MEDIA_LOCALHOST) return undefined;
+        return decodeURIComponent(parsedUrl.pathname.slice(1));
+      } catch {
+        return undefined;
+      }
+    }
+
+    return wrappedUrl;
+  }
+
+  try {
+    const parsedUrl = new URL(mediaUrl);
+    if (
+      (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') &&
+      parsedUrl.hostname === TAURI_MEDIA_LOCALHOST_HOST
+    ) {
+      return decodeURIComponent(parsedUrl.pathname.slice(1));
+    }
+  } catch {
+    return undefined;
+  }
+
+  return mediaUrl;
+};
 
 // Embeds a retry revision as a fragment on the inner http(s) target (stripping the
 // outer cache/session markers, which the rewrite re-adds). The fragment makes Rust's
@@ -53,9 +88,8 @@ export const getTauriMediaRetryTarget = (
   revision: number
 ): string | undefined => {
   if (revision <= 0 || !isTauri()) return undefined;
-  const innerTarget = mediaUrl.startsWith('sable-media://')
-    ? mediaUrl.slice('sable-media://'.length)
-    : mediaUrl;
+  const innerTarget = getTauriMediaInnerTarget(mediaUrl);
+  if (!innerTarget) return undefined;
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(innerTarget);
