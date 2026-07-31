@@ -132,6 +132,7 @@ export class CallEmbed {
       perParticipantE2EE: room.hasEncryptionStateEvent().toString(),
       lang: 'en-EN',
       theme: themeKind,
+      background: 'solid',
       header: 'none',
     });
 
@@ -446,6 +447,7 @@ export class CallEmbed {
     const doc = this.document;
     if (!doc) return;
 
+    doc.documentElement.style.setProperty('background', 'none', 'important');
     doc.body.style.setProperty('background', 'none', 'important');
 
     // Copy stylesheets from parent just in case
@@ -757,6 +759,7 @@ export class CallEmbed {
           font-family: ${appFontFamily} !important;
         }
       `;
+      if (doc.head.lastChild !== styleEl) doc.head.appendChild(styleEl);
     };
 
     // Sync theme classes from parent html/body
@@ -783,7 +786,12 @@ export class CallEmbed {
       attributes: true,
       attributeFilter: ['class', 'data-theme', 'style'],
     });
+    observer.observe(document.head, { childList: true, subtree: true });
     this.disposables.push(() => observer.disconnect());
+
+    const iframeHeadObserver = new MutationObserver(syncThemeClasses);
+    iframeHeadObserver.observe(doc.head, { childList: true });
+    this.disposables.push(() => iframeHeadObserver.disconnect());
   }
 
   private onEvent(ev: MatrixEvent): void {
