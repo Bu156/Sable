@@ -158,6 +158,8 @@ import {
   dropzoneIcon,
   File as FileIcon,
   Gif,
+  ListBullets,
+  MapPinPlusIcon,
   menuIcon,
   Microphone,
   PaperPlaneTilt,
@@ -327,6 +329,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const clientConfig = useClientConfig();
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
+    const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
     const [editorGifButton] = useSetting(settingsAtom, 'editorGifButton');
     const [editorEmojiButton] = useSetting(settingsAtom, 'editorEmojiButton');
     const [editorStickerButton] = useSetting(settingsAtom, 'editorStickerButton');
@@ -498,7 +501,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     }, []);
 
     const handleFiles = useCallback(
-      async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
+      async (
+        files: File[],
+        audioMeta?: { waveform: number[]; audioDuration: number },
+        options?: { alreadyInMemory?: boolean }
+      ) => {
         const epoch = draftEpochRef.current;
         fileIngestionCountRef.current += 1;
         setIngestingFiles(true);
@@ -508,18 +515,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           if (epoch !== draftEpochRef.current || !mountedRef.current) return;
 
           // Eager-read to avoid Android content URI expiry after SAF picker
-          const blobbedFiles = isMobileOrTablet()
-            ? await Promise.all(
-                safeFiles.map(async (f) => {
-                  try {
-                    const buf = await f.arrayBuffer();
-                    return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
-                  } catch {
-                    return f;
-                  }
-                })
-              )
-            : safeFiles;
+          const blobbedFiles =
+            isMobileOrTablet() && !options?.alreadyInMemory
+              ? await Promise.all(
+                  safeFiles.map(async (f) => {
+                    try {
+                      const buf = await f.arrayBuffer();
+                      return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+                    } catch {
+                      return f;
+                    }
+                  })
+                )
+              : safeFiles;
           if (epoch !== draftEpochRef.current || !mountedRef.current) return;
           blobbedFiles.forEach((file) => removedUploadFilesRef.current.delete(file));
 
@@ -601,10 +609,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
 
         try {
-          const files = await pickNativeFile(pickerMode, (path, error) => {
-            log.warn('Failed to read native attachment file:', path, error);
+          const files = await pickNativeFile(pickerMode, (source, error) => {
+            log.warn('Native attachment file error:', source, error);
           });
-          if (files.length > 0) await handleFiles(files);
+          if (files.length > 0) await handleFiles(files, undefined, { alreadyInMemory: true });
         } catch (error) {
           log.error('Failed to open native attachment picker', { roomId }, error);
         }
@@ -686,6 +694,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       },
       [setRoomEditingScheduledDelayId, threadRootId]
     );
+    const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
     const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
     const attachmentSkipReturnFocusRef = useRef(false);
     const [showPollPicker, setShowPollPicker] = useState(false);
@@ -2219,7 +2228,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           before={
             <>
-              {isMobileOrTablet() && (
+              {isMobileOrTablet() ? (
                 <>
                   <IconButton
                     onClick={() => {
@@ -2263,6 +2272,79 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       )}
                     </MobileSwipeDownModal>
                   )}
+                </>
+              ) : (
+                <>
+                  <PopOut
+                    anchor={AddMenuAnchor}
+                    position="Top"
+                    align="Start"
+                    offset={5}
+                    content={
+                      <FocusTrap
+                        focusTrapOptions={{
+                          initialFocus: false,
+                          onDeactivate: () => setAddMenuAnchor(undefined),
+                          clickOutsideDeactivates: true,
+                          escapeDeactivates: stopPropagation,
+                        }}
+                      >
+                        <Menu>
+                          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                setAddMenuAnchor(undefined);
+                                setShowPollPicker(true);
+                              }}
+                              before={menuIcon(ListBullets)}
+                            >
+                              <Text size="B300">Create Poll</Text>
+                            </MenuItem>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                setAddMenuAnchor(undefined);
+                                setShowLocationPicker(true);
+                              }}
+                              before={menuIcon(MapPinPlusIcon)}
+                            >
+                              <Text size="B300">Add Location</Text>
+                            </MenuItem>
+                            <MenuItem
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                pickFile('*');
+                                setAddMenuAnchor(undefined);
+                              }}
+                              before={menuIcon(PlusCircle)}
+                            >
+                              <Text size="B300">Add File</Text>
+                            </MenuItem>
+                          </Box>
+                        </Menu>
+                      </FocusTrap>
+                    }
+                  />
+                  <IconButton
+                    onClick={(evt) =>
+                      editorOldAddFile
+                        ? pickFile('*')
+                        : setAddMenuAnchor(evt.currentTarget.getBoundingClientRect())
+                    }
+                    onPointerDown={suppressEditorRefocus}
+                    variant="SurfaceVariant"
+                    size="300"
+                    radii="300"
+                    style={{ backgroundColor: 'transparent' }}
+                    title={editorOldAddFile ? 'Upload File' : 'Add'}
+                    aria-label={editorOldAddFile ? 'Upload and attach a File' : 'Add new Item'}
+                  >
+                    {composerIcon(PlusCircle)}
+                  </IconButton>
                 </>
               )}
               {pmpPickerEnable && (
