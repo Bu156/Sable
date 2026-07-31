@@ -51,7 +51,15 @@ vi.mock('$hooks/useSableCosmetics', () => ({
 }));
 
 vi.mock('$hooks/useRoomMemberHydration', () => ({
-  useRoomMemberHydration: vi.fn<(room: unknown, userId: string) => void>(),
+  useRoomMemberHydration:
+    vi.fn<
+      (
+        room: unknown,
+        userId: string,
+        hasTimelineMember?: boolean,
+        profileDisplayName?: string
+      ) => void
+    >(),
 }));
 
 vi.mock('$state/hooks/userRoomProfile', () => ({

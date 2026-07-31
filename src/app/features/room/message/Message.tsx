@@ -493,7 +493,7 @@ function MessageInternal(
   // Avatars
   // Prefer the room-scoped member avatar (m.room.member) over the global profile
   // avatar so per-room avatar overrides are respected in the timeline.
-  useRoomMemberHydration(room, senderId, mEvent.sender !== null);
+  useRoomMemberHydration(room, senderId, mEvent.sender !== null, profile.displayName);
   const memberAvatarMxc = mEvent.sender?.getMxcAvatarUrl() ?? getMemberAvatarMxc(room, senderId);
   const avatarUrl = useMemo(() => {
     const mxc = pmp?.avatar_url || memberAvatarMxc || profile.avatarUrl;
