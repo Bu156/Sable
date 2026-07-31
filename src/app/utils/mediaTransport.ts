@@ -1,6 +1,7 @@
 import { getCachedSWMediaAuthSupport } from './swMediaAuth';
 import { fetch } from '$utils/fetch';
 import { getFromMediaCache, putInMediaCache } from './mediaCache';
+import { withMediaFetchSlot } from './mediaConcurrency';
 
 type StoredSession = {
   baseUrl?: string;
@@ -326,7 +327,9 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
   };
 
   if (useServiceWorker) {
-    return fetchAndCache(await fetchMediaResponse(url, undefined, cacheMode));
+    return withMediaFetchSlot(async () =>
+      fetchAndCache(await fetchMediaResponse(url, undefined, cacheMode))
+    );
   }
 
   const fetchWithRetry = async (
@@ -352,20 +355,22 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
     }
   };
 
-  const initialAccessToken = resolveAccessToken(url, options);
-  const initialResponse = await fetchWithRetry(url, initialAccessToken, cacheMode);
-  if (initialResponse.ok) {
-    return fetchAndCache(initialResponse);
-  }
+  return withMediaFetchSlot(async () => {
+    const initialAccessToken = resolveAccessToken(url, options);
+    const initialResponse = await fetchWithRetry(url, initialAccessToken, cacheMode);
+    if (initialResponse.ok) {
+      return fetchAndCache(initialResponse);
+    }
 
-  if (!isRetryableAuthError(initialResponse)) {
-    throw new Error(
-      `Failed to fetch media: ${initialResponse.status} ${initialResponse.statusText}`
-    );
-  }
+    if (!isRetryableAuthError(initialResponse)) {
+      throw new Error(
+        `Failed to fetch media: ${initialResponse.status} ${initialResponse.statusText}`
+      );
+    }
 
-  const retryAccessToken = resolveAccessToken(url, options);
-  return fetchAndCache(await fetchMediaResponse(url, retryAccessToken, cacheMode));
+    const retryAccessToken = resolveAccessToken(url, options);
+    return fetchAndCache(await fetchMediaResponse(url, retryAccessToken, cacheMode));
+  });
 }
 
 export async function fetchMediaBlob(url: string, options?: MediaTransportOptions): Promise<Blob> {
