@@ -156,7 +156,9 @@ describe('DesktopUpdater', () => {
 
   it('retries when downloadAndInstall fails', async () => {
     const update = makeUpdate('4.0.0');
-    update.downloadAndInstall.mockRejectedValueOnce(new Error('eacces')).mockResolvedValueOnce(undefined);
+    update.downloadAndInstall
+      .mockRejectedValueOnce(new Error('eacces'))
+      .mockResolvedValueOnce(undefined);
     checkFn.mockResolvedValue(update);
 
     render(
