@@ -113,7 +113,6 @@ export function PersonaPicker({
   const fetchProfiles = async (mx_: MatrixClient) => {
     const fetchedProfiles = await getAllPerMessageProfiles(mx_);
     setProfiles(fetchedProfiles);
-    console.log(fetchedProfiles);
     setFilteredProfiles(fetchedProfiles);
   };
 
