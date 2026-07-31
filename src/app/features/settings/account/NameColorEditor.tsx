@@ -4,6 +4,7 @@ import { menuIcon, X } from '$components/icons/phosphor';
 import { HexColorPicker } from 'react-colorful';
 import { SettingTile } from '$components/setting-tile';
 import { HexColorPickerPopOut } from '$components/HexColorPickerPopOut';
+import { isValidHex } from '$hooks/useUserProfile';
 
 type NameColorEditorProps = {
   title: string;
@@ -45,7 +46,7 @@ export function NameColorEditor({
   };
 
   const handleSave = () => {
-    if (/^#[0-9A-F]{6}$/i.test(tempColor)) {
+    if (isValidHex(tempColor)) {
       onSave(tempColor);
       setHasChanged(false);
     }
@@ -81,7 +82,7 @@ export function NameColorEditor({
                   size="300"
                   radii="Pill"
                   onClick={handleSave}
-                  disabled={!/^#[0-9A-F]{6}$/i.test(tempColor)}
+                  disabled={!isValidHex(tempColor)}
                 >
                   <Text size="B300">Save</Text>
                 </Button>
