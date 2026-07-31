@@ -212,13 +212,21 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
 
     // Rows re-measure as dynamic content lands (decrypts, lazy media, replies),
     // nudging the total size back and forth across the sheet's max height. The
-    // sheet sizes itself off this list, so latch the largest size seen: it may
-    // grow as content arrives, but never shrink and jitter while open.
+    // sheet sizes itself off this list, so latch the largest size seen for the
+    // current set of pins. Structural changes rebase the latch so removals do
+    // not leave stale empty space.
     const totalSize = virtualizer.getTotalSize();
-    const [latchedSize, setLatchedSize] = useState(0);
+    const pinListKey = JSON.stringify(sortedPinnedEvent);
+    const [latchedSize, setLatchedSize] = useState({ pinListKey, size: 0 });
     useLayoutEffect(() => {
-      setLatchedSize((prev) => (totalSize > prev ? totalSize : prev));
-    }, [totalSize]);
+      setLatchedSize((prev) => {
+        if (prev.pinListKey !== pinListKey) return { pinListKey, size: totalSize };
+        if (totalSize <= prev.size) return prev;
+        return { pinListKey, size: totalSize };
+      });
+    }, [pinListKey, totalSize]);
+    const currentLatchedSize = latchedSize.pinListKey === pinListKey ? latchedSize.size : totalSize;
+    const mobileMaxHeight = 'calc(85vh - 4rem)';
 
     const renderMatrixEvent = useRoomMessagePreviewRenderer(room);
 
@@ -247,9 +255,9 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
               hideTrack
               visibility="Hover"
               style={{
-                minHeight: isMobile ? latchedSize : 0,
+                minHeight: isMobile ? `min(${currentLatchedSize}px, ${mobileMaxHeight})` : 0,
                 flex: isMobile ? '0 1 auto' : 1,
-                maxHeight: isMobile ? 'calc(85vh - 4rem)' : undefined,
+                maxHeight: isMobile ? mobileMaxHeight : undefined,
                 overflowY: 'auto',
                 touchAction: 'pan-y',
               }}
