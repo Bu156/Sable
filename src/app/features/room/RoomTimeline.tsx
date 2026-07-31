@@ -408,7 +408,12 @@ export function RoomTimeline({
       const v = vListRef.current;
       if (!v) return;
       const scrollTop = offset ?? v.scrollOffset;
-      const isNowAtBottom = v.scrollSize - scrollTop - v.viewportSize < 100;
+      let isNowAtBottom = v.scrollSize - scrollTop - v.viewportSize < 100;
+      // Don't arm atBottom while a focus jump is pending: the swapped-in
+      // context window transiently clamps to its bottom edge.
+      if (isNowAtBottom && !atBottomRef.current && timelineSyncRef.current.focusItem) {
+        isNowAtBottom = false;
+      }
       if (isNowAtBottom !== atBottomRef.current) setAtBottom(isNowAtBottom);
     },
     [setAtBottom]
@@ -724,10 +729,25 @@ export function RoomTimeline({
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (timelineSync.focusItem) {
       if (timelineSync.focusItem.scrollTo && vListRef.current) {
-        const processedIndex = getRawIndexToProcessedIndex(timelineSync.focusItem.index);
+        let processedIndex = getRawIndexToProcessedIndex(timelineSync.focusItem.index);
+        let focusRawIndex = timelineSync.focusItem.index;
+        if (processedIndex === undefined) {
+          // Jump targets with no rendered row (thread replies, hidden
+          // membership/name events): land on the nearest visible row.
+          const nearest = getProcessedRowIndexForRawTimelineIndex(
+            processedEventsRef.current,
+            timelineSync.focusItem.index
+          );
+          if (nearest) {
+            processedIndex = nearest.rowIndex;
+            focusRawIndex = nearest.focusRawIndex;
+          }
+        }
         if (processedIndex !== undefined) {
           vListRef.current.scrollToIndex(processedIndex, { align: 'center' });
-          timelineSync.setFocusItem((prev) => (prev ? { ...prev, scrollTo: false } : undefined));
+          timelineSync.setFocusItem((prev) =>
+            prev ? { ...prev, index: focusRawIndex, scrollTo: false } : undefined
+          );
         }
       }
       timeoutId = setTimeout(() => {
@@ -794,6 +814,21 @@ export function RoomTimeline({
     const el = messageListRef.current;
     if (!el) return () => {};
 
+    // Async content (e.g. link previews) grows the VList content element
+    // without re-render, so observe it alongside the viewport wrapper.
+    const contentEl = scrollElRef.current?.firstElementChild;
+    let contentObserver: ResizeObserver | undefined;
+    if (contentEl) {
+      contentObserver = new ResizeObserver(() => {
+        if (atBottomRef.current && liveTimelineLinkedRef.current) {
+          if (processedEventsRef.current.length > 0) scrollToBottom();
+        } else {
+          syncAtBottom();
+        }
+      });
+      contentObserver.observe(contentEl);
+    }
+
     const observer = new ResizeObserver((entries) => {
       const newHeight = entries[0]!.contentRect.height;
       const prev = prevViewportHeightRef.current;
@@ -811,7 +846,10 @@ export function RoomTimeline({
     });
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      contentObserver?.disconnect();
+    };
   }, [syncAtBottom, scrollToBottom]);
 
   // Decrypting rows and late-loading images grow without changing eventsLength,

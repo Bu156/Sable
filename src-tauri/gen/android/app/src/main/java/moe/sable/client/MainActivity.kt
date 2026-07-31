@@ -1,6 +1,8 @@
 package moe.sable.client
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -175,6 +177,22 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    @JvmStatic
+    fun startCallForegroundServiceNative() {
+      val activity = checkNotNull(instance) { "MainActivity is unavailable" }
+      check(
+        ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) ==
+          PackageManager.PERMISSION_GRANTED
+      ) { "Microphone permission is not granted" }
+      ContextCompat.startForegroundService(activity, Intent(activity, CallForegroundService::class.java))
+    }
+
+    @JvmStatic
+    fun stopCallForegroundServiceNative() {
+      val activity = checkNotNull(instance) { "MainActivity is unavailable" }
+      activity.stopService(Intent(activity, CallForegroundService::class.java))
+    }
+
     private fun isLight(color: Int): Boolean {
       val luminance =
         (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
@@ -210,23 +228,5 @@ class MainActivity : TauriActivity() {
       }
     }
 
-    @JvmStatic
-    fun startCallForegroundServiceNative() {
-      val activity = instance ?: return
-      activity.runOnUiThread {
-        ContextCompat.startForegroundService(
-          activity,
-          Intent(activity, CallForegroundService::class.java)
-        )
-      }
-    }
-
-    @JvmStatic
-    fun stopCallForegroundServiceNative() {
-      val activity = instance ?: return
-      activity.runOnUiThread {
-        activity.stopService(Intent(activity, CallForegroundService::class.java))
-      }
-    }
   }
 }

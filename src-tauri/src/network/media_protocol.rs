@@ -4,7 +4,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex, OnceLock, RwLock, Weak,
     },
     time::Duration,
@@ -29,6 +29,7 @@ use tokio::{
 };
 
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
+const MEDIA_SESSION_MARKER: &str = "__sable_media_session";
 
 const MEDIA_PATH_PREFIXES: [&str; 2] = ["/_matrix/media/", "/_matrix/client/v1/media/"];
 // How the webview spells this protocol: `sable-media://` on iOS/macOS, and
@@ -47,6 +48,7 @@ const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 6;
 // The frontend mounts (and starts requesting media) before it hands us the session, so a request
 // may arrive first. `<img>` never retries, so waiting beats answering 503.
 const SESSION_WAIT: Duration = Duration::from_secs(5);
+const SESSION_REFRESH_WAIT: Duration = Duration::from_millis(2500);
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 // Short: a 4xx stops being true once an unreachable remote server comes back.
 const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(600);
@@ -61,6 +63,7 @@ pub struct MediaSessionState {
     inner: RwLock<Option<MediaSession>>,
     session_ready: Notify,
     session_ever_set: AtomicBool,
+    session_generation: AtomicU64,
     encryption: RwLock<HashMap<String, EncryptionParams>>,
     client: OnceLock<Client>,
     thumbnail_semaphore: Semaphore,
@@ -75,6 +78,7 @@ impl Default for MediaSessionState {
             inner: RwLock::new(None),
             session_ready: Notify::new(),
             session_ever_set: AtomicBool::new(false),
+            session_generation: AtomicU64::new(0),
             encryption: RwLock::new(HashMap::new()),
             client: OnceLock::new(),
             thumbnail_semaphore: Semaphore::new(MAX_CONCURRENT_THUMBNAIL_REQUESTS),
@@ -112,6 +116,68 @@ impl MediaSessionState {
                 return None;
             }
         }
+    }
+
+    async fn wait_for_newer_session(&self, previous: &MediaSession) -> Option<MediaSession> {
+        self.wait_for_newer_session_with_timeout(previous, SESSION_REFRESH_WAIT)
+            .await
+    }
+
+    async fn wait_for_newer_session_with_timeout(
+        &self,
+        previous: &MediaSession,
+        wait: Duration,
+    ) -> Option<MediaSession> {
+        let deadline = Instant::now() + wait;
+        loop {
+            let mut notified = std::pin::pin!(self.session_ready.notified());
+            // Register before re-checking, otherwise a session arriving in between is missed.
+            notified.as_mut().enable();
+            match self.session() {
+                Some(session) if session.generation > previous.generation => {
+                    if session.origin != previous.origin || session.scope != previous.scope {
+                        return None;
+                    }
+                    if session.token != previous.token {
+                        return Some(session);
+                    }
+                }
+                None if self.session_generation.load(Ordering::Acquire) > previous.generation => {
+                    return None;
+                }
+                _ => {}
+            }
+            if timeout_at(deadline, notified).await.is_err() {
+                return None;
+            }
+        }
+    }
+
+    fn set_session(&self, mut session: MediaSession) -> Result<(), String> {
+        let mut guard = self
+            .inner
+            .write()
+            .map_err(|_| "media session lock poisoned".to_string())?;
+        session.generation = self.session_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        *guard = Some(session);
+        drop(guard);
+        self.forget_client_errors();
+        self.session_ever_set.store(true, Ordering::Release);
+        self.session_ready.notify_waiters();
+        Ok(())
+    }
+
+    fn clear_session(&self) -> Result<(), String> {
+        let mut guard = self
+            .inner
+            .write()
+            .map_err(|_| "media session lock poisoned".to_string())?;
+        *guard = None;
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
+        drop(guard);
+        self.forget_client_errors();
+        self.session_ready.notify_waiters();
+        Ok(())
     }
 
     // Shared across requests so the connection pool and TLS sessions stay warm.
@@ -194,6 +260,7 @@ struct MediaSession {
     // Cache key input. The Matrix user ID, not `token`, which rotates on every OIDC
     // refresh and would orphan the whole on-disk cache.
     scope: String,
+    generation: u64,
 }
 
 #[derive(Clone)]
@@ -221,22 +288,12 @@ pub fn set_media_session(
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| origin.clone());
 
-    {
-        let mut guard = state
-            .inner
-            .write()
-            .map_err(|_| "media session lock poisoned".to_string())?;
-        *guard = Some(MediaSession {
-            origin,
-            token,
-            scope,
-        });
-    }
-
-    state.forget_client_errors();
-    state.session_ever_set.store(true, Ordering::Release);
-    state.session_ready.notify_waiters();
-    Ok(())
+    state.set_session(MediaSession {
+        origin,
+        token,
+        scope,
+        generation: 0,
+    })
 }
 
 #[tauri::command]
@@ -244,18 +301,15 @@ pub fn clear_media_session<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, MediaSessionState>,
 ) {
-    if let Ok(mut guard) = state.inner.write() {
-        *guard = None;
-    }
-    if let Ok(mut guard) = state.encryption.write() {
-        guard.clear();
-    }
-    state.forget_client_errors();
+    let _ = state.clear_session();
     if let Ok(dir) = cache_dir(&app) {
         let _ = fs::remove_dir_all(dir);
     }
     if let Ok(temp_dir) = temp_cache_dir(&app) {
         let _ = fs::remove_dir_all(temp_dir);
+    }
+    if let Ok(mut guard) = state.encryption.write() {
+        guard.clear();
     }
 }
 
@@ -329,7 +383,9 @@ fn normalize_encryption_key(url: &str) -> String {
             let decoded = percent_encoding::percent_decode_str(path)
                 .decode_utf8()
                 .unwrap_or(std::borrow::Cow::Borrowed(path));
-            if let Ok(parsed) = Url::parse(&decoded) {
+            if let Ok(mut parsed) = Url::parse(&decoded) {
+                // A retry fragment is transport metadata, never part of the params key.
+                parsed.set_fragment(None);
                 return parsed.to_string();
             }
             return decoded.into_owned();
@@ -337,8 +393,49 @@ fn normalize_encryption_key(url: &str) -> String {
     }
     // Parse bare URLs too, so both sides of the map agree on one canonical form.
     Url::parse(url)
-        .map(|parsed| parsed.to_string())
+        .map(|mut parsed| {
+            parsed.set_fragment(None);
+            parsed.to_string()
+        })
         .unwrap_or_else(|_| url.to_string())
+}
+
+fn media_session_marker(uri: &Uri) -> Result<Option<String>, StatusCode> {
+    let Some(query) = uri.query() else {
+        return Ok(None);
+    };
+
+    let mut marker = None;
+    for component in query.split('&') {
+        let (raw_key, raw_value) = component.split_once('=').unwrap_or((component, ""));
+        let key = percent_encoding::percent_decode_str(raw_key)
+            .decode_utf8()
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        if key == MEDIA_SESSION_MARKER {
+            if marker.is_some() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            marker = Some(
+                percent_encoding::percent_decode_str(raw_value)
+                    .decode_utf8()
+                    .map_err(|_| StatusCode::BAD_REQUEST)?
+                    .into_owned(),
+            );
+        }
+    }
+
+    Ok(marker)
+}
+
+fn session_marker_matches(uri: &Uri, scope: &str) -> Result<bool, StatusCode> {
+    Ok(media_session_marker(uri)?.is_none_or(|marker| marker == scope))
+}
+
+fn should_retry_with_session(failed: &MediaSession, updated: &MediaSession) -> bool {
+    updated.generation != failed.generation
+        && updated.token != failed.token
+        && updated.origin == failed.origin
+        && updated.scope == failed.scope
 }
 
 /// The app's own webview origins, which vary by platform and scheme.
@@ -402,7 +499,10 @@ async fn handle_request<R: Runtime>(
         return Ok(session_unavailable_response());
     };
 
-    let media_url = Url::parse(&target).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let mut media_url = Url::parse(&target).map_err(|_| StatusCode::BAD_REQUEST)?;
+    // A retry fragment never goes upstream and must not key encryption params, but stays
+    // in `target` below so the retry gets a fresh cache identity.
+    media_url.set_fragment(None);
     if media_url.scheme() != "http" && media_url.scheme() != "https" {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -413,6 +513,9 @@ async fn handle_request<R: Runtime>(
         .iter()
         .any(|prefix| media_url.path().starts_with(prefix))
     {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if !session_marker_matches(&uri, &session.scope)? {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -611,6 +714,23 @@ async fn fetch_and_cache(
         .send()
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    if matches!(
+        upstream.status(),
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+    ) {
+        if let Some(updated) = state.wait_for_newer_session(session).await {
+            if should_retry_with_session(session, &updated) {
+                upstream = state
+                    .client()
+                    .get(media_url.clone())
+                    .header(AUTHORIZATION, format!("Bearer {}", updated.token))
+                    .send()
+                    .await
+                    .map_err(|_| StatusCode::BAD_GATEWAY)?;
+            }
+        }
+    }
 
     if !upstream.status().is_success() {
         return Err(
@@ -1033,6 +1153,7 @@ fn session_unavailable_response() -> Response<Vec<u8>> {
     Response::builder()
         .status(StatusCode::SERVICE_UNAVAILABLE)
         .header(header::RETRY_AFTER, "1")
+        .header(header::CACHE_CONTROL, "no-store")
         .body(Vec::new())
         .expect("failed to build 503 media response")
 }
@@ -1040,6 +1161,7 @@ fn session_unavailable_response() -> Response<Vec<u8>> {
 fn error_response(status: StatusCode) -> Response<Vec<u8>> {
     Response::builder()
         .status(status)
+        .header(header::CACHE_CONTROL, "no-store")
         .body(Vec::new())
         .expect("failed to build media error response")
 }
@@ -1069,11 +1191,123 @@ fn cache_key(session_token: &str, url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{
+        fs,
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{atomic::AtomicU64, mpsc, Arc},
+        thread,
+        time::Duration,
+    };
 
-    use tauri::http::{header, StatusCode};
+    use tauri::http::{header, StatusCode, Uri};
 
-    use super::{cache_key, ok_response, MediaSessionState};
+    use super::{
+        cache_key, ok_response, session_marker_matches, should_retry_with_session, MediaSession,
+        MediaSessionState, Url,
+    };
+
+    static TEST_CACHE_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn test_session(origin: &str, token: &str, scope: &str, generation: u64) -> MediaSession {
+        MediaSession {
+            origin: origin.to_owned(),
+            token: token.to_owned(),
+            scope: scope.to_owned(),
+            generation,
+        }
+    }
+
+    fn start_upstream(
+        statuses: Vec<(u16, &'static str)>,
+    ) -> (Url, mpsc::Receiver<String>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (auth_sender, auth_receiver) = mpsc::channel();
+        let server = thread::spawn(move || {
+            for (status, body) in statuses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut chunk = [0_u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let Ok(read) = stream.read(&mut chunk) else {
+                        break;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&chunk[..read]);
+                }
+                let authorization = String::from_utf8_lossy(&request)
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("Authorization: ")
+                            .or_else(|| line.strip_prefix("authorization: "))
+                    })
+                    .unwrap_or_default()
+                    .to_owned();
+                auth_sender.send(authorization).unwrap();
+                let reason = match status {
+                    200 => "OK",
+                    403 => "Forbidden",
+                    _ => "Unauthorized",
+                };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (
+            Url::parse(&format!(
+                "http://{address}/_matrix/client/v1/media/download/matrix.org/id"
+            ))
+            .unwrap(),
+            auth_receiver,
+            server,
+        )
+    }
+
+    async fn fetch_test(
+        state: &MediaSessionState,
+        session: MediaSession,
+        media_url: Url,
+    ) -> Result<(String, Option<Arc<Vec<u8>>>, std::path::PathBuf), StatusCode> {
+        let root = std::env::temp_dir().join(format!(
+            "sable-media-test-{}-{}",
+            std::process::id(),
+            TEST_CACHE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let temp = root.join("temp");
+        let key = cache_key(&session.scope, media_url.as_str());
+        let result = super::ensure_cached_with_limits(
+            state,
+            &session,
+            &key,
+            media_url,
+            root.clone(),
+            temp,
+            1024 * 1024,
+            1024 * 1024,
+        )
+        .await;
+        fs::remove_dir_all(root).ok();
+        result
+    }
+
+    async fn receive_auth(receiver: &mpsc::Receiver<String>) -> String {
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if let Ok(auth) = receiver.try_recv() {
+                    return auth;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap()
+    }
 
     #[test]
     fn cache_miss_gates_are_reused_and_expired_entries_are_cleaned() {
@@ -1101,18 +1335,14 @@ mod tests {
         let writer = Arc::clone(&state);
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            {
-                let mut guard = writer.inner.write().unwrap();
-                *guard = Some(super::MediaSession {
+            writer
+                .set_session(super::MediaSession {
                     origin: "https://matrix.example.org".into(),
                     token: "token".into(),
                     scope: "@a:example.org".into(),
-                });
-            }
-            writer
-                .session_ever_set
-                .store(true, std::sync::atomic::Ordering::Release);
-            writer.session_ready.notify_waiters();
+                    generation: 0,
+                })
+                .unwrap();
         });
 
         let session =
@@ -1120,6 +1350,267 @@ mod tests {
                 .await
                 .expect("wait_for_session hung");
         assert_eq!(session.map(|s| s.scope), Some("@a:example.org".to_string()));
+    }
+
+    #[tokio::test]
+    async fn retries_once_after_a_same_scope_token_update() {
+        let (media_url, auth_receiver, server) = start_upstream(vec![(401, ""), (200, "data")]);
+        let state = Arc::new(MediaSessionState::default());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "old-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        let failed_session = state.session().unwrap();
+        let fetch_state = Arc::clone(&state);
+        let fetch_url = media_url.clone();
+        let fetch =
+            tokio::spawn(async move { fetch_test(&fetch_state, failed_session, fetch_url).await });
+
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer old-token");
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "new-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+
+        assert!(fetch.await.unwrap().is_ok());
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer new-token");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn retries_once_after_same_token_then_changed_token_updates() {
+        let (media_url, auth_receiver, server) = start_upstream(vec![(401, ""), (200, "data")]);
+        let state = Arc::new(MediaSessionState::default());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "same-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        let failed_session = state.session().unwrap();
+        let fetch_state = Arc::clone(&state);
+        let fetch_url = media_url.clone();
+        let fetch =
+            tokio::spawn(async move { fetch_test(&fetch_state, failed_session, fetch_url).await });
+
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer same-token");
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "same-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(auth_receiver.try_recv().is_err());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "changed-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+
+        assert!(fetch.await.unwrap().is_ok());
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer changed-token");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn times_out_without_a_session_update() {
+        let state = MediaSessionState::default();
+        let session = test_session("https://matrix.example.org", "token", "@a:example.org", 1);
+        assert!(state
+            .wait_for_newer_session_with_timeout(&session, Duration::from_millis(20))
+            .await
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn a_failed_retry_does_not_loop() {
+        let (media_url, auth_receiver, server) = start_upstream(vec![(401, ""), (403, "")]);
+        let state = Arc::new(MediaSessionState::default());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "old-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        let failed_session = state.session().unwrap();
+        let fetch_state = Arc::clone(&state);
+        let fetch_url = media_url.clone();
+        let fetch =
+            tokio::spawn(async move { fetch_test(&fetch_state, failed_session, fetch_url).await });
+
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer old-token");
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "new-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+
+        assert_eq!(fetch.await.unwrap().unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer new-token");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn clear_while_waiting_terminates_without_a_retry() {
+        let (media_url, auth_receiver, server) = start_upstream(vec![(401, "")]);
+        let state = Arc::new(MediaSessionState::default());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        let failed_session = state.session().unwrap();
+        let fetch_state = Arc::clone(&state);
+        let fetch_url = media_url.clone();
+        let fetch =
+            tokio::spawn(async move { fetch_test(&fetch_state, failed_session, fetch_url).await });
+
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer token");
+        state.clear_session().unwrap();
+
+        assert_eq!(fetch.await.unwrap().unwrap_err(), StatusCode::UNAUTHORIZED);
+        assert!(auth_receiver.try_recv().is_err());
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn origin_or_scope_switch_while_waiting_terminates_without_a_retry() {
+        for (origin, scope) in [
+            ("https://other.example.org", "@a:example.org"),
+            ("https://matrix.example.org", "@b:example.org"),
+        ] {
+            let state = Arc::new(MediaSessionState::default());
+            state
+                .set_session(test_session(
+                    "https://matrix.example.org",
+                    "old-token",
+                    "@a:example.org",
+                    0,
+                ))
+                .unwrap();
+            let previous = state.session().unwrap();
+            let waiter_state = Arc::clone(&state);
+            let waiter = tokio::spawn(async move {
+                waiter_state
+                    .wait_for_newer_session_with_timeout(&previous, Duration::from_secs(1))
+                    .await
+            });
+
+            state
+                .set_session(test_session(origin, "new-token", scope, 0))
+                .unwrap();
+
+            assert!(tokio::time::timeout(Duration::from_millis(100), waiter)
+                .await
+                .unwrap()
+                .unwrap()
+                .is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrent_cache_misses_share_the_initial_attempt_and_retry() {
+        let (media_url, auth_receiver, server) = start_upstream(vec![(401, ""), (200, "data")]);
+        let state = Arc::new(MediaSessionState::default());
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "old-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+        let failed_session = state.session().unwrap();
+        let first_state = Arc::clone(&state);
+        let first_url = media_url.clone();
+        let first =
+            tokio::spawn(async move { fetch_test(&first_state, failed_session, first_url).await });
+        let second_state = Arc::clone(&state);
+        let second_session = state.session().unwrap();
+        let second_url = media_url.clone();
+        let second =
+            tokio::spawn(
+                async move { fetch_test(&second_state, second_session, second_url).await },
+            );
+
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer old-token");
+        state
+            .set_session(test_session(
+                media_url.origin().ascii_serialization().as_str(),
+                "new-token",
+                "@a:example.org",
+                0,
+            ))
+            .unwrap();
+
+        let first_result = first.await.unwrap();
+        let second_result = second.await.unwrap();
+        assert!(first_result.is_ok(), "first result: {first_result:?}");
+        assert!(second_result.is_ok(), "second result: {second_result:?}");
+        assert_eq!(receive_auth(&auth_receiver).await, "Bearer new-token");
+        assert!(auth_receiver.try_recv().is_err());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn mismatched_account_or_origin_never_qualifies_for_retry() {
+        let failed = test_session("https://matrix.example.org", "old", "@a:example.org", 1);
+        assert!(!should_retry_with_session(
+            &failed,
+            &test_session("https://matrix.example.org", "new", "@b:example.org", 2)
+        ));
+        assert!(!should_retry_with_session(
+            &failed,
+            &test_session("https://other.example.org", "new", "@a:example.org", 2)
+        ));
+    }
+
+    #[test]
+    fn session_marker_is_an_equality_guard_and_validates_decoding() {
+        let matching: Uri =
+            "https://sable-media.localhost/media?__sable_media_session=%40a%3Aexample.org"
+                .parse()
+                .unwrap();
+        let mismatched: Uri =
+            "https://sable-media.localhost/media?__sable_media_session=%40b%3Aexample.org"
+                .parse()
+                .unwrap();
+        let malformed: Uri = "https://sable-media.localhost/media?__sable_media_session=%FF"
+            .parse()
+            .unwrap();
+        let markerless: Uri = "https://sable-media.localhost/media".parse().unwrap();
+
+        assert!(session_marker_matches(&matching, "@a:example.org").unwrap());
+        assert!(!session_marker_matches(&mismatched, "@a:example.org").unwrap());
+        assert_eq!(
+            session_marker_matches(&malformed, "@a:example.org"),
+            Err(StatusCode::BAD_REQUEST)
+        );
+        assert!(session_marker_matches(&markerless, "@a:example.org").unwrap());
     }
 
     #[tokio::test]
@@ -1353,6 +1844,55 @@ mod tests {
         assert!(!response
             .headers()
             .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    #[test]
+    fn retry_fragment_never_keys_encryption_params() {
+        let bare = "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123";
+        for input in [
+            format!("{bare}#retry=1"),
+            format!(
+                "https://sable-media.localhost/{}?__sable_media_session=%40a%3Aexample.org",
+                percent_encoding::utf8_percent_encode(
+                    &format!("{bare}#retry=1"),
+                    percent_encoding::NON_ALPHANUMERIC
+                )
+            ),
+        ] {
+            assert_eq!(super::normalize_encryption_key(&input), bare);
+        }
+    }
+
+    #[test]
+    fn retry_fragment_gives_a_distinct_cache_identity() {
+        let base = "https://matrix.example.org/_matrix/client/v1/media/download/matrix.org/abc123";
+        let original = cache_key("@a:example.org", base);
+        assert_ne!(
+            original,
+            cache_key("@a:example.org", &format!("{base}#retry=1"))
+        );
+        assert_ne!(
+            original,
+            cache_key("@a:example.org", &format!("{base}#retry=2"))
+        );
+        assert_eq!(
+            cache_key("@a:example.org", &format!("{base}#retry=1")),
+            cache_key("@a:example.org", &format!("{base}#retry=1"))
+        );
+    }
+
+    #[test]
+    fn error_responses_are_no_store() {
+        for response in [
+            super::error_response(StatusCode::UNAUTHORIZED),
+            super::error_response(StatusCode::FORBIDDEN),
+            super::session_unavailable_response(),
+        ] {
+            assert_eq!(
+                response.headers().get(header::CACHE_CONTROL).unwrap(),
+                "no-store"
+            );
+        }
     }
 
     #[test]

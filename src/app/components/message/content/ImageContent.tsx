@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -40,6 +40,7 @@ import {
   mxcUrlToHttp,
   rewriteAuthenticatedMediaUrl,
 } from '$utils/matrix';
+import { addTauriMediaRetryRevision, getTauriMediaRetryTarget } from '$utils/mediaUrl';
 import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { isTauri } from '@tauri-apps/api/core';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
@@ -53,6 +54,8 @@ import {
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { useCreateObjectURL } from '$hooks/useObjectURL';
+import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
+import { useMobileTapActivation } from '$hooks/useMobileTapActivation';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 
 export function checkIfGif(url: string, mimetype?: string, body?: string) {
@@ -136,10 +139,13 @@ export const ImageContent = as<'div', ImageContentProps>(
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
+    const isMobile = useScreenSizeOptionally() === ScreenSize.Mobile;
     const blurHash = validBlurHash(info?.[MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]);
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
+    // Tauri only: each retry gets a distinct sable-media:// src.
+    const retryRevisionRef = useRef(0);
     const [viewer, setViewer] = useState(false);
     const [viewerFullSrc, setViewerFullSrc] = useState<string | null>(null);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
@@ -166,8 +172,11 @@ export const ImageContent = as<'div', ImageContentProps>(
         if (encInfo) {
           if (!rawMediaUrl) throw new Error('Invalid media URL');
           if (isTauri()) {
-            await setMediaEncryption(rawMediaUrl, encInfo, mimeType ?? FALLBACK_MIMETYPE);
-            return rewriteAuthenticatedMediaUrl(rawMediaUrl)!;
+            // The registration key is the revised target; Rust strips the fragment.
+            const attemptedTarget =
+              getTauriMediaRetryTarget(rawMediaUrl, retryRevisionRef.current) ?? rawMediaUrl;
+            await setMediaEncryption(attemptedTarget, encInfo, mimeType ?? FALLBACK_MIMETYPE);
+            return rewriteAuthenticatedMediaUrl(attemptedTarget)!;
           }
           return createObjectURL(
             downloadEncryptedMedia(rawMediaUrl, (encBuf) =>
@@ -175,7 +184,10 @@ export const ImageContent = as<'div', ImageContentProps>(
             )
           );
         }
-        return resolvedMediaUrl ?? rawMediaUrl ?? url;
+        return addTauriMediaRetryRevision(
+          resolvedMediaUrl ?? rawMediaUrl ?? url,
+          retryRevisionRef.current
+        );
       }, [rawMediaUrl, resolvedMediaUrl, url, mimeType, encInfo, createObjectURL])
     );
 
@@ -213,8 +225,22 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleRetry = () => {
       setError(false);
+      retryRevisionRef.current += 1;
       loadSrc().catch(() => undefined);
     };
+
+    const handleView = async () => {
+      if (srcState.status !== AsyncStatus.Idle) return;
+      try {
+        const src = await loadSrc();
+        if (src !== undefined) setViewer(true);
+      } catch {
+        // The existing error state is handled by the async callback.
+      }
+    };
+    const viewActivation = useMobileTapActivation(isMobile, () => {
+      void handleView();
+    });
 
     useEffect(() => {
       if (autoPlay) loadSrc().catch(() => undefined);
@@ -250,6 +276,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     return (
       <Box
         className={classNames(rootClass, className)}
+        data-gestures="ignore"
         style={{
           ...fillPreviewSlotStyle,
           ...intrinsicSizingStyle,
@@ -257,8 +284,12 @@ export const ImageContent = as<'div', ImageContentProps>(
         }}
         {...props}
         ref={ref}
-        onPointerEnter={() => setIsHovered(true)}
-        onPointerLeave={() => setIsHovered(false)}
+        onPointerEnter={(evt) => {
+          if (evt.pointerType === 'mouse' || evt.pointerType === 'pen') setIsHovered(true);
+        }}
+        onPointerLeave={(evt) => {
+          if (evt.pointerType === 'mouse' || evt.pointerType === 'pen') setIsHovered(false);
+        }}
       >
         {srcState.status === AsyncStatus.Success && (
           <ModalOverlay open={viewer} requestClose={() => setViewer(false)}>
@@ -291,14 +322,13 @@ export const ImageContent = as<'div', ImageContentProps>(
             className={css.AbsoluteContainer}
             alignItems="Center"
             justifyContent="Center"
-            onClick={loadSrc}
+            {...viewActivation}
           >
             <Button
               variant="Secondary"
               fill="Solid"
               radii="300"
               size="300"
-              onClick={loadSrc}
               before={sizedIcon(Image, 'Inherit', { filled: true })}
             >
               <Text size="B300">View</Text>

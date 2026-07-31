@@ -26,12 +26,20 @@ export function DesktopUpdater() {
   const [bannerVisible, setBannerVisible] = useAtom(updateBannerVisibleAtom);
   const setLastChecked = useSetAtom(desktopUpdateLastCheckedAtom);
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
-  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [useCustomTitleBar] = useDesktopSetting('useCustomTitleBar');
   const hasUpdateRef = useRef(false);
+  const runningRef = useRef(false);
+  const pendingUpdateRef = useRef<Update | null>(null);
+  const installStartedRef = useRef(false);
+
+  const closePendingUpdate = useCallback((update: Update | null) => {
+    if (!update || fakeDesktopUpdate()) return;
+    void update.close().catch((err) => log.error('Failed to release desktop update', err));
+  }, []);
 
   useEffect(() => {
     if (!isDesktopTauri()) return undefined;
@@ -39,22 +47,17 @@ export function DesktopUpdater() {
 
     let mounted = true;
 
-    setPhase({ type: 'checking' });
+    if (!installStartedRef.current) {
+      setPhase({ type: 'checking' });
+    }
 
     async function run() {
+      if (runningRef.current || installStartedRef.current) return;
+      runningRef.current = true;
       try {
         if (fakeDesktopUpdate()) {
-          log.log('Fake update: simulating download');
+          log.log('Fake update: simulating available update');
           setUpdateInfo({ version: '9.9.9', body: 'Fake changelog for testing.' } as Update);
-          setPhase({ type: 'downloading', progress: 0 });
-          for (let pct = 0; pct <= 100; pct += 2) {
-            // eslint-disable-next-line no-await-in-loop
-            await new Promise((r) => setTimeout(r, 40));
-            if (!mounted) return;
-            setPhase({ type: 'downloading', progress: pct });
-          }
-          if (!mounted) return;
-          setIsDownloaded(true);
           setPhase({ type: 'ready', version: '9.9.9' });
           setLastChecked(new Date().toISOString());
           if (!hasCustomDesktopTitlebar(useCustomTitleBar)) setBannerVisible(true);
@@ -63,38 +66,28 @@ export function DesktopUpdater() {
 
         const { check } = await import('@tauri-apps/plugin-updater');
         const update = await check();
-        if (!mounted) return;
+        if (!mounted) {
+          closePendingUpdate(update);
+          return;
+        }
 
         if (!update) {
-          if (!hasUpdateRef.current) {
-            setPhase({ type: 'idle' });
-          }
+          closePendingUpdate(pendingUpdateRef.current);
+          pendingUpdateRef.current = null;
+          setUpdateInfo(null);
+          hasUpdateRef.current = false;
+          setPhase({ type: 'idle' });
           setLastChecked(new Date().toISOString());
           return;
         }
 
-        log.log(`Desktop update ${update.version} available, downloading...`);
+        closePendingUpdate(pendingUpdateRef.current);
+        pendingUpdateRef.current = update;
+        log.log(`Desktop update ${update.version} available`);
         setUpdateInfo(update);
         setIsInstalled(false);
         setDismissed(false);
         hasUpdateRef.current = true;
-        setPhase({ type: 'downloading', progress: 0 });
-
-        let downloadedBytes = 0;
-        let contentLength = 0;
-        await update.download((event) => {
-          if (event.event === 'Started') {
-            contentLength = event.data.contentLength ?? 0;
-          } else if (event.event === 'Progress') {
-            downloadedBytes += event.data.chunkLength;
-            const pct = contentLength > 0 ? Math.round((downloadedBytes / contentLength) * 100) : 0;
-            setPhase({ type: 'downloading', progress: Math.min(pct, 100) });
-          }
-        });
-
-        if (!mounted) return;
-        log.log(`Update ${update.version} downloaded`);
-        setIsDownloaded(true);
         setPhase({ type: 'ready', version: update.version });
         setLastChecked(new Date().toISOString());
         if (!hasCustomDesktopTitlebar(useCustomTitleBar)) setBannerVisible(true);
@@ -106,6 +99,8 @@ export function DesktopUpdater() {
           }
           setLastChecked(new Date().toISOString());
         }
+      } finally {
+        runningRef.current = false;
       }
     }
 
@@ -116,11 +111,19 @@ export function DesktopUpdater() {
       return () => {
         mounted = false;
         clearInterval(interval);
+        if (!installStartedRef.current) {
+          closePendingUpdate(pendingUpdateRef.current);
+          pendingUpdateRef.current = null;
+        }
       };
     }
 
     return () => {
       mounted = false;
+      if (!installStartedRef.current) {
+        closePendingUpdate(pendingUpdateRef.current);
+        pendingUpdateRef.current = null;
+      }
     };
   }, [
     autoUpdateCheck,
@@ -129,6 +132,7 @@ export function DesktopUpdater() {
     setBannerVisible,
     setLastChecked,
     useCustomTitleBar,
+    closePendingUpdate,
   ]);
 
   useEffect(() => {
@@ -138,25 +142,49 @@ export function DesktopUpdater() {
   }, [bannerVisible, dismissed]);
 
   const handleInstall = useCallback(async () => {
-    if (!updateInfo) return;
+    if (!updateInfo || installStartedRef.current) return;
+    installStartedRef.current = true;
     try {
-      setIsInstalling(true);
-      setPhase({ type: 'installing' });
+      setIsDownloading(true);
+      setPhase({ type: 'downloading', progress: 0 });
 
       if (fakeDesktopUpdate()) {
-        await new Promise((r) => setTimeout(r, 1500));
+        for (let pct = 0; pct <= 100; pct += 2) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 40));
+          setPhase({ type: 'downloading', progress: pct });
+        }
       } else {
-        await updateInfo.install();
+        let downloadedBytes = 0;
+        let contentLength = 0;
+        await updateInfo.downloadAndInstall((event) => {
+          if (event.event === 'Started') {
+            contentLength = event.data.contentLength ?? 0;
+          } else if (event.event === 'Progress') {
+            downloadedBytes += event.data.chunkLength;
+            const pct = contentLength > 0 ? Math.round((downloadedBytes / contentLength) * 100) : 0;
+            setPhase({ type: 'downloading', progress: Math.min(pct, 100) });
+          }
+        });
       }
+
+      setIsDownloading(false);
+      setIsInstalling(true);
+      setPhase({ type: 'installing' });
+      if (fakeDesktopUpdate()) await new Promise((r) => setTimeout(r, 1500));
 
       setPhase({ type: 'ready', version: updateInfo.version });
       setIsInstalling(false);
       setIsInstalled(true);
+      pendingUpdateRef.current = null;
+      closePendingUpdate(updateInfo);
     } catch (err) {
       log.error('Failed to install update', err);
+      setIsDownloading(false);
       setIsInstalling(false);
+      installStartedRef.current = false;
     }
-  }, [updateInfo, setPhase]);
+  }, [closePendingUpdate, updateInfo, setPhase]);
 
   const handleRestart = useCallback(async () => {
     try {
@@ -195,16 +223,18 @@ export function DesktopUpdater() {
       };
     }
 
-    if (!isDownloaded) return null;
-
     return {
       id: 'desktop-update-ready',
       priority: 200,
       icon: ArrowUp,
       title: 'Update Available',
-      description: `Sable ${updateInfo.version} is ready to install.${updateInfo.body ? `\n${updateInfo.body}` : ''}`,
+      description: `Sable ${updateInfo.version} is available.${updateInfo.body ? `\n${updateInfo.body}` : ''}`,
       primaryAction: {
-        label: isInstalling ? 'Installing...' : 'Install & Update',
+        label: isDownloading
+          ? 'Downloading...'
+          : isInstalling
+            ? 'Installing...'
+            : 'Download & Install',
         variant: 'Primary',
         onClick: handleInstall,
       },
@@ -218,7 +248,7 @@ export function DesktopUpdater() {
     bannerVisible,
     updateInfo,
     dismissed,
-    isDownloaded,
+    isDownloading,
     isInstalled,
     isInstalling,
     handleInstall,

@@ -132,6 +132,7 @@ export type MessageProps = {
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
+import { shouldIgnoreMessageLongPress } from './messageTouch';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -1000,7 +1001,14 @@ function MessageInternal(
           WebkitTapHighlightColor: 'transparent',
         }}
         onContextMenu={contextMenuHandler}
-        onTouchStart={menu.triggerProps.onTouchStart}
+        onTouchStart={(evt) => {
+          const target = evt.target instanceof Element ? evt.target : undefined;
+          if (shouldIgnoreMessageLongPress(target)) {
+            menu.triggerProps.onTouchCancel();
+            return;
+          }
+          menu.triggerProps.onTouchStart(evt);
+        }}
         onTouchEnd={menu.triggerProps.onTouchEnd}
         onTouchMove={menu.triggerProps.onTouchMove}
         onTouchCancel={menu.triggerProps.onTouchCancel}

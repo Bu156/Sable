@@ -1,4 +1,4 @@
-import { hasControllingServiceWorker } from '$utils/platform';
+import { getCachedSWMediaAuthSupport } from './swMediaAuth';
 import { fetch } from '$utils/fetch';
 import { getFromMediaCache, putInMediaCache } from './mediaCache';
 
@@ -12,6 +12,7 @@ export type MediaFetchCacheMode = 'default' | 'reload' | 'bypass';
 
 export type MediaTransportOptions = {
   cache?: MediaFetchCacheMode;
+  forceDirectAuth?: boolean;
   accessToken?: string | null;
   getAccessToken?: () => string | null | undefined;
   sessionScope?: string;
@@ -64,11 +65,24 @@ function parseStoredSessions(): StoredSession[] {
   }
 }
 
+function getStoredActiveSessionId(): string | undefined {
+  const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'string' ? parsed : undefined;
+  } catch {
+    // Keep reading pre-multi-account values written without JSON encoding.
+    return raw;
+  }
+}
+
 function getActiveStoredSession(): StoredSession | undefined {
   if (typeof localStorage === 'undefined') return undefined;
 
   const sessions = parseStoredSessions();
-  const activeSessionId = localStorage.getItem(ACTIVE_SESSION_KEY);
+  const activeSessionId = getStoredActiveSessionId();
   return (
     (activeSessionId
       ? sessions.find((session) => session.userId === activeSessionId)
@@ -179,8 +193,13 @@ function getFetchCacheMode(cacheMode: MediaFetchCacheMode): RequestCache {
   return 'default';
 }
 
-function getRequestKey(url: string, cacheMode: MediaFetchCacheMode): string {
-  return `${cacheMode}:${getStableMediaCacheKeyFragment(url)}`;
+function getRequestKey(
+  url: string,
+  cacheMode: MediaFetchCacheMode,
+  forceDirectAuth: boolean
+): string {
+  const transportMode = forceDirectAuth ? 'direct-auth' : 'default';
+  return `${transportMode}:${cacheMode}:${getStableMediaCacheKeyFragment(url)}`;
 }
 
 type MatrixMediaInfo = {
@@ -287,7 +306,12 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
     if (cachedBlob) return cachedBlob;
   }
 
-  const useServiceWorker = hasControllingServiceWorker() && !hasExplicitMediaAuthOverride(options);
+  // Only let the service worker attach the token once it has proven media-auth
+  // support; a stale SW build would forward the request bare and get a 4xx.
+  const useServiceWorker =
+    getCachedSWMediaAuthSupport() === true &&
+    !hasExplicitMediaAuthOverride(options) &&
+    !options?.forceDirectAuth;
   const fetchAndCache = async (response: Response): Promise<Blob> => {
     if (!response.ok) {
       throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
@@ -348,7 +372,8 @@ export async function fetchMediaBlob(url: string, options?: MediaTransportOption
   const cacheMode = options?.cache ?? 'default';
   const requestKey = getRequestKey(
     getScopedMediaCacheKey(url, resolveSessionScope(options)),
-    cacheMode
+    cacheMode,
+    options?.forceDirectAuth === true
   );
 
   const inflight = inflightRequests.get(requestKey);

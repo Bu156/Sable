@@ -11,7 +11,7 @@ import {
 } from 'matrix-widget-api';
 import { CallWidgetDriver } from './CallWidgetDriver';
 import { trimTrailingSlash } from '../../utils/common';
-import { getWindowOrigin, isAndroidTauri } from '../../utils/platform';
+import { getWindowOrigin, iosApp, isAndroidTauri } from '../../utils/platform';
 import type { ElementCallThemeKind, ElementMediaStateDetail } from './types';
 import { color, config } from 'folds';
 import { ElementCallIntent, ElementWidgetActions } from './types';
@@ -45,6 +45,10 @@ export class CallEmbed {
   public readonly room: Room;
 
   public joined = false;
+
+  private initialMediaStateReceived = false;
+
+  private nativeCallRuntimeActive = false;
 
   public readonly control: CallControl;
 
@@ -89,6 +93,18 @@ export class CallEmbed {
     );
   }
 
+  // Widget-mode discovery can't reach a transport (no access token, iframe
+  // fetch restrictions), so forward the ongoing call's own transport.
+  private static getOngoingCallLivekitServiceUrl(mx: MatrixClient, room: Room): string | undefined {
+    const session = mx.matrixRTC.getRoomSession(room);
+    const oldest = session.getOldestMembership();
+    if (!oldest) return undefined;
+    const transport = session.memberships.map((m) => m.getTransport(oldest)).find(Boolean);
+    return transport?.type === 'livekit'
+      ? (transport as { livekit_service_url?: string }).livekit_service_url
+      : undefined;
+  }
+
   static getWidget(
     mx: MatrixClient,
     room: Room,
@@ -118,6 +134,11 @@ export class CallEmbed {
       theme: themeKind,
       header: 'none',
     });
+
+    const ongoingLivekitServiceUrl = CallEmbed.getOngoingCallLivekitServiceUrl(mx, room);
+    if (ongoingLivekitServiceUrl) {
+      params.append('livekitServiceUrl', ongoingLivekitServiceUrl);
+    }
 
     if (!room.isCallRoom() && CallEmbed.startingCall(intent)) {
       params.append('sendNotificationType', CallEmbed.dmCall(intent) ? 'ring' : 'notification');
@@ -230,7 +251,9 @@ export class CallEmbed {
         this.call.transport.reply(evt.detail as IWidgetApiRequest, {});
         if (initialMediaEvent) {
           initialMediaEvent = false;
+          this.initialMediaStateReceived = true;
           this.control.applyState();
+          this.startNativeCallRuntime();
           return;
         }
         this.control.onMediaState(evt as CustomEvent<ElementMediaStateDetail>);
@@ -356,7 +379,22 @@ export class CallEmbed {
    */
   public dispose(): void {
     debugLog.info('call', 'Disposing call widget', { roomId: this.roomId });
-    this.invokeForegroundService('stop_call_foreground_service');
+    if (this.nativeCallRuntimeActive && isAndroidTauri()) {
+      void invoke('stop_call_foreground_service').catch((error) => {
+        debugLog.error('call', 'Failed to stop call foreground service', {
+          roomId: this.roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    } else if (this.nativeCallRuntimeActive && iosApp()) {
+      void invoke('deactivate_call_audio_session').catch((error) => {
+        debugLog.error('call', 'Failed to deactivate call audio session', {
+          roomId: this.roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    this.nativeCallRuntimeActive = false;
     this.disposables.forEach((disposable) => {
       disposable();
     });
@@ -375,16 +413,33 @@ export class CallEmbed {
     this.call.transport.reply(evt.detail as IWidgetApiRequest, {});
     debugLog.info('call', 'Call joined', { roomId: this.roomId });
     this.joined = true;
-    this.invokeForegroundService('start_call_foreground_service');
+    this.startNativeCallRuntime();
     this.applyStyles();
     this.control.startObserving();
   }
 
-  private invokeForegroundService(
-    command: 'start_call_foreground_service' | 'stop_call_foreground_service'
-  ): void {
-    if (!isAndroidTauri()) return;
-    void invoke(command).catch(() => {});
+  private startNativeCallRuntime(): void {
+    if (!this.joined || !this.initialMediaStateReceived || this.nativeCallRuntimeActive) return;
+
+    if (isAndroidTauri()) {
+      this.nativeCallRuntimeActive = true;
+      void invoke('start_call_foreground_service').catch((error) => {
+        this.nativeCallRuntimeActive = false;
+        debugLog.error('call', 'Failed to start call foreground service', {
+          roomId: this.roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    } else if (iosApp()) {
+      this.nativeCallRuntimeActive = true;
+      void invoke('activate_call_audio_session').catch((error) => {
+        this.nativeCallRuntimeActive = false;
+        debugLog.error('call', 'Failed to activate call audio session', {
+          roomId: this.roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   }
 
   private applyStyles(): void {
