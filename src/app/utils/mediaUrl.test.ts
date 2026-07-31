@@ -196,8 +196,7 @@ describe('addTauriMediaRetryRevision', () => {
 describe('getTauriMediaRetryTarget', () => {
   const WRAPPED =
     'sable-media://https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123?__sable_media_cache=3&__sable_media_session=session_abc';
-  const INNER =
-    'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
+  const INNER = 'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
   const WRAPPED_TARGETS = [
     WRAPPED,
     `sable-media://localhost/${encodeURIComponent(INNER)}?__sable_media_cache=3&__sable_media_session=session_abc`,
