@@ -8,7 +8,7 @@ import { useDismissOnBack } from '$utils/androidBack';
 import { MobileSheetFocusTrap, MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import * as messageCss from '$features/room/message/styles.css';
 
-type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
+type FocusTrapOptions = NonNullable<ComponentProps<typeof FocusTrap>['focusTrapOptions']>;
 type ModalSize = '300' | '400' | '500';
 
 type ModalOverlayProps = {
@@ -74,7 +74,7 @@ export function ModalOverlay({
   }
 
   if (open && sheet) {
-    const focusTrapOptions = {
+    const focusTrapOptions: FocusTrapOptions = {
       initialFocus: false,
       fallbackFocus: () => document.body,
       onDeactivate: requestClose,

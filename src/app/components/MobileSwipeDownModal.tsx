@@ -30,7 +30,7 @@ interface MobileSwipeDownModalProps {
   keyboardAware?: boolean;
 }
 
-type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
+type FocusTrapOptions = NonNullable<ComponentProps<typeof FocusTrap>['focusTrapOptions']>;
 
 const MobileSheetCloseContext = createContext<(() => void) | null>(null);
 

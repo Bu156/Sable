@@ -10,7 +10,7 @@ import * as css from './ResponsiveMenu.css';
 
 type ComponentPosition = 'Top' | 'Right' | 'Bottom' | 'Left';
 type ComponentAlign = 'Start' | 'Center' | 'End';
-type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
+type FocusTrapOptions = NonNullable<ComponentProps<typeof FocusTrap>['focusTrapOptions']>;
 
 type ResponsiveMenuProps = {
   anchor: RectCords | undefined;
@@ -84,7 +84,7 @@ export function ResponsiveMenu({
   const isKeyBackward = (evt: KeyboardEvent) =>
     evt.key === 'ArrowUp' || (arrowNavigation === 'both' && evt.key === 'ArrowLeft');
 
-  const focusTrapOptions = {
+  const focusTrapOptions: FocusTrapOptions = {
     initialFocus: false,
     fallbackFocus: () => document.body,
     returnFocusOnDeactivate,
