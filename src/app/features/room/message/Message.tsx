@@ -24,7 +24,7 @@ import {
 } from 'react';
 import { useHover, useFocusWithin } from 'react-aria';
 import type { MatrixEvent, Room, Relations } from '$types/matrix-sdk';
-import { EventStatus, MatrixEventEvent, RoomEvent } from '$types/matrix-sdk';
+import { EventStatus, MatrixEventEvent, MsgType, RoomEvent } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import { useSetAtom } from 'jotai';
 import {
@@ -393,7 +393,7 @@ function MessageInternal(
 
   const isGif = useMemo(() => {
     const content = mEvent.getContent();
-    if (content.msgtype !== 'm.image') return false;
+    if (content.msgtype !== MsgType.Image) return false;
     return checkIfGif(content?.info?.url ?? '', content?.info?.mimetype, content?.body);
   }, [mEvent]);
 

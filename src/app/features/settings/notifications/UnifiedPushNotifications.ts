@@ -364,7 +364,7 @@ async function decryptPreviewFromPayload(
   const crypto = mx.getCrypto();
   if (!crypto || !pushData.content) return undefined;
   const mEvent = new MatrixEvent({
-    type: 'm.room.encrypted',
+    type: EventType.RoomMessageEncrypted,
     content: pushData.content,
     room_id: roomId,
     event_id: eventId,

@@ -1169,7 +1169,7 @@ export function RoomTimeline({
         .find(
           (e) =>
             e.mEvent.getSender() === myUserId &&
-            e.mEvent.getType() === 'm.room.message' &&
+            e.mEvent.getType() === (EventType.RoomMessage as string) &&
             !e.mEvent.isRedacted()
         );
       if (found?.mEvent.getId()) actions.handleEdit(found.mEvent.getId());

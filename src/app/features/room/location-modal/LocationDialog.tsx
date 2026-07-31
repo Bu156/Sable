@@ -12,6 +12,7 @@ import type { LatLngLiteral } from 'leaflet';
 import L from 'leaflet';
 import { getReplyContent } from '../RoomInput';
 import type { RoomMessageEventContent } from '$types/matrix-sdk';
+import { MsgType } from '$types/matrix-sdk';
 import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
 import classNames from 'classnames';
@@ -238,7 +239,7 @@ export function LocationDialog({
     const mlat = pinPosition.lat.toFixed(6);
     const mlon = pinPosition.lng.toFixed(6);
     const content: IContent = {
-      msgtype: 'm.location',
+      msgtype: MsgType.Location,
       geo_uri: `geo:${mlat},${mlon};u=0`,
       body: `https://www.openstreetmap.org/?mlat=${mlat}&mlon=${mlon}#map=16/${mlat}/${mlon}"`,
     };

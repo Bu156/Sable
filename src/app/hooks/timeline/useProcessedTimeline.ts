@@ -69,27 +69,32 @@ export function getProcessedRowIndexForRawTimelineIndex(
   return bestRowIndex >= 0 ? { rowIndex: bestRowIndex, focusRawIndex: bestRawIndex } : undefined;
 }
 
+// Decrypted room-message events are re-typed to this app-internal value; there is no SDK constant for it.
+const ROOM_MESSAGE_DECRYPTED = 'm.room.message.encrypted';
+
 const MESSAGE_EVENT_TYPES = new Set([
-  'm.room.message',
-  'm.room.message.encrypted',
-  'm.sticker',
-  'm.room.encrypted',
+  EventType.RoomMessage,
+  ROOM_MESSAGE_DECRYPTED,
+  EventType.Sticker,
+  EventType.RoomMessageEncrypted,
 ]);
 
 export const STANDARD_RENDERED_EVENT_TYPES = new Set([
-  'm.room.message',
-  'm.room.message.encrypted',
-  'm.sticker',
+  EventType.RoomMessage,
+  ROOM_MESSAGE_DECRYPTED,
+  EventType.Sticker,
   M_POLL_START.name,
-  'm.room.member',
-  'm.room.name',
-  'm.room.topic',
-  'm.room.avatar',
-  'org.matrix.msc3401.call.member',
+  EventType.RoomMember,
+  EventType.RoomName,
+  EventType.RoomTopic,
+  EventType.RoomAvatar,
+  EventType.GroupCallMemberPrefix,
 ]);
 
 const normalizeMessageType = (t: string): string =>
-  t === 'm.room.encrypted' || t === 'm.room.message.encrypted' ? 'm.room.message' : t;
+  t === (EventType.RoomMessageEncrypted as string) || t === ROOM_MESSAGE_DECRYPTED
+    ? EventType.RoomMessage
+    : t;
 
 const isMessageRow = (mEvent: MatrixEvent): boolean =>
   MESSAGE_EVENT_TYPES.has(mEvent.getType()) && !isEditEvent(mEvent);

@@ -586,7 +586,7 @@ function OptionMenu({
   const store = useStore();
   const mx = useMatrixClient();
   const isThreadedMessage = isThreadRelationEvent(mEvent, mEvent.threadRootId);
-  const isStickerMessage = mEvent.getType() === 'm.stidoecker';
+  const isStickerMessage = mEvent.getType() === (EventType.Sticker as string);
   const evtId = mEvent.getId()!;
   const evtTimeline = room.getTimelineForEvent(evtId);
   const edits =

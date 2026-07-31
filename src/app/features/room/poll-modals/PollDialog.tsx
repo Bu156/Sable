@@ -25,6 +25,7 @@ import {
   M_POLL_START,
   M_TEXT,
 } from 'matrix-js-sdk';
+import { MsgType } from '$types/matrix-sdk';
 import { isKeyHotkey } from 'is-hotkey';
 import * as css from './PollDialog.css';
 import type { IReplyDraft } from '$state/room/roomInputDrafts';
@@ -113,7 +114,7 @@ export function PollDialog({ onCancel, mx, room, replyDraft, clearReplyDraft }: 
         question: {
           [M_TEXT.name]: title.current,
           body: title.current,
-          msgtype: 'm.text',
+          msgtype: MsgType.Text,
         },
         kind: isDisclosed ? M_POLL_KIND_DISCLOSED.name : M_POLL_KIND_UNDISCLOSED.name,
         max_selections: maxSelections,

@@ -2,6 +2,7 @@
 
 /* oxlint-disable no-console, unicorn/require-post-message-target-origin */
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { EventType } from 'matrix-js-sdk/lib/@types/event';
 
 import { createPushNotifications } from './sw/pushNotification';
 import { withMediaFetchSlot } from './app/utils/mediaConcurrency';
@@ -497,7 +498,7 @@ async function handleMinimalPushPayload(
     sender_id: sender,
   };
 
-  if (eventType === 'm.room.encrypted') {
+  if (eventType === EventType.RoomMessageEncrypted) {
     // Try to relay decryption to an open app tab.
     const result =
       windowClients.length > 0
