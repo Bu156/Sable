@@ -53,6 +53,17 @@ vi.mock('./MobileSwipeDownModal', () => ({
       {children()}
     </div>
   ),
+  MobileSheetFocusTrap: ({ children, focusTrapOptions }: any) => (
+    <div
+      data-testid="focus-trap"
+      data-initial-focus={String(focusTrapOptions?.initialFocus ?? false)}
+      data-return-focus={String(focusTrapOptions?.returnFocusOnDeactivate ?? false)}
+      data-click-outside={String(focusTrapOptions?.clickOutsideDeactivates ?? false)}
+      data-escape-deactivates={String(focusTrapOptions?.escapeDeactivates ?? false)}
+    >
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock('$features/room/message/styles.css', () => ({

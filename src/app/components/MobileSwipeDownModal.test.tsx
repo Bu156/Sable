@@ -3,7 +3,11 @@ import type { PointerEventHandler } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as css from '$features/room/message/styles.css';
 import { MobileMenuItem } from './MobileMenuItem';
-import { MobileSwipeDownModal, VIEWPORT_SETTLE_MS } from './MobileSwipeDownModal';
+import {
+  MobileSwipeDownModal,
+  useMobileSheetClose,
+  VIEWPORT_SETTLE_MS,
+} from './MobileSwipeDownModal';
 
 vi.mock('$state/hooks/settings', () => ({
   useSetting: () => [false, vi.fn<() => void>()],
@@ -38,6 +42,11 @@ const renderWithScroller = (requestClose: () => void) => {
   );
   return { scroller: screen.getByTestId('scroller'), row: screen.getByTestId('row') };
 };
+
+function ContentCloseButton() {
+  const close = useMobileSheetClose();
+  return <button onClick={() => close?.()}>Close</button>;
+}
 
 /** jsdom reports zero for both, so a scroll container has to be declared. */
 const makeScrollable = (element: HTMLElement, scrollTop: number) => {
@@ -321,6 +330,33 @@ describe('MobileSwipeDownModal', () => {
       } else {
         delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
       }
+    }
+  });
+
+  it('animates a close requested by sheet content', async () => {
+    const requestClose = vi.fn<() => void>();
+    let finish: (() => void) | undefined;
+    const restore = stubElementAnimations((() => ({
+      addEventListener: (_event: string, callback: () => void) => {
+        finish = callback;
+      },
+    })) as unknown as HTMLElement['animate']);
+
+    try {
+      render(
+        <MobileSwipeDownModal requestClose={requestClose}>
+          {() => <ContentCloseButton />}
+        </MobileSwipeDownModal>
+      );
+      await act(async () => {});
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+      expect(requestClose).not.toHaveBeenCalled();
+      finish?.();
+      expect(requestClose).toHaveBeenCalledOnce();
+    } finally {
+      restore();
     }
   });
 

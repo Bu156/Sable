@@ -2076,18 +2076,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         <AttachmentContent
                           onPickPhotos={() => {
                             pickFile('image/*,.tgs');
-                            setShowAttachmentSheet(false);
                           }}
                           onPickFile={() => {
                             pickFile('*');
-                            setShowAttachmentSheet(false);
                           }}
                           onPickPoll={() => {
-                            setShowAttachmentSheet(false);
                             setShowPollPicker(true);
                           }}
                           onPickLocation={() => {
-                            setShowAttachmentSheet(false);
                             setShowLocationPicker(true);
                           }}
                           skipReturnFocusRef={attachmentSkipReturnFocusRef}
