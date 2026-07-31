@@ -71,6 +71,27 @@ export function useMobileSheetClose() {
   return useContext(MobileSheetCloseContext);
 }
 
+export function MobileSheetFocusTrap({
+  focusTrapOptions,
+  children,
+}: {
+  focusTrapOptions: FocusTrapOptions;
+  children: React.ReactNode;
+}) {
+  const mobileSheetClose = useMobileSheetClose();
+
+  return (
+    <FocusTrap
+      focusTrapOptions={{
+        ...focusTrapOptions,
+        onDeactivate: mobileSheetClose ?? focusTrapOptions.onDeactivate,
+      }}
+    >
+      {children}
+    </FocusTrap>
+  );
+}
+
 export function MobileSwipeDownModal({
   children,
   requestClose,

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAtomValue, useSetAtom, Provider } from 'jotai';
@@ -24,15 +23,6 @@ vi.mock('$state/hooks/desktopSettings', async (importOriginal) => ({
 vi.mock('$utils/tauriTitlebar', async (importOriginal) => {
   const mod = (await importOriginal()) as Record<string, unknown>;
   return { ...mod, hasCustomDesktopTitlebar: () => true };
-});
-
-// Make exit animations synchronous so hidden elements leave the DOM immediately.
-vi.mock('framer-motion', async (importOriginal) => {
-  const mod = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...mod,
-    AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  };
 });
 
 function BannersProbe() {

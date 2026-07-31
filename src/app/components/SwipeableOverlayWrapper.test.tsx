@@ -1,29 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { animate } from 'framer-motion';
 import { SwipeableOverlayWrapper } from './SwipeableOverlayWrapper';
 
 vi.mock('$utils/platform', () => ({
   isMobileOrTablet: () => true,
 }));
-
-vi.mock('framer-motion', () => {
-  const animateMock = vi.fn<(...args: unknown[]) => Promise<void>>(() => Promise.resolve());
-  return {
-    animate: animateMock,
-    motion: { div: 'div' },
-    useMotionValue: (initial: number) => {
-      let value = initial;
-      return {
-        get: () => value,
-        set: (next: number) => {
-          value = next;
-        },
-        stop: vi.fn<() => void>(),
-      };
-    },
-  };
-});
 
 const touchList = (target: HTMLElement, clientX: number, clientY: number) => {
   const point = { identifier: 0, target, clientX, clientY, pageX: clientX, pageY: clientY };
@@ -41,11 +22,12 @@ function renderWrapper(direction: 'left' | 'right' | 'both', onClose: () => void
 
 describe('SwipeableOverlayWrapper', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
-    vi.mocked(animate).mockClear();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -61,12 +43,9 @@ describe('SwipeableOverlayWrapper', () => {
       targetTouches: [],
     });
 
-    await Promise.resolve();
-
-    expect(animate).toHaveBeenCalledWith(expect.anything(), -320, {
-      duration: 0.22,
-      ease: 'easeOut',
-    });
+    const panel = content.parentElement as HTMLElement;
+    expect(panel.style.transform).toBe('translate3d(-320px, 0, 0)');
+    act(() => vi.advanceTimersByTime(220));
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -83,7 +62,6 @@ describe('SwipeableOverlayWrapper', () => {
     });
 
     expect(onClose).not.toHaveBeenCalled();
-    expect(animate).not.toHaveBeenCalled();
   });
 
   it('does not close a cancelled horizontal gesture', () => {
@@ -95,10 +73,8 @@ describe('SwipeableOverlayWrapper', () => {
     fireEvent.touchCancel(content, { touches: [], targetTouches: [] });
 
     expect(onClose).not.toHaveBeenCalled();
-    expect(animate).toHaveBeenCalledWith(expect.anything(), 0, {
-      duration: 0.22,
-      ease: 'easeOut',
-    });
+    const panel = content.parentElement as HTMLElement;
+    expect(panel.style.transform).toBe('translate3d(0px, 0, 0)');
   });
 
   it('does not close on a disallowed swipe direction', () => {
@@ -113,6 +89,7 @@ describe('SwipeableOverlayWrapper', () => {
       targetTouches: [],
     });
 
+    act(() => vi.advanceTimersByTime(220));
     expect(onClose).not.toHaveBeenCalled();
   });
 });

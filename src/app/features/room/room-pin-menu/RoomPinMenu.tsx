@@ -232,7 +232,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
 
     const handleOpen = (roomId: string, eventId: string) => {
       navigateRoom(roomId, eventId);
-      requestClose();
+      (mobileSheetClose ?? requestClose)();
     };
 
     return (
