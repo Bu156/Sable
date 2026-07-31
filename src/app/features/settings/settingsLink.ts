@@ -150,6 +150,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'render-global-username-colors',
     'render-space-room-fonts',
     'render-space-room-username-colors',
+    'render-persona-username-colors',
     'saturation',
     'selected-language-for-pronouns',
     'show-easter-eggs',

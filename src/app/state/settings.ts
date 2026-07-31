@@ -201,6 +201,7 @@ export interface Settings {
   filterPronounsLanguages?: string[];
   renderRoomColors: boolean;
   renderRoomFonts: boolean;
+  renderPersonaColors: boolean;
   captionPosition: CaptionPosition;
   customDMCards: boolean;
 
@@ -380,6 +381,7 @@ export const defaultSettings: Settings = {
   renderUserCards: 'both',
   renderRoomColors: true,
   renderRoomFonts: true,
+  renderPersonaColors: true,
   captionPosition: CaptionPosition.Below,
   customDMCards: true,
 
