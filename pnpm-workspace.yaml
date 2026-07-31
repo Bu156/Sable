@@ -16,6 +16,10 @@ minimumReleaseAgeExclude:
   - 'matrix-js-sdk'
   - '@sableclient/sable-call-embedded'
   - '@sableclient/twemoji-font'
+  - brace-expansion@5.0.8
+
+overrides:
+  brace-expansion@<=5.0.7: ^5.0.8
 
 peerDependencyRules:
   allowedVersions:
