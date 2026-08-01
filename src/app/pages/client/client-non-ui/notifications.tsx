@@ -248,7 +248,7 @@ export function MessageNotifications() {
       // For encrypted events that haven't been decrypted yet, wait for decryption
       // before processing the notification. The SDK's Timeline re-emission after
       // decryption comes with data.liveEvent=false which would wrongly block it.
-      if (mEvent.getType() === 'm.room.encrypted' && mEvent.isEncrypted()) {
+      if (mEvent.getType() === (EventType.RoomMessageEncrypted as string) && mEvent.isEncrypted()) {
         if (eventId) {
           // Mark this event to skip focus check when decrypted, so we use the focus
           // state from when the encrypted event originally arrived, not when it decrypts.

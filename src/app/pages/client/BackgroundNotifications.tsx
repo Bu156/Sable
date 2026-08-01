@@ -346,7 +346,7 @@ export function BackgroundNotifications() {
             if (!eventId) return;
 
             const eventType = mEvent.getType();
-            const isEncryptedType = eventType === 'm.room.encrypted';
+            const isEncryptedType = eventType === (EventType.RoomMessageEncrypted as string);
 
             // For encrypted events that haven't been decrypted yet, wait for decryption
             // before processing the notification. The SDK's Timeline re-emission after

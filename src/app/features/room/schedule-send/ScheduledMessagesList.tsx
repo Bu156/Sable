@@ -11,7 +11,7 @@ import {
   X,
 } from '$components/icons/phosphor';
 import type { Room } from '$types/matrix-sdk';
-import { MatrixEvent } from '$types/matrix-sdk';
+import { EventType, MatrixEvent } from '$types/matrix-sdk';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import {
@@ -157,7 +157,8 @@ export function ScheduledMessagesList({ room, onEditMessage }: ScheduledMessages
   const roomEvents = data?.delayed_events.filter(
     (event) =>
       event.room_id === room.roomId &&
-      (event.type === 'm.room.message' || event.type === 'm.room.encrypted')
+      (event.type === (EventType.RoomMessage as string) ||
+        event.type === (EventType.RoomMessageEncrypted as string))
   );
 
   const invalidateEvents = useCallback(() => {
