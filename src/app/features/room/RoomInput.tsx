@@ -515,9 +515,25 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const queryClient = useQueryClient();
     const delayedEventsSupported = useAtomValue(delayedEventsSupportedAtom);
-    const [scheduledTime, setScheduledTime] = useAtom(roomIdToScheduledTimeAtomFamily(roomId));
-    const [editingScheduledDelayId, setEditingScheduledDelayId] = useAtom(
+    const [roomScheduledTime, setRoomScheduledTime] = useAtom(
+      roomIdToScheduledTimeAtomFamily(roomId)
+    );
+    const [roomEditingScheduledDelayId, setRoomEditingScheduledDelayId] = useAtom(
       roomIdToEditingScheduledDelayIdAtomFamily(roomId)
+    );
+    const scheduledTime = threadRootId ? null : roomScheduledTime;
+    const editingScheduledDelayId = threadRootId ? null : roomEditingScheduledDelayId;
+    const setScheduledTime = useCallback(
+      (value: Date | null) => {
+        if (!threadRootId) setRoomScheduledTime(value);
+      },
+      [setRoomScheduledTime, threadRootId]
+    );
+    const setEditingScheduledDelayId = useCallback(
+      (value: string | null) => {
+        if (!threadRootId) setRoomEditingScheduledDelayId(value);
+      },
+      [setRoomEditingScheduledDelayId, threadRootId]
     );
     const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
     const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
