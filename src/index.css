@@ -149,13 +149,13 @@ pre {
 }
 
 table {
-	border-collapse: collapse;
+  border-collapse: collapse;
 }
 
 table td,
 table th {
-	padding: 5px;
-	border: 1px solid var(--sable-surface-container-line);
+  padding: 5px;
+  border: 1px solid var(--sable-surface-container-line);
 }
 
 /* Accessibility Overrides :D */
