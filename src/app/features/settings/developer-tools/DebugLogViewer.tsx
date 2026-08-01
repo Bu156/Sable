@@ -9,6 +9,7 @@ import { debugLoggerEnabledAtom, debugLogsAtom, clearDebugLogsAtom } from '$stat
 import type { LogEntry, LogLevel, LogCategory } from '$utils/debugLogger';
 import { getDebugLogger } from '$utils/debugLogger';
 import { copyToClipboard } from '$utils/dom';
+import { saveFileToDevice } from '$utils/download';
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -219,19 +220,15 @@ export function DebugLogViewer() {
         jsonData = debugLogger.exportLogs();
       }
 
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
       const filterSuffix =
         filtered && (filterLevel !== 'all' || filterCategory !== 'all')
           ? `-${filterCategory !== 'all' ? filterCategory : 'all'}-${filterLevel !== 'all' ? filterLevel : 'all'}`
           : '';
-      a.download = `sable-debug-logs${filterSuffix}-${new Date().toISOString()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      void saveFileToDevice(
+        new Blob([jsonData], { type: 'application/json' }),
+        `sable-debug-logs${filterSuffix}-${Date.now()}.json`,
+        'application/json'
+      );
     },
     [filterLevel, filterCategory]
   );
