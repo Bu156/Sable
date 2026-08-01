@@ -1,5 +1,5 @@
 import type {
-  ChangeEventHandler,
+  ChangeEvent,
   FocusEventHandler,
   MouseEventHandler,
   ReactNode,
@@ -527,6 +527,7 @@ export function EmojiBoard({
     loading: gifsLoading,
     error: gifsError,
     searchGifs,
+    cancelSearch: cancelGifSearch,
   } = useGifSearch(favoriteGifs, showGifPicker, gifSearch);
   const [emojiGroupItems, stickerGroupItems, gifGroupItems] = useGroups(tab, imagePacks, gifs);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(true);
@@ -555,9 +556,9 @@ export function EmojiBoard({
   const groups = groupsByTab[tab];
   const renderItem = useItemRenderer(tab, saveStickerEmojiBandwidth);
 
-  const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
+  const handleOnChange = useDebounce(
     useCallback(
-      (evt) => {
+      (evt: ChangeEvent<HTMLInputElement>) => {
         const term = evt.target.value;
         if (tab === EmojiBoardTab.Gif) {
           if (term) {
@@ -565,6 +566,7 @@ export function EmojiBoard({
             searchGifs(term);
           } else {
             setShowFavoritesOnly(true);
+            cancelGifSearch();
             resetGifSearch();
           }
         } else if (term) {
@@ -573,7 +575,7 @@ export function EmojiBoard({
           resetEmojiSearch();
         }
       },
-      [emojiSearch, resetEmojiSearch, searchGifs, resetGifSearch, tab]
+      [cancelGifSearch, emojiSearch, resetEmojiSearch, searchGifs, resetGifSearch, tab]
     ),
     { wait: 200 }
   );
@@ -584,6 +586,13 @@ export function EmojiBoard({
     if (initialGifSearch) searchGifs(initialGifSearch);
     else resetGifSearch();
   }, [gifTab, initialGifSearch, searchGifs, resetGifSearch]);
+
+  useEffect(() => {
+    if (!showGifPicker) {
+      handleOnChange.cancel();
+      cancelGifSearch();
+    }
+  }, [cancelGifSearch, handleOnChange, showGifPicker]);
 
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const virtualBaseRef = useRef<HTMLDivElement>(null);
