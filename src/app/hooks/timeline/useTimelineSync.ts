@@ -12,7 +12,13 @@ import type {
   IRoomTimelineData,
   RoomEventHandlerMap,
 } from '$types/matrix-sdk';
-import { Direction, RoomEvent, RelationType, ThreadEvent } from '$types/matrix-sdk';
+import {
+  Direction,
+  MatrixEventEvent,
+  RoomEvent,
+  RelationType,
+  ThreadEvent,
+} from '$types/matrix-sdk';
 
 import { useAlive } from '$hooks/useAlive';
 import { useMatrixEvent } from '$hooks/useMatrixEvent';
@@ -573,6 +579,16 @@ export function useTimelineSync({
   );
 
   useMatrixEvent(room, RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+
+  const handleDecrypted = useCallback(
+    (mEvent: MatrixEvent) => {
+      if (mEvent.getRoomId() !== room.roomId) return;
+      setTimeline((ct) => ({ ...ct }));
+    },
+    [room, setTimeline]
+  );
+
+  useMatrixEvent(mx, MatrixEventEvent.Decrypted, handleDecrypted);
 
   useLiveTimelineRefresh(
     room,
