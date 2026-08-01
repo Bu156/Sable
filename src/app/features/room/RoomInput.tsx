@@ -521,11 +521,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
+    const [initialGifSearch, setInitialGifSearch] = useState<string>();
     const closeEmojiBoard = useCallback(() => {
       if (isMobileOrTablet()) {
         const activeElement = document.activeElement;
         if (activeElement instanceof HTMLElement) activeElement.blur();
       }
+      setInitialGifSearch(undefined);
       setEmojiBoardTab(undefined);
     }, []);
     const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
@@ -1212,6 +1214,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           room,
         })
       );
+      const rawGifCommand =
+        commandName === undefined ? plainText.match(/^\/gif(?:\s+(.*))?$/i) : undefined;
 
       let msgType = MsgType.Text;
 
@@ -1226,6 +1230,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await pluralkitCmdMessageHandler.handleMessage(plainText);
         resetEditor(editor); // clear the editor
         return; // don't do anything besides handling the command
+      }
+
+      if (rawGifCommand) {
+        setInitialGifSearch(rawGifCommand[1] ?? '');
+        setEmojiBoardTab(EmojiBoardTab.Gif);
+        resetEditor(editor);
+        resetEditorHistory(editor);
+        sendTypingStatus(false);
+        return;
       }
 
       if (commandName) {
@@ -1249,7 +1262,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         if ((commandName as Command) === Command.Poll) setShowPollPicker(true);
         else if ((commandName as Command) === Command.Location && plainText.trim().length === 0)
           setShowLocationPicker(true);
-        else {
+        else if (commandName === 'gif') {
+          setInitialGifSearch(plainText);
+          setEmojiBoardTab(EmojiBoardTab.Gif);
+        } else {
           const commandContent = commands[commandName as Command];
           if (commandContent) {
             commandContent.exe(plainText, customHtml);
@@ -1831,12 +1847,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
-            onGifSelect={() => {
-              resetEditor(editor);
-              resetEditorHistory(editor);
-              sendTypingStatus(false);
-              setEmojiBoardTab(EmojiBoardTab.Gif);
-            }}
           />
         )}
         {isQuickTextReact &&
@@ -2227,6 +2237,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
                       onGifSelect={handleGifSelect}
+                      initialGifSearch={initialGifSearch}
                       requestClose={closeEmojiBoard}
                     />
                   );
