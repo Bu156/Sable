@@ -1,5 +1,8 @@
+import { createLogger } from '$utils/debug';
 import { FALLBACK_MIMETYPE, TGS_MIMETYPE } from '$utils/mimeTypes';
 import { isAndroidTauri } from '$utils/platform';
+
+const log = createLogger('nativeFilePicker');
 
 const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
   aac: 'audio/aac',
@@ -38,8 +41,19 @@ const MEDIA_MIME_TYPES = ['image/*', 'video/*'];
 export type NativePickerMode = 'media' | 'document';
 export type NativeFileFailureHandler = (source: string, error: unknown) => void;
 
-const normalizeSelectedPaths = (selected: string | string[] | null | undefined): string[] =>
-  (typeof selected === 'string' ? [selected] : (selected ?? [])).filter((path) => path.length > 0);
+const normalizeSelectedPaths = (selected: unknown): string[] => {
+  if (selected === null || selected === undefined) return [];
+
+  const values = Array.isArray(selected) ? (selected as unknown[]) : [selected];
+  const paths = values.filter(
+    (value): value is string => typeof value === 'string' && value.length > 0
+  );
+  if (paths.length !== values.length) {
+    throw new Error(`Native picker returned unusable entries: ${JSON.stringify(selected)}`);
+  }
+
+  return paths;
+};
 
 const getFileName = (path: string, index: number): string => {
   const pathName = path.split(/[\\/]/).pop();
@@ -103,8 +117,13 @@ const pickIosFiles = async (
 ): Promise<File[]> => {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const selected = await open({ pickerMode, multiple: true });
+  log.log('picker returned', pickerMode, typeof selected, selected);
+
   const paths = normalizeSelectedPaths(selected);
-  if (paths.length === 0) return [];
+  if (paths.length === 0) {
+    log.warn('picker resolved without any path (cancelled, or a swallowed native failure)');
+    return [];
+  }
 
   const { readFile, remove } = await import('@tauri-apps/plugin-fs');
   const files = await Promise.all(
