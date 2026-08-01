@@ -20,9 +20,11 @@ import type {
   IEventRelation,
   RoomMessageEventContent,
   StickerEventContent,
+  TimelineEvents,
 } from '$types/matrix-sdk';
 import { MatrixError } from '$types/matrix-sdk';
 import { EventType, RelationType } from '$types/matrix-sdk';
+import { M_POLL_START } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { Editor, Point, Range, Transforms } from 'slate';
 import type { RectCords } from 'folds';
@@ -101,7 +103,6 @@ import type { Upload, UploadSuccess } from '$state/upload';
 import { UploadStatus, createUploadFamilyObserverAtom } from '$state/upload';
 import { loadImageElementFromMediaUrl } from '$utils/dom';
 import { isImageMimeType, safeUploadFile } from '$utils/mimeTypes';
-import { fulfilledPromiseSettledResult } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
 import { settingsAtom } from '$state/settings';
@@ -134,6 +135,7 @@ import {
   computeDelayMs,
   cancelDelayedEvent,
 } from '$utils/delayedEvents';
+import { roomScheduleCoordinator } from '$state/room/roomScheduleCoordinator';
 import { timeHourMinute, timeDayMonthYear, daysToMs } from '$utils/time';
 import { stopPropagation } from '$utils/keyboard';
 
@@ -147,7 +149,6 @@ import {
   getCurrentlyUsedPerMessageProfileForRoom,
   type PerMessageProfileMsc4461,
   setCurrentlyUsedPerMessageProfileIdForRoom,
-  stripPerMessageProfileFormattedBody,
 } from '$hooks/usePerMessageProfile';
 import {
   Bell,
@@ -200,7 +201,6 @@ import {
   buildGalleryContent,
   getGalleryItemContent,
 } from './msgContent';
-import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
 import { getSendableKlipyMxcUrl } from '$utils/klipy';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import type {
@@ -212,6 +212,8 @@ import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
+import { createComposerController, type ComposerController } from './composerController';
+import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -275,6 +277,28 @@ interface ReplyEventContent {
 
 const createUploadItemKey = () =>
   globalThis.crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+interface ReplyClaim {
+  epoch: number;
+  snapshot: IReplyDraft;
+  silentReply: boolean;
+}
+
+interface Submission {
+  children: Editor['children'];
+  epoch: number;
+  replyClaim: ReplyClaim | undefined;
+}
+
+interface SendContentsOptions {
+  contents: IContent[];
+  submission: Submission;
+  isLive: () => boolean;
+  includeReplyWithText?: boolean;
+  /** Defaults to `m.room.message`. Polls and other non-message events set this. */
+  eventType?: keyof TimelineEvents;
+  onContentSent?: (index: number) => void | Promise<void>;
+}
 
 interface RoomInputProps {
   editor: Editor;
@@ -362,13 +386,28 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [msgDraft, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(draftKey));
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(draftKey));
+    const replyDraftRef = useRef(replyDraft);
+    replyDraftRef.current = replyDraft;
 
     const [uploadBoard, setUploadBoard] = useState(true);
     const [uploadSending, setUploadSending] = useState(false);
     const [uploadBusy, setUploadBusy] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+    const [ingestingFiles, setIngestingFiles] = useState(false);
+    const fileIngestionCountRef = useRef(0);
+    const composerControllerRef = useRef<ComposerController>();
+    composerControllerRef.current ??= createComposerController();
+    // Bumped when this composer goes away, so async work started for a previous
+    // room/thread stops writing to the current one.
+    const draftEpochRef = useRef(0);
+    const mountedRef = useRef(false);
     const [selectedFiles, setSelectedFiles] = useAtom(roomIdToUploadItemsAtomFamily(draftKey));
+    const selectedFilesRef = useRef(selectedFiles);
+    selectedFilesRef.current = selectedFiles;
+    const uploadItemOverridesRef = useRef(new Map<TUploadContent, Partial<TUploadItem>>());
+    const removedUploadFilesRef = useRef(new WeakSet<TUploadContent>());
     const isEncrypting = selectedFiles.some((f) => f.encrypting);
-    const sendBusy = uploadSending || isEncrypting || uploadBusy;
+    const sendBusy = isSending || uploadSending || isEncrypting || uploadBusy || ingestingFiles;
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -377,12 +416,27 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
     const suppressBlurRefocusRef = useRef(false);
+    const editorRafIdsRef = useRef(new Set<number>());
+    const scheduleEditorRaf = useCallback((callback: () => void) => {
+      const rafId = requestAnimationFrame(() => {
+        editorRafIdsRef.current.delete(rafId);
+        callback();
+      });
+      editorRafIdsRef.current.add(rafId);
+    }, []);
+    useEffect(
+      () => () => {
+        editorRafIdsRef.current.forEach((rafId) => cancelAnimationFrame(rafId));
+        editorRafIdsRef.current.clear();
+      },
+      []
+    );
     const suppressEditorRefocus = useCallback(() => {
       suppressBlurRefocusRef.current = true;
-      requestAnimationFrame(() => {
+      scheduleEditorRaf(() => {
         suppressBlurRefocusRef.current = false;
       });
-    }, []);
+    }, [scheduleEditorRaf]);
 
     const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
 
@@ -390,11 +444,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const audioRecorderRef = useRef<AudioMessageRecorderHandle>(null);
     const micHoldStartRef = useRef(0);
     const micHoldReleaseRef = useRef<(() => void) | null>(null);
+    const recorderActionRef = useRef<'stop' | 'cancel'>();
+    const recorderTimerRef = useRef<ReturnType<typeof setTimeout>>();
+    const scheduleRecorderTimer = useCallback((callback: () => void) => {
+      recorderTimerRef.current = setTimeout(() => {
+        recorderTimerRef.current = undefined;
+        callback();
+      }, 50);
+    }, []);
+    const requestRecorderStop = useCallback(() => {
+      if (recorderActionRef.current) return;
+      recorderActionRef.current = 'stop';
+      audioRecorderRef.current?.stop();
+    }, []);
     const HOLD_THRESHOLD_MS = 400;
 
     useEffect(
       () => () => {
         micHoldReleaseRef.current?.();
+        clearTimeout(recorderTimerRef.current);
+        recorderActionRef.current = undefined;
       },
       []
     );
@@ -417,6 +486,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId, { disabled: !!threadRootId });
 
+    useEffect(() => {
+      mountedRef.current = true;
+      const controller = (composerControllerRef.current ??= createComposerController());
+      return () => {
+        mountedRef.current = false;
+        draftEpochRef.current += 1;
+        controller.dispose();
+        composerControllerRef.current = undefined;
+      };
+    }, [draftKey]);
+
     const [inputKey, setInputKey] = useState(0);
     const getUploadItemKey = useCallback((fileItem: TUploadItem): string => {
       const existingKey = uploadItemKeysRef.current.get(fileItem.originalFile);
@@ -429,64 +509,98 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const handleFiles = useCallback(
       async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
-        setUploadBoard(true);
-        const safeFiles = await Promise.all(files.map(safeUploadFile));
-        // Eager-read to avoid Android content URI expiry after SAF picker
-        const blobbedFiles = isMobileOrTablet()
-          ? await Promise.all(
-              safeFiles.map(async (f) => {
-                try {
-                  const buf = await f.arrayBuffer();
-                  return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
-                } catch {
-                  return f;
-                }
-              })
-            )
-          : safeFiles;
-        const makeMetadata = () => ({
-          markedAsSpoiler: false,
-          waveform: audioMeta?.waveform,
-          audioDuration: audioMeta?.audioDuration,
-        });
+        const epoch = draftEpochRef.current;
+        fileIngestionCountRef.current += 1;
+        setIngestingFiles(true);
+        try {
+          setUploadBoard(true);
+          const safeFiles = await Promise.all(files.map(safeUploadFile));
+          if (epoch !== draftEpochRef.current || !mountedRef.current) return;
 
-        if (room.hasEncryptionStateEvent()) {
-          const placeholders: TUploadItem[] = blobbedFiles.map((f) => ({
-            file: f,
-            originalFile: f,
-            encInfo: undefined,
-            encrypting: true,
-            metadata: makeMetadata(),
-          }));
-          setSelectedFiles({ type: 'PUT', item: placeholders });
-          placeholders.forEach((placeholder) => {
-            encryptFile(placeholder.originalFile)
-              .then((ef) =>
-                setSelectedFiles({
-                  type: 'REPLACE',
-                  item: placeholder,
-                  replacement: { ...ef, encrypting: false, metadata: placeholder.metadata },
+          // Eager-read to avoid Android content URI expiry after SAF picker
+          const blobbedFiles = isMobileOrTablet()
+            ? await Promise.all(
+                safeFiles.map(async (f) => {
+                  try {
+                    const buf = await f.arrayBuffer();
+                    return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+                  } catch {
+                    return f;
+                  }
                 })
               )
-              .catch((encryptError: unknown) => {
-                log.warn('Failed to encrypt file for upload:', encryptError);
-                setSelectedFiles({ type: 'DELETE', item: placeholder });
-              });
-          });
-          return;
-        }
+            : safeFiles;
+          if (epoch !== draftEpochRef.current || !mountedRef.current) return;
+          blobbedFiles.forEach((file) => removedUploadFilesRef.current.delete(file));
 
-        setSelectedFiles({
-          type: 'PUT',
-          item: blobbedFiles.map((f) => ({
-            file: f,
-            originalFile: f,
-            encInfo: undefined,
-            metadata: makeMetadata(),
-          })),
-        });
+          const makeMetadata = () => ({
+            markedAsSpoiler: false,
+            waveform: audioMeta?.waveform,
+            audioDuration: audioMeta?.audioDuration,
+          });
+
+          if (room.hasEncryptionStateEvent()) {
+            const placeholders: TUploadItem[] = blobbedFiles.map((f) => ({
+              file: f,
+              originalFile: f,
+              encInfo: undefined,
+              encrypting: true,
+              metadata: makeMetadata(),
+            }));
+            setSelectedFiles({ type: 'PUT', item: placeholders });
+            await Promise.all(
+              placeholders.map(async (placeholder) => {
+                try {
+                  const encryptedFile = await encryptFile(placeholder.originalFile);
+                  if (epoch !== draftEpochRef.current || !mountedRef.current) return;
+                  if (removedUploadFilesRef.current.has(placeholder.originalFile)) return;
+                  const currentItem = selectedFilesRef.current.find(
+                    (item) => item.originalFile === placeholder.originalFile
+                  );
+                  if (!currentItem) return;
+                  const overrides = uploadItemOverridesRef.current.get(placeholder.originalFile);
+                  setSelectedFiles({
+                    type: 'REPLACE',
+                    item: currentItem,
+                    replacement: {
+                      ...currentItem,
+                      ...encryptedFile,
+                      ...overrides,
+                      encrypting: false,
+                      metadata: overrides?.metadata ?? currentItem.metadata,
+                    },
+                  });
+                } catch (encryptError: unknown) {
+                  log.warn('Failed to encrypt file for upload:', encryptError);
+                  if (epoch === draftEpochRef.current && mountedRef.current) {
+                    const currentItem = selectedFilesRef.current.find(
+                      (item) => item.originalFile === placeholder.originalFile
+                    );
+                    if (currentItem) setSelectedFiles({ type: 'DELETE', item: currentItem });
+                  }
+                }
+              })
+            );
+            return;
+          }
+
+          setSelectedFiles({
+            type: 'PUT',
+            item: blobbedFiles.map((f) => ({
+              file: f,
+              originalFile: f,
+              encInfo: undefined,
+              metadata: makeMetadata(),
+            })),
+          });
+        } catch (error: unknown) {
+          log.warn('Failed to prepare files for upload:', error);
+        } finally {
+          fileIngestionCountRef.current -= 1;
+          if (fileIngestionCountRef.current === 0 && mountedRef.current) setIngestingFiles(false);
+        }
       },
-      [setSelectedFiles, room]
+      [room, setSelectedFiles]
     );
     const pickFile = useFilePicker(handleFiles, true);
     const handlePaste = useFilePasteHandler(handleFiles);
@@ -538,6 +652,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [scheduleMenuAnchor, setScheduleMenuAnchor] = useState<RectCords>();
     const [showSchedulePicker, setShowSchedulePicker] = useState(false);
     const [silentReply, setSilentReply] = useState(!mentionInReplies);
+    // Clears the reply draft up front so it cannot be re-sent, keeping a snapshot to
+    // restore if the send never lands.
+    const claimReply = useCallback((): ReplyClaim | undefined => {
+      const currentReply = replyDraftRef.current;
+      if (!currentReply) return undefined;
+
+      const epoch = draftEpochRef.current;
+      replyDraftRef.current = replyDraftBase;
+      setReplyDraft(replyDraftBase);
+      return { epoch, snapshot: structuredClone(currentReply), silentReply };
+    }, [replyDraftBase, setReplyDraft, silentReply]);
+    const restoreReplyClaim = useCallback(
+      (claim: ReplyClaim | undefined) => {
+        if (!claim || claim.epoch !== draftEpochRef.current) return;
+        if (replyDraftRef.current !== replyDraftBase) return;
+        replyDraftRef.current = claim.snapshot;
+        setReplyDraft(claim.snapshot);
+      },
+      [replyDraftBase, setReplyDraft]
+    );
     const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
     const setServerMaxDelayMs = useSetAtom(serverMaxDelayMsAtom);
     const [sendError, setSendError] = useState<string | undefined>();
@@ -599,9 +733,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       Transforms.insertFragment(editor, msgDraft);
     }, [editor, msgDraft]);
 
+    const editingStateRef = useRef(false);
+    const preEditDraftRef = useRef<Editor['children']>();
     useEffect(
       () => () => {
-        if (isEmptyEditor(editor)) {
+        if (editingStateRef.current) {
+          setMsgDraft(structuredClone(preEditDraftRef.current ?? []));
+        } else if (isEmptyEditor(editor)) {
           setMsgDraft([]);
         } else {
           const parsedDraft = structuredClone(editor.children);
@@ -614,6 +752,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const editingEvent = editId ? room.findEventById(editId) : undefined;
+    const isMobile = isMobileOrTablet();
+    const [initializedEditId, setInitializedEditId] = useState<string>();
+    const isEditInitializing = isMobile && editId !== undefined && initializedEditId !== editId;
     const getEditingContent = useCallback(
       (event: MatrixEvent): IContent => {
         const eventId = event.getId();
@@ -628,15 +769,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const prevEditingEventId = useRef<string>();
-    const preEditDraftRef = useRef<Editor['children']>();
     useEffect(() => {
-      if (!isMobileOrTablet()) {
+      if (!isMobile) {
+        editingStateRef.current = false;
         prevEditingEventId.current = undefined;
         preEditDraftRef.current = undefined;
+        setInitializedEditId(undefined);
+        return;
+      }
+
+      if (editId !== undefined && !editingEvent) {
+        setInitializedEditId(undefined);
+        onCancelEdit?.();
         return;
       }
 
       if (editingEvent) {
+        editingStateRef.current = true;
         if (editingEvent.getId() !== prevEditingEventId.current) {
           if (!prevEditingEventId.current) {
             preEditDraftRef.current = structuredClone(editor.children);
@@ -664,7 +813,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           }
           const editableHtml = pmpDisplayname
-            ? stripPerMessageProfileFormattedBody(customHtml ?? '')
+            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
             : customHtml;
 
           const mentionOptions = {
@@ -686,7 +835,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           resetEditorHistory(editor);
           Transforms.insertFragment(editor, initialValue);
 
-          requestAnimationFrame(() => {
+          scheduleEditorRaf(() => {
             try {
               ReactEditor.focus(editor);
               moveCursor(editor);
@@ -695,7 +844,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           });
         }
+        setInitializedEditId(editId);
       } else {
+        editingStateRef.current = false;
         const previousDraft = preEditDraftRef.current;
         if (prevEditingEventId.current && previousDraft) {
           resetEditor(editor);
@@ -707,7 +858,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           prevEditingEventId.current &&
           (!replyDraft?.eventId || replyDraft.eventId === threadRootId)
         ) {
-          requestAnimationFrame(() => {
+          scheduleEditorRaf(() => {
             try {
               const domNode = ReactEditor.toDOMNode(editor, editor);
               domNode.blur();
@@ -718,8 +869,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           });
         }
         prevEditingEventId.current = undefined;
+        setInitializedEditId(undefined);
       }
     }, [
+      editId,
       editingEvent,
       editor,
       getEditingContent,
@@ -728,6 +881,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       room,
       replyDraft?.eventId,
       threadRootId,
+      isMobile,
+      setInitializedEditId,
+      onCancelEdit,
+      scheduleEditorRaf,
     ]);
 
     useEffect(() => {
@@ -760,7 +917,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         prevReplyEventId.current = newId;
 
         if (newId && newId !== threadRootId) {
-          requestAnimationFrame(() => {
+          scheduleEditorRaf(() => {
             try {
               ReactEditor.focus(editor);
               moveCursor(editor);
@@ -769,7 +926,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           });
         } else if (!newId && prevId && prevId !== threadRootId && !editId) {
-          requestAnimationFrame(() => {
+          scheduleEditorRaf(() => {
             try {
               const domNode = ReactEditor.toDOMNode(editor, editor);
               domNode.blur();
@@ -780,10 +937,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           });
         }
       }
-    }, [replyDraft?.eventId, threadRootId, editId, editor]);
+    }, [replyDraft?.eventId, threadRootId, editId, editor, scheduleEditorRaf]);
 
     const handleFileMetadata = useCallback(
       (fileItem: TUploadItem, metadata: TUploadMetadata) => {
+        uploadItemOverridesRef.current.set(fileItem.originalFile, {
+          ...uploadItemOverridesRef.current.get(fileItem.originalFile),
+          metadata,
+        });
         setSelectedFiles({
           type: 'REPLACE',
           item: fileItem,
@@ -794,6 +955,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
     const setDesc = useCallback(
       (fileItem: TUploadItem, body: string, formatted_body: string) => {
+        uploadItemOverridesRef.current.set(fileItem.originalFile, {
+          ...uploadItemOverridesRef.current.get(fileItem.originalFile),
+          body,
+          formatted_body,
+        });
         setSelectedFiles({
           type: 'REPLACE',
           item: fileItem,
@@ -809,13 +975,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           type: 'DELETE',
           item: selectedFiles.filter((f) => uploads.find((u) => u === f.file)),
         });
-        uploads.forEach((u) => roomUploadAtomFamily.remove(u));
+        uploads.forEach((u) => {
+          removedUploadFilesRef.current.add(u);
+          roomUploadAtomFamily.remove(u);
+          uploadItemOverridesRef.current.delete(u);
+        });
       },
       [setSelectedFiles, selectedFiles]
     );
 
     const handleAudioRecordingComplete = useCallback(
       (payload: AudioRecordingCompletePayload) => {
+        recorderActionRef.current = undefined;
         const extension = getSupportedAudioExtension(payload.audioCodec);
         const file = new File(
           [payload.audioBlob],
@@ -836,7 +1007,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const audioRecorder = showAudioRecorder ? (
       <AudioMessageRecorder
         ref={audioRecorderRef}
-        onRequestClose={() => setShowAudioRecorder(false)}
+        onRequestClose={() => {
+          recorderActionRef.current = undefined;
+          setShowAudioRecorder(false);
+        }}
         onRecordingComplete={handleAudioRecordingComplete}
         onAudioLengthUpdate={() => {}}
         onWaveformUpdate={() => {}}
@@ -852,8 +1026,53 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       handleRemoveUpload(uploads.map((upload) => upload.file));
     };
 
-    const handleSendContents = async (contents: IContent[]) => {
-      const plainText = toPlainText(editor.children).trim();
+    // Clears the composer immediately so a slow send cannot be edited or submitted
+    // twice; anything that fails without a local echo is restored afterwards.
+    const takeSubmission = useCallback(
+      ({ clearEditor = true, claimReplyDraft = true } = {}): Submission => {
+        const children = structuredClone(editor.children);
+        const submission: Submission = {
+          children,
+          epoch: draftEpochRef.current,
+          replyClaim: claimReplyDraft ? claimReply() : undefined,
+        };
+        if (clearEditor) {
+          resetEditor(editor);
+          resetEditorHistory(editor);
+          setInputKey((prev) => prev + 1);
+          imagePacksUsedRef.current.clear();
+          sendTypingStatus(false);
+        }
+        return submission;
+      },
+      [claimReply, editor, sendTypingStatus]
+    );
+    const restoreSubmission = useCallback(
+      (submission: Submission) => {
+        restoreReplyClaim(submission.replyClaim);
+        if (
+          !mountedRef.current ||
+          submission.epoch !== draftEpochRef.current ||
+          !isEmptyEditor(editor)
+        ) {
+          return;
+        }
+        Transforms.insertFragment(editor, submission.children);
+      },
+      [editor, restoreReplyClaim]
+    );
+
+    const handleSendContents = async ({
+      contents,
+      submission,
+      isLive,
+      includeReplyWithText = false,
+      eventType,
+      onContentSent,
+    }: SendContentsOptions) => {
+      const plainText = toPlainText(submission.children).trim();
+      const submittedReplyDraft = submission.replyClaim?.snapshot;
+      const submittedSilentReply = submission.replyClaim?.silentReply ?? silentReply;
 
       /**
        * the currently with the room associated per-message profile, if any, so that it can be included in the message content when sending.
@@ -874,39 +1093,61 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         });
       }
 
-      if (contents.length > 0) {
-        const replyContent =
-          plainText?.length === 0 ? getReplyContent(replyDraft, room) : undefined;
-        if (replyContent) {
-          contents[0]!['m.relates_to'] = replyContent;
-          if (!silentReply && replyDraft)
-            contents[0]!['m.mentions'] = { ['user_ids']: [replyDraft.userId] };
-          setReplyDraft(replyDraftBase);
-        }
+      const replyContent =
+        submittedReplyDraft && (includeReplyWithText || plainText.length === 0)
+          ? getReplyContent(submittedReplyDraft, room)
+          : undefined;
+      if (replyContent && contents.length > 0) {
+        contents[0]!['m.relates_to'] = replyContent;
+        if (!submittedSilentReply && submittedReplyDraft)
+          contents[0]!['m.mentions'] = { ['user_ids']: [submittedReplyDraft.userId] };
       }
 
-      const invalidate = () =>
-        queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
+      const invalidate = () => {
+        if (isLive()) queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
+      };
+      const handleContentSent = async (index: number) => {
+        if (onContentSent && isLive()) await onContentSent(index);
+      };
 
       if (scheduledTime) {
         try {
           const delayMs = computeDelayMs(scheduledTime);
-          if (editingScheduledDelayId) {
-            await cancelDelayedEvent(mx, editingScheduledDelayId);
-          }
+          await roomScheduleCoordinator.run(roomId, async () => {
+            if (editingScheduledDelayId) {
+              await cancelDelayedEvent(mx, editingScheduledDelayId);
+              if (isLive()) setEditingScheduledDelayId(null);
+            }
 
-          await Promise.all(
-            contents.map((content) => {
-              if (isEncrypted) {
-                return sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
-              }
-              return sendDelayedMessage(mx, roomId, content, delayMs);
-            })
-          );
+            const sendResults = await Promise.allSettled(
+              contents.map(async (content, index) => {
+                const response = isEncrypted
+                  ? await sendDelayedMessageE2EE(
+                      mx,
+                      roomId,
+                      room,
+                      content,
+                      delayMs,
+                      null,
+                      eventType
+                    )
+                  : await sendDelayedMessage(mx, roomId, content, delayMs, null, eventType);
+                await handleContentSent(index);
+                return response;
+              })
+            );
+            const failedSend = sendResults.find(
+              (result): result is PromiseRejectedResult => result.status === 'rejected'
+            );
+            if (failedSend) throw failedSend.reason;
+          });
 
           invalidate();
-          setEditingScheduledDelayId(null);
-          setScheduledTime(null);
+          if (isLive()) {
+            setEditingScheduledDelayId(null);
+            setScheduledTime(null);
+          }
+          return contents.length > 0;
         } catch (error) {
           debugLog.error('message', 'Failed to schedule message', {
             roomId,
@@ -916,40 +1157,65 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           throw error;
         }
       } else {
-        if (editingScheduledDelayId) {
-          try {
-            await cancelDelayedEvent(mx, editingScheduledDelayId);
-            invalidate();
-            setEditingScheduledDelayId(null);
-          } catch {
-            debugLog.error('message', 'Failed to cancel scheduled event before immediate send', {
-              roomId,
-            });
-          }
-        }
-
-        await Promise.all(
-          contents.map((content) =>
-            mx
-              .sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
-              .then((res: { event_id: string }) => {
+        const sendImmediateContents = async () =>
+          Promise.allSettled(
+            contents.map(async (content, index) => {
+              try {
+                const res = eventType
+                  ? await mx.sendEvent(
+                      roomId,
+                      threadRootId ?? null,
+                      eventType,
+                      content as TimelineEvents[keyof TimelineEvents]
+                    )
+                  : await mx.sendMessage(
+                      roomId,
+                      threadRootId ?? null,
+                      content as RoomMessageEventContent
+                    );
+                await handleContentSent(index);
                 debugLog.info('message', 'Message sent', {
                   roomId,
                   eventId: res.event_id,
                   msgtype: content.msgtype,
                 });
                 return res;
-              })
-              .catch((error: unknown) => {
+              } catch (error: unknown) {
                 debugLog.error('message', 'Failed to send message', {
                   roomId,
                   error: error instanceof Error ? error.message : String(error),
                 });
                 log.error('failed to send message', { roomId }, error);
                 throw error;
-              })
-          )
+              }
+            })
+          );
+        let sendResults: PromiseSettledResult<unknown>[] = [];
+        if (editingScheduledDelayId) {
+          let cancellationFailed = false;
+          await roomScheduleCoordinator.run(roomId, async () => {
+            try {
+              await cancelDelayedEvent(mx, editingScheduledDelayId);
+              invalidate();
+              if (isLive()) setEditingScheduledDelayId(null);
+            } catch {
+              cancellationFailed = true;
+              debugLog.error('message', 'Failed to cancel scheduled event before immediate send', {
+                roomId,
+              });
+              return;
+            }
+            sendResults = await sendImmediateContents();
+          });
+          if (cancellationFailed) sendResults = await sendImmediateContents();
+        } else {
+          sendResults = await sendImmediateContents();
+        }
+        const failedSend = sendResults.find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected'
         );
+        if (failedSend) throw failedSend.reason;
+        return contents.length > 0;
       }
     };
 
@@ -969,11 +1235,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       return getFileMsgContent(fileItem, upload.mxc);
     };
 
-    const handleSendUpload = async (uploads: Upload[]) => {
-      const plainText = toPlainText(editor.children).trim();
+    // Resolves true when the composer text went out as an attachment caption, meaning
+    // the caller must not send it again.
+    const handleSendUpload = async (
+      uploads: Upload[],
+      submission: Submission,
+      isLive: () => boolean
+    ): Promise<boolean> => {
+      const plainText = toPlainText(submission.children).trim();
       const caption = plainText.length > 0 ? plainText : undefined;
       let customHtml = trimCustomHtml(
-        toMatrixCustomHTML(editor.children, {
+        toMatrixCustomHTML(submission.children, {
           stripNickname: true,
           room,
         })
@@ -981,26 +1253,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const formattedCaption =
         caption && !customHtmlEqualsPlainText(customHtml, plainText) ? customHtml : undefined;
 
-      const resolved = fulfilledPromiseSettledResult(
-        await Promise.allSettled(
-          uploads.map(async (upload): Promise<UploadSuccess> => {
-            if (upload.status === UploadStatus.Success) return upload;
-            if (upload.status === UploadStatus.Loading) {
-              const response = await upload.promise;
-              if (!response.content_uri) throw new Error('Upload failed');
-              return { status: UploadStatus.Success, file: upload.file, mxc: response.content_uri };
-            }
-            throw new Error('Upload not ready');
-          })
-        )
+      if (uploads.length !== selectedFiles.length) throw new Error('Upload not ready');
+      const resolved = await Promise.all(
+        uploads.map(async (upload): Promise<UploadSuccess> => {
+          if (upload.status === UploadStatus.Success) return upload;
+          if (upload.status === UploadStatus.Loading) {
+            const response = await upload.promise;
+            if (!response.content_uri) throw new Error('Upload failed');
+            return { status: UploadStatus.Success, file: upload.file, mxc: response.content_uri };
+          }
+          throw new Error('Upload not ready');
+        })
       );
-      if (resolved.length === 0) return;
+      if (resolved.length === 0) throw new Error('Upload not ready');
 
-      if (resolved.length == 1 && sendIndividualAttachmentAsCaption) {
+      if (selectedFiles.length == 1 && sendIndividualAttachmentAsCaption) {
         const upload = resolved[0];
         if (!upload) throw new Error('Broken upload');
         let content = await uploadToContent(upload);
-        handleCancelUpload(resolved);
 
         content.body = caption ?? '';
         content.formatted_body = undefined;
@@ -1010,30 +1280,70 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           content.formatted_body = formattedCaption;
         }
 
-        await handleSendContents([content]);
-        return;
+        await handleSendContents({
+          contents: [content],
+          submission,
+          isLive,
+          includeReplyWithText: true,
+        });
+        if (isLive()) handleCancelUpload(resolved);
+        return true;
       }
-      if (resolved.length >= 2 && enableMediaGalleries) {
+      if (selectedFiles.length >= 2 && enableMediaGalleries) {
         const itemsPromises = resolved.map(async (upload) => {
           const fileItem = selectedFiles.find((f) => f.file === upload.file);
           if (!fileItem) throw new Error('Broken upload');
           return getGalleryItemContent(mx, fileItem, upload.mxc);
         });
-        handleCancelUpload(resolved);
-        const items = fulfilledPromiseSettledResult(await Promise.allSettled(itemsPromises));
-
-        if (items.length === 0) return;
+        const items = await Promise.all(itemsPromises);
 
         const galleryContent = buildGalleryContent(items, caption, formattedCaption);
 
-        await handleSendContents([galleryContent]);
-        return;
+        await handleSendContents({
+          contents: [galleryContent],
+          submission,
+          isLive,
+          includeReplyWithText: true,
+        });
+        if (isLive()) handleCancelUpload(resolved);
+        return true;
       }
-      const contentsPromises = resolved.map(uploadToContent);
-      handleCancelUpload(resolved);
-      const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
+      const contents = await Promise.all(resolved.map(uploadToContent));
 
-      await handleSendContents(contents);
+      await handleSendContents({
+        contents,
+        submission,
+        isLive,
+        onContentSent: (index) => {
+          const upload = resolved[index];
+          if (upload) handleCancelUpload([upload]);
+        },
+      });
+      return false;
+    };
+    // `submit` is memoized but this closure is not.
+    const handleSendUploadRef = useRef(handleSendUpload);
+    handleSendUploadRef.current = handleSendUpload;
+
+    const handleDialogSendContent = async (
+      content: IContent,
+      eventType?: keyof TimelineEvents
+    ): Promise<void> => {
+      const submission = takeSubmission({ clearEditor: false });
+      await composerControllerRef.current?.enqueue(async (isLive) => {
+        try {
+          await handleSendContents({
+            contents: [content],
+            submission,
+            isLive,
+            includeReplyWithText: true,
+            eventType,
+          });
+        } catch (error) {
+          restoreReplyClaim(submission.replyClaim);
+          throw error;
+        }
+      });
     };
 
     const handleCloseAutocomplete = useCallback(() => {
@@ -1075,243 +1385,284 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [editor, handleCloseAutocomplete, mx, room, sendTypingStatus]
     );
 
-    const submit = useCallback(async () => {
-      if (editingEvent && isMobileOrTablet()) {
-        const content = buildEditReplacement(editor.children, {
-          mx,
-          room,
-          roomId,
-          editingEvent,
-          currentContent: getEditingContent(editingEvent),
-          pmpNoFallback,
-        });
-        if (!content) {
-          onCancelEdit?.();
+    const executeSubmit = useCallback(
+      async (submission: Submission, isLive: () => boolean) => {
+        if (
+          fileIngestionCountRef.current > 0 ||
+          isEditInitializing ||
+          (isMobile && editId !== undefined && !editingEvent)
+        ) {
+          restoreSubmission(submission);
           return;
         }
 
-        await mx.sendMessage(roomId, content as RoomMessageEventContent);
-        onCancelEdit?.();
-        sendTypingStatus(false);
-        return;
-      }
+        setIsSending(true);
+        const submittedReplyDraft = submission.replyClaim?.snapshot;
+        const submittedSilentReply = submission.replyClaim?.silentReply ?? silentReply;
+        try {
+          if (editingEvent && isMobile) {
+            const content = buildEditReplacement(submission.children, {
+              mx,
+              room,
+              roomId,
+              editingEvent,
+              currentContent: getEditingContent(editingEvent),
+              pmpNoFallback,
+            });
+            if (!content) {
+              if (isLive()) onCancelEdit?.();
+              return;
+            }
+            await mx.sendMessage(roomId, content as RoomMessageEventContent);
+            if (isLive()) {
+              onCancelEdit?.();
+              sendTypingStatus(false);
+            }
+            return;
+          }
 
-      if (selectedFiles.some((f) => f.encrypting)) return;
-      uploadBoardHandlers.current?.handleSend();
-      if (
-        (selectedFiles.length >= 2 && enableMediaGalleries) ||
-        (selectedFiles.length == 1 && sendIndividualAttachmentAsCaption)
-      ) {
-        resetEditor(editor);
-        resetEditorHistory(editor);
-        sendTypingStatus(false);
-        return;
-      }
+          if (selectedFiles.some((f) => f.encrypting)) {
+            restoreSubmission(submission);
+            return;
+          }
+          if (selectedFiles.length > 0) {
+            const uploads = uploadBoardHandlers.current?.getSendableUploads() ?? [];
+            const sendUpload = handleSendUploadRef.current;
+            setUploadSending(true);
+            try {
+              if (await sendUpload(uploads, submission, isLive)) return;
+            } catch (error: unknown) {
+              log.error('failed to send attachments', { roomId }, error);
+              if (isLive()) {
+                setSendError('Failed to send attachments. Please try again.');
+              }
+              restoreSubmission(submission);
+              return;
+            } finally {
+              if (isLive()) setUploadSending(false);
+            }
+          }
 
-      const outgoing = await buildOutgoingMessage(editor.children, {
-        mx,
-        room,
-        roomId,
-        nicknames,
+          const outgoing = await buildOutgoingMessage(submission.children, {
+            mx,
+            room,
+            roomId,
+            nicknames,
+            replyEvent,
+            replyDraft: submittedReplyDraft,
+            silentReply: submittedSilentReply,
+            settingsLinkBaseUrl,
+            canSendReaction,
+            pkCompatEnable,
+            pmpProxyingEnable,
+            pmpLatchingEnable,
+            pmpNoFallback,
+            latchedPersona,
+            isPKCommand: (text) => PKitCommandMessageHandler.isPKCommand(text),
+            pluralkitProxyMessageHandler,
+            imagePacksUsed: imagePacksUsedRef.current,
+          });
+
+          if (outgoing.kind === 'empty') return;
+          if (outgoing.kind === 'quickReact') {
+            handleQuickReact(outgoing.key);
+            return;
+          }
+          if (outgoing.kind === 'pkCommand') {
+            await pluralkitCmdMessageHandler.handleMessage(outgoing.plainText);
+            return;
+          }
+          if (outgoing.kind === 'gifSearch') {
+            setInitialGifSearch(outgoing.query);
+            setEmojiBoardTab(EmojiBoardTab.Gif);
+            return;
+          }
+          if (outgoing.kind === 'command') {
+            const { command, plainText, customHtml } = outgoing;
+            if (command === Command.Poll) setShowPollPicker(true);
+            else if (command === Command.Location && plainText.trim().length === 0)
+              setShowLocationPicker(true);
+            else commands[command as Command]?.exe(plainText, customHtml);
+            return;
+          }
+
+          const { content } = outgoing;
+          if (outgoing.latchPersona) {
+            await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, outgoing.latchPersona.id);
+            if (isLive()) setLatchedPersona(outgoing.latchPersona);
+          }
+          if (submittedReplyDraft) {
+            content['m.relates_to'] = getReplyContent(submittedReplyDraft, room);
+          }
+          const invalidate = () => {
+            if (isLive()) {
+              queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
+            }
+          };
+
+          if (scheduledTime) {
+            try {
+              const delayMs = computeDelayMs(scheduledTime);
+              await roomScheduleCoordinator.run(roomId, async () => {
+                if (editingScheduledDelayId) {
+                  await cancelDelayedEvent(mx, editingScheduledDelayId);
+                  if (isLive()) setEditingScheduledDelayId(null);
+                }
+                if (isEncrypted) {
+                  await sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
+                } else {
+                  await sendDelayedMessage(mx, roomId, content as RoomMessageEventContent, delayMs);
+                }
+              });
+              invalidate();
+              if (isLive()) {
+                setSendError(undefined);
+                setEditingScheduledDelayId(null);
+                setScheduledTime(null);
+              }
+            } catch (e: unknown) {
+              // A scheduled send leaves no local echo, so hand the message back.
+              restoreSubmission(submission);
+              if (!isLive()) return;
+              if (
+                e instanceof MatrixError &&
+                (e.errcode === ErrorCode.M_MAX_DELAY_EXCEEDED ||
+                  e.data?.['org.matrix.msc4140.errcode'] === 'M_MAX_DELAY_EXCEEDED')
+              ) {
+                const maxDelay =
+                  (e.data as { max_delay?: number })?.max_delay ??
+                  e.data?.['org.matrix.msc4140.max_delay'];
+                if (typeof maxDelay === 'number') setServerMaxDelayMs(maxDelay);
+                const maxDelayDays = maxDelay / daysToMs(1);
+                setSendError(
+                  `Scheduled time exceeds the maximum delay allowed by this server. Please choose an earlier time. The Maximum Delay is of ${maxDelayDays} day${maxDelayDays > 1 ? 's' : ''}.`
+                );
+              } else {
+                setSendError('Failed to schedule message. Please try again.');
+              }
+            }
+          } else if (editingScheduledDelayId) {
+            const scheduledDelayId = editingScheduledDelayId;
+            try {
+              await roomScheduleCoordinator.run(roomId, async () => {
+                await cancelDelayedEvent(mx, scheduledDelayId);
+                if (isLive()) setEditingScheduledDelayId(null);
+                debugLog.info('message', 'Sending message after cancelling scheduled event', {
+                  roomId,
+                  scheduledDelayId,
+                });
+                const res = await mx.sendMessage(
+                  roomId,
+                  threadRootId ?? null,
+                  content as RoomMessageEventContent
+                );
+                debugLog.info('message', 'Message sent successfully', {
+                  roomId,
+                  eventId: res.event_id,
+                });
+              });
+              invalidate();
+            } catch (error) {
+              debugLog.error('message', 'Failed to send message after cancelling scheduled event', {
+                roomId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              // The scheduled copy may still exist, so don't drop the user's text.
+              restoreSubmission(submission);
+              if (isLive()) setSendError('Failed to reschedule message. Please try again.');
+            }
+          } else {
+            const msgSendStart = performance.now();
+            debugLog.info('message', 'Sending message', {
+              roomId,
+              msgtype: content.msgtype,
+            });
+            try {
+              const res = await Sentry.startSpan(
+                {
+                  name: 'message.send',
+                  op: 'matrix.message',
+                  attributes: { encrypted: String(isEncrypted) },
+                },
+                () =>
+                  mx.sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
+              );
+              debugLog.info('message', 'Message sent successfully', {
+                roomId,
+                eventId: res.event_id,
+              });
+              Sentry.metrics.distribution(
+                'sable.message.send_latency_ms',
+                performance.now() - msgSendStart,
+                { attributes: { encrypted: String(isEncrypted) } }
+              );
+            } catch (error: unknown) {
+              debugLog.error('message', 'Failed to send message', {
+                roomId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              Sentry.metrics.count('sable.message.send_error', 1, {
+                attributes: { encrypted: String(isEncrypted) },
+              });
+              log.error('failed to send message', { roomId }, error);
+              // The failed send stays in the timeline as a local echo the user can retry,
+              // so the composer is intentionally left empty here.
+            }
+          }
+        } finally {
+          if (isLive()) setIsSending(false);
+        }
+      },
+      [
         replyEvent,
-        replyDraft,
-        silentReply,
-        settingsLinkBaseUrl,
+        mx,
+        roomId,
         canSendReaction,
         pkCompatEnable,
+        silentReply,
         pmpProxyingEnable,
+        pluralkitProxyMessageHandler,
+        scheduledTime,
+        editingScheduledDelayId,
+        nicknames,
+        room,
+        handleQuickReact,
+        pluralkitCmdMessageHandler,
+        commands,
+        sendTypingStatus,
+        queryClient,
+        threadRootId,
+        settingsLinkBaseUrl,
+        isEncrypted,
+        setEditingScheduledDelayId,
+        setScheduledTime,
+        setServerMaxDelayMs,
+        selectedFiles,
+        editingEvent,
+        getEditingContent,
+        onCancelEdit,
+        restoreSubmission,
+        isMobile,
+        editId,
+        isEditInitializing,
         pmpLatchingEnable,
         pmpNoFallback,
         latchedPersona,
-        isPKCommand: (text) => PKitCommandMessageHandler.isPKCommand(text),
-        pluralkitProxyMessageHandler,
-        imagePacksUsed: imagePacksUsedRef.current,
+      ]
+    );
+
+    const submit = useCallback(() => {
+      // A mobile edit replaces an existing event, so it owns neither the draft nor the reply.
+      const isMobileEdit = Boolean(editingEvent && isMobile);
+      const submission = takeSubmission({
+        clearEditor: !isMobileEdit,
+        claimReplyDraft: !isMobileEdit,
       });
-
-      if (outgoing.kind === 'empty') return;
-      if (outgoing.kind === 'quickReact') {
-        handleQuickReact(outgoing.key);
-        return;
-      }
-      if (outgoing.kind === 'pkCommand') {
-        await pluralkitCmdMessageHandler.handleMessage(outgoing.plainText);
-        resetEditor(editor);
-        return;
-      }
-      if (outgoing.kind === 'gifSearch') {
-        setInitialGifSearch(outgoing.query);
-        setEmojiBoardTab(EmojiBoardTab.Gif);
-        resetEditor(editor);
-        resetEditorHistory(editor);
-        sendTypingStatus(false);
-        return;
-      }
-      if (outgoing.kind === 'command') {
-        const { command, plainText, customHtml } = outgoing;
-        if (command === Command.Poll) setShowPollPicker(true);
-        else if (command === Command.Location && plainText.trim().length === 0)
-          setShowLocationPicker(true);
-        else commands[command as Command]?.exe(plainText, customHtml);
-        resetEditor(editor);
-        resetEditorHistory(editor);
-        sendTypingStatus(false);
-        return;
-      }
-
-      const { content } = outgoing;
-      if (outgoing.latchPersona) {
-        await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, outgoing.latchPersona.id);
-        setLatchedPersona(outgoing.latchPersona);
-      }
-      if (replyDraft) {
-        content['m.relates_to'] = getReplyContent(replyDraft, room);
-      }
-      const invalidate = () =>
-        queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
-
-      const resetInput = () => {
-        resetEditor(editor);
-        resetEditorHistory(editor);
-        setInputKey((prev) => prev + 1);
-        imagePacksUsedRef.current.clear();
-        setReplyDraft(replyDraftBase);
-        sendTypingStatus(false);
-      };
-      if (scheduledTime) {
-        try {
-          const delayMs = computeDelayMs(scheduledTime);
-          if (editingScheduledDelayId) {
-            await cancelDelayedEvent(mx, editingScheduledDelayId);
-          }
-          if (isEncrypted) {
-            await sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
-          } else {
-            await sendDelayedMessage(mx, roomId, content as RoomMessageEventContent, delayMs);
-          }
-          setSendError(undefined);
-          invalidate();
-          setEditingScheduledDelayId(null);
-          setScheduledTime(null);
-          resetInput();
-        } catch (e: unknown) {
-          if (
-            e instanceof MatrixError &&
-            (e.errcode === ErrorCode.M_MAX_DELAY_EXCEEDED ||
-              e.data?.['org.matrix.msc4140.errcode'] === 'M_MAX_DELAY_EXCEEDED')
-          ) {
-            const maxDelay =
-              (e.data as { max_delay?: number })?.max_delay ??
-              e.data?.['org.matrix.msc4140.max_delay'];
-            if (typeof maxDelay === 'number') setServerMaxDelayMs(maxDelay);
-            const maxDelayDays = maxDelay / daysToMs(1);
-            setSendError(
-              `Scheduled time exceeds the maximum delay allowed by this server. Please choose an earlier time. The Maximum Delay is of ${maxDelayDays} day${maxDelayDays > 1 ? 's' : ''}.`
-            );
-          } else {
-            setSendError('Failed to schedule message. Please try again.');
-          }
-        }
-      } else if (editingScheduledDelayId) {
-        try {
-          await cancelDelayedEvent(mx, editingScheduledDelayId);
-          debugLog.info('message', 'Sending message after cancelling scheduled event', {
-            roomId,
-            scheduledDelayId: editingScheduledDelayId,
-          });
-          const res = await mx.sendMessage(
-            roomId,
-            threadRootId ?? null,
-            content as RoomMessageEventContent
-          );
-          debugLog.info('message', 'Message sent successfully', {
-            roomId,
-            eventId: res.event_id,
-          });
-          invalidate();
-          setEditingScheduledDelayId(null);
-          resetInput();
-        } catch (error) {
-          debugLog.error('message', 'Failed to send message after cancelling scheduled event', {
-            roomId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Cancel failed — leave state intact for retry
-        }
-      } else {
-        const msgSendStart = performance.now();
-        resetInput();
-        debugLog.info('message', 'Sending message', {
-          roomId,
-          msgtype: content.msgtype,
-        });
-        Sentry.startSpan(
-          {
-            name: 'message.send',
-            op: 'matrix.message',
-            attributes: { encrypted: String(isEncrypted) },
-          },
-          () => mx.sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
-        )
-          .then((res: { event_id: string }) => {
-            debugLog.info('message', 'Message sent successfully', {
-              roomId,
-              eventId: res.event_id,
-            });
-            Sentry.metrics.distribution(
-              'sable.message.send_latency_ms',
-              performance.now() - msgSendStart,
-              { attributes: { encrypted: String(isEncrypted) } }
-            );
-          })
-          .catch((error: unknown) => {
-            debugLog.error('message', 'Failed to send message', {
-              roomId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            Sentry.metrics.count('sable.message.send_error', 1, {
-              attributes: { encrypted: String(isEncrypted) },
-            });
-            log.error('failed to send message', { roomId }, error);
-          });
-      }
-    }, [
-      editor,
-      replyEvent,
-      mx,
-      roomId,
-      canSendReaction,
-      pkCompatEnable,
-      replyDraft,
-      silentReply,
-      pmpProxyingEnable,
-      pmpLatchingEnable,
-      pmpNoFallback,
-      pluralkitProxyMessageHandler,
-      scheduledTime,
-      editingScheduledDelayId,
-      nicknames,
-      room,
-      handleQuickReact,
-      pluralkitCmdMessageHandler,
-      commands,
-      sendTypingStatus,
-      queryClient,
-      threadRootId,
-      setReplyDraft,
-      settingsLinkBaseUrl,
-      isEncrypted,
-      setEditingScheduledDelayId,
-      setScheduledTime,
-      setServerMaxDelayMs,
-      replyDraftBase,
-      selectedFiles,
-      enableMediaGalleries,
-      sendIndividualAttachmentAsCaption,
-      editingEvent,
-      getEditingContent,
-      onCancelEdit,
-      latchedPersona,
-    ]);
+      return (
+        composerControllerRef.current?.enqueue((isLive) => executeSubmit(submission, isLive)) ??
+        Promise.resolve(undefined)
+      );
+    }, [editingEvent, executeSubmit, isMobile, takeSubmission]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
       (evt) => {
@@ -1467,7 +1818,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       handleCloseAutocomplete();
     };
 
-    const handleStickerSelect = async (mxc: string, shortcode: string, label: string) => {
+    const executeStickerSelect = async (mxc: string, label: string, submission: Submission) => {
+      const replySnapshot = submission.replyClaim?.snapshot;
+      const silentReplySnapshot = submission.replyClaim?.silentReply ?? silentReply;
       // Packs declare their own info, so sending does not need the file. Measuring it instead made
       // the send fail outright whenever the media fetch did.
       let info = getPackImageInfo(mx, room, ImageUsage.Sticker, mxc);
@@ -1510,28 +1863,45 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
         getImagePackReferencesForMxcWrappedInMap(mxc, mx, ImageUsage.Sticker, room);
 
-      if (replyDraft) {
-        content['m.relates_to'] = getReplyContent(replyDraft, room);
-        if (!silentReply && replyDraft)
-          content['m.mentions'] = { ['user_ids']: [replyDraft.userId] };
-        setReplyDraft(replyDraftBase);
+      if (replySnapshot) {
+        content['m.relates_to'] = getReplyContent(replySnapshot, room);
+        if (!silentReplySnapshot) content['m.mentions'] = { ['user_ids']: [replySnapshot.userId] };
       }
-      try {
-        await mx.sendEvent(roomId, EventType.Sticker, content);
-      } catch (error) {
-        log.error('failed to send sticker', { roomId }, error);
-      }
+      await mx.sendEvent(roomId, EventType.Sticker, content);
     };
 
-    const handleGifSelect = async (gif: GifData, spoiler?: boolean) => {
-      const url = getSendableKlipyMxcUrl(gif.url, clientConfig.gifs?.proxyUrl);
-      if (!url) return;
-
-      const content = await getGifMsgContent(mx, gif, url, spoiler);
-      if (!content) return;
-
-      await handleSendContents([content]);
+    const handleStickerSelect = (mxc: string, _shortcode: string, label: string) => {
+      const submission = takeSubmission({ clearEditor: false });
+      return composerControllerRef.current?.enqueue(async () => {
+        try {
+          await executeStickerSelect(mxc, label, submission);
+        } catch (error) {
+          log.error('failed to send sticker', { roomId }, error);
+          restoreReplyClaim(submission.replyClaim);
+        }
+      });
     };
+
+    const handleGifSelect = (gif: GifData, spoiler?: boolean) => {
+      const submission = takeSubmission({ clearEditor: false });
+      return composerControllerRef.current?.enqueue(async (isLive) => {
+        try {
+          const url = getSendableKlipyMxcUrl(gif.url, clientConfig.gifs?.proxyUrl);
+          if (!url) throw new Error('Unsendable GIF url');
+
+          const content = await getGifMsgContent(mx, gif, url, spoiler);
+          if (!content) throw new Error('Unsendable GIF content');
+
+          return await handleSendContents({ contents: [content], submission, isLive });
+        } catch (error) {
+          log.error('failed to send gif', { roomId }, error);
+          restoreReplyClaim(submission.replyClaim);
+          return false;
+        }
+      });
+    };
+
+    if (isEditInitializing) return <div ref={ref} />;
 
     return (
       <div ref={ref}>
@@ -1636,14 +2006,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       open={uploadBoard}
                       onToggle={() => setUploadBoard(!uploadBoard)}
                       uploadFamilyObserverAtom={uploadFamilyObserverAtom}
-                      onSend={async (uploads) => {
-                        setUploadSending(true);
-                        try {
-                          await handleSendUpload(uploads);
-                        } finally {
-                          setUploadSending(false);
-                        }
-                      }}
                       onBusyChange={setUploadBusy}
                       imperativeHandlerRef={uploadBoardHandlers}
                       onCancel={handleCancelUpload}
@@ -2141,7 +2503,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 aria-pressed={!hasContent && editorMicButton ? showAudioRecorder : undefined}
                 onClick={() => {
                   if (showAudioRecorder) {
-                    audioRecorderRef.current?.stop();
+                    requestRecorderStop();
                     return;
                   }
                   if (hasContent) {
@@ -2154,6 +2516,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   }
                   if (!editorMicButton) return;
                   if (isMobileOrTablet()) return;
+                  recorderActionRef.current = undefined;
                   setShowAudioRecorder(true);
                 }}
                 onMouseDown={(e: MouseEvent) => {
@@ -2163,7 +2526,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   if (showAudioRecorder) return;
                   if (hasContent) {
                     isLongPress.current = false;
-                    if (isMobileOrTablet() && delayedEventsSupported) {
+                    if (isMobileOrTablet() && delayedEventsSupported && !threadRootId) {
                       longPressTimer.current = setTimeout(() => {
                         isLongPress.current = true;
                         setShowSchedulePicker(true);
@@ -2173,22 +2536,27 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   }
                   if (!editorMicButton) return;
                   if (!isMobileOrTablet()) return;
+                  recorderActionRef.current = undefined;
                   micHoldStartRef.current = Date.now();
                   setShowAudioRecorder(true);
 
                   function discardRecording() {
+                    if (recorderActionRef.current) return;
+                    recorderActionRef.current = 'cancel';
                     releaseListeners();
-                    setTimeout(() => {
+                    scheduleRecorderTimer(() => {
                       audioRecorderRef.current?.cancel();
-                    }, 50);
+                    });
                   }
                   function onUp() {
+                    if (recorderActionRef.current) return;
                     const held = Date.now() - micHoldStartRef.current;
                     if (held >= HOLD_THRESHOLD_MS) {
+                      recorderActionRef.current = 'stop';
                       releaseListeners();
-                      setTimeout(() => {
+                      scheduleRecorderTimer(() => {
                         audioRecorderRef.current?.stop();
-                      }, 50);
+                      });
                     } else {
                       discardRecording();
                     }
@@ -2214,8 +2582,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     longPressTimer.current = null;
                   }
                 }}
-                disabled={hasContent && sendBusy && !showAudioRecorder}
-                className={hasContent && delayedEventsSupported ? css.SplitSendButton : undefined}
+                disabled={sendBusy && !showAudioRecorder}
+                className={
+                  hasContent && delayedEventsSupported && !threadRootId
+                    ? css.SplitSendButton
+                    : undefined
+                }
               >
                 {showAudioRecorder ? (
                   <Stop
@@ -2223,10 +2595,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     weight="fill"
                     style={{ color: color.Critical.Main }}
                   />
+                ) : sendBusy ? (
+                  <Spinner size="300" variant="Secondary" />
                 ) : hasContent || !editorMicButton ? (
-                  sendBusy ? (
-                    <Spinner size="300" variant="Secondary" />
-                  ) : scheduledTime ? (
+                  scheduledTime ? (
                     composerIcon(Clock)
                   ) : (
                     composerIcon(PaperPlaneTilt)
@@ -2278,7 +2650,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </FocusTrap>
                 }
               />
-              {delayedEventsSupported && !isMobileOrTablet() && (
+              {delayedEventsSupported && !isMobileOrTablet() && !threadRootId && (
                 <IconButton
                   onClick={(evt: MouseEvent<HTMLButtonElement>) => {
                     setScheduleMenuAnchor(evt.currentTarget.getBoundingClientRect());
@@ -2298,7 +2670,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           bottom={<MarkdownFormattingToolbarBottom />}
         />
-        {showSchedulePicker && (
+        {showSchedulePicker && !threadRootId && (
           <SchedulePickerDialog
             initialTime={scheduledTime?.getTime()}
             showEncryptionWarning={isEncrypted}
@@ -2313,20 +2685,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         {showPollPicker && (
           <PollDialog
             onCancel={() => setShowPollPicker(false)}
-            mx={mx}
-            room={room}
-            replyDraft={replyDraft}
-            clearReplyDraft={() => setReplyDraft(replyDraftBase)}
+            onSubmit={(content) =>
+              handleDialogSendContent(content, M_POLL_START.name as keyof TimelineEvents)
+            }
           />
         )}
         {showLocationPicker && (
           <Suspense fallback={null}>
             <LocationDialog
               onCancel={() => setShowLocationPicker(false)}
-              mx={mx}
               room={room}
-              replyDraft={replyDraft}
-              clearReplyDraft={() => setReplyDraft(replyDraftBase)}
+              onSubmit={handleDialogSendContent}
             />
           </Suspense>
         )}
