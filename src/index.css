@@ -148,6 +148,15 @@ pre {
   font-variant-ligatures: contextual;
 }
 
+table {
+	border-collapse: collapse;
+}
+
+table td, table th {
+	padding: 5px;
+	border: 1px solid var(--sable-surface-container-line);
+}
+
 /* Accessibility Overrides :D */
 
 .force-underline-links [data-message-id] a:not([data-mention-id]),
