@@ -1331,6 +1331,7 @@ export function RoomTimeline({
             onClick={() => {
               if (eventId) navigateRoom(room.roomId, undefined, { replace: true });
               timelineSync.setTimeline(getInitialTimeline(room));
+              setAtBottom(true);
               scrollToBottom();
             }}
             style={{
