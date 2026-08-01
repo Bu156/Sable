@@ -164,6 +164,22 @@ const dividerIds = (processed: ProcessedEvent[]) =>
   processed.filter((e) => e.willRenderNewDivider).map((e) => e.id);
 
 describe('useProcessedTimeline new-messages divider', () => {
+  it('renders an event that is still encrypted', () => {
+    const processed = processTimeline(
+      [
+        createEvent({ id: '$a' }),
+        createEvent({
+          id: '$encrypted',
+          type: EventType.RoomMessageEncrypted as string,
+          content: { algorithm: 'm.megolm.v1.aes-sha2', ciphertext: 'AwgAEnB...' },
+        }),
+      ],
+      undefined
+    );
+
+    expect(renderedIds(processed)).toEqual(['$a', '$encrypted']);
+  });
+
   it('keeps poll start events with default hidden-event settings', () => {
     const processed = processTimeline(
       [
