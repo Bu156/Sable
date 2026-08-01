@@ -19,12 +19,14 @@ import { useKeyDown } from '$hooks/useKeyDown';
 import { onTabPress } from '$utils/keyboard';
 
 type CommandAutoCompleteHandler = (commandName: string) => void;
+const GIF_COMMAND = 'gif';
 
 type CommandAutocompleteProps = {
   room: Room;
   editor: Editor;
   query: AutocompleteQuery<string>;
   requestClose: () => void;
+  onGifSelect: () => void;
 };
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
@@ -38,10 +40,14 @@ export function CommandAutocomplete({
   editor,
   query,
   requestClose,
+  onGifSelect,
 }: CommandAutocompleteProps) {
   const mx = useMatrixClient();
   const commands = useCommands(mx, room);
-  const commandNames = useMemo(() => Object.keys(commands) as Command[], [commands]);
+  const commandNames = useMemo(
+    () => [GIF_COMMAND, ...(Object.keys(commands) as Command[])],
+    [commands]
+  );
 
   const [result, search, resetSearch] = useAsyncSearch(
     commandNames,
@@ -57,6 +63,11 @@ export function CommandAutocomplete({
   }, [query.text, search, resetSearch]);
 
   const handleAutocomplete: CommandAutoCompleteHandler = (commandName) => {
+    if (commandName === GIF_COMMAND) {
+      onGifSelect();
+      requestClose();
+      return;
+    }
     const cmdEl = createCommandElement(commandName);
     replaceWithElement(editor, query.range, cmdEl);
     moveCursor(editor, true);
@@ -106,7 +117,9 @@ export function CommandAutocomplete({
               {`/${commandName}`}
             </Text>
             <Text truncate priority="300" size="T200">
-              {commands[commandName].description}
+              {commandName === GIF_COMMAND
+                ? 'Search and send a GIF'
+                : commands[commandName as Command].description}
             </Text>
           </Box>
         </MenuItem>

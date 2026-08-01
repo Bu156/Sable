@@ -1831,6 +1831,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
+            onGifSelect={() => {
+              resetEditor(editor);
+              resetEditorHistory(editor);
+              sendTypingStatus(false);
+              setEmojiBoardTab(EmojiBoardTab.Gif);
+            }}
           />
         )}
         {isQuickTextReact &&
