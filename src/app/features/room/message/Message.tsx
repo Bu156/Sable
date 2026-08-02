@@ -111,6 +111,7 @@ export type MessageProps = {
     startThread?: boolean
   ) => void;
   onEditId?: (eventId?: string) => void;
+  onReproxyId?: (eventId?: string) => void;
   onReactionToggle: (targetEventId: string, key: string, shortcode?: string) => void;
   reply?: ReactNode;
   reactions?: ReactNode;
@@ -340,6 +341,7 @@ function MessageInternal(
     onReplyClick,
     onReactionToggle,
     onEditId,
+    onReproxyId,
     reply,
     reactions,
     hideReadReceipts,
@@ -980,6 +982,7 @@ function MessageInternal(
             relations={relations}
             onReplyClick={onReplyClick}
             onEditId={onEditId}
+            onReproxyId={onReproxyId}
             hideReadReceipts={hideReadReceipts}
             showDeveloperTools={showDeveloperTools}
             canPinEvent={canPinEvent}
