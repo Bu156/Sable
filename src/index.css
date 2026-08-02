@@ -158,6 +158,16 @@ table th {
   border: 1px solid var(--sable-surface-container-line);
 }
 
+table th {
+  background-color: var(--sable-surface-var-container);
+  color: var(--sable-surface-var-on-container);
+}
+
+table td {
+  background-color: var(--sable-surface-container);
+  color: var(--sable-surface-on-container);
+}
+
 /* Accessibility Overrides :D */
 
 .force-underline-links [data-message-id] a:not([data-mention-id]),
