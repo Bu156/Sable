@@ -580,12 +580,29 @@ export function useTimelineSync({
 
   useMatrixEvent(room, RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
 
+  // A cached room decrypts its whole backlog, one event per task, so batching does not
+  // collapse it. One reprocess a frame instead of one per event.
+  const decryptedFrameRef = useRef<number>();
   const handleDecrypted = useCallback(
     (mEvent: MatrixEvent) => {
       if (mEvent.getRoomId() !== room.roomId) return;
-      setTimeline((ct) => ({ ...ct }));
+      if (decryptedFrameRef.current !== undefined) return;
+      decryptedFrameRef.current = requestAnimationFrame(() => {
+        decryptedFrameRef.current = undefined;
+        if (!alive()) return;
+        setTimeline((ct) => ({ ...ct }));
+      });
     },
-    [room, setTimeline]
+    [alive, room, setTimeline]
+  );
+
+  useEffect(
+    () => () => {
+      if (decryptedFrameRef.current !== undefined) {
+        cancelAnimationFrame(decryptedFrameRef.current);
+      }
+    },
+    []
   );
 
   useMatrixEvent(mx, MatrixEventEvent.Decrypted, handleDecrypted);
