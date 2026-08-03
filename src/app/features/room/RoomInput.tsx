@@ -341,6 +341,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpProxyingEnable] = useSetting(settingsAtom, 'pmpProxying');
     const [pmpLatchingEnable] = useSetting(settingsAtom, 'pmpLatching');
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
+    const [pmpNoFallback] = useSetting(settingsAtom, 'pmpNoFallback');
 
     const [latchedPersona, setLatchedPersona] = useState<PerMessageProfileMsc4461>();
 
@@ -1100,7 +1101,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           eventId,
           mMentions,
           linkPreviews,
-          rawPmp
+          rawPmp,
+          pmpNoFallback
         );
 
         await mx.sendMessage(roomId, content as RoomMessageEventContent);
@@ -1364,7 +1366,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             perMessageProfile.displayname.trim() !== ''
           );
 
-        if (perMessageProfile.displayname.trim() !== '') {
+        if (!pmpNoFallback && perMessageProfile.displayname.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
           const pmpPrefix = `${perMessageProfile.displayname}: `;
 
@@ -1513,6 +1515,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       silentReply,
       pmpProxyingEnable,
       pmpLatchingEnable,
+      pmpNoFallback,
       pluralkitProxyMessageHandler,
       scheduledTime,
       editingScheduledDelayId,
