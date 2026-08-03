@@ -209,7 +209,7 @@ function RenderMessageContentInternal({
     ),
     [urlPreview]
   );
-  const messageUrlsPreview = urlPreview || themeChatSableWidgets ? renderUrlsPreview : undefined;
+  const messageUrlsPreview = urlPreview ? renderUrlsPreview : undefined;
   const messageBundlePreview = bundledPreview ? renderBundledPreviews : undefined;
 
   const renderCaption = () => {
