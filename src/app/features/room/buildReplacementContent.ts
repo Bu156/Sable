@@ -2,6 +2,9 @@ import type { IContent, IMentions } from '$types/matrix-sdk';
 import { MsgType, RelationType } from '$types/matrix-sdk';
 import { customHtmlEqualsPlainText } from '$components/editor';
 import { sanitizeText } from '$utils/sanitize';
+import type { PerMessageProfile } from '$hooks/usePerMessageProfile';
+import { convertPerMessageProfileToBeeperFormat } from '$hooks/usePerMessageProfile';
+import { MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME } from '$unstable/prefixes';
 
 /**
  * Unified from RoomInput and MessageEditor, which had drifted: this keeps
@@ -89,6 +92,60 @@ export function buildReplacementContent(
 
   content['com.beeper.linkpreviews'] = linkPreviews;
   newContent['com.beeper.linkpreviews'] = linkPreviews;
+
+  return content;
+}
+
+// Replacing only the PMP in a content. No, you can't use the above function. I tried.
+export function buildReplacementPmpContent(
+  oldContent: IContent,
+  eventId: string,
+  newProfile: PerMessageProfile | undefined
+) {
+  const profileBeeperFormat =
+    newProfile && convertPerMessageProfileToBeeperFormat(newProfile, true);
+
+  // handle fallbacks
+  if (oldContent[MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME]) {
+    const plainBody = oldContent.body;
+    let newPlainBody = plainBody?.replace(/^.*?: /, '');
+
+    const formattedBody = oldContent.formatted_body;
+    let newFormattedBody = formattedBody?.replace(
+      /^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/,
+      ''
+    );
+
+    oldContent.formatted_body = newFormattedBody;
+    oldContent.body = newPlainBody;
+  }
+
+  if (newProfile) {
+    const escapedName = sanitizeText(newProfile.name);
+    const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
+
+    if (oldContent.formatted_body) {
+      oldContent.formatted_body = htmlPrefix + oldContent.formatted_body;
+    } else {
+      // we don't have a formatted body, but we need one
+      oldContent.format = 'org.matrix.custom.html';
+      const escapedBody = sanitizeText(oldContent.body).replaceAll('\n', '<br/>');
+      oldContent.formatted_body = `${htmlPrefix}${escapedBody}`;
+    }
+
+    const pmpPrefix = `${newProfile.name}: `;
+    oldContent.body = pmpPrefix + oldContent.body;
+  }
+
+  const newContent = {
+    ...oldContent,
+    [MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME]: profileBeeperFormat,
+  };
+  const content: IContent = {
+    ...newContent,
+    'm.new_content': newContent,
+    'm.relates_to': { event_id: eventId, rel_type: RelationType.Replace },
+  };
 
   return content;
 }

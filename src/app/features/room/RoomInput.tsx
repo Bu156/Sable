@@ -216,7 +216,7 @@ import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { PersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
+import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -2194,7 +2194,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 </>
               )}
               {pmpPickerEnable && (
-                <PersonaPicker
+                <PersistentPersonaPicker
                   tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}

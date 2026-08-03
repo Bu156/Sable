@@ -1,4 +1,9 @@
-import type { RoomPinnedEventsEventContent, StateEvents } from '$types/matrix-sdk';
+import type {
+  MatrixClient,
+  RoomMessageEventContent,
+  RoomPinnedEventsEventContent,
+  StateEvents,
+} from '$types/matrix-sdk';
 import { type Room, type MatrixEvent, type Relations, EventType } from '$types/matrix-sdk';
 import {
   canEditEvent,
@@ -48,7 +53,7 @@ import { useRoomPinnedEvents } from '$hooks/useRoomPinnedEvents';
 import { EmojiBoard } from '$components/emoji-board';
 import { MemoizedBody, type ReactionHandler } from '$features/room/message';
 import { useRecentEmoji } from '$hooks/useRecentEmoji';
-import { BookmarkIcon } from '@phosphor-icons/react';
+import { BookmarkIcon, UserIcon } from '@phosphor-icons/react';
 import {
   computeBookmarkId,
   createBookmarkItem,
@@ -61,6 +66,11 @@ import { MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS } from '$unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import type { IImageInfo } from '$types/matrix/common';
 import { getIncomingMediaMxcUrl } from '../MsgTypeRenderers';
+import { TemporaryPersonaPicker } from '$features/room/persona-picker/PersonaPicker';
+import { type PerMessageProfile } from '$hooks/usePerMessageProfile';
+import { buildReplacementPmpContent } from '$features/room/buildReplacementContent';
+import { settingsAtom } from '$state/settings';
+import { useSetting } from '$state/hooks/settings';
 
 function WrappedMessage({
   isModal,
@@ -390,6 +400,40 @@ function OptionsEmojiBoard({
   );
 }
 
+type OptionsReproxyPersonaPickerProps = {
+  mx: MatrixClient;
+  mEvent: MatrixEvent;
+  roomId: string;
+  closeMenu: () => void;
+  anchor: RectCords;
+};
+function OptionsReproxyPersonaPicker({
+  mx,
+  mEvent,
+  roomId,
+  closeMenu,
+  anchor,
+}: OptionsReproxyPersonaPickerProps) {
+  const reproxyMessage = async (profile: PerMessageProfile | undefined) => {
+    const content = buildReplacementPmpContent(mEvent.getContent(), mEvent.getId()!, profile);
+    await mx.sendMessage(roomId, content as RoomMessageEventContent);
+
+    closeMenu();
+  };
+
+  return (
+    <>
+      <TemporaryPersonaPicker
+        mx={mx}
+        hideTabs={true}
+        onPersonaSelect={reproxyMessage}
+        requestClose={closeMenu}
+        anchor={anchor}
+      />
+    </>
+  );
+}
+
 export function OptionQuickMenu({
   mEvent,
   room,
@@ -399,6 +443,7 @@ export function OptionQuickMenu({
   relations,
   onReplyClick,
   onEditId,
+  onReproxyId,
   hideReadReceipts,
   showDeveloperTools,
   canPinEvent,
@@ -505,6 +550,7 @@ export function OptionQuickMenu({
               relations={relations}
               onReplyClick={onReplyClick}
               onEditId={onEditId}
+              onReproxyId={onReproxyId}
               hideReadReceipts={hideReadReceipts}
               showDeveloperTools={showDeveloperTools}
               canPinEvent={canPinEvent}
@@ -546,6 +592,7 @@ export type OptionMenuProps = {
     startThread?: boolean
   ) => void;
   onEditId?: (eventId?: string) => void;
+  onReproxyId?: (profileId?: string) => void;
   hideReadReceipts?: boolean;
   showDeveloperTools?: boolean;
   canPinEvent?: boolean;
@@ -593,6 +640,7 @@ function OptionMenu({
     evtTimeline &&
     getEventEdits(evtTimeline.getTimelineSet(), evtId, mEvent.getType())?.getRelations();
   const isEdited = !!edits?.length;
+  const [showPersonaSetting] = useSetting(settingsAtom, 'showPersonaSetting');
 
   const onTotalClose = () => {
     setModal(null);
@@ -605,6 +653,20 @@ function OptionMenu({
   }, [store, setModal]);
 
   const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+
+  const [reproxyPickerAnchor, setReproxyPickerAnchor] = useState<RectCords>();
+
+  const handleOpenReproxyPicker: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    const target = isModal
+      ? { x: 0, y: innerHeight, width: 0, height: 0 }
+      : (evt.currentTarget.parentElement?.parentElement?.getBoundingClientRect() ?? {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        });
+    setReproxyPickerAnchor(target);
+  };
 
   const handleOpenEmojiBoard: MouseEventHandler<HTMLButtonElement> = (evt) => {
     // THIS MAGIC NUMBER SHOULD BE FIXED WHEN SOMEONE FIGURES OUT WHY THE LACK OF IT CREATES A GAP IN THE EMOJIBOARD
@@ -632,6 +694,15 @@ function OptionMenu({
           imagePackRooms={imagePackRooms}
           isModal={isModal}
           ActualMessage={<WrappedMessage isModal={isModal} ActualMessage={ActualMessage} />}
+        />
+      )}
+      {reproxyPickerAnchor !== undefined && (
+        <OptionsReproxyPersonaPicker
+          mx={mx}
+          roomId={room.roomId}
+          mEvent={mEvent}
+          closeMenu={onTotalClose}
+          anchor={reproxyPickerAnchor}
         />
       )}
       <FocusTrap
@@ -776,6 +847,19 @@ function OptionMenu({
                 >
                   <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
                     Edit Message
+                  </Text>
+                </MenuItem>
+              )}
+              {canEditEvent(mx, mEvent) && showPersonaSetting && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(UserIcon)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={handleOpenReproxyPicker}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Change Persona
                   </Text>
                 </MenuItem>
               )}
