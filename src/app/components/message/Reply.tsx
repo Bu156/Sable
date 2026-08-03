@@ -512,7 +512,7 @@ export const Reply = as<'div', ReplyProps>(
             eventType !== EventType.RoomMember && (
               <Text size="T300" truncate style={{ fontFamily: usernameFont }}>
                 <b>
-                  {pmp?.name ??
+                  {pmp?.displayname ??
                     getMemberDisplayName(room, sender, nicknames) ??
                     cachedProfiles[sender]?.displayName ??
                     getMxIdLocalPart(sender)}

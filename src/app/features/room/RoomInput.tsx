@@ -150,7 +150,7 @@ import {
   convertPerMessageProfileToBeeperFormat,
   getCurrentlyUsedPerMessageProfileForAccount,
   getCurrentlyUsedPerMessageProfileForRoom,
-  type PerMessageProfile,
+  type PerMessageProfileMsc4461,
   setCurrentlyUsedPerMessageProfileIdForRoom,
 } from '$hooks/usePerMessageProfile';
 import {
@@ -342,7 +342,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpLatchingEnable] = useSetting(settingsAtom, 'pmpLatching');
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
 
-    const [latchedPersona, setLatchedPersona] = useState<PerMessageProfile>();
+    const [latchedPersona, setLatchedPersona] = useState<PerMessageProfileMsc4461>();
 
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
     const gifBtnRef = useRef<HTMLButtonElement>(null);
@@ -1361,12 +1361,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
           convertPerMessageProfileToBeeperFormat(
             perMessageProfile,
-            perMessageProfile.name.trim() !== ''
+            perMessageProfile.displayname.trim() !== ''
           );
 
-        if (perMessageProfile.name.trim() !== '') {
+        if (perMessageProfile.displayname.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
-          const pmpPrefix = `${perMessageProfile.name}: `;
+          const pmpPrefix = `${perMessageProfile.displayname}: `;
 
           if (!content.body.startsWith(pmpPrefix)) {
             // to prevent double-prefixing when the fallback is already present
@@ -1376,7 +1376,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           /**
            * html escaped version of the display name
            */
-          const escapedName = sanitizeText(perMessageProfile.name);
+          const escapedName = sanitizeText(perMessageProfile.displayname);
 
           const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
 

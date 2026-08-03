@@ -67,7 +67,7 @@ import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import type { IImageInfo } from '$types/matrix/common';
 import { getIncomingMediaMxcUrl } from '../MsgTypeRenderers';
 import { TemporaryPersonaPicker } from '$features/room/persona-picker/PersonaPicker';
-import { type PerMessageProfile } from '$hooks/usePerMessageProfile';
+import { type PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
 import { buildReplacementPmpContent } from '$features/room/buildReplacementContent';
 import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
@@ -414,7 +414,7 @@ function OptionsReproxyPersonaPicker({
   closeMenu,
   anchor,
 }: OptionsReproxyPersonaPickerProps) {
-  const reproxyMessage = async (profile: PerMessageProfile | undefined) => {
+  const reproxyMessage = async (profile: PerMessageProfileMsc4461 | undefined) => {
     const content = buildReplacementPmpContent(mEvent.getContent(), mEvent.getId()!, profile);
     await mx.sendMessage(roomId, content as RoomMessageEventContent);
 
