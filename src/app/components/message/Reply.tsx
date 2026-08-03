@@ -64,6 +64,7 @@ import { ReactionKeyInline } from './ReactionKeyInline';
 import { M_POLL_START, M_TEXT } from 'matrix-js-sdk';
 import type { PerMessageProfileBeeperFormat } from '$hooks/usePerMessageProfile';
 import { convertBeeperFormatToOurPerMessageProfile } from '$hooks/usePerMessageProfile';
+import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
 
 const ROOM_REPLY_TIMELINE_EVENT_TYPES = new Set<string>([
   EventType.RoomMessage as string,
@@ -291,6 +292,11 @@ export const Reply = as<'div', ReplyProps>(
     const parseMemberEvent = useMemberEventParser();
 
     const { color: usernameColor, font: usernameFont } = useSableCosmetics(sender ?? '', room);
+    const activeTheme = useActiveTheme();
+    const pmpNameColor =
+      activeTheme.kind === ThemeKind.Dark
+        ? pmp?.['eu.she-a.color']?.on_dark
+        : pmp?.['eu.she-a.color']?.on_light;
     const nicknames = useAtomValue(nicknamesAtom);
     const cachedProfiles = useAtomValue(profilesCacheAtom);
     useRoomMemberHydration(room, sender ?? '');
@@ -503,7 +509,7 @@ export const Reply = as<'div', ReplyProps>(
         )}
         <ReplyLayout
           as="button"
-          userColor={usernameColor}
+          userColor={pmpNameColor ?? usernameColor}
           icon={image}
           replyIcon={replyIcon}
           mentioned={mentioned}
