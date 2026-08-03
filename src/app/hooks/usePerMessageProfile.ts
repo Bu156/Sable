@@ -553,6 +553,18 @@ export async function getAllPerMessageProfiles(
         typeof mx.getAccountData
       >[0]
     );
+
+    // delete old records
+    await mx.deleteAccountData(
+      'fyi.cisnt.permessageprofile.index' as Parameters<typeof mx.getAccountData>[0]
+    );
+
+    profiles.forEach(async (profile) => {
+      if (!profile) return;
+      await mx.deleteAccountData(
+        `fyi.cisnt.permessageprofile.${profile.id}` as Parameters<typeof mx.getAccountData>[0]
+      );
+    });
   }
 
   if (!profileListIndex) return [];
