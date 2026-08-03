@@ -98,29 +98,6 @@ fn resolve_webview_permission(
     allowed
 }
 
-#[cfg(all(feature = "cef", target_os = "linux"))]
-fn setup_cef_resize_workaround(
-    webview_window: &tauri::WebviewWindow<BrowserEngine>,
-) -> tauri::Result<()> {
-    let webview = webview_window.as_ref().clone();
-    webview.set_auto_resize(false)?;
-    webview_window.on_window_event(move |event| {
-        let size = match event {
-            tauri::WindowEvent::Resized(size) => *size,
-            tauri::WindowEvent::ScaleFactorChanged { new_inner_size, .. } => *new_inner_size,
-            _ => return,
-        };
-
-        if let Err(error) = webview.set_bounds(tauri::Rect {
-            position: tauri::Position::Physical(tauri::PhysicalPosition::new(0, 0)),
-            size: tauri::Size::Physical(size),
-        }) {
-            log::warn!("failed to resize CEF webview: {error}");
-        }
-    });
-    Ok(())
-}
-
 /// Routes in-app notification sounds to the native volume stream on mobile.
 /// `kind` is "notification" or "invite".
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -211,9 +188,6 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     let webview_window = builder.build()?;
     #[cfg(not(desktop))]
     builder.build()?;
-
-    #[cfg(all(feature = "cef", target_os = "linux"))]
-    setup_cef_resize_workaround(&webview_window)?;
 
     #[cfg(desktop)]
     desktop::tray::setup_close_to_background(&webview_window);
