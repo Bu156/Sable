@@ -217,29 +217,49 @@ export function MText({
   /**
    * For the unwrapping of per-message profile fallbacks, we look for <strong> tags with the data-mx-profile-fallback attribute
    */
-  const unwrappedPerMessageProfileMessage = useMemo(
+  const hadPerMessageProfileFallback = useMemo(
+    () => cleanedMessage?.match(/<strong[^>]*data-mx-profile-fallback[^>]*>(.*?):\s*<\/strong>/i),
+    [cleanedMessage]
+  );
+  // the html body, with PMP fallback removed
+  const unwrappedPmpCustomBody = useMemo(
     () =>
       cleanedMessage?.replace(/<strong[^>]*data-mx-profile-fallback[^>]*>(.*?):\s*<\/strong>/i, ''),
     [cleanedMessage]
+  );
+  // the plain body, with PMP fallback removed
+  const unwrappedPmpBody = useMemo(
+    () => (hadPerMessageProfileFallback ? trimmedBody?.replace(/(.*?):/i, '') : trimmedBody),
+    [trimmedBody, hadPerMessageProfileFallback]
   );
 
   const isJumbo = useMemo(() => {
     if (!trimmedBody || trimmedBody.length >= 500) return false;
     if (
-      (unwrappedPerMessageProfileMessage ?? cleanedMessage ?? customBody)?.match(
+      (unwrappedPmpCustomBody ?? cleanedMessage ?? customBody)?.match(
         /^(<img[^>]*data-mx-emoticon[^>]*\/>){1,20}$/i
       )
     )
       return true;
-    if (!isJumboEmojiText(trimmedBody)) return false;
+    if (!isJumboEmojiText(unwrappedPmpBody)) return false;
 
-    if (trimmedBody.includes(':')) {
-      const hasImage = customBody && /<img[^>]*>/i.test(customBody);
+    // we need to strip the plainbody fallback because it contains a colon
+    if (unwrappedPmpBody.includes(':')) {
+      const newCustomBody = hadPerMessageProfileFallback ? unwrappedPmpCustomBody : customBody;
+
+      const hasImage = newCustomBody && /<img[^>]*>/i.test(newCustomBody);
       if (!hasImage) return false;
     }
 
     return true;
-  }, [unwrappedPerMessageProfileMessage, cleanedMessage, trimmedBody, customBody]);
+  }, [
+    unwrappedPmpCustomBody,
+    cleanedMessage,
+    trimmedBody,
+    customBody,
+    unwrappedPmpBody,
+    hadPerMessageProfileFallback,
+  ]);
 
   const { urls, bundleContent } = getUrlsFromContent(content, renderUrlsPreview);
 
@@ -260,7 +280,7 @@ export function MText({
         >
           {renderBody({
             body: trimmedBody,
-            customBody: unwrappedPerMessageProfileMessage,
+            customBody: unwrappedPmpCustomBody,
           })}
           {edited && <MessageEditedContent />}
         </MessageTextBody>
