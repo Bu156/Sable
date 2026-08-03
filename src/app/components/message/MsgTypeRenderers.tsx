@@ -21,7 +21,11 @@ import { FALLBACK_MIMETYPE, getBlobSafeMimeType } from '$utils/mimeTypes';
 import { parseGeoUri, scaleYDimension } from '$utils/common';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
-import type { PerMessageProfileBeeperFormat } from '$hooks/usePerMessageProfile';
+import {
+  stripPerMessageProfileFormattedBody,
+  stripPerMessageProfilePlainBody,
+  type PerMessageProfileBeeperFormat,
+} from '$hooks/usePerMessageProfile';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
 import {
@@ -223,13 +227,15 @@ export function MText({
   );
   // the html body, with PMP fallback removed
   const unwrappedPmpCustomBody = useMemo(
-    () =>
-      cleanedMessage?.replace(/<strong[^>]*data-mx-profile-fallback[^>]*>(.*?):\s*<\/strong>/i, ''),
+    () => (cleanedMessage ? stripPerMessageProfileFormattedBody(cleanedMessage) : undefined),
     [cleanedMessage]
   );
   // the plain body, with PMP fallback removed
   const unwrappedPmpBody = useMemo(
-    () => (hadPerMessageProfileFallback ? trimmedBody?.replace(/(.*?):/i, '') : trimmedBody),
+    () =>
+      hadPerMessageProfileFallback
+        ? stripPerMessageProfilePlainBody(trimmedBody ?? '')
+        : trimmedBody,
     [trimmedBody, hadPerMessageProfileFallback]
   );
 

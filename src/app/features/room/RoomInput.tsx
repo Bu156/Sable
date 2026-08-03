@@ -152,6 +152,7 @@ import {
   getCurrentlyUsedPerMessageProfileForRoom,
   type PerMessageProfileMsc4461,
   setCurrentlyUsedPerMessageProfileIdForRoom,
+  stripPerMessageProfileFormattedBody,
 } from '$hooks/usePerMessageProfile';
 import {
   Bell,
@@ -640,7 +641,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           }
           const editableHtml = pmpDisplayname
-            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+            ? stripPerMessageProfileFormattedBody(customHtml ?? '')
             : customHtml;
 
           const mentionOptions = {

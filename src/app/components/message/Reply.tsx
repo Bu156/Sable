@@ -63,7 +63,10 @@ import { LinePlaceholder } from './placeholder';
 import { ReactionKeyInline } from './ReactionKeyInline';
 import { M_POLL_START, M_TEXT } from 'matrix-js-sdk';
 import type { PerMessageProfileBeeperFormat } from '$hooks/usePerMessageProfile';
-import { convertBeeperFormatToOurPerMessageProfile } from '$hooks/usePerMessageProfile';
+import {
+  convertBeeperFormatToOurPerMessageProfile,
+  stripPerMessageProfileFormattedBody,
+} from '$hooks/usePerMessageProfile';
 
 const ROOM_REPLY_TIMELINE_EVENT_TYPES = new Set<string>([
   EventType.RoomMessage as string,
@@ -272,7 +275,7 @@ export const Reply = as<'div', ReplyProps>(
 
     // strip the PMP fallback if it's there, to avoid displaying the PMP name twice
     const formattedBodyStripped: string = pmp
-      ? formattedBody?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+      ? stripPerMessageProfileFormattedBody(formattedBody ?? '')
       : formattedBody;
 
     const extensibleContent = contentForPreview[M_TEXT.name] as
