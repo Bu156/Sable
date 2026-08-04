@@ -13,6 +13,32 @@ The stable web app is available at [app.sable.moe](https://app.sable.moe/) and t
 
 You can also download our desktop app for Windows and Linux from [releases](https://github.com/SableClient/Sable/releases/latest). Release artifacts include build attestations, and desktop installations update automatically.
 
+## Android (Obtainium)
+
+Android APKs are published to every release, and [Obtainium](https://obtainium.imranr.dev) keeps them updated straight from GitHub. Each release also ships an `obtainium.json` app config. Use it for the nightly channel, where prereleases and date-based version tracking have to be enabled to follow the rolling `nightly` tag.
+
+### Stable
+
+<a href="https://intradeus.github.io/http-protocol-redirector?r=obtainium://add/https://github.com/SableClient/Sable"><img alt="Add to Obtainium" src="https://img.shields.io/badge/Add_to_Obtainium-6750A3?style=for-the-badge"></a>
+&nbsp;
+<a href="https://github.com/SableClient/Sable/releases/latest/download/obtainium.json"><img alt="App config" src="https://img.shields.io/badge/App_config-6B7280?style=for-the-badge"></a>
+&nbsp;
+<a href="https://github.com/SableClient/Sable/releases/latest"><img alt="Download APK" src="https://img.shields.io/badge/Download_APK-3DDC84?style=for-the-badge&logo=android"></a>
+
+### Nightly
+
+<a href="https://github.com/SableClient/Sable/releases/download/nightly/obtainium.json"><img alt="App config" src="https://img.shields.io/badge/App_config-6B7280?style=for-the-badge"></a>
+&nbsp;
+<a href="https://github.com/SableClient/Sable/releases/tag/nightly"><img alt="Download APK" src="https://img.shields.io/badge/Download_APK-3DDC84?style=for-the-badge&logo=android"></a>
+
+### Setup & install
+
+1. Install [Obtainium](https://github.com/ImranR98/Obtainium/releases/latest).
+2. For stable, tap the button above, or add `https://github.com/SableClient/Sable` by hand under **Add App**.
+3. For nightly, download the `obtainium.json` above and import it with **Import/Export → Import from file**.
+
+Android builds are produced by the `android` job in [`tauri-build.yml`](.github/workflows/tauri-build.yml), and the config by the `obtainium` job in the same workflow.
+
 ## iOS (AltStore / SideStore)
 
 Sable iOS builds are distributed as unsigned IPAs through [AltStore](https://altstore.io) and [SideStore](https://sidestore.io). Each release publishes both the IPA and an `altstore-source.json` manifest — stable builds to the [latest GitHub release](https://github.com/SableClient/Sable/releases/latest), nightly builds to the [`nightly` GitHub release](https://github.com/SableClient/Sable/releases/tag/nightly).
