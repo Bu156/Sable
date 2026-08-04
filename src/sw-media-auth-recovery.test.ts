@@ -55,6 +55,27 @@ describe('service worker media auth recovery', () => {
     expect(respondWith).not.toHaveBeenCalled();
   });
 
+  it('does not borrow another account session for an unscoped media request', async () => {
+    const fetchHandler = addEventListener.mock.calls.find(([type]) => type === 'fetch')?.[1] as
+      | ((event: FetchEvent) => void)
+      | undefined;
+    const respondWith = vi.fn<(response: Promise<Response>) => void>();
+    const request = new Request(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/media-id'
+    );
+
+    await swTestHooks.setSession(
+      'alice-window',
+      'alice-token',
+      'https://matrix.example.org',
+      '@alice:example.org'
+    );
+    fetchHandler?.({ request, respondWith, clientId: 'widget-client' } as unknown as FetchEvent);
+
+    await expect(respondWith.mock.calls[0]?.[0]).resolves.toMatchObject({ status: 503 });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('shares recovery and preserves each Range header on retry', async () => {
     const client = {
       id: 'client-a',
