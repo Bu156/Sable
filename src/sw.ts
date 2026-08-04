@@ -2,8 +2,10 @@
 
 /* oxlint-disable no-console, unicorn/require-post-message-target-origin */
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { EventType } from 'matrix-js-sdk/lib/@types/event';
 
 import { createPushNotifications } from './sw/pushNotification';
+import { withMediaFetchSlot } from './app/utils/mediaConcurrency';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -27,6 +29,15 @@ const SW_SETTINGS_URL = '/sw-settings-meta';
 /** Cache key used to persist the active session so push-event fetches work after SW restart. */
 const SW_SESSION_CACHE = 'sable-sw-session-v1';
 const SW_SESSION_URL = '/sw-session-meta';
+
+/**
+ * Version of the media-auth interception protocol this service worker supports.
+ * The page probes for it before handing raw authenticated-media URLs to
+ * <img>/<video> elements; a stale SW build without this handler never answers
+ * and the page falls back to token-attached blob fetches instead.
+ * Keep in sync with src/app/utils/swMediaAuth.ts.
+ */
+const SW_MEDIA_AUTH_PROTOCOL_VERSION = 1;
 
 async function persistSettings() {
   try {
@@ -487,7 +498,7 @@ async function handleMinimalPushPayload(
     sender_id: sender,
   };
 
-  if (eventType === 'm.room.encrypted') {
+  if (eventType === EventType.RoomMessageEncrypted) {
     // Try to relay decryption to an open app tab.
     const result =
       windowClients.length > 0
@@ -571,6 +582,15 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (type === 'setSession') {
     setSession(client.id, accessToken, baseUrl, userId);
     event.waitUntil(cleanupDeadClients());
+  }
+  if (type === 'swMediaAuthProbe') {
+    // Capability handshake: prove this SW intercepts authenticated media so the
+    // page can safely stream raw media URLs through media elements.
+    event.ports?.[0]?.postMessage({
+      type: 'swMediaAuth',
+      supported: true,
+      version: SW_MEDIA_AUTH_PROTOCOL_VERSION,
+    });
   }
   if (type === 'pushDecryptResult') {
     // Resolve a pending decryption request from handleMinimalPushPayload
@@ -772,8 +792,9 @@ function respondWithInflightMedia(
   // Fetch by URL instead of reusing the subresource Request. Image requests commonly carry
   // mode: "no-cors", which prevents the Authorization header above from reaching the server.
   // Preserve Range header for streaming audio and video.
-  const promise = fetch(request.url, { ...fetchConfig(token, request), redirect })
-    .then(
+  // The slot is held until the body has been read, since that is what holds the connection.
+  const promise = withMediaFetchSlot(() =>
+    fetch(request.url, { ...fetchConfig(token, request), redirect }).then(
       async (res): Promise<BufferedMediaResponse> => ({
         status: res.status,
         statusText: res.statusText,
@@ -781,9 +802,9 @@ function respondWithInflightMedia(
         body: await res.arrayBuffer(),
       })
     )
-    .finally(() => {
-      inflightMediaFetches.delete(key);
-    });
+  ).finally(() => {
+    inflightMediaFetches.delete(key);
+  });
   inflightMediaFetches.set(key, promise);
   return promise.then(
     (data) =>
@@ -870,6 +891,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   }
 
   if (!mediaPath(url)) return;
+
+  // Direct-auth fallback requests already carry the page's token. Let the
+  // browser send them unchanged instead of routing them back through SW auth.
+  if (event.request.headers.has('Authorization')) return;
 
   const { clientId } = event;
 

@@ -37,6 +37,7 @@ import { MatrixClientProvider } from '$hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { useSyncState } from '$hooks/useSyncState';
 import { useCrossSigningResetDetect } from '$hooks/useCrossSigningResetDetect';
+import { useDeviceDisplayName } from '$hooks/useDeviceDisplayName';
 import { useMatrixEvent } from '$hooks/useMatrixEvent';
 import { stopPropagation } from '$utils/keyboard';
 import { AuthMetadataProvider, getSessionAuthMetadata } from '$hooks/useAuthMetadata';
@@ -54,7 +55,7 @@ import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/ph
 import { getHomePath } from '$pages/pathUtils';
 import { DIRECT_ROOM_PATH, HOME_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
 import { getCanonicalAliasRoomId, isRoomAlias, isRoomId } from '$utils/matrix';
-import { pushSessionToSW } from '../../../sw-session';
+import { pushPersistedSessionToSW, pushSessionToSW } from '../../../sw-session';
 import { SyncStatus } from './SyncStatus';
 import { SpecVersions } from './SpecVersions';
 import { AutoDiscovery } from './AutoDiscovery';
@@ -279,7 +280,9 @@ export function ClientRoot({ children }: ClientRootProps) {
       log.log('initClient for', activeSession.userId);
       const newMx = await initClient(activeSession);
       loadedUserIdRef.current = activeSession.userId;
-      await pushSessionToSW(activeSession.baseUrl, activeSession.accessToken, activeSession.userId);
+      // initClient may have refreshed the token; push the persisted session, not
+      // the stale captured one.
+      await pushPersistedSessionToSW(activeSession);
       return newMx;
     }, [activeSession, activeSessionId, setActiveSessionId])
   );
@@ -351,6 +354,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   useAppVisibility(mx);
   useNetworkRecovery(mx);
   useCrossSigningResetDetect(mx);
+  useDeviceDisplayName(mx);
 
   useEffect(
     () => () => {

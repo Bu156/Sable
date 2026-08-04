@@ -2,10 +2,10 @@ import type { MouseEventHandler, ReactNode } from 'react';
 import { useCallback } from 'react';
 import { Text } from 'folds';
 import type { MatrixEvent, Room } from '$types/matrix-sdk';
-import type { IMemberContent } from '$types/matrix/room';
 import {
   At,
   EnvelopeSimple,
+  PaintBrush,
   SignIn,
   SignOut,
   timelineIcon,
@@ -20,6 +20,8 @@ import { useOpenUserRoomProfile } from '$state/hooks/userRoomProfile';
 import { useSableCosmetics } from './useSableCosmetics';
 import { useMatrixClient } from './useMatrixClient';
 import { KnownMembership } from '$types/matrix-sdk';
+import type { CustomRoomMemberEventContent } from '$unstable/CustomRoomMemberEventContent';
+import { MATRIX_UNSTABLE_COLORS } from '$unstable/prefixes';
 
 type DecoratedUserProps = {
   roomId: string;
@@ -57,8 +59,8 @@ export type ParsedResult = {
 export type MemberEventParser = (mEvent: MatrixEvent) => ParsedResult;
 
 const parseMemberEvent: MemberEventParser = (mEvent) => {
-  const content = mEvent.getContent<IMemberContent>();
-  const prevContent = mEvent.getPrevContent() as IMemberContent;
+  const content = mEvent.getContent<CustomRoomMemberEventContent>();
+  const prevContent = mEvent.getPrevContent() as CustomRoomMemberEventContent;
   const senderId = mEvent.getSender();
   const userId = mEvent.getStateKey();
   const roomId = mEvent.getRoomId();
@@ -86,10 +88,8 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
               <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
               <Text>{' accepted '}</Text>
               <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-              <Text>
-                {`'s join request `}
-                {reason}
-              </Text>
+              <Text>{`'s join request`}</Text>
+              <Text>{reason ? `(${reason})` : null}</Text>
             </>
           ),
         };
@@ -102,7 +102,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
             <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
             <Text>{' invited '}</Text>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-            <Text>{reason}</Text>
+            <Text>{reason ? `(${reason})` : null}</Text>
           </>
         ),
       };
@@ -114,10 +114,8 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
         body: (
           <>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-            <Text>
-              {' requested to join room: '}
-              <i>{reason}</i>
-            </Text>
+            <Text>{' requested to join room'}</Text>
+            <Text>{reason ? `(${reason})` : null}</Text>
           </>
         ),
       };
@@ -130,6 +128,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
           <>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
             <Text>{' joined the room'}</Text>
+            <Text>{reason ? `(${reason})` : null}</Text>
           </>
         ),
       };
@@ -143,20 +142,16 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
             senderId === userId ? (
               <>
                 <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-                <Text>
-                  {' rejected the invitation '}
-                  {reason}
-                </Text>
+                <Text>{' rejected the invitation'}</Text>
+                <Text>{reason ? `(${reason})` : null}</Text>
               </>
             ) : (
               <>
                 <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
                 <Text>{' rejected '}</Text>
                 <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-                <Text>
-                  {`'s join request `}
-                  {reason}
-                </Text>
+                <Text>{`'s join request`}</Text>
+                <Text>{reason ? `(${reason})` : null}</Text>
               </>
             ),
         };
@@ -169,20 +164,16 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
             senderId === userId ? (
               <>
                 <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-                <Text>
-                  {' revoked joined request '}
-                  {reason}
-                </Text>
+                <Text>{' revoked joined request'}</Text>
+                <Text>{reason ? `(${reason})` : null}</Text>
               </>
             ) : (
               <>
                 <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
                 {' revoked '}
                 <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-                <Text>
-                  {`'s invite `}
-                  {reason}
-                </Text>
+                <Text>{`'s invite`}</Text>
+                <Text>{reason ? `(${reason})` : null}</Text>
               </>
             ),
         };
@@ -196,7 +187,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
               <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
               <Text>{' unbanned '}</Text>
               <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-              <Text>{reason}</Text>
+              <Text>{reason ? `(${reason})` : null}</Text>
             </>
           ),
         };
@@ -208,17 +199,15 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
           senderId === userId ? (
             <>
               <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-              <Text>
-                {' left the room '}
-                {reason}
-              </Text>
+              <Text>{' left the room '}</Text>
+              <Text>{reason ? `(${reason})` : null}</Text>
             </>
           ) : (
             <>
               <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
               <Text>{' kicked '}</Text>
               <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-              <Text>{reason}</Text>
+              <Text>{reason ? `(${reason})` : null}</Text>
             </>
           ),
       };
@@ -232,7 +221,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
             <DecoratedUser roomId={roomId ?? ''} userId={senderId} userName={senderName} />
             <Text>{' banned '}</Text>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-            <Text>{reason}</Text>
+            <Text>{reason ? `(${reason})` : null}</Text>
           </>
         ),
       };
@@ -257,7 +246,7 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
         ) : (
           <>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={prevUserName} />
-            <Text>{' removed their display name '}</Text>
+            <Text>{' removed their display name'}</Text>
           </>
         ),
     };
@@ -274,7 +263,43 @@ const parseMemberEvent: MemberEventParser = (mEvent) => {
         ) : (
           <>
             <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
-            <Text>{' removed their avatar '}</Text>
+            <Text>{' removed their avatar'}</Text>
+          </>
+        ),
+    };
+  }
+  if (content[MATRIX_UNSTABLE_COLORS]?.on_dark !== prevContent[MATRIX_UNSTABLE_COLORS]?.on_dark) {
+    return {
+      icon: timelineIcon(PaintBrush),
+      body:
+        content[MATRIX_UNSTABLE_COLORS]?.on_dark &&
+        typeof content[MATRIX_UNSTABLE_COLORS]?.on_dark === 'string' ? (
+          <>
+            <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
+            <Text>{' changed one of their room name colors'}</Text>
+          </>
+        ) : (
+          <>
+            <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
+            <Text>{' removed one of their room name colors '}</Text>
+          </>
+        ),
+    };
+  }
+  if (content[MATRIX_UNSTABLE_COLORS]?.on_light !== prevContent[MATRIX_UNSTABLE_COLORS]?.on_light) {
+    return {
+      icon: timelineIcon(PaintBrush),
+      body:
+        content[MATRIX_UNSTABLE_COLORS]?.on_light &&
+        typeof content[MATRIX_UNSTABLE_COLORS]?.on_light === 'string' ? (
+          <>
+            <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
+            <Text>{' changed one of their room name colors'}</Text>
+          </>
+        ) : (
+          <>
+            <DecoratedUser roomId={roomId ?? ''} userId={userId} userName={userName} />
+            <Text>{' removed one of their room name colors '}</Text>
           </>
         ),
     };

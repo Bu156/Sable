@@ -45,7 +45,6 @@ import {
 } from 'folds';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { useDismissOnBack } from '$utils/androidBack';
 import type { AutocompleteQuery } from '$components/editor';
 import {
   AutocompletePrefix,
@@ -151,6 +150,9 @@ import {
   convertPerMessageProfileToBeeperFormat,
   getCurrentlyUsedPerMessageProfileForAccount,
   getCurrentlyUsedPerMessageProfileForRoom,
+  type PerMessageProfileMsc4461,
+  setCurrentlyUsedPerMessageProfileIdForRoom,
+  stripPerMessageProfileFormattedBody,
 } from '$hooks/usePerMessageProfile';
 import {
   Bell,
@@ -190,7 +192,9 @@ import { ImageUsage } from '$plugins/custom-emoji';
 import { getPackImageInfo } from '$plugins/custom-emoji/utils';
 import { SerializableMap } from '$types/wrapper/SerializableMap';
 import { useSettingsLinkBaseUrl } from '$features/settings/useSettingsLinkBaseUrl';
-import { AttachmentSheet } from '$components/attachment-sheet/AttachmentSheet';
+import * as messageCss from '$features/room/message/styles.css';
+import { AttachmentContent } from '$components/attachment-sheet/AttachmentContent';
+import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import { SchedulePickerDialog } from './schedule-send';
 import * as css from './schedule-send/SchedulePickerDialog.css';
 import {
@@ -213,7 +217,7 @@ import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { PersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
+import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -336,7 +340,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [pkCompatEnable] = useSetting(settingsAtom, 'pkCompat');
     const [pmpProxyingEnable] = useSetting(settingsAtom, 'pmpProxying');
+    const [pmpLatchingEnable] = useSetting(settingsAtom, 'pmpLatching');
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
+    const [pmpNoFallback] = useSetting(settingsAtom, 'pmpNoFallback');
+
+    const [latchedPersona, setLatchedPersona] = useState<PerMessageProfileMsc4461>();
 
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
     const gifBtnRef = useRef<HTMLButtonElement>(null);
@@ -504,6 +512,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
     const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
     const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
+    const attachmentSkipReturnFocusRef = useRef(false);
     const [showPollPicker, setShowPollPicker] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [scheduleMenuAnchor, setScheduleMenuAnchor] = useState<RectCords>();
@@ -514,11 +523,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
-    // Android back closes the mobile emoji board instead of navigating away.
-    useDismissOnBack(() => setEmojiBoardTab(undefined), emojiBoardTab !== undefined);
-
+    const [initialGifSearch, setInitialGifSearch] = useState<string>();
+    const closeEmojiBoard = useCallback(() => {
+      if (isMobileOrTablet()) {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement) activeElement.blur();
+      }
+      setInitialGifSearch(undefined);
+      setEmojiBoardTab(undefined);
+    }, []);
     const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
-      setEmojiBoardTab((prev) => (prev === tab ? undefined : tab));
+      setEmojiBoardTab((prev) => {
+        if (prev !== tab) return tab;
+        if (isMobileOrTablet()) {
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLElement) activeElement.blur();
+        }
+        return undefined;
+      });
     }, []);
 
     const [personaPickerTab, setPersonaPickerTab] = useState<PersonaPickerTab | undefined>(
@@ -622,7 +644,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           }
           const editableHtml = pmpDisplayname
-            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+            ? stripPerMessageProfileFormattedBody(customHtml ?? '')
             : customHtml;
 
           const mentionOptions = {
@@ -1082,7 +1104,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           eventId,
           mMentions,
           linkPreviews,
-          rawPmp
+          rawPmp,
+          pmpNoFallback
         );
 
         await mx.sendMessage(roomId, content as RoomMessageEventContent);
@@ -1194,6 +1217,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           room,
         })
       );
+      const rawGifCommand =
+        commandName === undefined ? plainText.match(/^\/gif(?:\s+(.*))?$/i) : undefined;
 
       let msgType = MsgType.Text;
 
@@ -1208,6 +1233,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await pluralkitCmdMessageHandler.handleMessage(plainText);
         resetEditor(editor); // clear the editor
         return; // don't do anything besides handling the command
+      }
+
+      if (rawGifCommand) {
+        setInitialGifSearch(rawGifCommand[1] ?? '');
+        setEmojiBoardTab(EmojiBoardTab.Gif);
+        resetEditor(editor);
+        resetEditorHistory(editor);
+        sendTypingStatus(false);
+        return;
       }
 
       if (commandName) {
@@ -1231,7 +1265,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         if ((commandName as Command) === Command.Poll) setShowPollPicker(true);
         else if ((commandName as Command) === Command.Location && plainText.trim().length === 0)
           setShowLocationPicker(true);
-        else {
+        else if (commandName === 'gif') {
+          setInitialGifSearch(plainText);
+          setEmojiBoardTab(EmojiBoardTab.Gif);
+        } else {
           const commandContent = commands[commandName as Command];
           if (commandContent) {
             commandContent.exe(plainText, customHtml);
@@ -1284,6 +1321,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 room,
               })
             );
+
+            if (pmpLatchingEnable) {
+              await setCurrentlyUsedPerMessageProfileIdForRoom(
+                mx,
+                roomId,
+                proxiedPerMessageProfile.id
+              );
+              setLatchedPersona(proxiedPerMessageProfile);
+            }
           }
         }
       }
@@ -1325,21 +1371,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
        */
       const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
       const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
-      let perMessageProfile = roomPerMessageProfile ?? globalPerMessageProfile;
+      let perMessageProfile = latchedPersona ?? roomPerMessageProfile ?? globalPerMessageProfile;
 
       if (pmpProxyingEnable) {
         if (proxiedPerMessageProfile) perMessageProfile = proxiedPerMessageProfile;
       }
       if (perMessageProfile) {
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
-          convertPerMessageProfileToBeeperFormat(
-            perMessageProfile,
-            perMessageProfile.name.trim() !== ''
-          );
+          convertPerMessageProfileToBeeperFormat(perMessageProfile, !pmpNoFallback);
 
-        if (perMessageProfile.name.trim() !== '') {
+        if (!pmpNoFallback && perMessageProfile.displayname.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
-          const pmpPrefix = `${perMessageProfile.name}: `;
+          const pmpPrefix = `${perMessageProfile.displayname}: `;
 
           if (!content.body.startsWith(pmpPrefix)) {
             // to prevent double-prefixing when the fallback is already present
@@ -1349,7 +1392,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           /**
            * html escaped version of the display name
            */
-          const escapedName = sanitizeText(perMessageProfile.name);
+          const escapedName = sanitizeText(perMessageProfile.displayname);
 
           const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
 
@@ -1485,6 +1528,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       replyDraft,
       silentReply,
       pmpProxyingEnable,
+      pmpLatchingEnable,
+      pmpNoFallback,
       pluralkitProxyMessageHandler,
       scheduledTime,
       editingScheduledDelayId,
@@ -1509,6 +1554,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       editingEvent,
       getEditingContent,
       onCancelEdit,
+      latchedPersona,
     ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
@@ -2037,7 +2083,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               {isMobileOrTablet() ? (
                 <>
                   <IconButton
-                    onClick={() => setShowAttachmentSheet(true)}
+                    onClick={() => {
+                      attachmentSkipReturnFocusRef.current = false;
+                      setShowAttachmentSheet(true);
+                    }}
                     onPointerDown={suppressEditorRefocus}
                     variant="SurfaceVariant"
                     size="300"
@@ -2048,27 +2097,33 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   >
                     {composerIcon(PlusCircle)}
                   </IconButton>
-                  <AttachmentSheet
-                    open={showAttachmentSheet}
-                    onClose={() => setShowAttachmentSheet(false)}
-                    onPickPhotos={() => {
-                      pickFile('image/*,.tgs');
-                      setShowAttachmentSheet(false);
-                    }}
-                    onPickFile={() => {
-                      pickFile('*');
-                      setShowAttachmentSheet(false);
-                    }}
-                    onPickPoll={() => {
-                      setShowAttachmentSheet(false);
-                      setShowPollPicker(true);
-                    }}
-                    onPickLocation={() => {
-                      setShowAttachmentSheet(false);
-                      setShowLocationPicker(true);
-                    }}
-                    containerRef={fileDropContainerRef}
-                  />
+                  {showAttachmentSheet && (
+                    <MobileSwipeDownModal
+                      requestClose={() => setShowAttachmentSheet(false)}
+                      containerRef={fileDropContainerRef}
+                      focusTrap
+                      dialogLabel="Share"
+                      skipReturnFocusRef={attachmentSkipReturnFocusRef}
+                    >
+                      {() => (
+                        <AttachmentContent
+                          onPickPhotos={() => {
+                            pickFile('image/*,.tgs');
+                          }}
+                          onPickFile={() => {
+                            pickFile('*');
+                          }}
+                          onPickPoll={() => {
+                            setShowPollPicker(true);
+                          }}
+                          onPickLocation={() => {
+                            setShowLocationPicker(true);
+                          }}
+                          skipReturnFocusRef={attachmentSkipReturnFocusRef}
+                        />
+                      )}
+                    </MobileSwipeDownModal>
+                  )}
                 </>
               ) : (
                 <>
@@ -2156,12 +2211,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 </>
               )}
               {pmpPickerEnable && (
-                <PersonaPicker
+                <PersistentPersonaPicker
                   tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}
                   suppressEditorRefocus={suppressEditorRefocus}
                   onTabChange={setPersonaPickerTab}
+                  latchedPersona={latchedPersona}
                 />
               )}
             </>
@@ -2177,11 +2233,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       imagePackRooms={imagePackRooms}
                       returnFocusOnDeactivate={false}
                       isFullWidth={isMobileOrTablet()}
+                      sheet={isMobileOrTablet()}
                       onEmojiSelect={handleEmoticonSelect}
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
                       onGifSelect={handleGifSelect}
-                      requestClose={() => setEmojiBoardTab(undefined)}
+                      initialGifSearch={initialGifSearch}
+                      requestClose={closeEmojiBoard}
                     />
                   );
                   const triggers = (
@@ -2255,20 +2313,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     return (
                       <>
                         {triggers}
-                        <Overlay open={emojiBoardTab !== undefined} backdrop={<OverlayBackdrop />}>
-                          <div
-                            style={{
-                              position: 'fixed',
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              display: 'flex',
-                              justifyContent: 'center',
-                            }}
+                        {emojiBoardTab !== undefined && (
+                          <MobileSwipeDownModal
+                            requestClose={closeEmojiBoard}
+                            focusTrap
+                            dialogLabel="Emoji picker"
+                            sheetClassName={messageCss.MessageMobileOptionsContainerPicker}
+                            keyboardAware
                           >
-                            {emojiBoard}
-                          </div>
-                        </Overlay>
+                            {() => emojiBoard}
+                          </MobileSwipeDownModal>
+                        )}
                       </>
                     );
                   }

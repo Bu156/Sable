@@ -770,7 +770,9 @@ export function SpaceTabs({ scrollRef }: Readonly<SpaceTabsProps>) {
       (evt) => {
         evt.preventDefault();
         setFolderMenuTarget(folder);
-        folderMenu.openAt(evt.currentTarget as HTMLElement);
+        // Opening, not toggling: right-clicking a second folder while the first
+        // menu is open must move the menu, not close it.
+        folderMenu.open(evt.currentTarget as HTMLElement);
       },
     [folderMenu]
   );

@@ -3,14 +3,22 @@ import type { AccountDataCompatVersion } from '$types/matrix/accountData';
 import type { PronounSet } from '$utils/pronouns';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
-import { MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME } from '$unstable/prefixes';
+import type { ColorSet } from './useUserProfile';
+import { MATRIX_UNSTABLE_COLORS } from '$unstable/prefixes';
+import {
+  MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME,
+  MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME,
+  MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME,
+  MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
+} from '$unstable/prefixes';
 
 const ACCOUNT_DATA_PREFIX = CustomAccountDataEvent.SablePerProfileMessageProfiles;
 
 /**
+ * @deprecated in favour if {@link PerMessageProfileMsc4461}
  * a per message profile
  */
-export type PerMessageProfile = {
+type PerMessageProfile = {
   /**
    * a unique id for this profile, can be generated using something like nanoid.
    * This is used to identify the profile when applying it to a message, and also used as the key when storing the profile in account data.
@@ -31,7 +39,139 @@ export type PerMessageProfile = {
    */
   pronouns?: PronounSet[];
   compat?: AccountDataCompatVersion;
+  colors?: ColorSet;
 };
+
+export type ProfileTrigger = {
+  prefix: string[];
+  [MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME]?: string[];
+  [MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME]?: {
+    prefix: string;
+    suffix: string;
+  }[];
+};
+
+/**
+ * a per message profile
+ */
+export type PerMessageProfileIndexMsc4461 = {
+  type: 'm.per_message_profiles';
+  content: {
+    profiles: PerMessageProfileMsc4461[];
+  };
+};
+
+/**
+ * a per message profile
+ */
+export type PerMessageProfileMsc4461 = {
+  /**
+   * a unique id for this profile, can be generated using something like nanoid.
+   * This is used to identify the profile when applying it to a message, and also used as the key when storing the profile in account data.
+   */
+  id: string;
+  /**
+   * the display name to use for messages using this profile.
+   * This is required because otherwise the profile would have no effect on the message.
+   */
+  displayname: string;
+  /**
+   * the avatar url to use for messages using this profile.
+   */
+  avatar_url?: string;
+  /**
+   * a per message profile can also include pronouns
+   * @see PronounSet for the format of the pronouns, and how to parse them from a string input
+   */
+  [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]?: PronounSet[];
+
+  /**
+   * following spec MSC4522
+   */
+  [MATRIX_UNSTABLE_COLORS]?: ColorSet;
+
+  trigger: ProfileTrigger;
+
+  compat?: AccountDataCompatVersion;
+};
+
+function getPerMessageProfileIndex(mx: MatrixClient): PerMessageProfileIndexMsc4461 | undefined {
+  return mx
+    .getAccountData(
+      MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME as Parameters<
+        typeof mx.getAccountData
+      >[0]
+    )
+    ?.getContent() as PerMessageProfileIndexMsc4461 | undefined;
+}
+
+async function savePerMessageProfileIndex(mx: MatrixClient, profiles: PerMessageProfileMsc4461[]) {
+  await mx.setAccountData(
+    MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME as Parameters<
+      typeof mx.setAccountData
+    >[0],
+    { type: 'm.per_message_profiles', content: { profiles } } as Parameters<
+      typeof mx.setAccountData
+    >[1]
+  );
+}
+
+export function convertPmpToMsc4461(
+  mx: MatrixClient,
+  profile: PerMessageProfile
+): PerMessageProfileMsc4461 {
+  const triggers: ProfileTrigger = {
+    prefix: [],
+    [MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME]: [],
+    [MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME]: [],
+  };
+
+  // lookup old proxyAssociations
+  getProxyAssociationMap(
+    mx
+      .getAccountData(
+        `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
+      )
+      ?.getContent()
+    /* oxlint-disable no-unused-vars */
+  )
+    .entries()
+    .filter(([_k, assoc]) => assoc.profileId === profile.id)
+    .forEach(([k, assoc]) => {
+      const migratedAssoc = migratePmpProxyAssociation(k, assoc);
+      if (!migratedAssoc) return;
+
+      if (migratedAssoc.prefix && !migratedAssoc.suffix) {
+        triggers.prefix.push(migratedAssoc.prefix);
+      } else if (!migratedAssoc.prefix && migratedAssoc.suffix) {
+        triggers[MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME]!.push(
+          migratedAssoc.suffix
+        );
+      } else if (migratedAssoc.prefix && migratedAssoc.suffix) {
+        triggers[MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME]!.push({
+          prefix: migratedAssoc.prefix,
+          suffix: migratedAssoc.suffix,
+        });
+      }
+    });
+
+  const newPmp: PerMessageProfileMsc4461 = {
+    id: profile.id,
+    displayname: profile.name,
+    avatar_url: profile.avatarUrl,
+    [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]: profile.pronouns,
+    [MATRIX_UNSTABLE_COLORS]: profile.colors,
+    trigger: triggers,
+  };
+
+  // delete empty fields
+  // to-do maybe find a better way of doing it
+  if (!profile.avatarUrl) delete newPmp.avatar_url;
+  if (!profile.pronouns || profile.pronouns?.length === 0)
+    delete newPmp[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME];
+  if (!profile.colors) delete newPmp[MATRIX_UNSTABLE_COLORS];
+  return newPmp;
+}
 
 /**
  * the format used by Beeper for per message profiles
@@ -55,6 +195,8 @@ export type PerMessageProfileBeeperFormat = {
    * using the unstable prefix for pronouns, under which it is also stored in profiles
    */
   [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]?: PronounSet[];
+
+  [MATRIX_UNSTABLE_COLORS]?: ColorSet;
   has_fallback?: boolean;
 };
 
@@ -66,22 +208,28 @@ export type PerMessageProfileBeeperFormat = {
  * @return {*}  {PerMessageProfileBeeperFormat} the per message profile in Beeper's format, which can be applied to a message before sending it
  */
 export function convertPerMessageProfileToBeeperFormat(
-  profile: PerMessageProfile,
+  profile: PerMessageProfileMsc4461,
   has_fallback: boolean
 ): PerMessageProfileBeeperFormat {
   const beeperPMP: PerMessageProfileBeeperFormat = {
     id: profile.id,
-    displayname: profile.name,
-    avatar_url: profile.avatarUrl,
-    [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]: profile.pronouns,
+    displayname: profile.displayname,
+    avatar_url: profile.avatar_url,
+    [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]:
+      profile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME],
+    [MATRIX_UNSTABLE_COLORS]: profile[MATRIX_UNSTABLE_COLORS],
     has_fallback,
   };
   // delete empty fields
   // to-do maybe find a better way of doing it
-  if (!profile.name || profile?.name.trim().length === 0) delete beeperPMP.displayname;
-  if (!profile.avatarUrl) delete beeperPMP.avatar_url;
-  if (!profile.pronouns || profile.pronouns?.length === 0)
-    delete beeperPMP[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME];
+  if (!profile.displayname || profile?.displayname.trim().length === 0)
+    delete beeperPMP.displayname;
+  if (!profile.avatar_url) delete beeperPMP.avatar_url;
+  if (
+    !profile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME] ||
+    profile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]?.length === 0
+  )
+    if (!profile[MATRIX_UNSTABLE_COLORS]) delete beeperPMP[MATRIX_UNSTABLE_COLORS];
   if (!has_fallback) delete beeperPMP.has_fallback;
   return beeperPMP;
 }
@@ -96,12 +244,15 @@ export function convertPerMessageProfileToBeeperFormat(
  */
 export function convertBeeperFormatToOurPerMessageProfile(
   beeperProfile: PerMessageProfileBeeperFormat
-): PerMessageProfile {
+): PerMessageProfileMsc4461 {
   return {
     id: beeperProfile.id,
-    name: beeperProfile.displayname ?? '',
-    avatarUrl: beeperProfile.avatar_url,
-    pronouns: beeperProfile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME],
+    displayname: beeperProfile.displayname ?? '',
+    avatar_url: beeperProfile.avatar_url,
+    [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]:
+      beeperProfile[MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME],
+    [MATRIX_UNSTABLE_COLORS]: beeperProfile[MATRIX_UNSTABLE_COLORS],
+    trigger: { prefix: [] },
   };
 }
 
@@ -328,6 +479,23 @@ function proxyAssociationsMapToObject(
 }
 
 /**
+ * helper function: getting a profile from the account data where the profile matches a given id
+ *
+ * @export
+ * @param {MatrixClient} mx the matrix client
+ * @param {string} id the profile id
+ * @return {*}  {(Promise<PerMessageProfileMsc4461 | undefined>)} the profile, with the profile Id, if it exists
+ */
+export async function getPerMessageProfileById(
+  mx: MatrixClient,
+  id: string
+): Promise<PerMessageProfileMsc4461 | undefined> {
+  return getPerMessageProfileIndex(mx)?.content.profiles.find((profile) => profile.id === id);
+}
+
+/**
+ * @deprecated
+ *
  * getting a profile from the account data where the profile matches a given id
  *
  * @export
@@ -335,7 +503,7 @@ function proxyAssociationsMapToObject(
  * @param {string} id the profile id
  * @return {*}  {(Promise<PerMessageProfile | undefined>)} the profile, with the profile Id, if it exists
  */
-export async function getPerMessageProfileById(
+async function getPerMessageProfileByIdDeprecated(
   mx: MatrixClient,
   id: string
 ): Promise<PerMessageProfile | undefined> {
@@ -352,13 +520,58 @@ export async function getPerMessageProfileById(
  * @param {MatrixClient} mx the matrix client
  * @return {*}  {Promise<PerMessageProfile[]>} a array containing all per-message-profiles saved
  */
-export async function getAllPerMessageProfiles(mx: MatrixClient): Promise<PerMessageProfile[]> {
-  const profileData = mx.getAccountData(
-    `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
-  );
-  const profileIds = (profileData?.getContent() as PerMessageProfileIndex)?.profileIds || [];
-  const profiles = await Promise.all(profileIds.map((id) => getPerMessageProfileById(mx, id)));
-  return profiles.filter((profile): profile is PerMessageProfile => profile !== undefined);
+export async function getAllPerMessageProfiles(
+  mx: MatrixClient
+): Promise<PerMessageProfileMsc4461[]> {
+  let profileListIndex = getPerMessageProfileIndex(mx);
+
+  if (!profileListIndex) {
+    const profileData = mx.getAccountData(
+      `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
+    );
+    if (!profileData) return [];
+
+    const msc4461Index: PerMessageProfileIndexMsc4461 = {
+      type: 'm.per_message_profiles',
+      content: {
+        profiles: [],
+      },
+    };
+
+    const profileIds = (profileData?.getContent() as PerMessageProfileIndex)?.profileIds || [];
+    const profiles = await Promise.all(
+      profileIds.map((id) => getPerMessageProfileByIdDeprecated(mx, id))
+    );
+
+    profiles.forEach((profile) => {
+      if (!profile) return;
+
+      const migratedProfile = convertPmpToMsc4461(mx, profile);
+      msc4461Index.content.profiles.push(migratedProfile);
+    });
+
+    await savePerMessageProfileIndex(mx, msc4461Index.content.profiles);
+
+    profileListIndex = getPerMessageProfileIndex(mx) ?? msc4461Index;
+
+    // delete old records
+    await mx.deleteAccountData(
+      'fyi.cisnt.permessageprofile.index' as Parameters<typeof mx.getAccountData>[0]
+    );
+
+    await Promise.all(
+      profiles
+        .filter((profile): profile is PerMessageProfile => profile !== undefined)
+        .map((profile) =>
+          mx.deleteAccountData(
+            `fyi.cisnt.permessageprofile.${profile.id}` as Parameters<typeof mx.getAccountData>[0]
+          )
+        )
+    );
+  }
+
+  if (!profileListIndex) return [];
+  return profileListIndex.content.profiles;
 }
 
 /**
@@ -367,54 +580,20 @@ export async function getAllPerMessageProfiles(mx: MatrixClient): Promise<PerMes
  * @param profile the profile to add/update
  * @returns void
  */
-export async function addOrUpdatePerMessageProfile(mx: MatrixClient, profile: PerMessageProfile) {
-  const profileListIndex = mx.getAccountData(
-    `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
-  );
-  const profileWithCompat = {
-    ...profile,
-    compat: {
-      version: 1,
-      compatDate: '2026-03-26',
-    } satisfies AccountDataCompatVersion,
-  } satisfies PerMessageProfile;
-  if (profileListIndex?.getContent()?.profileIds.includes(profile.id)) {
-    return await mx.setAccountData(
-      `${ACCOUNT_DATA_PREFIX}.${profile.id}` as Parameters<typeof mx.setAccountData>[0],
-      profileWithCompat as Parameters<typeof mx.setAccountData>[1]
-    );
-  }
-  const newProfileIds = [...(profileListIndex?.getContent()?.profileIds || []), profile.id];
-  return await Promise.all([
-    mx.setAccountData(
-      `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.setAccountData>[0],
-      { profileIds: newProfileIds } as Parameters<typeof mx.setAccountData>[1]
-    ),
-    mx.setAccountData(
-      `${ACCOUNT_DATA_PREFIX}.${profile.id}` as Parameters<typeof mx.setAccountData>[0],
-      profileWithCompat as Parameters<typeof mx.setAccountData>[1]
-    ),
-  ]);
-}
+export async function addOrUpdatePerMessageProfile(
+  mx: MatrixClient,
+  profile: PerMessageProfileMsc4461
+) {
+  const profiles = getPerMessageProfileIndex(mx)?.content.profiles ?? [];
+  const existingIndex = profiles.findIndex((existingProfile) => existingProfile.id === profile.id);
+  const updatedProfiles =
+    existingIndex === -1
+      ? [...profiles, profile]
+      : profiles.map((existingProfile) =>
+          existingProfile.id === profile.id ? profile : existingProfile
+        );
 
-/**
- * remove a id from the index of profile ids, used when deleting a profile to
- * remove the id from the list of profiles, so it doesn't show up in the list of profiles to manage anymore.
- * The actual profile data is also removed when deleting a profile, but this function is only responsible
- * for removing the id from the index.
- * @param mx the matrix client
- * @param id the id to drop from the index
- */
-async function dropIdFromIndex(mx: MatrixClient, id: string) {
-  const profileListIndex = mx.getAccountData(
-    `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
-  );
-  const profileIds = profileListIndex?.getContent()?.profileIds || [];
-  const newProfileIds = profileIds.filter((profileId: string) => profileId !== id);
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.setAccountData>[0],
-    { profileIds: newProfileIds } as Parameters<typeof mx.setAccountData>[1]
-  );
+  await savePerMessageProfileIndex(mx, updatedProfiles);
 }
 
 async function getRoomsUsingProfile(mx: MatrixClient, profileId: string): Promise<string[]> {
@@ -454,7 +633,7 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
 
   if (reset) {
     associations.delete(roomId);
-    mx.setAccountData(
+    await mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.setAccountData>[0],
       { associations: associationsMapToObject(associations) } as Parameters<
         typeof mx.setAccountData
@@ -466,7 +645,7 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
     throw new Error("profile Id is empty, yet it isn't a reset");
   }
   associations.set(roomId, { profileId, validUntil });
-  mx.setAccountData(
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.setAccountData>[0],
     { associations: associationsMapToObject(associations) } as Parameters<
       typeof mx.setAccountData
@@ -484,7 +663,7 @@ export async function setCurrentlyUsedPerMessageProfileIdForAccount(
   reset?: boolean
 ) {
   if (reset) {
-    mx.deleteAccountData(
+    await mx.deleteAccountData(
       `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0]
     );
     return;
@@ -495,99 +674,15 @@ export async function setCurrentlyUsedPerMessageProfileIdForAccount(
 
   const association: PerMessageProfileRoomAssociation = { profileId, validUntil };
 
-  mx.setAccountData(
+  await mx.setAccountData(
     `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0],
     { association: association } as Parameters<typeof mx.setAccountData>[1]
   );
 }
 
-/**
- *
- * @param mx the matrix client
- * @param profileId the profile id which the prefix should be attached to
- * @param proxy the prefix to use as index
- * @param proxyRegExp the regex we can use to match the prefix
- * @param reset wheather to delete the prefix
+/*
+ * @deprecated in favor of Msc4461 format triggers
  */
-export async function associateProxyWithProfile(
-  mx: MatrixClient,
-  profileId: string | undefined,
-  prefix: string | undefined,
-  suffix: string | undefined,
-  reset: boolean
-) {
-  if (!(prefix || suffix)) throw new Error('Proxy must have either a prefix, suffix, or both.');
-
-  const associations = getProxyAssociationMap(
-    mx
-      .getAccountData(
-        `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
-      )
-      ?.getContent()
-  );
-
-  const proxy = createProxyKey(prefix, suffix);
-
-  if (reset) associations.delete(proxy);
-
-  if (!profileId) throw new Error('profileId might not be undefined');
-  if (profileId)
-    associations.set(proxy, {
-      profileId,
-      prefix,
-      suffix,
-    } satisfies PerMessageProfileProxyAssociationV2);
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
-    { associations: proxyAssociationsMapToObject(associations) } as Parameters<
-      typeof mx.setAccountData
-    >[1]
-  );
-}
-
-/**
- *
- *
- * @export
- * @param {MatrixClient} mx the matrix client
- * @return {*}  {Promise<PerMessageProfileProxyAssociation[]>}
- */
-export async function getAllPerMessageProfileProxies(
-  mx: MatrixClient
-): Promise<PerMessageProfileProxyAssociationV2[]> {
-  const cont: PerMessageProfileProxyAssociationWrapper | undefined = mx
-    .getAccountData(
-      `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
-    )
-    ?.getContent();
-  if (!cont) return [];
-  const pmap = getProxyAssociationMap(cont);
-  const parr = new Array<PerMessageProfileProxyAssociationV2>();
-  let needsMigration = false;
-  pmap.entries().forEach(([k, v]) => {
-    if (proxyNeedsMigration(v)) {
-      needsMigration = true;
-      v = migratePmpProxyAssociation(k, v) ?? v;
-    }
-    return parr.push(v as PerMessageProfileProxyAssociationV2);
-  });
-
-  if (needsMigration) {
-    const newPmap = new Map(
-      pmap.entries().map(([k, v]) => [k, migratePmpProxyAssociation(k, v) ?? v])
-    );
-
-    await mx.setAccountData(
-      `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
-      { associations: proxyAssociationsMapToObject(newPmap) } as Parameters<
-        typeof mx.setAccountData
-      >[1]
-    );
-  }
-
-  return parr;
-}
-
 export async function getAllProxiesForPMP(
   mx: MatrixClient,
   profileId: string
@@ -607,24 +702,6 @@ export async function getAllProxiesForPMP(
     .filter(([_k, v]) => v.profileId === profileId)
     .forEach(([k, v]) => parr.push(migratePmpProxyAssociation(k, v)!));
   return parr;
-}
-
-export async function dropProxyAssociationForPMP(mx: MatrixClient, proxy: string) {
-  const associations = getProxyAssociationMap(
-    mx
-      .getAccountData(
-        `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.getAccountData>[0]
-      )
-      ?.getContent()
-  );
-  if (!associations) return;
-  associations.delete(proxy);
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.proxyassociation` as Parameters<typeof mx.setAccountData>[0],
-    { associations: proxyAssociationsMapToObject(associations) } as Parameters<
-      typeof mx.setAccountData
-    >[1]
-  );
 }
 
 /**
@@ -661,11 +738,13 @@ async function dropPerMessageProfileRoomAssociations(mx: MatrixClient, id: strin
  */
 export async function deletePerMessageProfile(mx: MatrixClient, id: string) {
   await dropPerMessageProfileRoomAssociations(mx, id);
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.${id}` as Parameters<typeof mx.setAccountData>[0],
-    {}
+  const profiles = getPerMessageProfileIndex(mx)?.content.profiles;
+  if (!profiles) return;
+
+  await savePerMessageProfileIndex(
+    mx,
+    profiles.filter((profile) => profile.id !== id)
   );
-  await dropIdFromIndex(mx, id);
 }
 
 /**
@@ -676,13 +755,15 @@ export async function deletePerMessageProfile(mx: MatrixClient, id: string) {
  * @param newId the id it will be moved to
  */
 export async function renamePerMessageProfile(mx: MatrixClient, oldId: string, newId: string) {
-  const profile = await getPerMessageProfileById(mx, oldId);
-  if (!profile) {
+  const profiles = getPerMessageProfileIndex(mx)?.content.profiles;
+  if (!profiles?.some((profile) => profile.id === oldId)) {
     throw new Error('Profile not found');
   }
-  const newProfile = { ...profile, id: newId };
-  await addOrUpdatePerMessageProfile(mx, newProfile);
-  await deletePerMessageProfile(mx, oldId);
+
+  await savePerMessageProfileIndex(
+    mx,
+    profiles.map((profile) => (profile.id === oldId ? { ...profile, id: newId } : profile))
+  );
 }
 
 /**
@@ -694,7 +775,7 @@ export async function renamePerMessageProfile(mx: MatrixClient, oldId: string, n
 export async function getCurrentlyUsedPerMessageProfileForRoom(
   mx: MatrixClient,
   roomId: string
-): Promise<PerMessageProfile | undefined> {
+): Promise<PerMessageProfileMsc4461 | undefined> {
   const accountData = mx.getAccountData(
     `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.getAccountData>[0]
   );
@@ -710,7 +791,7 @@ export async function getCurrentlyUsedPerMessageProfileForRoom(
  */
 export async function getCurrentlyUsedPerMessageProfileForAccount(
   mx: MatrixClient
-): Promise<PerMessageProfile | undefined> {
+): Promise<PerMessageProfileMsc4461 | undefined> {
   const accountData = mx.getAccountData(
     `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.getAccountData>[0]
   );
@@ -718,4 +799,21 @@ export async function getCurrentlyUsedPerMessageProfileForAccount(
   const profileId = content?.association.profileId;
   const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
   return profileId ? pmp : undefined;
+}
+
+/*
+ * If you don't supply a profile, it may fail if the displayname has a colon.
+ */
+export function stripPerMessageProfilePlainBody(
+  formatted_body: string,
+  profile?: PerMessageProfileMsc4461
+): string {
+  if (profile) {
+    return formatted_body.replace(`${profile.displayname}: `, '');
+  } else {
+    return formatted_body.replace(/^.*?: /, '');
+  }
+}
+export function stripPerMessageProfileFormattedBody(formatted_body: string): string {
+  return formatted_body.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '');
 }

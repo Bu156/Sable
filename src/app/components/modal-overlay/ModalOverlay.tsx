@@ -5,7 +5,7 @@ import { Box, Modal, Overlay, OverlayBackdrop, OverlayCenter } from 'folds';
 import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
 import { useDismissOnBack } from '$utils/androidBack';
-import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
+import { MobileSheetFocusTrap, MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import * as messageCss from '$features/room/message/styles.css';
 
 type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
@@ -44,8 +44,12 @@ export function ModalOverlay({
   const isMobile = useScreenSizeOptionally() === ScreenSize.Mobile;
   const ownedModalRef = useRef<HTMLDivElement | null>(null);
 
-  // Android back closes the overlay instead of navigating away.
-  useDismissOnBack(requestClose, open);
+  const sheet = isMobile && mobile === 'sheet';
+
+  // Android back closes the overlay instead of navigating away. The sheet registers
+  // its own handler, and a child's runs first, so registering here too would skip
+  // the sheet's exit animation.
+  useDismissOnBack(requestClose, open && !sheet);
 
   if (open && isMobile && mobile === 'fullscreen') {
     return (
@@ -69,7 +73,7 @@ export function ModalOverlay({
     );
   }
 
-  if (open && isMobile && mobile === 'sheet') {
+  if (open && sheet) {
     const focusTrapOptions = {
       initialFocus: false,
       fallbackFocus: () => document.body,
@@ -79,15 +83,12 @@ export function ModalOverlay({
     };
     return (
       <MobileSwipeDownModal requestClose={requestClose}>
-        {(dragHandle) => (
-          <FocusTrap focusTrapOptions={focusTrapOptions}>
-            <div role="dialog" aria-modal="true" className={messageCss.MessageOptionsMenu}>
-              <Box direction="Column">
-                {dragHandle}
-                {children}
-              </Box>
+        {() => (
+          <MobileSheetFocusTrap focusTrapOptions={focusTrapOptions}>
+            <div role="dialog" aria-modal="true" className={messageCss.MessageOptionsSheetMenu}>
+              <Box direction="Column">{children}</Box>
             </div>
-          </FocusTrap>
+          </MobileSheetFocusTrap>
         )}
       </MobileSwipeDownModal>
     );

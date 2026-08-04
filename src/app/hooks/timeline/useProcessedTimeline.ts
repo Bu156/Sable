@@ -69,27 +69,27 @@ export function getProcessedRowIndexForRawTimelineIndex(
   return bestRowIndex >= 0 ? { rowIndex: bestRowIndex, focusRawIndex: bestRawIndex } : undefined;
 }
 
-const MESSAGE_EVENT_TYPES = new Set([
-  'm.room.message',
-  'm.room.message.encrypted',
-  'm.sticker',
-  'm.room.encrypted',
+const MESSAGE_EVENT_TYPES = new Set<string>([
+  EventType.RoomMessage,
+  EventType.Sticker,
+  EventType.RoomMessageEncrypted,
 ]);
 
-export const STANDARD_RENDERED_EVENT_TYPES = new Set([
-  'm.room.message',
-  'm.room.message.encrypted',
-  'm.sticker',
+export const STANDARD_RENDERED_EVENT_TYPES = new Set<string>([
+  EventType.RoomMessage,
+  // getType() reports this until decryption resolves the real type.
+  EventType.RoomMessageEncrypted,
+  EventType.Sticker,
   M_POLL_START.name,
-  'm.room.member',
-  'm.room.name',
-  'm.room.topic',
-  'm.room.avatar',
-  'org.matrix.msc3401.call.member',
+  EventType.RoomMember,
+  EventType.RoomName,
+  EventType.RoomTopic,
+  EventType.RoomAvatar,
+  EventType.GroupCallMemberPrefix,
 ]);
 
 const normalizeMessageType = (t: string): string =>
-  t === 'm.room.encrypted' || t === 'm.room.message.encrypted' ? 'm.room.message' : t;
+  t === (EventType.RoomMessageEncrypted as string) ? EventType.RoomMessage : t;
 
 const isMessageRow = (mEvent: MatrixEvent): boolean =>
   MESSAGE_EVENT_TYPES.has(mEvent.getType()) && !isEditEvent(mEvent);
@@ -110,21 +110,44 @@ type ProcessedEventDraft = Omit<
 type TimelineEventEntry = {
   mEvent: MatrixEvent;
   timelineSet: EventTimelineSet;
+  // Decryption rewrites a MatrixEvent in place, so identity alone does not prove a cached
+  // row still matches it. Undefined for unencrypted events.
+  clearType: string | undefined;
+  clearContent: unknown;
 };
 
 const flattenTimelineEvents = (linkedTimelines: EventTimeline[]): TimelineEventEntry[] => {
   const entries: TimelineEventEntry[] = [];
   linkedTimelines.forEach((timeline) => {
     const timelineSet = timeline.getTimelineSet();
-    timeline.getEvents().forEach((mEvent) => entries.push({ mEvent, timelineSet }));
+    timeline.getEvents().forEach((mEvent) => {
+      const encrypted = mEvent.isEncrypted();
+      entries.push({
+        mEvent,
+        timelineSet,
+        clearType: encrypted ? mEvent.getType() : undefined,
+        clearContent: encrypted ? mEvent.getContent() : undefined,
+      });
+    });
   });
   return entries;
 };
 
+const isCachedEntryCurrent = (
+  cached: TimelineEventEntry,
+  current: TimelineEventEntry | undefined
+): boolean =>
+  cached.mEvent === current?.mEvent &&
+  cached.clearType === current.clearType &&
+  cached.clearContent === current.clearContent;
+
 const computeCollapseAndDividers = (
   drafts: ProcessedEventDraft[],
   mxUserId: string | null,
-  readUptoEventId: string | undefined
+  readUptoEventId: string | undefined,
+  // Row that already carries the divider. Drafts hold only rendered rows, so a
+  // receipt anchored on a filtered event is unresolvable from `drafts` alone.
+  carriedDividerId: string | undefined
 ): ProcessedEvent[] => {
   let prevEvent: MatrixEvent | undefined;
   let isPrevRendered = false;
@@ -137,7 +160,7 @@ const computeCollapseAndDividers = (
 
     if (!newDivider && readUptoEventId) {
       const prevId = prevEvent ? prevEvent.getId() : undefined;
-      newDivider = prevId === readUptoEventId;
+      newDivider = prevId === readUptoEventId || draft.id === carriedDividerId;
     }
 
     if (!dayDivider) {
@@ -298,7 +321,12 @@ const mergeRelationReactions = (
 
   const mergedDrafts = mergeDraftsAndExtras(baseDrafts, allExtras);
 
-  return computeCollapseAndDividers(mergedDrafts, mxUserId, readUptoEventId);
+  return computeCollapseAndDividers(
+    mergedDrafts,
+    mxUserId,
+    readUptoEventId,
+    result.find((event) => event.willRenderNewDivider)?.id
+  );
 };
 
 const mergeRelationEdits = (
@@ -347,7 +375,12 @@ const mergeRelationEdits = (
 
   const mergedDrafts = mergeDraftsAndExtras(baseDrafts, allExtras);
 
-  return computeCollapseAndDividers(mergedDrafts, mxUserId, readUptoEventId);
+  return computeCollapseAndDividers(
+    mergedDrafts,
+    mxUserId,
+    readUptoEventId,
+    result.find((event) => event.willRenderNewDivider)?.id
+  );
 };
 
 type TimelineProcessingState = {
@@ -635,8 +668,8 @@ export function useProcessedTimeline({
       items.every((item, index) => item === index) &&
       // Cached rows are reused verbatim, so anchoring on the first and last event
       // alone would accept a run that both inserted and removed within the prefix.
-      previous.timelineEvents.every(
-        (entry, index) => entry.mEvent === timelineEvents[index]?.mEvent
+      previous.timelineEvents.every((entry, index) =>
+        isCachedEntryCurrent(entry, timelineEvents[index])
       ) &&
       (appendedEntries.length === 0 ||
         (previous.timelineEvents.at(-1)?.mEvent.getTs() ?? 0) <=

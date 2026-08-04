@@ -21,7 +21,6 @@ fn prompt_cef_permission(message: String, tx: std::sync::mpsc::Sender<bool>) {
         dialog.set_title("Permission request");
 
         let tx = std::cell::RefCell::new(Some(tx));
-        let dialog_ptr = dialog.clone();
         dialog.connect_response(move |dlg, response| {
             if let Some(tx) = tx.take() {
                 let _ = tx.send(matches!(response, ResponseType::Yes));
@@ -74,6 +73,13 @@ fn main() {
                 if let Ok(port) = std::env::var("SABLE_DEVTOOLS") {
                     args.push(("--remote-debugging-port".into(), Some(port)));
                 }
+
+                // Diagnostic escape hatch for GPU/display-resume crashes. Keep
+                // acceleration enabled by default; this is for affected users to
+                // A/B test without rebuilding the application.
+                if std::env::var_os("SABLE_DISABLE_GPU").is_some() {
+                    args.push(("--disable-gpu".into(), None));
+                }
                 args
             },
             ..Default::default()
@@ -93,7 +99,7 @@ fn main() {
             return;
         }
 
-        // Allow call media capture (mic, camera, screen-share) for our webview.
+        // Allow call media capture (mic, camera, screen-share) and geolocation for our webview.
         // Cache granted permissions so we only prompt once per kind.
         use std::collections::HashSet;
         use std::sync::{Mutex, OnceLock};
@@ -107,7 +113,7 @@ fn main() {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
-            let media_kinds: Vec<PermissionKind> = request
+            let permission_kinds: Vec<PermissionKind> = request
                 .kinds
                 .iter()
                 .filter(|kind| {
@@ -118,17 +124,18 @@ fn main() {
                             | PermissionKind::CameraPanTiltZoom
                             | PermissionKind::ScreenCapture
                             | PermissionKind::CapturedSurfaceControl
+                            | PermissionKind::Geolocation
                     )
                 })
                 .cloned()
                 .collect();
 
-            if media_kinds.is_empty() {
+            if permission_kinds.is_empty() {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
             // Check cache: if all requested kinds were already granted, allow immediately.
-            let kind_names: Vec<&'static str> = media_kinds
+            let kind_names: Vec<&'static str> = permission_kinds
                 .iter()
                 .map(|k| match k {
                     PermissionKind::Microphone => "mic",
@@ -136,6 +143,7 @@ fn main() {
                     PermissionKind::ScreenCapture | PermissionKind::CapturedSurfaceControl => {
                         "screen"
                     }
+                    PermissionKind::Geolocation => "geolocation",
                     _ => "other",
                 })
                 .collect();
@@ -147,14 +155,15 @@ fn main() {
                 }
             }
 
-            let msg = match media_kinds.as_slice() {
+            let msg = match permission_kinds.as_slice() {
                 [PermissionKind::Microphone] => "Sable wants to access your microphone.",
                 [PermissionKind::Camera] => "Sable wants to access your camera.",
                 [PermissionKind::ScreenCapture] | [PermissionKind::CapturedSurfaceControl] => {
                     "Sable wants to share your screen."
                 }
-                _ if media_kinds.contains(&PermissionKind::Microphone)
-                    && media_kinds.contains(&PermissionKind::Camera) =>
+                [PermissionKind::Geolocation] => "Sable wants to access your location.",
+                _ if permission_kinds.contains(&PermissionKind::Microphone)
+                    && permission_kinds.contains(&PermissionKind::Camera) =>
                 {
                     "Sable wants to access your microphone and camera."
                 }

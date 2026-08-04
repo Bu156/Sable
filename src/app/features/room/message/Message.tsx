@@ -24,7 +24,7 @@ import {
 } from 'react';
 import { useHover, useFocusWithin } from 'react-aria';
 import type { MatrixEvent, Room, Relations } from '$types/matrix-sdk';
-import { EventStatus, MatrixEventEvent, RoomEvent } from '$types/matrix-sdk';
+import { EventStatus, MatrixEventEvent, MsgType, RoomEvent } from '$types/matrix-sdk';
 import classNames from 'classnames';
 import { useSetAtom } from 'jotai';
 import {
@@ -111,6 +111,7 @@ export type MessageProps = {
     startThread?: boolean
   ) => void;
   onEditId?: (eventId?: string) => void;
+  onReproxyId?: (eventId?: string) => void;
   onReactionToggle: (targetEventId: string, key: string, shortcode?: string) => void;
   reply?: ReactNode;
   reactions?: ReactNode;
@@ -131,6 +132,8 @@ export type MessageProps = {
 };
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
+import { shouldIgnoreMessageLongPress } from './messageTouch';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -266,7 +269,6 @@ type WrappedMessageProps = {
   handleSwipeReply?: () => void;
   handleSwipeEdit?: () => void;
   handleSwipeActionChange?: (mode: SwipeActionMode) => void;
-  handleContextMenu: MouseEventHandler<HTMLDivElement>;
   align?: 'left' | 'right';
 };
 function WrappedMessage({
@@ -277,7 +279,6 @@ function WrappedMessage({
   handleSwipeReply,
   handleSwipeEdit,
   handleSwipeActionChange,
-  handleContextMenu,
   align,
 }: WrappedMessageProps) {
   if (messageLayout === undefined) return <>{msgContentJSX}</>;
@@ -289,9 +290,7 @@ function WrappedMessage({
         onEdit={handleSwipeEdit}
         onActionModeChange={handleSwipeActionChange}
       >
-        <CompactLayout before={headerJSX} onContextMenu={handleContextMenu}>
-          {msgContentJSX}
-        </CompactLayout>
+        <CompactLayout before={headerJSX}>{msgContentJSX}</CompactLayout>
       </SwipeableMessageWrapper>
     );
   if (messageLayout === MessageLayout.Bubble)
@@ -301,12 +300,7 @@ function WrappedMessage({
         onEdit={handleSwipeEdit}
         onActionModeChange={handleSwipeActionChange}
       >
-        <BubbleLayout
-          before={avatarJSX}
-          header={headerJSX}
-          onContextMenu={handleContextMenu}
-          align={align}
-        >
+        <BubbleLayout before={avatarJSX} header={headerJSX} align={align}>
           {msgContentJSX}
         </BubbleLayout>
       </SwipeableMessageWrapper>
@@ -317,7 +311,7 @@ function WrappedMessage({
       onEdit={handleSwipeEdit}
       onActionModeChange={handleSwipeActionChange}
     >
-      <ModernLayout before={avatarJSX} onContextMenu={handleContextMenu}>
+      <ModernLayout before={avatarJSX}>
         {headerJSX}
         {msgContentJSX}
       </ModernLayout>
@@ -347,6 +341,7 @@ function MessageInternal(
     onReplyClick,
     onReactionToggle,
     onEditId,
+    onReproxyId,
     reply,
     reactions,
     hideReadReceipts,
@@ -376,6 +371,8 @@ function MessageInternal(
   const messageRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => messageRef.current as HTMLDivElement);
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const activeTheme = useActiveTheme();
+  const [renderPersonaColors] = useSetting(settingsAtom, 'renderPersonaColors');
 
   useEffect(() => {
     const element = messageRef.current;
@@ -398,7 +395,7 @@ function MessageInternal(
 
   const isGif = useMemo(() => {
     const content = mEvent.getContent();
-    if (content.msgtype !== 'm.image') return false;
+    if (content.msgtype !== MsgType.Image) return false;
     return checkIfGif(content?.info?.url ?? '', content?.info?.mimetype, content?.body);
   }, [mEvent]);
 
@@ -459,11 +456,19 @@ function MessageInternal(
     return convertBeeperFormatToOurPerMessageProfile(pmp);
   }, [pmp]);
 
+  const pmpNameColor = useMemo(() => {
+    if (!renderPersonaColors) return undefined;
+    const pmpNameColorLight = parsedPMPContent?.['eu.she-a.color']?.on_light;
+    const pmpNameColorDark = parsedPMPContent?.['eu.she-a.color']?.on_dark;
+
+    return activeTheme.kind === ThemeKind.Dark ? pmpNameColorDark : pmpNameColorLight;
+  }, [parsedPMPContent, activeTheme, renderPersonaColors]);
+
   /**
    * boolean to indicate wheather we should indicate to the user that it is a pmp
    * We want to not show it, when the name is unset, or whitespace only
    */
-  const showPmPInfo = parsedPMPContent?.name && parsedPMPContent.name?.trim() !== '';
+  const showPmPInfo = parsedPMPContent?.displayname && parsedPMPContent.displayname?.trim() !== '';
   // Profiles and Colors
   const profile = useUserProfile(senderId, room, undefined, true, isVisible);
   const { color: usernameColor, font: usernameFont } = useSableCosmetics(
@@ -483,14 +488,14 @@ function MessageInternal(
    * otherwise we fall back to the profile pronouns.
    * This allows users to set pronouns on a per-message basis, while still falling back to their profile pronouns if they don't set any for a specific message.
    */
-  const pronouns = parsedPMPContent?.pronouns ?? profile.pronouns;
+  const pronouns = parsedPMPContent?.['io.fsky.nyx.pronouns'] ?? profile.pronouns;
 
   const [highlightMentions] = useSetting(settingsAtom, 'highlightMentions');
 
   // Avatars
   // Prefer the room-scoped member avatar (m.room.member) over the global profile
   // avatar so per-room avatar overrides are respected in the timeline.
-  useRoomMemberHydration(room, senderId, mEvent.sender !== null);
+  useRoomMemberHydration(room, senderId, mEvent.sender !== null, profile.displayName);
   const memberAvatarMxc = mEvent.sender?.getMxcAvatarUrl() ?? getMemberAvatarMxc(room, senderId);
   const avatarUrl = useMemo(() => {
     const mxc = pmp?.avatar_url || memberAvatarMxc || profile.avatarUrl;
@@ -583,7 +588,7 @@ function MessageInternal(
             <Username
               as="button"
               style={{
-                color: usernameColor,
+                color: pmpNameColor ?? usernameColor,
                 fontFamily: usernameFont,
               }}
               data-user-id={senderId}
@@ -599,7 +604,10 @@ function MessageInternal(
               </Text>
             </Username>
             {showPronouns && (
-              <Pronouns pronouns={mergedPronouns} tagColor={usernameColor ?? 'currentColor'} />
+              <Pronouns
+                pronouns={mergedPronouns}
+                tagColor={pmpNameColor ?? usernameColor ?? 'currentColor'}
+              />
             )}
             {showPmPInfo && (
               <Box>
@@ -880,7 +888,6 @@ function MessageInternal(
               avatarJSX={avatarJSX()}
               msgContentJSX={msgContentJSX}
               messageLayout={messageLayout}
-              handleContextMenu={() => {}}
               align={useRightBubbles && senderId === mx.getUserId() ? 'right' : 'left'}
             />
           </div>
@@ -975,6 +982,7 @@ function MessageInternal(
             relations={relations}
             onReplyClick={onReplyClick}
             onEditId={onEditId}
+            onReproxyId={onReproxyId}
             hideReadReceipts={hideReadReceipts}
             showDeveloperTools={showDeveloperTools}
             canPinEvent={canPinEvent}
@@ -996,7 +1004,14 @@ function MessageInternal(
           WebkitTapHighlightColor: 'transparent',
         }}
         onContextMenu={contextMenuHandler}
-        onTouchStart={menu.triggerProps.onTouchStart}
+        onTouchStart={(evt) => {
+          const target = evt.target instanceof Element ? evt.target : undefined;
+          if (shouldIgnoreMessageLongPress(target)) {
+            menu.triggerProps.onTouchCancel();
+            return;
+          }
+          menu.triggerProps.onTouchStart(evt);
+        }}
         onTouchEnd={menu.triggerProps.onTouchEnd}
         onTouchMove={menu.triggerProps.onTouchMove}
         onTouchCancel={menu.triggerProps.onTouchCancel}
@@ -1009,7 +1024,6 @@ function MessageInternal(
           handleSwipeReply={handleSwipeReply}
           handleSwipeEdit={handleSwipeEdit}
           handleSwipeActionChange={setSwipeActionMode}
-          handleContextMenu={contextMenuHandler}
           align={useRightBubbles && senderId === mx.getUserId() ? 'right' : 'left'}
         />
       </div>

@@ -24,13 +24,27 @@ export const getRoomAvatarUrl = (
   useAuthentication = false
 ): string | undefined => getAvatarUrl(mx, room.getMxcAvatarUrl(), size, useAuthentication);
 
+// Bridges add a persistent bot member to 1:1 DM portals that the SDK counts as a real participant.
+export const isBridgeBot = (userId: string): boolean => {
+  const localpart = userId.split(':')[0]?.substring(1) ?? '';
+  return localpart.toLowerCase().endsWith('bot');
+};
+
+export const getDmOtherMember = (mx: MatrixClient, room: Room): RoomMember | undefined => {
+  const currentUserId = mx.getUserId();
+  const others = room
+    .getJoinedMembers()
+    .filter((member) => member.userId !== currentUserId && !isBridgeBot(member.userId));
+  return others.length === 1 ? others[0] : undefined;
+};
+
 export const getDirectRoomAvatarUrl = (
   mx: MatrixClient,
   room: Room,
   size: 32 | 96 = 32,
   useAuthentication = false
 ): string | undefined => {
-  const mxcUrl = room.getAvatarFallbackMember()?.getMxcAvatarUrl();
+  const mxcUrl = getDmOtherMember(mx, room)?.getMxcAvatarUrl();
 
   if (!mxcUrl) {
     return getRoomAvatarUrl(mx, room, size, useAuthentication);

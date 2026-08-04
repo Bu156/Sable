@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { faker } from '@faker-js/faker';
 import { M_POLL_RESPONSE } from 'matrix-js-sdk';
 import type { EventTimeline, EventTimelineSet, MatrixEvent } from '$types/matrix-sdk';
 import { EventType, RelationType } from '$types/matrix-sdk';
@@ -163,6 +164,22 @@ const dividerIds = (processed: ProcessedEvent[]) =>
   processed.filter((e) => e.willRenderNewDivider).map((e) => e.id);
 
 describe('useProcessedTimeline new-messages divider', () => {
+  it('renders an event that is still encrypted', () => {
+    const processed = processTimeline(
+      [
+        createEvent({ id: '$a' }),
+        createEvent({
+          id: '$encrypted',
+          type: EventType.RoomMessageEncrypted as string,
+          content: { algorithm: 'm.megolm.v1.aes-sha2', ciphertext: 'AwgAEnB...' },
+        }),
+      ],
+      undefined
+    );
+
+    expect(renderedIds(processed)).toEqual(['$a', '$encrypted']);
+  });
+
   it('keeps poll start events with default hidden-event settings', () => {
     const processed = processTimeline(
       [
@@ -385,6 +402,38 @@ describe('useProcessedTimeline new-messages divider', () => {
 
     expect(dividerIds(processed)).toEqual([]);
   });
+
+  it('renders the divider on a filtered anchor with show-hidden-events enabled', () => {
+    const events = [
+      createEvent({ id: '$a' }),
+      createMembership('$member'),
+      createEvent({ id: '$b' }),
+      createReaction('$reaction', '$a'),
+    ];
+    const { result } = renderHook(() =>
+      useProcessedTimeline({
+        items: events.map((_, index) => index),
+        linkedTimelines: [createTimeline(events)],
+        ignoredUsersSet: new Set(),
+        // Reaction/edit rows merge into their target, which reprocesses every
+        // row through a second divider pass.
+        hiddenEvents: {
+          ...hiddenEvents,
+          showHiddenEvents: true,
+          hiddenEventReactions: true,
+          hiddenEventEdits: true,
+        },
+        mxUserId: MY_USER,
+        readUptoEventId: '$member',
+        hideMembershipEvents: true,
+        hideNickAvatarEvents: true,
+        isReadOnly: false,
+        hideMemberInReadOnly: false,
+      })
+    );
+
+    expect(dividerIds(result.current)).toEqual(['$b']);
+  });
 });
 
 describe('useProcessedTimeline append-only fast path', () => {
@@ -467,5 +516,412 @@ describe('getProcessedRowIndexForRawTimelineIndex', () => {
       rowIndex: 1,
       focusRawIndex: 2,
     });
+  });
+});
+
+const rowSignature = (rows: ProcessedEvent[]) =>
+  rows.map((r) => ({
+    id: r.id,
+    itemIndex: r.itemIndex,
+    collapsed: r.collapsed,
+    willRenderNewDivider: r.willRenderNewDivider,
+    willRenderDayDivider: r.willRenderDayDivider,
+  }));
+
+describe('getProcessedRowIndexForRawTimelineIndex (fuzz)', () => {
+  it('matches a filter-based reference over random row maps', () => {
+    for (let seed = 1; seed <= 500; seed += 1) {
+      faker.seed(seed);
+      let nextIndex = 0;
+      const rows = Array.from(
+        { length: faker.number.int({ min: 0, max: 15 }) },
+        (): ProcessedEvent => {
+          if (faker.datatype.boolean({ probability: 0.25 }))
+            return { itemIndex: -1 } as unknown as ProcessedEvent;
+          // Real timelines assign each non-sentinel raw index exactly once.
+          nextIndex += faker.number.int({ min: 1, max: 3 });
+          return { itemIndex: nextIndex } as unknown as ProcessedEvent;
+        }
+      );
+      const start = faker.number.int({ min: -1, max: nextIndex + 2 });
+
+      // Reference: item indices are non-decreasing, so the addressable target
+      // is the last row with a non-sentinel index not beyond the raw index.
+      const candidates = rows
+        .map((row, rowIndex) => ({ rowIndex, itemIndex: row.itemIndex }))
+        .filter((c) => c.itemIndex >= 0 && c.itemIndex <= start);
+      const last = candidates.at(-1);
+      const expected = last
+        ? { rowIndex: last.rowIndex, focusRawIndex: last.itemIndex }
+        : undefined;
+
+      expect(getProcessedRowIndexForRawTimelineIndex(rows, start), `seed ${seed}`).toEqual(
+        expected
+      );
+    }
+  });
+});
+
+describe('append-only fast path vs full reprocess (fuzz)', () => {
+  it('incremental live appends produce the same rows as a full reprocess', () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      faker.seed(seed * 7919);
+      const senders = [MY_USER, OTHER_USER, '@carol:test'];
+
+      // Occasional multi-day jumps so day-divider boundaries get crossed.
+      const total = faker.number.int({ min: 20, max: 49 });
+      let ts = 1_000_000_000_000;
+      const events: MatrixEvent[] = [];
+      for (let i = 0; i < total; i += 1) {
+        ts += faker.datatype.boolean({ probability: 0.08 })
+          ? faker.number.int({ min: 1, max: 2 }) * 86_400_000
+          : faker.number.int({ min: 0, max: 599_999 });
+        const id = `$seed${seed}-e${i}`;
+        if (faker.datatype.boolean({ probability: 0.1 })) {
+          events.push(
+            createEvent({
+              id,
+              type: EventType.RoomMember as string,
+              content: { membership: 'join' },
+              ts,
+            })
+          );
+        } else {
+          events.push(
+            createEvent({
+              id,
+              type: faker.datatype.boolean({ probability: 0.11 })
+                ? (EventType.Sticker as string)
+                : undefined,
+              sender: faker.helpers.arrayElement(senders),
+              ts,
+              content: { msgtype: 'm.text', body: `msg ${i}` },
+            })
+          );
+        }
+      }
+      // Anchor the read marker somewhere arbitrary — possibly on a filtered event.
+      const readUptoEventId = faker.datatype.boolean({ probability: 0.4 })
+        ? (faker.helpers.arrayElement(events).getId() ?? undefined)
+        : undefined;
+
+      const live: MatrixEvent[] = [];
+      const timeline = createTimeline(live);
+      const ignoredUsersSet = new Set<string>();
+      const { result, rerender } = renderHook(
+        ({ count }: { count: number }) =>
+          useProcessedTimeline({
+            items: Array.from({ length: count }, (_, index) => index),
+            linkedTimelines: [timeline],
+            ignoredUsersSet,
+            hiddenEvents,
+            mxUserId: MY_USER,
+            readUptoEventId,
+            hideMembershipEvents: true,
+            hideNickAvatarEvents: true,
+            isReadOnly: false,
+            hideMemberInReadOnly: false,
+          }),
+        { initialProps: { count: 0 } }
+      );
+
+      let cursor = 0;
+      while (cursor < events.length) {
+        const batch = faker.number.int({ min: 1, max: 5 });
+        cursor = Math.min(cursor + batch, events.length);
+        live.splice(live.length, 0, ...events.slice(live.length, cursor));
+        rerender({ count: cursor });
+      }
+
+      // Oracle: a fresh hook instance has no cache, so it always fully reprocesses.
+      const fresh = processTimeline(events, readUptoEventId);
+
+      expect(rowSignature(result.current), `seed ${seed}`).toEqual(rowSignature(fresh));
+    }
+  });
+
+  it('out-of-order (late-delivered) appends force a full reprocess with identical output', () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      faker.seed(seed * 104_729);
+      const senders = [MY_USER, OTHER_USER, '@carol:test'];
+
+      const total = faker.number.int({ min: 10, max: 25 });
+      let ts = 1_000_000_000_000;
+      const events: MatrixEvent[] = [];
+      for (let i = 0; i < total; i += 1) {
+        ts += faker.number.int({ min: 0, max: 599_999 });
+        events.push(
+          createEvent({
+            id: `$late${seed}-e${i}`,
+            sender: faker.helpers.arrayElement(senders),
+            ts,
+            content: { msgtype: 'm.text', body: `msg ${i}` },
+          })
+        );
+      }
+
+      const live = [...events];
+      const timeline = createTimeline(live);
+      const ignoredUsersSet = new Set<string>();
+      const { result, rerender } = renderHook(
+        ({ count }: { count: number }) =>
+          useProcessedTimeline({
+            items: Array.from({ length: count }, (_, index) => index),
+            linkedTimelines: [timeline],
+            ignoredUsersSet,
+            hiddenEvents,
+            mxUserId: MY_USER,
+            readUptoEventId: undefined,
+            hideMembershipEvents: true,
+            hideNickAvatarEvents: true,
+            isReadOnly: false,
+            hideMemberInReadOnly: false,
+          }),
+        { initialProps: { count: live.length } }
+      );
+
+      // A late delivery: appended to the array, but timestamped mid-stream.
+      const insertionPoint = faker.number.int({ min: 0, max: events.length - 1 });
+      live.push(
+        createEvent({
+          id: `$late${seed}-straggler`,
+          sender: faker.helpers.arrayElement(senders),
+          ts: events[insertionPoint]?.getTs() ?? ts,
+          content: { msgtype: 'm.text', body: 'late' },
+        })
+      );
+      rerender({ count: live.length });
+
+      const fresh = processTimeline(live, undefined);
+      expect(rowSignature(result.current), `seed ${seed}`).toEqual(rowSignature(fresh));
+    }
+  });
+
+  it('spec-shaped relations and redactions in the stream force reprocessing, output still matches oracle', () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      faker.seed(seed * 31_337);
+      const senders = [MY_USER, OTHER_USER, '@carol:test'];
+
+      const baseMsg = (id: string, ts: number): MatrixEvent =>
+        createEvent({
+          id,
+          sender: faker.helpers.arrayElement(senders),
+          ts,
+          content: { msgtype: 'm.text', body: `msg ${id}` },
+        });
+
+      const total = faker.number.int({ min: 15, max: 30 });
+      let ts = 1_000_000_000_000;
+      const all: MatrixEvent[] = [];
+      for (let i = 0; i < total; i += 1) {
+        ts += faker.number.int({ min: 0, max: 599_999 });
+        const id = `$spec${seed}-e${i}`;
+        all.push(baseMsg(id, ts));
+        if (faker.datatype.boolean({ probability: 0.3 }) && i > 1) {
+          const target = faker.helpers.arrayElement(all.slice(0, -1)).getId() ?? id;
+          const kind = faker.number.int({ min: 0, max: 3 });
+          if (kind === 0) all.push(createReaction(`$spec${seed}-r${i}`, target));
+          else if (kind === 1) all.push(createEdit(`$spec${seed}-r${i}`, target));
+          else if (kind === 2) all.push(createRedaction(`$spec${seed}-r${i}`, target));
+          else all.push(createThreadReply(`$spec${seed}-r${i}`, target));
+        }
+      }
+
+      const live: MatrixEvent[] = [];
+      const timeline = createTimeline(live);
+      const ignoredUsersSet = new Set<string>();
+      const { result, rerender } = renderHook(
+        ({ count }: { count: number }) =>
+          useProcessedTimeline({
+            items: Array.from({ length: count }, (_, index) => index),
+            linkedTimelines: [timeline],
+            ignoredUsersSet,
+            hiddenEvents,
+            mxUserId: MY_USER,
+            readUptoEventId: undefined,
+            hideMembershipEvents: true,
+            hideNickAvatarEvents: true,
+            isReadOnly: false,
+            hideMemberInReadOnly: false,
+          }),
+        { initialProps: { count: 0 } }
+      );
+
+      let cursor = 0;
+      while (cursor < all.length) {
+        const batch = faker.number.int({ min: 1, max: 5 });
+        cursor = Math.min(cursor + batch, all.length);
+        live.splice(live.length, 0, ...all.slice(live.length, cursor));
+        rerender({ count: cursor });
+      }
+
+      const fresh = processTimeline(all, undefined);
+      expect(rowSignature(result.current), `seed ${seed}`).toEqual(rowSignature(fresh));
+    }
+  });
+
+  it('sliding-sync limited windows replace the stream mid-run and stay consistent', () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      faker.seed(seed * 97_403);
+      const senders = [MY_USER, OTHER_USER, '@carol:test'];
+
+      const total = faker.number.int({ min: 20, max: 40 });
+      let ts = 1_000_000_000_000;
+      const all: MatrixEvent[] = [];
+      for (let i = 0; i < total; i += 1) {
+        ts += faker.number.int({ min: 0, max: 599_999 });
+        all.push(
+          createEvent({
+            id: `$slide${seed}-e${i}`,
+            sender: faker.helpers.arrayElement(senders),
+            ts,
+            content: { msgtype: 'm.text', body: `msg ${i}` },
+          })
+        );
+      }
+
+      const live: MatrixEvent[] = [];
+      const timeline = createTimeline(live);
+      const ignoredUsersSet = new Set<string>();
+      const { result, rerender } = renderHook(
+        ({ count }: { count: number }) =>
+          useProcessedTimeline({
+            items: Array.from({ length: count }, (_, index) => index),
+            linkedTimelines: [timeline],
+            ignoredUsersSet,
+            hiddenEvents,
+            mxUserId: MY_USER,
+            readUptoEventId: undefined,
+            hideMembershipEvents: true,
+            hideNickAvatarEvents: true,
+            isReadOnly: false,
+            hideMemberInReadOnly: false,
+          }),
+        { initialProps: { count: 0 } }
+      );
+
+      let cursor = 0;
+      while (cursor < all.length) {
+        const batch = faker.number.int({ min: 1, max: 5 });
+        cursor = Math.min(cursor + batch, all.length);
+        live.splice(live.length, 0, ...all.slice(live.length, cursor));
+
+        // A limited window: the sdk dropped older rows from the live timeline.
+        if (cursor < all.length && faker.datatype.boolean({ probability: 0.25 })) {
+          const drop = faker.number.int({ min: 1, max: Math.max(1, live.length - 1) });
+          const kept = all.slice(drop, cursor);
+          // A reset re-instantiates MatrixEvent objects half of the time.
+          live.splice(
+            0,
+            live.length,
+            ...(faker.datatype.boolean()
+              ? kept.map((e) =>
+                  createEvent({
+                    id: e.getId() ?? '',
+                    sender: e.getSender() ?? '',
+                    ts: e.getTs(),
+                    content: e.getContent(),
+                  })
+                )
+              : kept)
+          );
+        }
+        rerender({ count: live.length });
+      }
+
+      const fresh = processTimeline(live, undefined);
+      expect(rowSignature(result.current), `seed ${seed}`).toEqual(rowSignature(fresh));
+    }
+  });
+});
+
+function createEncryptedEvent(id: string, ts: number) {
+  const state = {
+    type: EventType.RoomMessageEncrypted as string,
+    content: { algorithm: 'm.megolm.v1.aes-sha2', ciphertext: 'AwgAEnB' } as Record<
+      string,
+      unknown
+    >,
+  };
+  const mEvent = {
+    getId: () => id,
+    getType: () => state.type,
+    getSender: () => OTHER_USER,
+    getContent: () => state.content,
+    getPrevContent: () => ({}),
+    getWireContent: () => state.content,
+    getTs: () => ts,
+    isRedacted: () => false,
+    isRedaction: () => false,
+    isEncrypted: () => true,
+    getRelation: () => null,
+    threadRootId: undefined,
+  } as unknown as MatrixEvent;
+  const decrypt = () => {
+    state.type = EventType.RoomMessage as string;
+    state.content = { msgtype: 'm.text', body: 'the secret' };
+  };
+  return { mEvent, decrypt };
+}
+
+const bodyOf = (processed: ProcessedEvent[], id: string) =>
+  (processed.find((e) => e.id === id)?.content as Record<string, unknown> | undefined)?.body;
+
+describe('useProcessedTimeline decryption', () => {
+  // Stable so the append-only fast path is reachable.
+  const ignoredUsersSet = new Set<string>();
+  const renderTimeline = (getEvents: () => MatrixEvent[]) =>
+    renderHook(() =>
+      useProcessedTimeline({
+        items: getEvents().map((_, i) => i),
+        linkedTimelines: [createTimeline(getEvents())],
+        ignoredUsersSet,
+        hiddenEvents,
+        mxUserId: MY_USER,
+        readUptoEventId: undefined,
+        hideMembershipEvents: true,
+        hideNickAvatarEvents: true,
+        isReadOnly: false,
+        hideMemberInReadOnly: false,
+      })
+    );
+
+  it('refreshes a row whose event decrypted since it was cached', () => {
+    const { mEvent: encrypted, decrypt } = createEncryptedEvent('$enc', 1_000_000);
+    let events: MatrixEvent[] = [createEvent({ id: '$a', ts: 999_000 }), encrypted];
+
+    const { result, rerender } = renderTimeline(() => events);
+    expect(renderedIds(result.current)).toEqual(['$a', '$enc']);
+
+    decrypt();
+    rerender();
+
+    expect(bodyOf(result.current, '$enc')).toBe('the secret');
+  });
+
+  it('does not carry a stale encrypted row through the append-only fast path', () => {
+    const { mEvent: encrypted, decrypt } = createEncryptedEvent('$enc', 1_000_000);
+    let events: MatrixEvent[] = [createEvent({ id: '$a', ts: 999_000 }), encrypted];
+
+    const { result, rerender } = renderTimeline(() => events);
+
+    decrypt();
+    events = [...events, createEvent({ id: '$live', ts: 1_001_000 })];
+    rerender();
+
+    expect(renderedIds(result.current)).toEqual(['$a', '$enc', '$live']);
+    expect(bodyOf(result.current, '$enc')).toBe('the secret');
+  });
+
+  it('keeps the append-only fast path for unencrypted events', () => {
+    let events: MatrixEvent[] = [createEvent({ id: '$a', ts: 999_000 })];
+    const { result, rerender } = renderTimeline(() => events);
+    const firstRow = result.current[0];
+
+    events = [...events, createEvent({ id: '$b', ts: 1_000_000 })];
+    rerender();
+
+    expect(renderedIds(result.current)).toEqual(['$a', '$b']);
+    expect(result.current[0]).toBe(firstRow);
   });
 });

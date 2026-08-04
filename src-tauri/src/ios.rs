@@ -7,8 +7,16 @@ use std::ffi::CString;
 use std::sync::OnceLock;
 
 use objc2::rc::{Allocated, Retained};
-use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
-use objc2::{msg_send, sel};
+use objc2::runtime::{
+    AnyClass, AnyObject, ClassBuilder, NSObject, NSObjectProtocol, ProtocolObject, Sel,
+};
+use objc2::{define_class, msg_send, sel, AnyThread, ClassType};
+use objc2_avf_audio::AVAudioSession;
+use objc2_call_kit::{
+    CXCallController, CXCallUpdate, CXEndCallAction, CXHandle, CXHandleType, CXProvider,
+    CXProviderConfiguration, CXProviderDelegate, CXStartCallAction, CXTransaction,
+};
+use objc2_foundation::{NSString, NSUUID};
 use tauri::webview::WebviewWindow;
 
 extern "C-unwind" fn input_accessory_view_nil(_this: &AnyObject, _cmd: Sel) -> *mut AnyObject {
@@ -56,6 +64,203 @@ pub fn haptic_feedback(style: String) {
     }
 }
 
+#[tauri::command]
+pub fn activate_call_audio_session() -> Result<(), String> {
+    callkit::start_call()
+}
+
+#[tauri::command]
+pub fn deactivate_call_audio_session() -> Result<(), String> {
+    callkit::end_call()
+}
+
+// CallKit owns the audio session and keeps the process alive in the
+// background via the `voip` UIBackgroundMode (Apple rejects `voip` without it).
+
+use std::cell::RefCell;
+
+thread_local! {
+    static CALLKIT: RefCell<CallKitState> = RefCell::new(CallKitState::default());
+}
+
+#[derive(Default)]
+struct CallKitState {
+    provider: Option<Retained<CXProvider>>,
+    controller: Option<Retained<CXCallController>>,
+    uuid: Option<Retained<NSUUID>>,
+}
+
+// Minimal CXProviderDelegate: calls are controlled from Sable's UI, so the
+// perform* methods just fulfill.
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "SableCallKitDelegate"]
+    struct SableCallKitDelegate;
+
+    unsafe impl NSObjectProtocol for SableCallKitDelegate {}
+
+    unsafe impl CXProviderDelegate for SableCallKitDelegate {
+        #[unsafe(method(providerDidReset:))]
+        fn providerDidReset(&self, _provider: &CXProvider) {
+            CALLKIT.with(|s| s.borrow_mut().uuid = None);
+        }
+
+        #[unsafe(method(provider:didActivateAudioSession:))]
+        fn provider_didActivateAudioSession(
+            &self,
+            _provider: &CXProvider,
+            _session: &AVAudioSession,
+        ) {
+        }
+
+        #[unsafe(method(provider:didDeactivateAudioSession:))]
+        fn provider_didDeactivateAudioSession(
+            &self,
+            _provider: &CXProvider,
+            _session: &AVAudioSession,
+        ) {
+        }
+
+        #[unsafe(method(provider:performStartCallAction:))]
+        fn provider_performStartCallAction(
+            &self,
+            _provider: &CXProvider,
+            action: &CXStartCallAction,
+        ) {
+            unsafe { action.fulfill() };
+        }
+
+        #[unsafe(method(provider:performEndCallAction:))]
+        fn provider_performEndCallAction(&self, _provider: &CXProvider, action: &CXEndCallAction) {
+            unsafe { action.fulfill() };
+        }
+    }
+);
+
+mod callkit {
+    use super::*;
+
+    fn ensure_provider() -> Result<(), String> {
+        CALLKIT.with(|s| -> Result<(), String> {
+            let mut s = s.borrow_mut();
+            if s.provider.is_some() && s.controller.is_some() {
+                return Ok(());
+            }
+
+            let config = unsafe {
+                let allocated = CXProviderConfiguration::alloc();
+                let cfg = CXProviderConfiguration::init(allocated);
+                cfg.setSupportsVideo(true);
+                cfg.setMaximumCallsPerCallGroup(1);
+                cfg.setMaximumCallGroups(1);
+                cfg.setIncludesCallsInRecents(true);
+                cfg
+            };
+
+            let delegate = {
+                let allocated = SableCallKitDelegate::alloc();
+                let delegate: Retained<SableCallKitDelegate> =
+                    unsafe { msg_send![allocated, init] };
+                ProtocolObject::from_retained(delegate)
+            };
+
+            let provider = unsafe {
+                let allocated = CXProvider::alloc();
+                CXProvider::initWithConfiguration(allocated, &config)
+            };
+            unsafe { provider.setDelegate_queue(Some(&delegate), None) };
+
+            let controller = unsafe {
+                let allocated = CXCallController::alloc();
+                CXCallController::init(allocated)
+            };
+
+            s.provider = Some(provider);
+            s.controller = Some(controller);
+            Ok(())
+        })
+    }
+
+    pub fn start_call() -> Result<(), String> {
+        ensure_provider()?;
+
+        CALLKIT.with(|s| -> Result<(), String> {
+            let mut s = s.borrow_mut();
+
+            if s.uuid.is_none() {
+                s.uuid = Some(NSUUID::from_bytes(random_uuid_bytes()));
+            }
+            let uuid = s.uuid.as_ref().unwrap().clone();
+            let controller = s.controller.as_ref().unwrap().clone();
+
+            let handle = unsafe {
+                let allocated = CXHandle::alloc();
+                CXHandle::initWithType_value(
+                    allocated,
+                    CXHandleType::Generic,
+                    &NSString::from_str("Sable"),
+                )
+            };
+            let action = unsafe {
+                let allocated = CXStartCallAction::alloc();
+                CXStartCallAction::initWithCallUUID_handle(allocated, &uuid, &handle)
+            };
+            let transaction = unsafe {
+                let allocated = CXTransaction::alloc();
+                CXTransaction::initWithAction(allocated, &action)
+            };
+
+            let completion: RcBlock<dyn Fn(*mut objc2_foundation::NSError)> =
+                RcBlock::new(move |_error: *mut objc2_foundation::NSError| {});
+            unsafe {
+                controller.requestTransactionWithAction_completion(&action, &completion);
+            }
+            Ok(())
+        })
+    }
+
+    pub fn end_call() -> Result<(), String> {
+        CALLKIT.with(|s| -> Result<(), String> {
+            let mut s = s.borrow_mut();
+            let uuid = match s.uuid.take() {
+                Some(uuid) => uuid,
+                None => return Ok(()),
+            };
+            let controller = match s.controller.as_ref() {
+                Some(c) => c.clone(),
+                None => return Ok(()),
+            };
+
+            let action = unsafe {
+                let allocated = CXEndCallAction::alloc();
+                CXEndCallAction::initWithCallUUID(allocated, &uuid)
+            };
+            let completion: RcBlock<dyn Fn(*mut objc2_foundation::NSError)> =
+                RcBlock::new(move |_error: *mut objc2_foundation::NSError| {});
+            unsafe {
+                controller.requestTransactionWithAction_completion(&action, &completion);
+            }
+            Ok(())
+        })
+    }
+
+    fn random_uuid_bytes() -> [u8; 16] {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let mut bytes = [0u8; 16];
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let n = nanos.to_le_bytes();
+        for i in 0..16 {
+            bytes[i] = n[i % 16].wrapping_add(i as u8);
+        }
+        bytes[6] = (bytes[6] & 0x0F) | 0x40; // RFC 4122 v4
+        bytes[8] = (bytes[8] & 0x3F) | 0x80;
+        bytes
+    }
+}
+
 pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
     let _ = window.with_webview(|webview| unsafe {
         let webview: *mut AnyObject = webview.inner().cast();
@@ -90,7 +295,7 @@ pub fn hide_form_accessory_bar(window: &WebviewWindow<crate::BrowserEngine>) {
 // WKWebView plays HTMLAudioElement on .playback, ignoring the silent switch.
 // AudioServicesPlaySystemSound respects the switch and uses ringer volume.
 
-use objc2_foundation::{NSString, NSURL};
+use objc2_foundation::NSURL;
 
 // This library is linked by Cargo before Xcode creates the application bundle,
 // so declaring AudioToolbox only in tauri.conf.json is not sufficient.
@@ -158,4 +363,140 @@ pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
     };
     unsafe { AudioServicesPlaySystemSound(sound_id) };
     Ok(())
+}
+
+// PhotoKit lane for saving images to the camera roll with add-only access;
+// the prompt text is NSPhotoLibraryAddUsageDescription in ios-project.yml.
+
+// Empty block only to emit the linker directive, same role as AudioToolbox above.
+#[link(name = "Photos", kind = "framework")]
+extern "C" {}
+
+use std::ffi::OsStr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+
+use block2::RcBlock;
+use objc2_photos::{
+    PHAccessLevel, PHAssetCreationRequest, PHAssetResourceType, PHAuthorizationStatus,
+    PHPhotoLibrary,
+};
+use tokio::sync::oneshot;
+
+fn photo_access_allowed(status: PHAuthorizationStatus) -> bool {
+    // Add-only access: .limited still permits adds (it only restricts reads).
+    status == PHAuthorizationStatus::Authorized || status == PHAuthorizationStatus::Limited
+}
+
+fn photo_authorization_error(status: PHAuthorizationStatus) -> String {
+    if status == PHAuthorizationStatus::Denied {
+        "permission denied: allow photo access in Settings > Apps > Sable > Photos".to_string()
+    } else if status == PHAuthorizationStatus::Restricted {
+        "saving to Photos is blocked by device management or parental controls".to_string()
+    } else {
+        format!("unexpected photo authorization status: {status:?}")
+    }
+}
+
+async fn request_photo_add_authorization() -> Result<(), String> {
+    let status =
+        unsafe { PHPhotoLibrary::authorizationStatusForAccessLevel(PHAccessLevel::AddOnly) };
+    if photo_access_allowed(status) {
+        return Ok(());
+    }
+    if status != PHAuthorizationStatus::NotDetermined {
+        return Err(photo_authorization_error(status));
+    }
+
+    let (tx, rx) = oneshot::channel::<PHAuthorizationStatus>();
+    {
+        let tx = Mutex::new(Some(tx));
+        let handler: RcBlock<dyn Fn(PHAuthorizationStatus)> = RcBlock::new(move |status| {
+            if let Ok(mut guard) = tx.lock() {
+                if let Some(tx) = guard.take() {
+                    let _ = tx.send(status);
+                }
+            }
+        });
+        unsafe {
+            PHPhotoLibrary::requestAuthorizationForAccessLevel_handler(
+                PHAccessLevel::AddOnly,
+                &handler,
+            );
+        }
+        // PhotoKit copies the handler; keep the !Send RcBlock out of the await below.
+    }
+
+    let granted = rx
+        .await
+        .map_err(|_| "photo authorization request was cancelled".to_string())?;
+    if photo_access_allowed(granted) {
+        Ok(())
+    } else {
+        Err(photo_authorization_error(granted))
+    }
+}
+
+fn write_media_to_photo_library(bytes: &[u8], filename: &str) -> Result<(), String> {
+    // PhotoKit infers the content type from the file URL, so the temp file
+    // keeps the extension; `file_name` strips any directory components.
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let leaf = std::path::Path::new(filename)
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("download"));
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "sable-photos-{}-{}-{}",
+        std::process::id(),
+        TEMP_COUNTER.fetch_add(1, Ordering::Relaxed),
+        leaf.to_string_lossy()
+    ));
+
+    if let Err(error) = std::fs::write(&path, bytes) {
+        let _ = std::fs::remove_file(&path);
+        return Err(format!("failed to write {}: {error}", path.display()));
+    }
+
+    let result = unsafe {
+        let path_str = NSString::from_str(&path.to_string_lossy());
+        let url = NSURL::fileURLWithPath(&path_str);
+        let library = PHPhotoLibrary::sharedPhotoLibrary();
+        // PhotoKit rejects creation requests instantiated outside the change block.
+        let change: RcBlock<dyn Fn()> = RcBlock::new(move || {
+            let request = PHAssetCreationRequest::creationRequestForAsset();
+            request.addResourceWithType_fileURL_options(PHAssetResourceType::Photo, &url, None);
+        });
+        library
+            .performChangesAndWait_error(RcBlock::as_ptr(&change))
+            .map_err(|error| {
+                format!(
+                    "failed to save '{filename}' to Photos ({} error {}): {}",
+                    error.domain(),
+                    error.code(),
+                    error.localizedDescription()
+                )
+            })
+    };
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
+#[tauri::command]
+pub async fn save_media_to_photos(
+    bytes: Vec<u8>,
+    filename: String,
+    mime_type: String,
+) -> Result<(), String> {
+    if !mime_type.starts_with("image/") {
+        return Err(format!(
+            "unsupported media type '{mime_type}': only images can be saved to Photos"
+        ));
+    }
+
+    request_photo_add_authorization().await?;
+
+    // performChangesAndWait blocks until commit; it must not run on the main thread.
+    tauri::async_runtime::spawn_blocking(move || write_media_to_photo_library(&bytes, &filename))
+        .await
+        .map_err(|error| format!("failed to run photo save: {error}"))?
 }
