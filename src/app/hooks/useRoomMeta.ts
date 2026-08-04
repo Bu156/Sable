@@ -25,6 +25,18 @@ const getRoomDisplayName = (
 export const useRoomAvatar = (room: Room, dm?: boolean): string | undefined => {
   const mx = useMatrixClient();
   const avatarEvent = useStateEvent(room, EventType.RoomAvatar);
+  const [, refreshDmAvatar] = useState(0);
+
+  useEffect(() => {
+    if (!dm) return undefined;
+
+    const updateAvatar = () => refreshDmAvatar((version) => version + 1);
+    room.on(RoomStateEvent.Members, updateAvatar);
+
+    return () => {
+      room.removeListener(RoomStateEvent.Members, updateAvatar);
+    };
+  }, [room, dm]);
 
   if (dm) {
     return getDmOtherMember(mx, room)?.getMxcAvatarUrl();

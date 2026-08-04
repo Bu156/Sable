@@ -1,3 +1,4 @@
+import { EventType } from '$types/matrix-sdk';
 import type { MatrixClient, Room, RoomMember } from '$types/matrix-sdk';
 
 import { getMxIdLocalPart } from '$utils/matrix';
@@ -24,18 +25,22 @@ export const getRoomAvatarUrl = (
   useAuthentication = false
 ): string | undefined => getAvatarUrl(mx, room.getMxcAvatarUrl(), size, useAuthentication);
 
-// Bridges add a persistent bot member to 1:1 DM portals that the SDK counts as a real participant.
-export const isBridgeBot = (userId: string): boolean => {
-  const localpart = userId.split(':')[0]?.substring(1) ?? '';
-  return localpart.toLowerCase().endsWith('bot');
-};
-
 export const getDmOtherMember = (mx: MatrixClient, room: Room): RoomMember | undefined => {
   const currentUserId = mx.getUserId();
-  const others = room
-    .getJoinedMembers()
-    .filter((member) => member.userId !== currentUserId && !isBridgeBot(member.userId));
-  return others.length === 1 ? others[0] : undefined;
+  const mDirect = mx.getAccountData(EventType.Direct)?.getContent<Record<string, string[]>>();
+  const directUserIds = Object.entries(mDirect ?? {})
+    .filter(
+      ([userId, roomIds]) =>
+        userId !== currentUserId && Array.isArray(roomIds) && roomIds.includes(room.roomId)
+    )
+    .map(([userId]) => userId);
+
+  if (directUserIds.length === 1) {
+    const member = room.getMember(directUserIds[0]!);
+    if (member?.membership === 'join' || member?.membership === 'invite') return member;
+  }
+
+  return room.getAvatarFallbackMember();
 };
 
 export const getDirectRoomAvatarUrl = (

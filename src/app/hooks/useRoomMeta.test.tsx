@@ -72,4 +72,36 @@ describe('useRoomAvatar', () => {
 
     expect(result.current).toBeUndefined();
   });
+
+  it('updates a DM avatar when its member state arrives after the sidebar rendered', () => {
+    const member = {
+      getMxcAvatarUrl: () => AVATAR_MXC,
+      membership: 'join',
+      userId: '@alice:server',
+    };
+    const { room, client, wrapper } = makeRoom('!dm:server');
+    const roomEvents = new EventEmitter();
+    let members = [{ membership: 'join', userId: '@me:server' }];
+    Object.assign(room, {
+      getMember: (userId: string) => members.find((roomMember) => roomMember.userId === userId),
+      getMembers: () => members,
+      getAvatarFallbackMember: () => undefined,
+      on: roomEvents.on.bind(roomEvents),
+      removeListener: roomEvents.removeListener.bind(roomEvents),
+    });
+    Object.assign(client, {
+      getAccountData: () => ({ getContent: () => ({ '@alice:server': [room.roomId] }) }),
+      getUserId: () => '@me:server',
+    });
+
+    const { result } = renderHook(() => useRoomAvatar(room, true), { wrapper });
+    expect(result.current).toBeUndefined();
+
+    members = [{ membership: 'join', userId: '@me:server' }, member];
+    act(() => {
+      roomEvents.emit(RoomStateEvent.Members);
+    });
+
+    expect(result.current).toBe(AVATAR_MXC);
+  });
 });
