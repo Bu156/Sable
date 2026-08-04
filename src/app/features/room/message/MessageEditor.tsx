@@ -127,6 +127,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const nicknames = useAtomValue(nicknamesAtom);
     const editor = useEditor();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
+    const [pmpNoFallback] = useSetting(settingsAtom, 'pmpNoFallback');
     const isComposing = useComposingCheck();
 
     const [autocompleteQuery, setAutocompleteQuery] =
@@ -290,11 +291,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           eventId,
           mMentions,
           linkPreviews,
-          rawPmp
+          rawPmp,
+          pmpNoFallback
         );
 
         return mx.sendMessage(roomId, content as RoomMessageEventContent);
-      }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room])
+      }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room, pmpNoFallback])
     );
 
     const handleSave = useCallback(() => {

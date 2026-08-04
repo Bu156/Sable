@@ -20,7 +20,8 @@ export function buildReplacementContent(
   eventId: string,
   mMentions: IMentions,
   linkPreviews: { matched_url: string }[],
-  perMessageProfile: unknown
+  perMessageProfile: unknown,
+  pmpNoFallback: boolean
 ): IContent {
   const pmpDisplayname =
     perMessageProfile !== null &&
@@ -34,7 +35,7 @@ export function buildReplacementContent(
   let adjustedPlainText = plainText;
   let adjustedCustomHtml = customHtml;
 
-  if (pmpDisplayname) {
+  if (!pmpNoFallback && pmpDisplayname) {
     const bodyPrefix = `${pmpDisplayname}: `;
     if (!adjustedPlainText.startsWith(bodyPrefix))
       adjustedPlainText = bodyPrefix + adjustedPlainText;
