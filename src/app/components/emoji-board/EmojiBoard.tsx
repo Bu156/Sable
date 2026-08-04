@@ -455,6 +455,7 @@ type EmojiBoardProps = {
   onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
   onStickerSelect?: (mxc: string, shortcode: string, label: string) => void;
   onGifSelect?: (gif: GifData, spoiler?: boolean) => void;
+  initialGifSearch?: string;
   allowTextCustomEmoji?: boolean;
   addToRecentEmoji?: boolean;
   isFullWidth?: boolean;
@@ -474,6 +475,7 @@ export function EmojiBoard({
   onCustomEmojiSelect,
   onStickerSelect,
   onGifSelect,
+  initialGifSearch,
   allowTextCustomEmoji,
   addToRecentEmoji = true,
   isFullWidth,
@@ -576,6 +578,13 @@ export function EmojiBoard({
     { wait: 200 }
   );
 
+  useEffect(() => {
+    if (!gifTab || initialGifSearch === undefined) return;
+    setShowFavoritesOnly(initialGifSearch.length === 0);
+    if (initialGifSearch) searchGifs(initialGifSearch);
+    else resetGifSearch();
+  }, [gifTab, initialGifSearch, searchGifs, resetGifSearch]);
+
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const virtualBaseRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -677,10 +686,11 @@ export function EmojiBoard({
         <Box direction="Column" gap="200">
           {onTabChange && <EmojiBoardTabs tab={tab} onTabChange={onTabChange} />}
           <SearchInput
-            key={tab}
+            key={gifTab ? `${tab}-${initialGifSearch ?? ''}` : tab}
             query={emojiResult?.query}
             onChange={handleOnChange}
             tab={tab}
+            defaultValue={gifTab ? initialGifSearch : undefined}
             allowTextCustomEmoji={allowTextCustomEmoji}
             onTextCustomEmojiSelect={handleTextCustomEmojiSelect}
           />
