@@ -3,7 +3,10 @@ import { MsgType, RelationType } from '$types/matrix-sdk';
 import { customHtmlEqualsPlainText } from '$components/editor';
 import { sanitizeText } from '$utils/sanitize';
 import type { PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
-import { convertPerMessageProfileToBeeperFormat } from '$hooks/usePerMessageProfile';
+import {
+  convertPerMessageProfileToBeeperFormat,
+  stripPerMessageProfileFormattedBody,
+} from '$hooks/usePerMessageProfile';
 import { MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME } from '$unstable/prefixes';
 
 /**
@@ -111,10 +114,9 @@ export function buildReplacementPmpContent(
     let newPlainBody = plainBody?.replace(/^.*?: /, '');
 
     const formattedBody = oldContent.formatted_body;
-    let newFormattedBody = formattedBody?.replace(
-      /^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/,
-      ''
-    );
+    let newFormattedBody = formattedBody
+      ? stripPerMessageProfileFormattedBody(formattedBody)
+      : undefined;
 
     oldContent.formatted_body = newFormattedBody;
     oldContent.body = newPlainBody;

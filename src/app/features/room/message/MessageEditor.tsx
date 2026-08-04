@@ -81,6 +81,7 @@ import {
   readdAngleBracketsForHiddenPreviews,
   stripMarkdownEscapesForHiddenPreviews,
 } from './hiddenLinkPreviews';
+import { stripPerMessageProfileFormattedBody } from '$hooks/usePerMessageProfile';
 
 // Wraps the mobile emoji-board overlay so the Android back action closes it
 // instead of navigating away. Hooks can't run inside the UseStateProvider
@@ -164,10 +165,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       }
 
       if (pmpDisplayname && typeof customHtml === 'string') {
-        customHtml = customHtml.replace(
-          /^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/,
-          ''
-        );
+        customHtml = stripPerMessageProfileFormattedBody(customHtml);
       }
 
       const bundleContent =

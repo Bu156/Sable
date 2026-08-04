@@ -825,3 +825,20 @@ export async function getCurrentlyUsedPerMessageProfileForAccount(
   const pmp = profileId ? await getPerMessageProfileById(mx, profileId) : undefined;
   return profileId ? pmp : undefined;
 }
+
+/*
+ * If you don't supply a profile, it may fail if the displayname has a colon.
+ */
+export function stripPerMessageProfilePlainBody(
+  formatted_body: string,
+  profile?: PerMessageProfileMsc4461
+): string {
+  if (profile) {
+    return formatted_body.replace(`${profile.displayname}: `, '');
+  } else {
+    return formatted_body.replace(/^.*?: /, '');
+  }
+}
+export function stripPerMessageProfileFormattedBody(formatted_body: string): string {
+  return formatted_body.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '');
+}
