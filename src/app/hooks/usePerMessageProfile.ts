@@ -55,10 +55,7 @@ export type ProfileTrigger = {
  * a per message profile
  */
 export type PerMessageProfileIndexMsc4461 = {
-  type: 'm.per_message_profiles';
-  content: {
-    profiles: PerMessageProfileMsc4461[];
-  };
+  profiles: PerMessageProfileMsc4461[];
 };
 
 /**
@@ -95,14 +92,28 @@ export type PerMessageProfileMsc4461 = {
   compat?: AccountDataCompatVersion;
 };
 
+function isPerMessageProfileIndex(content: unknown): content is PerMessageProfileIndexMsc4461 {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'profiles' in content &&
+    Array.isArray(content.profiles)
+  );
+}
+
 function getPerMessageProfileIndex(mx: MatrixClient): PerMessageProfileIndexMsc4461 | undefined {
-  return mx
+  const content = mx
     .getAccountData(
       MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME as Parameters<
         typeof mx.getAccountData
       >[0]
     )
-    ?.getContent() as PerMessageProfileIndexMsc4461 | undefined;
+    ?.getContent();
+
+  if (isPerMessageProfileIndex(content)) return content;
+  if (typeof content !== 'object' || content === null || !('content' in content)) return undefined;
+
+  return isPerMessageProfileIndex(content.content) ? content.content : undefined;
 }
 
 async function savePerMessageProfileIndex(mx: MatrixClient, profiles: PerMessageProfileMsc4461[]) {
@@ -110,9 +121,7 @@ async function savePerMessageProfileIndex(mx: MatrixClient, profiles: PerMessage
     MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME as Parameters<
       typeof mx.setAccountData
     >[0],
-    { type: 'm.per_message_profiles', content: { profiles } } as Parameters<
-      typeof mx.setAccountData
-    >[1]
+    { profiles } as Parameters<typeof mx.setAccountData>[1]
   );
 }
 
@@ -490,7 +499,7 @@ export async function getPerMessageProfileById(
   mx: MatrixClient,
   id: string
 ): Promise<PerMessageProfileMsc4461 | undefined> {
-  return getPerMessageProfileIndex(mx)?.content.profiles.find((profile) => profile.id === id);
+  return getPerMessageProfileIndex(mx)?.profiles.find((profile) => profile.id === id);
 }
 
 /**
@@ -513,6 +522,39 @@ async function getPerMessageProfileByIdDeprecated(
   return profile ? (profile.getContent() as unknown as PerMessageProfile) : undefined;
 }
 
+async function migrateLegacyPerMessageProfiles(
+  mx: MatrixClient
+): Promise<PerMessageProfileMsc4461[] | undefined> {
+  const profileIndex = mx.getAccountData(
+    `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
+  );
+  if (!profileIndex) return undefined;
+
+  const profileIds = (profileIndex.getContent() as PerMessageProfileIndex).profileIds ?? [];
+  const legacyProfiles = await Promise.all(
+    profileIds.map((id) => getPerMessageProfileByIdDeprecated(mx, id))
+  );
+  const profiles = legacyProfiles
+    .filter((profile): profile is PerMessageProfile => profile !== undefined)
+    .map((profile) => convertPmpToMsc4461(mx, profile));
+
+  await savePerMessageProfileIndex(mx, profiles);
+  await Promise.all([
+    mx.deleteAccountData(
+      `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.deleteAccountData>[0]
+    ),
+    ...legacyProfiles
+      .filter((profile): profile is PerMessageProfile => profile !== undefined)
+      .map((profile) =>
+        mx.deleteAccountData(
+          `${ACCOUNT_DATA_PREFIX}.${profile.id}` as Parameters<typeof mx.deleteAccountData>[0]
+        )
+      ),
+  ]);
+
+  return profiles;
+}
+
 /**
  * getting an array of all PerMessageProfile's saved in the account data
  *
@@ -523,55 +565,10 @@ async function getPerMessageProfileByIdDeprecated(
 export async function getAllPerMessageProfiles(
   mx: MatrixClient
 ): Promise<PerMessageProfileMsc4461[]> {
-  let profileListIndex = getPerMessageProfileIndex(mx);
+  const profiles = getPerMessageProfileIndex(mx)?.profiles;
+  if (profiles) return profiles;
 
-  if (!profileListIndex) {
-    const profileData = mx.getAccountData(
-      `${ACCOUNT_DATA_PREFIX}.index` as Parameters<typeof mx.getAccountData>[0]
-    );
-    if (!profileData) return [];
-
-    const msc4461Index: PerMessageProfileIndexMsc4461 = {
-      type: 'm.per_message_profiles',
-      content: {
-        profiles: [],
-      },
-    };
-
-    const profileIds = (profileData?.getContent() as PerMessageProfileIndex)?.profileIds || [];
-    const profiles = await Promise.all(
-      profileIds.map((id) => getPerMessageProfileByIdDeprecated(mx, id))
-    );
-
-    profiles.forEach((profile) => {
-      if (!profile) return;
-
-      const migratedProfile = convertPmpToMsc4461(mx, profile);
-      msc4461Index.content.profiles.push(migratedProfile);
-    });
-
-    await savePerMessageProfileIndex(mx, msc4461Index.content.profiles);
-
-    profileListIndex = getPerMessageProfileIndex(mx) ?? msc4461Index;
-
-    // delete old records
-    await mx.deleteAccountData(
-      'fyi.cisnt.permessageprofile.index' as Parameters<typeof mx.getAccountData>[0]
-    );
-
-    await Promise.all(
-      profiles
-        .filter((profile): profile is PerMessageProfile => profile !== undefined)
-        .map((profile) =>
-          mx.deleteAccountData(
-            `fyi.cisnt.permessageprofile.${profile.id}` as Parameters<typeof mx.getAccountData>[0]
-          )
-        )
-    );
-  }
-
-  if (!profileListIndex) return [];
-  return profileListIndex.content.profiles;
+  return (await migrateLegacyPerMessageProfiles(mx)) ?? [];
 }
 
 /**
@@ -584,7 +581,7 @@ export async function addOrUpdatePerMessageProfile(
   mx: MatrixClient,
   profile: PerMessageProfileMsc4461
 ) {
-  const profiles = getPerMessageProfileIndex(mx)?.content.profiles ?? [];
+  const profiles = getPerMessageProfileIndex(mx)?.profiles ?? [];
   const existingIndex = profiles.findIndex((existingProfile) => existingProfile.id === profile.id);
   const updatedProfiles =
     existingIndex === -1
@@ -738,7 +735,7 @@ async function dropPerMessageProfileRoomAssociations(mx: MatrixClient, id: strin
  */
 export async function deletePerMessageProfile(mx: MatrixClient, id: string) {
   await dropPerMessageProfileRoomAssociations(mx, id);
-  const profiles = getPerMessageProfileIndex(mx)?.content.profiles;
+  const profiles = getPerMessageProfileIndex(mx)?.profiles;
   if (!profiles) return;
 
   await savePerMessageProfileIndex(
@@ -755,7 +752,7 @@ export async function deletePerMessageProfile(mx: MatrixClient, id: string) {
  * @param newId the id it will be moved to
  */
 export async function renamePerMessageProfile(mx: MatrixClient, oldId: string, newId: string) {
-  const profiles = getPerMessageProfileIndex(mx)?.content.profiles;
+  const profiles = getPerMessageProfileIndex(mx)?.profiles;
   if (!profiles?.some((profile) => profile.id === oldId)) {
     throw new Error('Profile not found');
   }

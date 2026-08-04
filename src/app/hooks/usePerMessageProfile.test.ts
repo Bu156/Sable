@@ -7,16 +7,14 @@ import {
   deletePerMessageProfile,
   getAllPerMessageProfiles,
   renamePerMessageProfile,
-  type PerMessageProfileIndexMsc4461,
   type PerMessageProfileMsc4461,
 } from './usePerMessageProfile';
 
 function createMatrixClient(profiles: PerMessageProfileMsc4461[] = []) {
   const accountData = new Map<string, unknown>();
   accountData.set(MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME, {
-    type: 'm.per_message_profiles',
-    content: { profiles },
-  } satisfies PerMessageProfileIndexMsc4461);
+    profiles,
+  });
 
   const mx = {
     getAccountData: vi.fn<(eventType: string) => { getContent: () => unknown } | undefined>(
@@ -79,6 +77,42 @@ describe('profile persistence', () => {
 
     completeWrite();
     await saving;
+  });
+
+  it('reads nested payloads', async () => {
+    const nestedProfile = profile('nested');
+    const { accountData, mx } = createMatrixClient();
+    accountData.set(MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME, {
+      type: 'm.per_message_profiles',
+      content: { profiles: [nestedProfile] },
+    });
+
+    await expect(getAllPerMessageProfiles(mx)).resolves.toEqual([nestedProfile]);
+  });
+
+  it('migrates legacy profiles', async () => {
+    const { accountData, mx } = createMatrixClient();
+    accountData.delete(MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME);
+    accountData.set('fyi.cisnt.permessageprofile.index', { profileIds: ['legacy'] });
+    accountData.set('fyi.cisnt.permessageprofile.legacy', {
+      id: 'legacy',
+      name: 'Legacy profile',
+    });
+
+    const migratedProfile = {
+      id: 'legacy',
+      displayname: 'Legacy profile',
+      trigger: { prefix: [], 'net.f0rest.suffix': [], 'net.f0rest.circumfix': [] },
+    };
+
+    await expect(getAllPerMessageProfiles(mx)).resolves.toEqual([migratedProfile]);
+    expect(
+      accountData.get(MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME)
+    ).toEqual({
+      profiles: [migratedProfile],
+    });
+    expect(accountData.has('fyi.cisnt.permessageprofile.index')).toBe(false);
+    expect(accountData.has('fyi.cisnt.permessageprofile.legacy')).toBe(false);
   });
 
   it('deletes profiles', async () => {
