@@ -50,6 +50,8 @@ const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 6;
 const SESSION_WAIT: Duration = Duration::from_secs(5);
 const SESSION_REFRESH_WAIT: Duration = Duration::from_millis(2500);
 const MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
+// WRY's Android adapter copies custom-protocol bodies into a JNI byte array, so range
+// responses must stay bounded even when WebView asks for the rest of a large video.
 const MAX_RANGE_CHUNK: u64 = 2 * 1024 * 1024;
 // Short: a 4xx stops being true once an unreachable remote server comes back.
 const NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(600);
@@ -1105,10 +1107,16 @@ async fn serve_range(
             .metadata()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .len();
-        let Some((start, end)) = parse_range(&range_header, total) else {
-            return Ok(range_not_satisfiable(total));
+        let (start, end) = match select_range(&range_header, total) {
+            RangeSelection::Partial { start, end } => (start, end),
+            RangeSelection::Ignore => {
+                let mut body = Vec::new();
+                file.read_to_end(&mut body)
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                return Ok(ok_response(body, &content_type));
+            }
+            RangeSelection::Unsatisfiable => return Ok(range_not_satisfiable(total)),
         };
-        let end = end.min(start.saturating_add(MAX_RANGE_CHUNK - 1));
         let length = end - start + 1;
         let mut body = vec![0; length as usize];
         file.seek(SeekFrom::Start(start))
@@ -1123,10 +1131,11 @@ async fn serve_range(
 
 fn serve_range_memory(body: &[u8], content_type: &str, range_header: &str) -> Response<Vec<u8>> {
     let total = body.len() as u64;
-    let Some((start, end)) = parse_range(range_header, total) else {
-        return range_not_satisfiable(total);
+    let (start, end) = match select_range(range_header, total) {
+        RangeSelection::Partial { start, end } => (start, end),
+        RangeSelection::Ignore => return ok_response(body.to_vec(), content_type),
+        RangeSelection::Unsatisfiable => return range_not_satisfiable(total),
     };
-    let end = end.min(start.saturating_add(MAX_RANGE_CHUNK - 1));
     partial_response(
         body[start as usize..=end as usize].to_vec(),
         content_type,
@@ -1136,28 +1145,54 @@ fn serve_range_memory(body: &[u8], content_type: &str, range_header: &str) -> Re
     )
 }
 
-fn parse_range(range_header: &str, total: u64) -> Option<(u64, u64)> {
+enum RangeSelection {
+    Partial { start: u64, end: u64 },
+    Ignore,
+    Unsatisfiable,
+}
+
+fn select_range(range_header: &str, total: u64) -> RangeSelection {
     if total == 0 {
-        return None;
+        return RangeSelection::Unsatisfiable;
     }
-    let spec = range_header.strip_prefix("bytes=")?;
-    let (start, end) = spec.split(',').next()?.trim().split_once('-')?;
+    let Some(spec) = range_header.strip_prefix("bytes=") else {
+        return RangeSelection::Unsatisfiable;
+    };
+    if spec.contains(',') {
+        return RangeSelection::Ignore;
+    }
+    let Some((start, end)) = spec.trim().split_once('-') else {
+        return RangeSelection::Unsatisfiable;
+    };
     let (start, end) = if start.is_empty() {
-        let suffix = end.parse::<u64>().ok()?;
+        let Ok(suffix) = end.parse::<u64>() else {
+            return RangeSelection::Unsatisfiable;
+        };
         if suffix == 0 {
-            return None;
+            return RangeSelection::Unsatisfiable;
         }
-        (total.saturating_sub(suffix), total - 1)
+        let length = suffix.min(total).min(MAX_RANGE_CHUNK);
+        (total - length, total - 1)
     } else {
-        let start = start.parse::<u64>().ok()?;
-        let end = if end.is_empty() {
+        let Ok(start) = start.parse::<u64>() else {
+            return RangeSelection::Unsatisfiable;
+        };
+        let requested_end = if end.is_empty() {
             total - 1
         } else {
-            end.parse::<u64>().ok()?.min(total - 1)
+            let Ok(end) = end.parse::<u64>() else {
+                return RangeSelection::Unsatisfiable;
+            };
+            end.min(total - 1)
         };
+        let end = requested_end.min(start.saturating_add(MAX_RANGE_CHUNK - 1));
         (start, end)
     };
-    (start <= end && start < total).then_some((start, end))
+    if start <= end && start < total {
+        RangeSelection::Partial { start, end }
+    } else {
+        RangeSelection::Unsatisfiable
+    }
 }
 
 // Trim oldest-first when the cache exceeds its byte budget.
@@ -1242,11 +1277,22 @@ fn partial_response(
 }
 
 fn range_not_satisfiable(total: u64) -> Response<Vec<u8>> {
-    Response::builder()
-        .status(StatusCode::RANGE_NOT_SATISFIABLE)
-        .header(header::CONTENT_RANGE, format!("bytes */{total}"))
-        .body(Vec::new())
-        .expect("failed to build 416 response")
+    let mut response = error_response(StatusCode::RANGE_NOT_SATISFIABLE);
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_RANGE,
+        header::HeaderValue::from_str(&format!("bytes */{total}"))
+            .expect("valid 416 content range"),
+    );
+    headers.insert(
+        header::CONTENT_LENGTH,
+        header::HeaderValue::from_static("0"),
+    );
+    headers.insert(
+        header::ACCEPT_RANGES,
+        header::HeaderValue::from_static("bytes"),
+    );
+    response
 }
 
 fn session_unavailable_response() -> Response<Vec<u8>> {
@@ -1308,6 +1354,13 @@ mod tests {
     };
 
     static TEST_CACHE_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn selected_range(header: &str, total: u64) -> Option<(u64, u64)> {
+        match super::select_range(header, total) {
+            super::RangeSelection::Partial { start, end } => Some((start, end)),
+            _ => None,
+        }
+    }
 
     fn test_session(origin: &str, token: &str, scope: &str, generation: u64) -> MediaSession {
         MediaSession {
@@ -1832,11 +1885,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_range_supports_video_metadata_and_seek_requests() {
-        assert_eq!(super::parse_range("bytes=0-499", 1000), Some((0, 499)));
-        assert_eq!(super::parse_range("bytes=500-", 1000), Some((500, 999)));
-        assert_eq!(super::parse_range("bytes=-200", 1000), Some((800, 999)));
-        assert_eq!(super::parse_range("bytes=990-5000", 1000), Some((990, 999)));
+    fn select_range_supports_video_metadata_and_seek_requests() {
+        assert_eq!(selected_range("bytes=0-499", 1000), Some((0, 499)));
+        assert_eq!(selected_range("bytes=500-", 1000), Some((500, 999)));
+        assert_eq!(selected_range("bytes=-200", 1000), Some((800, 999)));
+        assert_eq!(selected_range("bytes=990-5000", 1000), Some((990, 999)));
+    }
+
+    #[test]
+    fn open_ended_ranges_are_capped_from_the_requested_offset() {
+        let total = super::MAX_RANGE_CHUNK * 2 + 100;
+        assert_eq!(
+            selected_range("bytes=0-", total),
+            Some((0, super::MAX_RANGE_CHUNK - 1))
+        );
+        assert_eq!(
+            selected_range(&format!("bytes={}-", super::MAX_RANGE_CHUNK), total),
+            Some((super::MAX_RANGE_CHUNK, super::MAX_RANGE_CHUNK * 2 - 1))
+        );
+        assert_eq!(
+            selected_range(&format!("bytes={}-", super::MAX_RANGE_CHUNK * 2), total),
+            Some((super::MAX_RANGE_CHUNK * 2, total - 1))
+        );
     }
 
     #[test]
@@ -1847,9 +1917,27 @@ mod tests {
             "bytes=abc-def",
             "items=0-1",
         ] {
-            assert_eq!(super::parse_range(range, 1000), None, "{range}");
+            assert!(
+                matches!(
+                    super::select_range(range, 1000),
+                    super::RangeSelection::Unsatisfiable
+                ),
+                "{range}"
+            );
         }
-        assert_eq!(super::parse_range("bytes=0-0", 0), None);
+        assert!(matches!(
+            super::select_range("bytes=0-0", 0),
+            super::RangeSelection::Unsatisfiable
+        ));
+    }
+
+    #[test]
+    fn multi_range_requests_fall_back_to_the_full_response() {
+        let body = [1_u8, 2, 3];
+        let response = super::serve_range_memory(&body, "video/mp4", "bytes=0-0,2-2");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.body(), &body);
     }
 
     #[test]
@@ -1874,6 +1962,64 @@ mod tests {
                 .to_str()
                 .unwrap(),
             format!("bytes 0-{}/{}", super::MAX_RANGE_CHUNK - 1, body.len())
+        );
+
+        let requested_suffix = super::MAX_RANGE_CHUNK + 100;
+        let response =
+            super::serve_range_memory(&body, "video/mp4", &format!("bytes=-{requested_suffix}"));
+        assert_eq!(response.body().len() as u64, super::MAX_RANGE_CHUNK);
+        let expected = format!(
+            "bytes {}-{}/{}",
+            body.len() as u64 - super::MAX_RANGE_CHUNK,
+            body.len() - 1,
+            body.len()
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_RANGE)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn unsatisfiable_ranges_are_not_cacheable() {
+        let response = super::range_not_satisfiable(1000);
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            response.headers().get(header::CONTENT_RANGE).unwrap(),
+            "bytes */1000"
+        );
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert_eq!(response.headers().get(header::CONTENT_LENGTH).unwrap(), "0");
+    }
+
+    #[test]
+    fn partial_responses_include_webview_range_metadata() {
+        let response = super::serve_range_memory(&[0_u8; 100], "video/mp4", "bytes=10-19");
+
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            "video/mp4"
+        );
+        assert_eq!(
+            response.headers().get(header::CONTENT_LENGTH).unwrap(),
+            "10"
+        );
+        assert_eq!(
+            response.headers().get(header::CONTENT_RANGE).unwrap(),
+            "bytes 10-19/100"
+        );
+        assert_eq!(
+            response.headers().get(header::ACCEPT_RANGES).unwrap(),
+            "bytes"
         );
     }
 
