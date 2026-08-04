@@ -455,7 +455,14 @@ jobs:
 
       - name: Stamp release version into tauri.conf.json
         shell: bash
-        run: node .github/scripts/set-tauri-version.mjs "$VERSION"
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+        run: |
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            node .github/scripts/set-tauri-version.mjs "$VERSION" --apple-short-version
+          else
+            node .github/scripts/set-tauri-version.mjs "$VERSION"
+          fi
 
       - name: Set up iOS
         shell: bash
@@ -541,6 +548,8 @@ jobs:
           set -euo pipefail
           if [ "$NIGHTLY" = "true" ]; then
             SOURCE_FILE="altstore-source-nightly.json"
+            # Superseded nightly IPAs get deleted, so older entries would be dead links.
+            export ALTSTORE_MAX_VERSIONS=1
           else
             SOURCE_FILE="altstore-source.json"
           fi
