@@ -21,13 +21,12 @@ const APK_NAME = `Sable-${version}-android-universal.apk`;
 const APK_URL = `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${APK_NAME}`;
 const isNightly = tag === 'nightly';
 
-// Obtainium fills in the rest from its own defaults on import.
+// Obtainium fills in every other setting from its own defaults on import.
 const additionalSettings = {
   about: 'An almost stable Matrix client',
+  // The nightly tag name never changes, so the version has to come from the date instead.
   ...(isNightly && {
     includePrereleases: true,
-    // The nightly tag name never changes, so the re-uploaded APK's date is the
-    // only usable version, which in turn needs pseudo-versioning.
     useLatestAssetDateAsReleaseDate: true,
     releaseDateAsVersion: true,
     versionDetection: false,

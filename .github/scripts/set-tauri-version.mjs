@@ -34,15 +34,24 @@ const sanitizedVersion = version.replace(/^(\d+\.\d+\.\d+-nightly)\.(.+)$/, (_, 
   return `${prefix}.${sanitizedBuild}`;
 });
 
-// AltStore/SideStore only compare CFBundleShortVersionString, which Tauri fills with
-// major.minor.patch, so the nightly stamp has to go in patch to be seen as a new version.
+// The nightly stamp goes into patch as a Unix timestamp, since the YYMMDDHHMMSS form
+// overflows the u32 Tauri parses each version part into.
 let stampedVersion = sanitizedVersion;
 if (foldNightlyIntoPatch) {
-  stampedVersion = sanitizedVersion.replace(/^(\d+\.\d+)\.\d+-nightly\.(\d+)$/, '$1.$2');
-  if (stampedVersion === sanitizedVersion) {
+  const nightly = /^(\d+\.\d+)\.\d+-nightly\.(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(
+    sanitizedVersion
+  );
+  if (!nightly) {
     console.error(`--apple-short-version needs a nightly version (got: ${sanitizedVersion})`);
     process.exit(1);
   }
+  const [, base, yy, mm, dd, hh, min, sec] = nightly;
+  const patch = Date.UTC(2000 + +yy, mm - 1, +dd, +hh, +min, +sec) / 1000;
+  if (!Number.isInteger(patch) || patch <= 0 || patch > 0xffffffff) {
+    console.error(`Nightly stamp does not map to a u32 patch version: ${sanitizedVersion}`);
+    process.exit(1);
+  }
+  stampedVersion = `${base}.${patch}`;
 }
 
 config.version = stampedVersion;
