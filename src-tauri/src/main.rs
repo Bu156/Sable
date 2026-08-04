@@ -131,7 +131,7 @@ fn main() {
                 .cloned()
                 .collect();
 
-            if permission_kinds.is_empty() {
+            if permission_kinds.is_empty() || permission_kinds.len() != request.kinds.len() {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
