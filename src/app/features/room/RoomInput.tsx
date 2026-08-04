@@ -1361,10 +1361,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
       if (perMessageProfile) {
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
-          convertPerMessageProfileToBeeperFormat(
-            perMessageProfile,
-            perMessageProfile.displayname.trim() !== ''
-          );
+          convertPerMessageProfileToBeeperFormat(perMessageProfile, !pmpNoFallback);
 
         if (!pmpNoFallback && perMessageProfile.displayname.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
