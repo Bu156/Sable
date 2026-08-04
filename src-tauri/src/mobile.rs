@@ -9,8 +9,14 @@ use std::sync::OnceLock;
 use jni::objects::{JObject, JValue};
 use jni::strings::JNIString;
 use jni::{jni_sig, jni_str, EnvUnowned, JavaVM};
+use tauri::{AppHandle, Emitter};
 
 static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+
+pub fn set_app_handle(app: AppHandle) {
+    let _ = APP_HANDLE.set(app);
+}
 
 // Called by MainActivity.onCreate to cache the JavaVM for later callbacks.
 #[no_mangle]
@@ -23,6 +29,16 @@ pub extern "system" fn Java_moe_sable_client_MainActivity_nativeInitStatusBar(
         let _ = JAVA_VM.set(vm);
         Ok::<_, jni::errors::Error>(())
     });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_moe_sable_client_MainActivity_nativeShareReceived(
+    _env: EnvUnowned,
+    _this: JObject,
+) {
+    if let Some(app) = APP_HANDLE.get() {
+        let _ = app.emit("share-received", ());
+    }
 }
 
 /// `color` is a packed ARGB int (as produced by Android's `Color`).
