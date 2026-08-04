@@ -41,6 +41,14 @@ Android APKs are published to every release, and [Obtainium](https://obtainium.i
 
 Android builds are produced by the `android` job in [`tauri-build.yml`](.github/workflows/tauri-build.yml), and the config by the `obtainium` job in the same workflow.
 
+### Relevant variables and switching between Nightly and Stable
+
+Relevant variable differences between Nightly and Stable:
+- *Include prereleases* - `true` for Nightly, `false` for Stable
+- *Fallback to older releases* - `false` for Nightly, `true` for Stable
+- *Use latest asset upload as release date* - `true` for Nightly, `false` for Stable (this is due to Nightly builds being uploaded to one release instead of creating new ones)
+- *Use release date as version string (pseudo-version)* - `true` for Nightly, `false` for Stable (this is due to Nightly builds being uploaded to one release instead of creating new ones)
+
 ## iOS (AltStore / SideStore)
 
 Sable iOS builds are distributed as unsigned IPAs through [AltStore](https://altstore.io) and [SideStore](https://sidestore.io). Each release publishes both the IPA and an `altstore-source.json` manifest — stable builds to the [latest GitHub release](https://github.com/SableClient/Sable/releases/latest), nightly builds to the [`nightly` GitHub release](https://github.com/SableClient/Sable/releases/tag/nightly).
@@ -83,7 +91,8 @@ You have a few options for self hosting, you can:
 
 Prebuilt images are published to `ghcr.io/sableclient/sable`.
 
-- `latest` tracks the current `dev` branch image.
+- `latest` tracks the current latest version release.
+- `dev` tracks the current `dev` branch image.
 - `X.Y.Z` tags are versioned releases.
 - `X.Y` tags float within a release line.
 - Pushes to `dev` also publish a short commit SHA tag.
