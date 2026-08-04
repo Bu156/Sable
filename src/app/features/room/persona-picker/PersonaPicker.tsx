@@ -43,7 +43,7 @@ import {
 } from 'react';
 import * as css from './PersonaPicker.css.ts';
 import { InfoCard } from '$components/info-card/InfoCard.tsx';
-import { InfoIcon, XIcon } from '@phosphor-icons/react';
+import { InfoIcon } from '@phosphor-icons/react';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme.ts';
 
 const pillStyles = {
@@ -67,7 +67,7 @@ type PersonaPickerProps = {
   suppressEditorRefocus?: () => void;
   onTabChange?: (tab: PersonaPickerTab) => void;
   latchedPersona?: PerMessageProfileMsc4461;
-  onPersonaSelect?: (persona: PerMessageProfileMsc4461 | undefined) => void;
+  onPersonaSelect?: (persona: PerMessageProfileMsc4461 | undefined) => void | Promise<void>;
   requestClose?: () => void;
   showNoneOption?: boolean;
   hideButton?: boolean;
@@ -97,10 +97,8 @@ function PersonaPickerMenu({
   onPersonaSelect,
   anchor,
   requestClose,
-  presentation,
 }: PersonaPickerProps & { presentation: PersonaPickerPresentation }) {
   const useAuthentication = useMediaAuthentication();
-  const persistent = presentation === PersonaPickerPresentation.PersistentPicker;
   const [tab, setTab] = useState(tabProp);
   const activeTheme = useActiveTheme();
   const [AddPersonaMenuAnchor, setAddPersonaMenuAnchor] = useState<RectCords | undefined>(anchor);
