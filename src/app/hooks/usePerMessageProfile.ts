@@ -599,7 +599,7 @@ export async function addOrUpdatePerMessageProfile(
   }
   mx.setAccountData(
     MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME as Parameters<
-      typeof mx.getAccountData
+      typeof mx.setAccountData
     >[0],
     newIndex as Parameters<typeof mx.setAccountData>[1]
   );
