@@ -80,7 +80,7 @@ export function InviteNotifications() {
 
   const navigate = useNavigate();
   const [showSystemNotifications] = useSetting(settingsAtom, 'useSystemNotifications');
-  const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
+  const [backgroundPushEnabled] = useSetting(settingsAtom, 'backgroundPushEnabled');
   const [notificationSound] = useSetting(settingsAtom, 'isNotificationSounds');
   const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
 
@@ -128,7 +128,7 @@ export function InviteNotifications() {
     if (invites.length <= perviousInviteLen || mx.getSyncState() !== SyncState.Syncing) return;
 
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
-    if (!isPageVisible() && usePushNotifications) return;
+    if (!isPageVisible() && backgroundPushEnabled) return;
 
     const withSound = notificationSound && (isWindowFocused() || backgroundNotificationSounds);
     let soundOnNotification = false;
@@ -154,7 +154,7 @@ export function InviteNotifications() {
     invites,
     perviousInviteLen,
     showSystemNotifications,
-    usePushNotifications,
+    backgroundPushEnabled,
     notificationSound,
     backgroundNotificationSounds,
     notify,
