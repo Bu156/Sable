@@ -1,5 +1,5 @@
 import type { MatrixClient, Room } from '$types/matrix-sdk';
-import { getMemberDisplayName, isBridgeBot } from '$utils/room/display';
+import { getMemberDisplayName } from '$utils/room/display';
 
 export type GroupMemberInfo = {
   userId: string;
@@ -20,23 +20,13 @@ export const useGroupDMMembers = (
   const currentUserId = mx.getUserId();
   const members = room
     .getMembers()
-    .filter(
-      (member) =>
-        member.membership === 'join' &&
-        member.userId !== currentUserId &&
-        !isBridgeBot(member.userId)
-    );
+    .filter((member) => member.membership === 'join' && member.userId !== currentUserId);
 
   const recentSenderRank = new Map<string, number>();
   const events = room.getLiveTimeline().getEvents();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const sender = events[index]?.getSender();
-    if (
-      sender &&
-      sender !== currentUserId &&
-      !isBridgeBot(sender) &&
-      !recentSenderRank.has(sender)
-    ) {
+    if (sender && sender !== currentUserId && !recentSenderRank.has(sender)) {
       recentSenderRank.set(sender, recentSenderRank.size);
     }
   }

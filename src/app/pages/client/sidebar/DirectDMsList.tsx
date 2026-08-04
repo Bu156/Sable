@@ -15,13 +15,13 @@ import {
 } from '$components/sidebar';
 import { RoomAvatar } from '$components/room-avatar';
 import { UserAvatar } from '$components/user-avatar';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '$utils/room/display';
+import { getAvatarUrl, getDmOtherMember, getRoomAvatarUrl } from '$utils/room/display';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { nameInitials } from '$utils/common';
 import { getCanonicalAliasOrRoomId, mxcUrlToHttp } from '$utils/matrix';
 import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { useGroupDMMembers } from '$hooks/useGroupDMMembers';
-import { useRoomName } from '$hooks/useRoomMeta';
+import { useRoomAvatar, useRoomName } from '$hooks/useRoomMeta';
 import { useSidebarDirectRoomIds } from './useSidebarDirectRoomIds';
 import * as css from './DirectDMsList.css';
 
@@ -43,11 +43,13 @@ function DMItem({ room, selected }: DMItemProps) {
   };
 
   const roomName = useRoomName(room);
+  const dmAvatarMxc = useRoomAvatar(room, true);
+  const dmAvatarUrl = getAvatarUrl(mx, dmAvatarMxc, 96, useAuthentication);
 
   // Use already-synced room state only; sidebar rendering must not trigger member/profile requests.
   const groupMembers = useGroupDMMembers(mx, room, MAX_GROUP_MEMBERS);
 
-  const isGroupDM = groupMembers.length > 1;
+  const isGroupDM = !getDmOtherMember(mx, room) && groupMembers.length > 1;
 
   // Get unread info for badge
   const unread = roomToUnread.get(room.roomId);
@@ -60,10 +62,7 @@ function DMItem({ room, selected }: DMItemProps) {
         <Avatar size="400" radii="400">
           <RoomAvatar
             roomId={room.roomId}
-            src={
-              getRoomAvatarUrl(mx, room, 96, useAuthentication) ||
-              getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-            }
+            src={getRoomAvatarUrl(mx, room, 96, useAuthentication) || dmAvatarUrl}
             alt={roomName}
             renderFallback={() => (
               <Text as="span" size="H6">
