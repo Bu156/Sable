@@ -345,6 +345,10 @@ export class ProfileCatalog {
     });
   }
 
+  async overwrite(profiles: Persona[]): Promise<void> {
+    await saveCatalog(this.mx, profiles);
+  }
+
   async getSelection(
     scope: 'account' | { roomId: string }
   ): Promise<ResolvedPersonaSelection | undefined> {

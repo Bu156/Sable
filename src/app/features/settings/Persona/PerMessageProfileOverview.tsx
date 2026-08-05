@@ -1,12 +1,13 @@
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import type { PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
+import type { PerMessageProfileMsc4461, Persona } from '$hooks/usePerMessageProfile';
 import {
   addOrUpdatePerMessageProfile,
   getAllPerMessageProfiles,
   getPerMessageProfileById,
+  ProfileCatalog,
 } from '$hooks/usePerMessageProfile';
-import { useCallback, useEffect, useState } from 'react';
-import { Box, Button, Spinner, Text } from 'folds';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Box, Button, color, config, Dialog, Header, Spinner, Text } from 'folds';
 import { generateShortId } from '$utils/shortIdGen';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { PerMessageProfileListItem } from './PerMessageProfileListItem';
@@ -16,6 +17,11 @@ import {
   MATRIX_UNSTABLE_COLORS,
   MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
 } from '$unstable/prefixes';
+import { downloadJsonFile } from '$app/utils/common';
+import { useFilePicker } from '$hooks/useFilePicker';
+import { createUploadAtom, useBindUploadAtom } from '$app/state/upload';
+import { selectFile } from '$app/utils/dom';
+import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 
 type PerMessageProfileOverviewProps = {
   onCreateProfile: (profile: PerMessageProfileMsc4461) => void;
@@ -31,6 +37,8 @@ export function PerMessageProfileOverview({
 }: PerMessageProfileOverviewProps) {
   const mx = useMatrixClient();
   const [profiles, setProfiles] = useState<PerMessageProfileMsc4461[]>([]);
+
+  const [confirmWipeData, setConfirmWipeData] = useState(false);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -57,7 +65,63 @@ export function PerMessageProfileOverview({
     }, [mx, onCreateProfile])
   );
 
+  // import, export, etc
+  const [handlePersonaExportState, handlePersonaExport] = useAsyncCallback<void, Error, []>(
+    useCallback(async () => {
+      const personas = await new ProfileCatalog(mx).list();
+      const data = { personas };
+      downloadJsonFile(JSON.stringify(data), "persona");
+    }, [mx])
+  );
+
+  const [handlePersonaImportState, handlePersonaImport] = useAsyncCallback<void, Error, []>(
+    useCallback(async () => {
+      const readFile = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error("Problem reading JSON file."));
+
+          reader.readAsText(file);
+        })
+      }
+
+      const file = await selectFile("application/json", false);
+      if (!file) throw new Error("No file provided");
+
+      const text = await readFile(file);
+      const json = JSON.parse(text);
+      if (!json) throw new Error("JSON parsing failed.");
+      if (!json.personas) throw new Error("Personas not found in file");
+
+      await new ProfileCatalog(mx).overwrite(json.personas as Persona[]);
+
+      // refetch
+      const fetchedProfiles = await getAllPerMessageProfiles(mx);
+      setProfiles(fetchedProfiles);
+    }, [mx])
+  );
+
+  const [handlePersonaWipeState, handlePersonaWipe] = useAsyncCallback<void, Error, []>(
+    useCallback(async () => {
+      await new ProfileCatalog(mx).overwrite([]);
+
+      // refetch
+      const fetchedProfiles = await getAllPerMessageProfiles(mx);
+      setProfiles(fetchedProfiles);
+      setConfirmWipeData(false);
+    }, [mx])
+  );
+
+  const manageError = useMemo(() => {
+    if (handlePersonaExportState.status == AsyncStatus.Error) return handlePersonaExportState.error;
+    if (handlePersonaImportState.status == AsyncStatus.Error) return handlePersonaImportState.error;
+    if (handlePersonaWipeState.status == AsyncStatus.Error) return handlePersonaWipeState.error;
+    return undefined;
+  }, [])
+
   return (
+   <>
     <Box gap="100" direction="Column">
       <Text size="L400">Personas</Text>
 
@@ -107,6 +171,129 @@ export function PerMessageProfileOverview({
           />
         </SequenceCard>
       ))}
+
+      </Box>
+    <Box gap="100" direction="Column">
+      <Text size="L400">Persona Mass Management</Text>
+
+      <SequenceCard
+        className={SequenceCardStyle}
+        variant="SurfaceVariant"
+        direction="Column"
+        gap="100"
+      >
+        <SettingTile
+          focusId="pmp-pk-import"
+          title="PluralKit Import"
+          description={<>Add or update PluralKit members from <code>system.json</code>. Consider backing up Persona data before importing.</>}
+          after={
+      
+              <Button
+                size="400"
+                radii="300"
+                variant="Primary"
+                fill="Solid"
+              >
+                <Text size="B300">Import PK member data</Text>
+              </Button>
+        }
+          >
+          </SettingTile>
+        </SequenceCard>
+      <SequenceCard
+        className={SequenceCardStyle}
+        variant="SurfaceVariant"
+        direction="Column"
+        gap="100"
+      >
+        <SettingTile
+          focusId="pmp-list-export"
+          title="Persona management"
+          description="Import, export, et cetera." 
+          after={
+          <>
+            {manageError && <Text style={{ color: color.Critical.Main }} size="T300" >{manageError.message}</Text>}
+            <Box
+              direction="Row"
+              justifyContent="End"
+              gap="200"
+              aria-label="PMP List edit buttons"
+            >
+                <Button
+                  onClick={handlePersonaExport}
+                  size="400"
+                  radii="300"
+                  variant="Primary"
+                  fill="Solid"
+                >
+                  {handlePersonaExportState.status === AsyncStatus.Loading ? (
+                    <Spinner variant="Primary" size="400" />
+                  ) :
+                    <Text size="B300">Export data</Text>
+                  }
+                </Button>
+                <Button
+                  onClick={handlePersonaImport}
+                  size="400"
+                  radii="300"
+                  variant="Primary"
+                  fill="Soft"
+                >
+                  {handlePersonaImportState.status === AsyncStatus.Loading ? (
+                    <Spinner variant="Primary" size="300" />
+                  ) :
+                    <Text size="B300">Overwrite data from a backup</Text>
+                  }
+                </Button>
+                <Button
+                  onClick={() => setConfirmWipeData(true)}
+                  size="400"
+                  radii="300"
+                  variant="Critical"
+                  fill="Solid"
+                >
+                  <Text size="B300">Wipe all Persona data</Text>
+                </Button>
+            </Box></>
+        }>
+
+          {confirmWipeData && (
+            <ModalOverlay requestClose={() => setConfirmWipeData(false)}>
+              <Dialog variant="Surface">
+                <Header
+                  style={{
+                    padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                    borderBottomWidth: config.borderWidth.B300,
+                  }}
+                  variant="Surface"
+                  size="500"
+                >
+                  <Box grow="Yes">
+                    <Text size="H4">Wipe all Persona data</Text>
+                  </Box>
+                </Header>
+                <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
+                  <Text priority="400">
+                    Are you sure you want to wipe all Persona data?
+                  </Text>
+                  <Box direction="Column" gap="200">
+                    <Button
+                      variant="Critical"
+                      onClick={handlePersonaWipe}
+                    >
+                      <Text size="B400">Delete all data</Text>
+                    </Button>
+                    <Button variant="Secondary" onClick={() => setConfirmWipeData(false)}>
+                      <Text size="B400">Cancel</Text>
+                    </Button>
+                  </Box>
+                </Box>
+              </Dialog>
+            </ModalOverlay>
+          )}
+          </SettingTile>
+      </SequenceCard>
     </Box>
+  </>
   );
 }
