@@ -111,6 +111,8 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'prevent-sending-pmp-fallback',
     'create-pmp',
     'enable-pmp-picker',
+    'pmp-pk-import',
+    'pmp-list-export',
   ],
   appearance: [
     'old-sidebar',

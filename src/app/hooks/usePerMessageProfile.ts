@@ -45,7 +45,7 @@ export async function addOrUpdatePerMessageProfile(
   mx: MatrixClient,
   profile: PerMessageProfileMsc4461
 ) {
-  await new ProfileCatalog(mx).upsert(profile);
+  await new ProfileCatalog(mx).merge(profile);
 }
 
 export async function deletePerMessageProfile(mx: MatrixClient, id: string) {

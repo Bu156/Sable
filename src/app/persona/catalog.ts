@@ -2,7 +2,7 @@ import type { AccountDataCompatVersion } from '$types/matrix/accountData';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import type { ColorSet } from '$hooks/useUserProfile';
-import type { PronounSet } from '$utils/pronouns';
+import { type PronounSet } from '$utils/pronouns';
 import { createKeyedQueue } from '$utils/keyedQueue';
 import {
   MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME,
@@ -309,7 +309,7 @@ export class ProfileCatalog {
     return (await this.list({ migrate: false })).find((persona) => persona.id === id);
   }
 
-  async upsert(persona: Persona): Promise<void> {
+  async merge(persona: Persona): Promise<void> {
     await enqueueProfilePersistence('catalog', async () => {
       const personas = await this.load(true);
       const index = personas.findIndex((existing) => existing.id === persona.id);
@@ -317,7 +317,9 @@ export class ProfileCatalog {
         this.mx,
         index === -1
           ? [...personas, persona]
-          : personas.map((existing) => (existing.id === persona.id ? persona : existing))
+          : personas.map((existing) =>
+              existing.id === persona.id ? { ...existing, ...persona } : existing
+            )
       );
     });
   }
@@ -346,7 +348,9 @@ export class ProfileCatalog {
   }
 
   async overwrite(profiles: Persona[]): Promise<void> {
-    await saveCatalog(this.mx, profiles);
+    await enqueueProfilePersistence('catalog', async () => {
+      await saveCatalog(this.mx, profiles);
+    });
   }
 
   async getSelection(
