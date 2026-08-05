@@ -1,5 +1,11 @@
 import type { MatrixClient, MSC3575RoomData, SlidingSync } from '$types/matrix-sdk';
-import { EventType, KnownMembership, MatrixEvent, SlidingSyncEvent } from '$types/matrix-sdk';
+import {
+  EventType,
+  KnownMembership,
+  MatrixEvent,
+  SlidingSyncEvent,
+  UNSTABLE_ELEMENT_FUNCTIONAL_USERS,
+} from '$types/matrix-sdk';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import { CustomStateEvent } from '$types/matrix/room';
 
@@ -44,6 +50,7 @@ const CACHED_STATE_TYPES = new Set<string>([
   EventType.RoomServerAcl,
   EventType.SpaceChild,
   EventType.SpaceParent,
+  UNSTABLE_ELEMENT_FUNCTIONAL_USERS.name,
   CustomStateEvent.PowerLevelTags,
   CustomStateEvent.RoomWidget,
   CustomStateEvent.RoomAbbreviations,
