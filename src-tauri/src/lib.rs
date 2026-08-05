@@ -278,6 +278,12 @@ pub fn run() {
 
     let builder = tauri::Builder::<BrowserEngine>::new();
 
+    // this should always be the first
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        let _ = show_or_create_main_window(app);
+    }));
+
     // macOS needs a standard menu (with the Edit submenu) for keyboard
     // copy/paste/select-all to work in the webview. It lives in the system menu
     // bar, so it is macOS-only to avoid an in-window menu bar elsewhere.
@@ -305,11 +311,6 @@ pub fn run() {
     let builder = builder.manage(std::sync::Arc::new(
         desktop::windows::window_tracking::TrackingState::new(),
     ));
-
-    #[cfg(desktop)]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-        let _ = show_or_create_main_window(app);
-    }));
 
     let builder = builder.plugin(tauri_plugin_notifications::init());
 
