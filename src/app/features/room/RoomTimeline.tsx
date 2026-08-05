@@ -291,6 +291,7 @@ const MemoizedTimelineItem = memo(
       prev.eventData.id === next.eventData.id &&
       // A filtered mid-timeline insert shifts this without changing `index`.
       prev.eventData.itemIndex === next.eventData.itemIndex &&
+      prev.eventData.isRedacted === next.eventData.isRedacted &&
       prev.eventData.collapsed === next.eventData.collapsed &&
       prev.eventData.willRenderNewDivider === next.eventData.willRenderNewDivider &&
       prev.eventData.willRenderDayDivider === next.eventData.willRenderDayDivider &&
@@ -1281,7 +1282,11 @@ export function RoomTimeline({
           >
             {(eventData, index) => (
               <MemoizedTimelineItem
-                key={eventData ? eventData.id : `placeholder-${index}`}
+                key={
+                  eventData
+                    ? `${eventData.id}:${eventData.isRedacted ? 'redacted' : 'message'}`
+                    : `placeholder-${index}`
+                }
                 eventData={eventData}
                 index={index}
                 showLoadingPlaceholders={showLoadingPlaceholders}
