@@ -485,6 +485,19 @@ const isCallToneId = (value: unknown): value is CallRingtoneId => CALL_TONE_ID_S
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 
 function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
+  if (typeof parsed.backgroundPushEnabled !== 'boolean') {
+    const legacyProvider = parsed.useUnifiedPush === true ? 'unifiedpush' : null;
+    if (
+      legacyProvider !== null ||
+      typeof parsed.usePushNotifications === 'boolean' ||
+      typeof parsed.useUnifiedPush === 'boolean'
+    ) {
+      parsed.backgroundPushEnabled =
+        legacyProvider !== null || parsed.usePushNotifications === true;
+      parsed.backgroundPushProvider = legacyProvider;
+    }
+  }
+
   const shortcutOverrides = sanitizeShortcutOverrides(parsed.shortcutOverrides);
   if (shortcutOverrides) parsed.shortcutOverrides = shortcutOverrides;
   else delete parsed.shortcutOverrides;

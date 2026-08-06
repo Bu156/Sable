@@ -79,6 +79,28 @@ describe('mergePersistedSettings', () => {
     expect(merged).not.toHaveProperty('callCustomRingtoneName');
     expect(merged).not.toHaveProperty('callCustomRingbackName');
   });
+
+  it.each([
+    [{ usePushNotifications: true }, true, null],
+    [{ usePushNotifications: true, useUnifiedPush: true }, true, 'unifiedpush'],
+    [{ usePushNotifications: false, useUnifiedPush: false }, false, null],
+    [
+      {
+        usePushNotifications: true,
+        backgroundPushEnabled: false,
+        backgroundPushProvider: null,
+      },
+      false,
+      null,
+    ],
+  ] as const)(
+    'migrates legacy push settings without overwriting new transport state',
+    (persisted, enabled, provider) => {
+      const merged = mergePersistedSettings(JSON.stringify(persisted), {});
+      expect(merged.backgroundPushEnabled).toBe(enabled);
+      expect(merged.backgroundPushProvider).toBe(provider);
+    }
+  );
 });
 
 describe('sanitizeSettingsDefaults', () => {
