@@ -90,6 +90,7 @@ function makeRoom() {
 
 const encryptedPush = (eventId: string) => ({
   type: 'm.room.encrypted',
+  user_id: '@user:example.com',
   room_id: '!room:example.com',
   room_name: 'Room',
   event_id: eventId,
@@ -148,8 +149,33 @@ describe('UnifiedPushNotifications', () => {
 
   async function listenAndPush(payload: Record<string, unknown>, settings = makeSettings()) {
     await listenForUnifiedPushMessages(() => settings as never);
-    pushHandler({ message: JSON.stringify(payload) });
+    pushHandler({
+      message: JSON.stringify({ user_id: '@user:example.com', ...payload }),
+    });
   }
+
+  it('ignores pushes without an exact active-account identity', async () => {
+    await listenForUnifiedPushMessages(() => makeSettings() as never);
+
+    pushHandler({
+      message: JSON.stringify({
+        type: 'm.room.message',
+        room_id: '!room:example.com',
+        content: { body: 'unscoped' },
+      }),
+    });
+    pushHandler({
+      message: JSON.stringify({
+        type: 'm.room.message',
+        user_id: '@other:example.com',
+        room_id: '!room:example.com',
+        content: { body: 'wrong account' },
+      }),
+    });
+
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).not.toHaveBeenCalled());
+    expect(matrixClient.getRoom).not.toHaveBeenCalled();
+  });
 
   it('posts an encrypted baseline before a hanging local decryption completes', async () => {
     matrixClient.getRoom.mockReturnValue(makeRoom());

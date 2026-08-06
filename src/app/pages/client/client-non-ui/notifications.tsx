@@ -705,6 +705,7 @@ function registerNativeNotificationListener(
 // payload attached in sendNativeTauriNotification.
 export function NativeNotificationClickRouting() {
   const setPending = useSetAtom(pendingNotificationAtom);
+  const setActiveSessionId = useSetAtom(activeSessionIdAtom);
   const navigate = useNavigate();
 
   useEffect(
@@ -717,6 +718,8 @@ export function NativeNotificationClickRouting() {
               .catch(() => {});
           }
           if (!data) return;
+          if (!data.user_id) return;
+          setActiveSessionId(data.user_id);
           if (data.type === 'invite') {
             navigate(getInboxInvitesPath());
             return;
@@ -730,7 +733,7 @@ export function NativeNotificationClickRouting() {
           }
         })
       ),
-    [setPending, navigate]
+    [setPending, setActiveSessionId, navigate]
   );
 
   return null;
@@ -815,7 +818,7 @@ export function NativeNotificationActionRouting() {
       .sendMessage(item.roomId, null, { msgtype: MsgType.Text, body: item.text })
       // Replying is reading; otherwise the room stays unread and its
       // notification lingers while later pushes stack onto it.
-      .then(() => markAsRead(mx, item.roomId, hideReads))
+      .then(() => markAsRead(mx, item.roomId, hideReads).catch(() => undefined))
       .catch(() => {
         showToast('Reply was not sent. Open the room to retry.');
       })

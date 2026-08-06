@@ -1034,7 +1034,11 @@ async function handleUnifiedPushPayload(
 
   const pushData = (raw.extra ?? raw) as UnifiedPushPayload;
   const eventType = pushData?.type as EventType | undefined;
-  const userId = pushData?.user_id ?? settings.mx.getUserId() ?? '';
+  const userId = isNonEmptyString(pushData?.user_id) ? pushData.user_id.trim() : undefined;
+  if (!userId || userId !== settings.mx.getUserId()) {
+    unifiedPushLog.warn('notification', 'Ignoring push without an exact active-account match');
+    return;
+  }
 
   if (eventType) {
     await handleRichPushPayload(pushData, settings, userId, getSettings);
