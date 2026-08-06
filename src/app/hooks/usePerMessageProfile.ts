@@ -4,15 +4,19 @@ import type { PronounSet } from '$utils/pronouns';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import type { ColorSet } from './useUserProfile';
-import { MATRIX_UNSTABLE_COLORS } from '$unstable/prefixes';
 import {
+  MATRIX_UNSTABLE_COLORS,
   MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME,
   MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME,
   MATRIX_UNSTABLE_MSC4461_ACCOUNT_PER_MESSAGE_PROFILES_PROPERTY_NAME,
   MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
 } from '$unstable/prefixes';
+import { createKeyedQueue } from '$utils/keyedQueue';
 
 const ACCOUNT_DATA_PREFIX = CustomAccountDataEvent.SablePerProfileMessageProfiles;
+
+/** Account data is read-modify-written, so writes to the same key must not interleave. */
+const enqueueProfilePersistence = createKeyedQueue();
 
 /**
  * @deprecated in favour if {@link PerMessageProfileMsc4461}
@@ -622,32 +626,34 @@ export async function setCurrentlyUsedPerMessageProfileIdForRoom(
   validUntil?: number,
   reset?: boolean
 ) {
-  const accountData = mx.getAccountData(
-    `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.getAccountData>[0]
-  );
-  const content: PerMessageProfileRoomAssociationWrapper | undefined = accountData?.getContent();
-  const associations = getAssociationsMap(content);
+  return enqueueProfilePersistence('roomassociation', async () => {
+    const accountData = mx.getAccountData(
+      `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.getAccountData>[0]
+    );
+    const content: PerMessageProfileRoomAssociationWrapper | undefined = accountData?.getContent();
+    const associations = getAssociationsMap(content);
 
-  if (reset) {
-    associations.delete(roomId);
+    if (reset) {
+      associations.delete(roomId);
+      await mx.setAccountData(
+        `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.setAccountData>[0],
+        { associations: associationsMapToObject(associations) } as Parameters<
+          typeof mx.setAccountData
+        >[1]
+      );
+      return;
+    }
+    if (!profileId) {
+      throw new Error("profile Id is empty, yet it isn't a reset");
+    }
+    associations.set(roomId, { profileId, validUntil });
     await mx.setAccountData(
       `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.setAccountData>[0],
       { associations: associationsMapToObject(associations) } as Parameters<
         typeof mx.setAccountData
       >[1]
     );
-    return;
-  }
-  if (!profileId) {
-    throw new Error("profile Id is empty, yet it isn't a reset");
-  }
-  associations.set(roomId, { profileId, validUntil });
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.roomassociation` as Parameters<typeof mx.setAccountData>[0],
-    { associations: associationsMapToObject(associations) } as Parameters<
-      typeof mx.setAccountData
-    >[1]
-  );
+  });
 }
 
 /**
@@ -659,22 +665,24 @@ export async function setCurrentlyUsedPerMessageProfileIdForAccount(
   validUntil?: number,
   reset?: boolean
 ) {
-  if (reset) {
-    await mx.deleteAccountData(
-      `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0]
+  return enqueueProfilePersistence('globalassociation', async () => {
+    if (reset) {
+      await mx.deleteAccountData(
+        `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0]
+      );
+      return;
+    }
+    if (!profileId) {
+      throw new Error("profile Id is empty, yet it isn't a reset");
+    }
+
+    const association: PerMessageProfileRoomAssociation = { profileId, validUntil };
+
+    await mx.setAccountData(
+      `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0],
+      { association: association } as Parameters<typeof mx.setAccountData>[1]
     );
-    return;
-  }
-  if (!profileId) {
-    throw new Error("profile Id is empty, yet it isn't a reset");
-  }
-
-  const association: PerMessageProfileRoomAssociation = { profileId, validUntil };
-
-  await mx.setAccountData(
-    `${ACCOUNT_DATA_PREFIX}.globalassociation` as Parameters<typeof mx.setAccountData>[0],
-    { association: association } as Parameters<typeof mx.setAccountData>[1]
-  );
+  });
 }
 
 /*
