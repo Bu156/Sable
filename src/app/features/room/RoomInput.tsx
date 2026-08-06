@@ -1113,7 +1113,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       if (scheduledTime) {
         try {
           const delayMs = computeDelayMs(scheduledTime);
-          await roomScheduleCoordinator.run(roomId, async () => {
+          await roomScheduleCoordinator.run(mx, roomId, async () => {
             if (editingScheduledDelayId) {
               await cancelDelayedEvent(mx, editingScheduledDelayId);
               if (isLive()) setEditingScheduledDelayId(null);
@@ -1193,7 +1193,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         let sendResults: PromiseSettledResult<unknown>[] = [];
         if (editingScheduledDelayId) {
           let cancellationFailed = false;
-          await roomScheduleCoordinator.run(roomId, async () => {
+          await roomScheduleCoordinator.run(mx, roomId, async () => {
             try {
               await cancelDelayedEvent(mx, editingScheduledDelayId);
               invalidate();
@@ -1473,16 +1473,20 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             return;
           }
           if (outgoing.kind === 'gifSearch') {
+            restoreReplyClaim(submission.replyClaim);
             setInitialGifSearch(outgoing.query);
             setEmojiBoardTab(EmojiBoardTab.Gif);
             return;
           }
           if (outgoing.kind === 'command') {
             const { command, plainText, customHtml } = outgoing;
-            if (command === Command.Poll) setShowPollPicker(true);
-            else if (command === Command.Location && plainText.trim().length === 0)
+            if (command === Command.Poll) {
+              restoreReplyClaim(submission.replyClaim);
+              setShowPollPicker(true);
+            } else if (command === Command.Location && plainText.trim().length === 0) {
+              restoreReplyClaim(submission.replyClaim);
               setShowLocationPicker(true);
-            else commands[command as Command]?.exe(plainText, customHtml);
+            } else commands[command as Command]?.exe(plainText, customHtml);
             return;
           }
 
@@ -1503,7 +1507,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           if (scheduledTime) {
             try {
               const delayMs = computeDelayMs(scheduledTime);
-              await roomScheduleCoordinator.run(roomId, async () => {
+              await roomScheduleCoordinator.run(mx, roomId, async () => {
                 if (editingScheduledDelayId) {
                   await cancelDelayedEvent(mx, editingScheduledDelayId);
                   if (isLive()) setEditingScheduledDelayId(null);
@@ -1544,7 +1548,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           } else if (editingScheduledDelayId) {
             const scheduledDelayId = editingScheduledDelayId;
             try {
-              await roomScheduleCoordinator.run(roomId, async () => {
+              await roomScheduleCoordinator.run(mx, roomId, async () => {
                 await cancelDelayedEvent(mx, scheduledDelayId);
                 if (isLive()) setEditingScheduledDelayId(null);
                 debugLog.info('message', 'Sending message after cancelling scheduled event', {
@@ -1641,6 +1645,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         editingEvent,
         getEditingContent,
         onCancelEdit,
+        restoreReplyClaim,
         restoreSubmission,
         isMobile,
         editId,

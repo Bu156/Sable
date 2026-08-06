@@ -14,6 +14,7 @@ import { createEditor, Transforms } from 'slate';
 import { M_POLL_START } from 'matrix-js-sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RoomInput } from './RoomInput';
+import type * as MsgContentModule from './msgContent';
 import {
   roomIdToMsgDraftAtomFamily,
   roomIdToReplyDraftAtomFamily,
@@ -128,9 +129,9 @@ vi.mock('$state/upload', async () => {
 });
 
 vi.mock('$components/editor', () => {
-  const textOf = (nodes: any[]) =>
+  const textOf = (nodes: any[]): string =>
     nodes
-      .map((node) => (node.children ?? []).map((child: any) => child.text ?? '').join(''))
+      .map((node) => (typeof node.text === 'string' ? node.text : textOf(node.children ?? [])))
       .join('\n');
   const passthrough = ({ children }: { children?: unknown }) => children ?? null;
   const CustomEditor = ({
@@ -172,7 +173,7 @@ vi.mock('$components/editor', () => {
     ANYWHERE_AUTOCOMPLETE_PREFIXES: [],
     BEGINNING_AUTOCOMPLETE_PREFIXES: [],
     BlockType: { Paragraph: 'paragraph' },
-    Command: {},
+    Command: { Poll: 'poll', Location: 'location' },
     CustomEditor,
     EmoticonAutocomplete: passthrough,
     MarkdownFormattingToolbarBottom: passthrough,
@@ -183,7 +184,7 @@ vi.mock('$components/editor', () => {
     customHtmlEqualsPlainText: (html: string, text: string) => html === text,
     focusEditor: vi.fn(),
     getAutocompleteQuery: vi.fn(),
-    getBeginCommand: () => undefined,
+    getBeginCommand: (editor: any) => editor.children[0]?.children?.[1]?.command,
     getLinks: () => [],
     getMentions: () => ({ users: new Set<string>(), room: undefined }),
     getPrevWorldRange: () => undefined,
@@ -241,14 +242,41 @@ vi.mock('$components/upload-card', () => ({
     </>
   ),
 }));
+vi.mock('./msgContent', async (importOriginal) => ({
+  ...(await importOriginal<typeof MsgContentModule>()),
+  getGifMsgContent: async (_mx: unknown, gif: { title: string }, url: string) => ({
+    msgtype: 'm.image',
+    body: gif.title,
+    url,
+  }),
+}));
 vi.mock('$components/attachment-sheet/AttachmentSheet', () => ({ AttachmentSheet: () => null }));
 vi.mock('$components/emoji-board', () => ({
-  EmojiBoard: ({ onStickerSelect }: any) => (
-    <button type="button" onClick={() => onStickerSelect('mxc://sticker', 'sticker', 'sticker')}>
-      Select sticker
-    </button>
+  EmojiBoard: ({ onStickerSelect, onGifSelect, requestClose }: any) => (
+    <>
+      <button type="button" onClick={() => onStickerSelect('mxc://sticker', 'sticker', 'sticker')}>
+        Select sticker
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onGifSelect({
+            url: 'mxc://gif',
+            title: 'gif',
+            width: 320,
+            height: 240,
+            mimetype: 'image/gif',
+          })
+        }
+      >
+        Select GIF
+      </button>
+      <button type="button" onClick={requestClose}>
+        Close media picker
+      </button>
+    </>
   ),
-  EmojiBoardTab: {},
+  EmojiBoardTab: { Emoji: 'emoji', Gif: 'gif', Sticker: 'sticker' },
 }));
 vi.mock('$components/UseStateProvider', () => ({
   UseStateProvider: ({ children }: any) => (typeof children === 'function' ? children() : children),
@@ -256,16 +284,24 @@ vi.mock('$components/UseStateProvider', () => ({
 vi.mock('$components/message', () => ({ Reply: () => null, ThreadIndicator: () => null }));
 vi.mock('./CommandAutocomplete', () => ({ CommandAutocomplete: () => null }));
 vi.mock('./AudioMessageRecorder', () => ({ AudioMessageRecorder: () => null }));
-vi.mock('./persona-picker/PersonaPicker', () => ({ PersonaPicker: () => null }));
+vi.mock('./persona-picker/PersonaPicker', () => ({
+  PersistentPersonaPicker: () => null,
+  PersonaPickerTab: { Global: 'Global', PerRoom: 'PerRoom' },
+}));
 vi.mock('./schedule-send', () => ({ SchedulePickerDialog: () => null }));
 vi.mock('./poll-modals', () => ({
-  PollDialog: ({ onSubmit }: any) => (
-    <button
-      type="button"
-      onClick={() => void onSubmit({ msgtype: 'm.poll.start', body: 'poll' }).catch(() => {})}
-    >
-      Submit poll
-    </button>
+  PollDialog: ({ onSubmit, onCancel }: any) => (
+    <>
+      <button
+        type="button"
+        onClick={() => void onSubmit({ msgtype: 'm.poll.start', body: 'poll' }).catch(() => {})}
+      >
+        Submit poll
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel poll
+      </button>
+    </>
   ),
 }));
 vi.mock('./location-modal', () => ({
@@ -283,6 +319,9 @@ vi.mock('./location-modal', () => ({
           }
         >
           Submit location
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel location
         </button>
       </>
     );
@@ -360,7 +399,7 @@ vi.mock('$hooks/useFilePicker', () => ({
 vi.mock('$hooks/useFilePasteHandler', () => ({ useFilePasteHandler: () => vi.fn() }));
 vi.mock('$hooks/useFileDrop', () => ({ useFileDropZone: () => false }));
 vi.mock('$hooks/useCommands', () => ({
-  Command: {},
+  Command: { Poll: 'poll', Location: 'location' },
   SHRUG: '¯\\_(ツ)_/¯',
   TABLEFLIP: '(╯°□°）╯︵ ┻━┻',
   UNFLIP: '┬─┬ノ( º _ ºノ)',
@@ -399,6 +438,7 @@ vi.mock('$state/scheduledMessages', async () => {
   const editingScheduledDelayIdAtom = atom(null);
   return {
     delayedEventsSupportedAtom: atom(false),
+    getScheduledMessageStateKey: (userId: string, roomId: string) => `${userId}\0${roomId}`,
     roomIdToScheduledTimeAtomFamily: () => scheduledTimeAtom,
     roomIdToEditingScheduledDelayIdAtomFamily: () => editingScheduledDelayIdAtom,
     serverMaxDelayMsAtom: atom(null),
@@ -533,6 +573,19 @@ function RoomInputHarness({
     Transforms.insertText(editor, text);
     fireEvent.input(screen.getByTestId('room-input-editor'));
   };
+  const setCommand = (command: 'poll' | 'location') => {
+    editor.children = [
+      {
+        type: 'paragraph' as any,
+        children: [
+          { text: '' },
+          { type: 'command' as any, command, children: [{ text: `/${command}` }] },
+          { text: '' },
+        ],
+      },
+    ];
+    fireEvent.input(screen.getByTestId('room-input-editor'));
+  };
   return (
     <>
       <button type="button" onClick={() => setText()}>
@@ -540,6 +593,15 @@ function RoomInputHarness({
       </button>
       <button type="button" onClick={() => setText('updated while sending')}>
         Compose updated text
+      </button>
+      <button type="button" onClick={() => setText('/gif cats')}>
+        Compose GIF command
+      </button>
+      <button type="button" onClick={() => setCommand('poll')}>
+        Compose poll command
+      </button>
+      <button type="button" onClick={() => setCommand('location')}>
+        Compose location command
       </button>
       <button
         type="button"
@@ -785,7 +847,7 @@ describe('RoomInput submit regressions', () => {
       fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Enter', code: 'Enter' });
 
       await waitFor(() => expect(testState.sendDelayedMessage).toHaveBeenCalledTimes(2));
-      expect(runSpy).toHaveBeenCalledWith(room.roomId, expect.any(Function));
+      expect(runSpy).toHaveBeenCalledWith(testState.matrix, room.roomId, expect.any(Function));
     } finally {
       runSpy.mockRestore();
     }
@@ -821,6 +883,67 @@ describe('RoomInput submit regressions', () => {
     expect(pollCall?.[2]).toBe(M_POLL_START.name);
     expect(pollCall?.[3]?.['m.relates_to']).toBeDefined();
     expect(testState.matrix.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps a reply through GIF command dispatch and claims it exactly once on selection', async () => {
+    render(<RoomInputHarness initialReply />);
+    render(<ReplyObserver />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compose GIF command' }));
+    fireEvent.click(sendButton());
+
+    await waitFor(() => expect(screen.getByTestId('reply-observer')).toHaveTextContent('$reply'));
+    expect(testState.matrix.sendMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select GIF' }));
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    expect(testState.matrix.sendMessage.mock.calls[0]?.[2]?.['m.relates_to']).toBeDefined();
+    expect(screen.getByTestId('reply-observer')).toHaveTextContent('');
+  });
+
+  it('restores a reply while a poll command is pending, including cancellation and retry', async () => {
+    render(<RoomInputHarness initialReply />);
+    render(<ReplyObserver />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compose poll command' }));
+    fireEvent.click(sendButton());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cancel poll' })).toBeInTheDocument()
+    );
+    expect(screen.getByTestId('reply-observer')).toHaveTextContent('$reply');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel poll' }));
+    expect(testState.matrix.sendEvent).not.toHaveBeenCalled();
+    expect(screen.getByTestId('reply-observer')).toHaveTextContent('$reply');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compose poll command' }));
+    fireEvent.click(sendButton());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Submit poll' })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Submit poll' }));
+
+    await waitFor(() => expect(testState.matrix.sendEvent).toHaveBeenCalledOnce());
+    expect(testState.matrix.sendEvent.mock.calls[0]?.[3]?.['m.relates_to']).toBeDefined();
+    expect(screen.getByTestId('reply-observer')).toHaveTextContent('');
+  });
+
+  it('keeps a thread reply through an empty location command until submission', async () => {
+    render(<RoomInputHarness initialReply threadRootId="$thread" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compose location command' }));
+    fireEvent.click(sendButton());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Submit location' })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Submit location' }));
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    expect(testState.matrix.sendMessage).toHaveBeenCalledWith(
+      room.roomId,
+      '$thread',
+      expect.objectContaining({ 'm.relates_to': expect.anything() })
+    );
   });
 
   it('keeps the location dialog open when the queued send rejects', async () => {

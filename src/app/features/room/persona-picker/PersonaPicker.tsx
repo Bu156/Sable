@@ -81,8 +81,6 @@ export function TemporaryPersonaPicker(props: PersonaPickerProps) {
   );
 }
 
-export const PersonaPicker = TemporaryPersonaPicker;
-
 export function PersistentPersonaPicker(props: PersonaPickerProps) {
   return <PersonaPickerMenu {...props} presentation={PersonaPickerPresentation.PersistentPicker} />;
 }
