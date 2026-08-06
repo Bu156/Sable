@@ -100,8 +100,13 @@ const startBackgroundClient = async (session: Session): Promise<MatrixClient> =>
     timelineLimit: 1,
   };
 
-  await startClient(mx, startOpts);
-  return mx;
+  try {
+    await startClient(mx, startOpts);
+    return mx;
+  } catch (error) {
+    stopClient(mx);
+    throw error;
+  }
 };
 
 /**
@@ -302,7 +307,8 @@ export function BackgroundNotifications() {
 
           await waitForSync(mx);
 
-          if (disposed || current.get(session.userId) !== mx) {
+          if (disposed) return;
+          if (current.get(session.userId) !== mx) {
             stopClient(mx);
             return;
           }
@@ -328,6 +334,12 @@ export function BackgroundNotifications() {
                 resolve();
               }, 5000);
             });
+          }
+
+          if (disposed) return;
+          if (current.get(session.userId) !== mx) {
+            stopClient(mx);
+            return;
           }
 
           const pushProcessor = mx.pushProcessor;
