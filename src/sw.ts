@@ -6,6 +6,7 @@ import { EventType } from 'matrix-js-sdk/lib/@types/event';
 
 import { createPushNotifications } from './sw/pushNotification';
 import { withMediaFetchSlot } from './app/utils/mediaConcurrency';
+import { readPersistedSession } from './sw-session-persistence';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -105,15 +106,7 @@ async function loadPersistedSession(): Promise<SessionInfo | undefined> {
     const cache = await self.caches.open(SW_SESSION_CACHE);
     const response = await cache.match(SW_SESSION_URL);
     if (!response) return undefined;
-    const s = await response.json();
-    if (typeof s.accessToken === 'string' && typeof s.baseUrl === 'string') {
-      return {
-        accessToken: s.accessToken,
-        baseUrl: s.baseUrl,
-        userId: typeof s.userId === 'string' ? s.userId : undefined,
-      };
-    }
-    return undefined;
+    return readPersistedSession(await response.json());
   } catch {
     return undefined;
   }
@@ -157,7 +150,13 @@ async function cleanupDeadClients() {
   });
 }
 
-function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, userId?: unknown) {
+function setSession(
+  clientId: string,
+  accessToken: unknown,
+  baseUrl: unknown,
+  userId?: unknown
+): Promise<void> {
+  let persistence: Promise<void>;
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
     const info: SessionInfo = {
       accessToken,
@@ -169,13 +168,13 @@ function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, us
     preloadedSession = undefined;
     console.debug('[SW] setSession: stored', clientId, baseUrl);
     // Persist so push-event fetches work after iOS restarts the SW.
-    persistSession(info).catch(() => undefined);
+    persistence = persistSession(info);
   } else {
     // Logout or invalid session
     sessions.delete(clientId);
     preloadedSession = undefined;
     console.debug('[SW] setSession: removed', clientId);
-    clearPersistedSession().catch(() => undefined);
+    persistence = clearPersistedSession();
   }
 
   const pending = pendingSessionRequests.get(clientId);
@@ -183,6 +182,8 @@ function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, us
     pending.resolve(sessions.get(clientId));
     pendingSessionRequests.delete(clientId);
   }
+
+  return persistence;
 }
 
 function requestSession(client: Client): Promise<SessionInfo | undefined> {
@@ -580,8 +581,11 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const { type, accessToken, baseUrl, userId } = data as Record<string, unknown>;
 
   if (type === 'setSession') {
-    setSession(client.id, accessToken, baseUrl, userId);
-    event.waitUntil(cleanupDeadClients());
+    event.waitUntil(
+      Promise.all([setSession(client.id, accessToken, baseUrl, userId), cleanupDeadClients()]).then(
+        () => undefined
+      )
+    );
   }
   if (type === 'swMediaAuthProbe') {
     // Capability handshake: prove this SW intercepts authenticated media so the
