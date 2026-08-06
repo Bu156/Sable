@@ -167,7 +167,8 @@ function setSession(
   baseUrl: unknown,
   userId?: unknown
 ): Promise<void> {
-  let persistence: Promise<void>;
+  const previous = sessions.get(clientId);
+  const persistence: Promise<void>[] = [];
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
     const info: SessionInfo = {
       accessToken,
@@ -176,13 +177,19 @@ function setSession(
     };
     sessions.set(clientId, info);
     console.debug('[SW] setSession: stored', clientId, baseUrl);
-    persistence = info.userId ? updatePersistedSession(info.userId, info) : Promise.resolve();
+    if (info.userId) persistence.push(updatePersistedSession(info.userId, info));
   } else {
     // Logout or invalid session
-    const previous = sessions.get(clientId);
     sessions.delete(clientId);
     console.debug('[SW] setSession: removed', clientId);
-    persistence = previous?.userId ? updatePersistedSession(previous.userId) : Promise.resolve();
+  }
+
+  if (
+    previous?.userId &&
+    previous.userId !== sessions.get(clientId)?.userId &&
+    ![...sessions.values()].some((session) => session.userId === previous.userId)
+  ) {
+    persistence.push(updatePersistedSession(previous.userId));
   }
 
   const pending = pendingSessionRequests.get(clientId);
@@ -191,7 +198,7 @@ function setSession(
     pendingSessionRequests.delete(clientId);
   }
 
-  return persistence;
+  return Promise.all(persistence).then(() => undefined);
 }
 
 function requestSession(client: Client): Promise<SessionInfo | undefined> {

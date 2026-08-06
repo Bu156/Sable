@@ -13,19 +13,25 @@ describe('service worker media auth recovery', () => {
   let swTestHooks: SwTestHooks;
   let clients: Map<string, Client>;
   let addEventListener: ReturnType<typeof vi.fn>;
+  let persistedSessions: string | undefined;
 
   beforeEach(async () => {
     vi.resetModules();
     clients = new Map();
     addEventListener = vi.fn();
+    persistedSessions = undefined;
     vi.stubGlobal('self', {
       __WB_MANIFEST: [],
       addEventListener,
       caches: {
         open: vi.fn(async () => ({
           delete: vi.fn(async () => true),
-          match: vi.fn(async () => undefined),
-          put: vi.fn(async () => undefined),
+          match: vi.fn(async () =>
+            persistedSessions ? new Response(persistedSessions) : undefined
+          ),
+          put: vi.fn(async (_key: string, response: Response) => {
+            persistedSessions = await response.text();
+          }),
         })),
       },
       clients: {
@@ -74,6 +80,52 @@ describe('service worker media auth recovery', () => {
 
     await expect(respondWith.mock.calls[0]?.[0]).resolves.toMatchObject({ status: 503 });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('removes a stale persisted account when a client switches users', async () => {
+    await swTestHooks.setSession(
+      'client-a',
+      'alice-token',
+      'https://matrix.example.org',
+      '@alice:example.org'
+    );
+    await swTestHooks.setSession(
+      'client-a',
+      'bob-token',
+      'https://matrix.example.org',
+      '@bob:example.org'
+    );
+
+    expect(Object.keys(JSON.parse(persistedSessions ?? '{}'))).toEqual(['@bob:example.org']);
+  });
+
+  it('keeps a persisted account until its final client logs out', async () => {
+    await swTestHooks.setSession(
+      'alice-a',
+      'alice-token',
+      'https://matrix.example.org',
+      '@alice:example.org'
+    );
+    await swTestHooks.setSession(
+      'alice-b',
+      'alice-token',
+      'https://matrix.example.org',
+      '@alice:example.org'
+    );
+    await swTestHooks.setSession(
+      'alice-a',
+      'bob-token',
+      'https://matrix.example.org',
+      '@bob:example.org'
+    );
+
+    expect(Object.keys(JSON.parse(persistedSessions ?? '{}')).toSorted()).toEqual([
+      '@alice:example.org',
+      '@bob:example.org',
+    ]);
+
+    await swTestHooks.setSession('alice-b', undefined, undefined);
+    expect(Object.keys(JSON.parse(persistedSessions ?? '{}'))).toEqual(['@bob:example.org']);
   });
 
   it('shares recovery and preserves each Range header on retry', async () => {
