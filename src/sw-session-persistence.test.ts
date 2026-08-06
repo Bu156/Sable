@@ -29,11 +29,18 @@ describe('readPersistedSession', () => {
 
 describe('service worker session persistence', () => {
   let addEventListener: ReturnType<typeof vi.fn>;
+  let cachePut: ReturnType<typeof vi.fn>;
   let resolveCachePut: (() => void) | undefined;
 
   beforeEach(async () => {
     vi.resetModules();
     addEventListener = vi.fn();
+    cachePut = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCachePut = resolve;
+        })
+    );
 
     vi.stubGlobal('self', {
       __WB_MANIFEST: [],
@@ -42,12 +49,7 @@ describe('service worker session persistence', () => {
         open: vi.fn(async () => ({
           delete: vi.fn(async () => true),
           match: vi.fn(async () => undefined),
-          put: vi.fn(
-            () =>
-              new Promise<void>((resolve) => {
-                resolveCachePut = resolve;
-              })
-          ),
+          put: cachePut,
         })),
       },
       clients: {
@@ -92,5 +94,27 @@ describe('service worker session persistence', () => {
 
     resolveCachePut?.();
     await expect(lifetime).resolves.toBeUndefined();
+  });
+
+  it('settles the worker lifetime when session persistence fails', async () => {
+    cachePut.mockRejectedValueOnce(new Error('cache unavailable'));
+    const messageHandler = addEventListener.mock.calls.find(([type]) => type === 'message')?.[1] as
+      | ((event: ExtendableMessageEvent) => void)
+      | undefined;
+    const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+
+    messageHandler?.({
+      source: { id: 'client-a' },
+      data: {
+        type: 'setSession',
+        accessToken: 'token',
+        baseUrl: 'https://matrix.example.org',
+        userId: '@alice:example.org',
+      },
+      waitUntil,
+    } as unknown as ExtendableMessageEvent);
+
+    expect(waitUntil).toHaveBeenCalledOnce();
+    await expect(waitUntil.mock.calls[0]?.[0]).resolves.toBeUndefined();
   });
 });
