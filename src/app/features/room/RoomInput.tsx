@@ -22,7 +22,7 @@ import type {
   StickerEventContent,
 } from '$types/matrix-sdk';
 import { MatrixError } from '$types/matrix-sdk';
-import { EventType, MsgType, RelationType } from '$types/matrix-sdk';
+import { EventType, RelationType } from '$types/matrix-sdk';
 import { ReactEditor } from 'slate-react';
 import { Editor, Point, Range, Transforms } from 'slate';
 import type { RectCords } from 'folds';
@@ -63,17 +63,12 @@ import {
   moveCursor,
   resetEditorHistory,
   isEmptyEditor,
-  getBeginCommand,
-  trimCommand,
-  getMentions,
   ANYWHERE_AUTOCOMPLETE_PREFIXES,
   BEGINNING_AUTOCOMPLETE_PREFIXES,
-  getLinks,
   MarkdownFormattingToolbarBottom,
   MarkdownFormattingToolbarToggle,
   focusEditor,
   replaceWithElement,
-  BlockType,
 } from '$components/editor';
 import { stripMarkdownEscapesForHiddenPreviews } from './message/hiddenLinkPreviews';
 import { plainToEditorInput } from '$components/editor/input';
@@ -111,10 +106,9 @@ import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
 import { settingsAtom } from '$state/settings';
 import { matchesShortcut } from '../../keyboard/shortcuts';
-import { getEditedEvent, getMentionContent, getThreadReplyEvents } from '$utils/room/relations';
-import { buildReplacementContent } from './buildReplacementContent';
+import { getEditedEvent, getThreadReplyEvents } from '$utils/room/relations';
 import { htmlToMarkdown } from '$plugins/markdown';
-import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '$hooks/useCommands';
+import { Command, useCommands } from '$hooks/useCommands';
 import { isMobileOrTablet } from '$utils/platform';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
@@ -181,7 +175,6 @@ import {
 } from '$components/icons/phosphor';
 import { getSupportedAudioExtension } from '$plugins/voice-recorder-kit/supportedCodec';
 import { ErrorCode } from '../../cs-errorcode';
-import { sanitizeText } from '$utils/sanitize';
 import { PKitCommandMessageHandler } from '$plugins/pluralkit-handler/PKitCommandMessageHandler';
 import { PKitProxyMessageHandler } from '$plugins/pluralkit-handler/PKitProxyMessageHandler';
 import type { IGenericMSC4459, MSC4459ImagePackReference } from '$types/matrix/common';
@@ -207,7 +200,7 @@ import {
   buildGalleryContent,
   getGalleryItemContent,
 } from './msgContent';
-import { outgoingMessageTransforms } from './outgoingMessageTransforms';
+import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
 import { getSendableKlipyMxcUrl } from '$utils/klipy';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import type {
@@ -1084,56 +1077,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const submit = useCallback(async () => {
       if (editingEvent && isMobileOrTablet()) {
-        let plainText = toPlainText(editor.children).trim();
-        if (!plainText) {
+        const content = buildEditReplacement(editor.children, {
+          mx,
+          room,
+          roomId,
+          editingEvent,
+          currentContent: getEditingContent(editingEvent),
+          pmpNoFallback,
+        });
+        if (!content) {
           onCancelEdit?.();
           return;
         }
-
-        let customHtml = trimCustomHtml(
-          toMatrixCustomHTML(editor.children, {
-            forEmote: editingEvent.getContent().msgtype === MsgType.Emote,
-            room,
-          })
-        );
-        const oldContent = editingEvent.getContent();
-        const currentContent = getEditingContent(editingEvent);
-        const eventId = editingEvent.getId();
-        if (!eventId) return;
-
-        const rawPmp =
-          currentContent['com.beeper.per_message_profile'] ??
-          oldContent['com.beeper.per_message_profile'];
-
-        const mentionData = getMentions(mx, roomId, editor);
-        const previousMentions = currentContent['m.mentions'];
-        if (
-          previousMentions &&
-          typeof previousMentions === 'object' &&
-          'user_ids' in previousMentions &&
-          Array.isArray(previousMentions.user_ids)
-        ) {
-          previousMentions.user_ids.forEach((userId) => {
-            if (typeof userId === 'string') mentionData.users.add(userId);
-          });
-        }
-        const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
-
-        const linkPreviews =
-          getLinks(editor.children)?.map((matchedUrl) => ({
-            matched_url: matchedUrl,
-          })) ?? [];
-
-        const content = buildReplacementContent(
-          oldContent,
-          plainText,
-          customHtml,
-          eventId,
-          mMentions,
-          linkPreviews,
-          rawPmp,
-          pmpNoFallback
-        );
 
         await mx.sendMessage(roomId, content as RoomMessageEventContent);
         onCancelEdit?.();
@@ -1153,287 +1108,61 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         return;
       }
 
-      const commandName = getBeginCommand(editor);
-      /**
-       * a map of regex patterns to replace nicknames with,
-       * used when stripNickname is true in toMatrixCustomHTML
-       * during HTML generation for the message content.
-       * This is necessary because the HTML generation needs to know
-       * which nicknames to strip in order to generate the correct formatted_body,
-       * and the plain text generation needs to replace those same nicknames with
-       * the original user IDs so that the message content remains consistent and
-       * mentions are correctly processed by the server and clients.
-       */
-      const nicknameReplacement = new Map<RegExp, string>();
-      if (replyEvent) {
-        /**
-         * the id of the user being replied to,
-         * whose nickname (if any) should be stripped
-         * from the message content and replaced with their
-         * user ID for correct mention processing
-         */
-        const senderId = replyEvent.getSender();
-        if (senderId) {
-          const nick = nicknames[senderId];
-          if (typeof nick === 'string' && nick.length > 0) {
-            nicknameReplacement.set(
-              new RegExp(`@?${nick}`, 'g'),
-              room.getMember(senderId)?.rawDisplayName ?? senderId
-            );
-          }
-        }
-      }
-      /**
-       * any other users mentioned in the message being replied to,
-       * whose nicknames should also be stripped and replaced with user IDs
-       */
-      const mentions = getMentions(mx, roomId, editor);
-      if (mentions?.users) {
-        mentions.users.forEach((id) => {
-          const nick = nicknames[id];
-          if (typeof nick === 'string' && nick.length > 0) {
-            nicknameReplacement.set(
-              new RegExp(`@?${nick}`, 'g'),
-              room.getMember(id)?.rawDisplayName ?? id
-            );
-          }
-        });
-      }
-      /**
-       * the plain text we will send
-       */
-      let serializedChildren = editor.children;
-      if (commandName) {
-        // Strip the empty text node and command node from the beginning of the first paragraph
-        const firstPara = serializedChildren[0];
-        if (
-          firstPara &&
-          'type' in firstPara &&
-          firstPara.type === BlockType.Paragraph &&
-          firstPara.children.length >= 2
-        ) {
-          serializedChildren = [
-            {
-              ...firstPara,
-              children: firstPara.children.slice(2),
-            },
-            ...serializedChildren.slice(1),
-          ];
-        }
-      }
-      const outgoingTransformContext = {
-        isMarkdown: true,
+      const outgoing = await buildOutgoingMessage(editor.children, {
+        mx,
+        room,
+        roomId,
+        nicknames,
+        replyEvent,
+        replyDraft,
+        silentReply,
         settingsLinkBaseUrl,
-      };
-
-      outgoingMessageTransforms.forEach((transform) => {
-        if (!transform.shouldApply(serializedChildren, outgoingTransformContext)) return;
-        serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
+        canSendReaction,
+        pkCompatEnable,
+        pmpProxyingEnable,
+        pmpLatchingEnable,
+        pmpNoFallback,
+        latchedPersona,
+        isPKCommand: (text) => PKitCommandMessageHandler.isPKCommand(text),
+        pluralkitProxyMessageHandler,
+        imagePacksUsed: imagePacksUsedRef.current,
       });
 
-      let plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
-
-      /**
-       * the html we will send
-       */
-      let customHtml = trimCustomHtml(
-        toMatrixCustomHTML(serializedChildren, {
-          stripNickname: true,
-          nickNameReplacement: nicknameReplacement,
-          forEmote: commandName === Command.Me || commandName === Command.RainbowMe,
-          room,
-        })
-      );
-      const rawGifCommand =
-        commandName === undefined ? plainText.match(/^\/gif(?:\s+(.*))?$/i) : undefined;
-
-      let msgType = MsgType.Text;
-
-      // quick text react
-      if (canSendReaction && plainText.startsWith('+#')) {
-        handleQuickReact(plainText.substring(2));
+      if (outgoing.kind === 'empty') return;
+      if (outgoing.kind === 'quickReact') {
+        handleQuickReact(outgoing.key);
         return;
       }
-
-      // check if its a pk command
-      if (pkCompatEnable && PKitCommandMessageHandler.isPKCommand(plainText)) {
-        await pluralkitCmdMessageHandler.handleMessage(plainText);
-        resetEditor(editor); // clear the editor
-        return; // don't do anything besides handling the command
+      if (outgoing.kind === 'pkCommand') {
+        await pluralkitCmdMessageHandler.handleMessage(outgoing.plainText);
+        resetEditor(editor);
+        return;
       }
-
-      if (rawGifCommand) {
-        setInitialGifSearch(rawGifCommand[1] ?? '');
+      if (outgoing.kind === 'gifSearch') {
+        setInitialGifSearch(outgoing.query);
         setEmojiBoardTab(EmojiBoardTab.Gif);
         resetEditor(editor);
         resetEditorHistory(editor);
         sendTypingStatus(false);
         return;
       }
-
-      if (commandName) {
-        plainText = trimCommand(commandName, plainText);
-        customHtml = trimCommand(commandName, customHtml);
-      }
-      if (commandName === Command.Me) {
-        msgType = MsgType.Emote;
-      } else if (commandName === Command.Notice) {
-        msgType = MsgType.Notice;
-      } else if (commandName === Command.Shrug) {
-        plainText = `${SHRUG} ${plainText}`;
-        customHtml = `${SHRUG} ${customHtml}`;
-      } else if (commandName === Command.TableFlip) {
-        plainText = `${TABLEFLIP} ${plainText}`;
-        customHtml = `${TABLEFLIP} ${customHtml}`;
-      } else if (commandName === Command.UnFlip) {
-        plainText = `${UNFLIP} ${plainText}`;
-        customHtml = `${UNFLIP} ${customHtml}`;
-      } else if (commandName) {
-        if ((commandName as Command) === Command.Poll) setShowPollPicker(true);
-        else if ((commandName as Command) === Command.Location && plainText.trim().length === 0)
+      if (outgoing.kind === 'command') {
+        const { command, plainText, customHtml } = outgoing;
+        if (command === Command.Poll) setShowPollPicker(true);
+        else if (command === Command.Location && plainText.trim().length === 0)
           setShowLocationPicker(true);
-        else if (commandName === 'gif') {
-          setInitialGifSearch(plainText);
-          setEmojiBoardTab(EmojiBoardTab.Gif);
-        } else {
-          const commandContent = commands[commandName as Command];
-          if (commandContent) {
-            commandContent.exe(plainText, customHtml);
-          }
-        }
+        else commands[command as Command]?.exe(plainText, customHtml);
         resetEditor(editor);
         resetEditorHistory(editor);
         sendTypingStatus(false);
-
         return;
       }
 
-      if (plainText === '') return;
-
-      // PluralKit-style proxy wrappers (per-message profile proxies) must be stripped
-      // *before* building `content`, otherwise we end up sending the wrapper verbatim.
-      let proxiedPerMessageProfile:
-        | Awaited<ReturnType<(typeof pluralkitProxyMessageHandler)['getPmpBasedOnMessage']>>
-        | undefined;
-      if (pmpProxyingEnable) {
-        proxiedPerMessageProfile =
-          await pluralkitProxyMessageHandler.getPmpBasedOnMessage(plainText);
-        if (proxiedPerMessageProfile) {
-          // normal plainText has spoilers stripped, but this breaks spoilers with a proxy tag.
-          // here we get a new 'unsanitized' plainText without spoiler stripping
-          let unsanitizedPlainText = toPlainText(
-            serializedChildren,
-            true,
-            false,
-            nicknameReplacement
-          ).trim();
-
-          const stripped = pluralkitProxyMessageHandler.stripProxyFromMessage(unsanitizedPlainText);
-          if (stripped !== undefined) {
-            // Re-run the normal outgoing pipeline on the stripped content so the message
-            // goes through the same transforms/parsers as any other message.
-            serializedChildren = plainToEditorInput(stripped);
-
-            outgoingMessageTransforms.forEach((transform) => {
-              if (!transform.shouldApply(serializedChildren, outgoingTransformContext)) return;
-              serializedChildren = transform.apply(serializedChildren, outgoingTransformContext);
-            });
-
-            plainText = toPlainText(serializedChildren, true, true, nicknameReplacement).trim();
-            customHtml = trimCustomHtml(
-              toMatrixCustomHTML(serializedChildren, {
-                stripNickname: true,
-                nickNameReplacement: nicknameReplacement,
-                forEmote: commandName === Command.Me || commandName === Command.RainbowMe,
-                room,
-              })
-            );
-
-            if (pmpLatchingEnable) {
-              await setCurrentlyUsedPerMessageProfileIdForRoom(
-                mx,
-                roomId,
-                proxiedPerMessageProfile.id
-              );
-              setLatchedPersona(proxiedPerMessageProfile);
-            }
-          }
-        }
+      const { content } = outgoing;
+      if (outgoing.latchPersona) {
+        await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, outgoing.latchPersona.id);
+        setLatchedPersona(outgoing.latchPersona);
       }
-
-      const body = plainText;
-      const formattedBody = customHtml;
-      const mentionData = getMentions(mx, roomId, editor);
-
-      const content: IContent & Pick<RoomMessageEventContent, 'msgtype' | 'body'> = {
-        msgtype: msgType,
-        body,
-      };
-
-      if (replyDraft && !silentReply) {
-        mentionData.users.add(replyDraft.userId);
-      }
-
-      content['m.mentions'] = getMentionContent(Array.from(mentionData.users), mentionData.room);
-      content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
-        imagePacksUsedRef.current.toJSON();
-
-      const links = getLinks(serializedChildren);
-      content[prefix.MATRIX_UNSTABLE_EMBEDDED_LINK_PREVIEW_PROPERTY_NAME] = [];
-      links?.forEach((link) =>
-        content[prefix.MATRIX_UNSTABLE_EMBEDDED_LINK_PREVIEW_PROPERTY_NAME].push({
-          matched_url: link,
-        })
-      );
-
-      if (replyDraft || !customHtmlEqualsPlainText(formattedBody, body)) {
-        content.format = 'org.matrix.custom.html';
-        content.formatted_body = formattedBody;
-      }
-
-      /**
-       * the currently with the room associated per-message profile, if any, so that it can be included in the message content when sending.
-       * This allows the server to apply the correct profile-based transformations (e.g. font size adjustments) when processing the message,
-       * and also allows clients to display an accurate preview of how the message will look with the profile applied while it's being composed.
-       */
-      const globalPerMessageProfile = await getCurrentlyUsedPerMessageProfileForAccount(mx);
-      const roomPerMessageProfile = await getCurrentlyUsedPerMessageProfileForRoom(mx, roomId);
-      let perMessageProfile = latchedPersona ?? roomPerMessageProfile ?? globalPerMessageProfile;
-
-      if (pmpProxyingEnable) {
-        if (proxiedPerMessageProfile) perMessageProfile = proxiedPerMessageProfile;
-      }
-      if (perMessageProfile) {
-        content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
-          convertPerMessageProfileToBeeperFormat(perMessageProfile, !pmpNoFallback);
-
-        if (!pmpNoFallback && perMessageProfile.displayname.trim() !== '') {
-          // if a per-message profile is used, it must per spec include a fallback
-          const pmpPrefix = `${perMessageProfile.displayname}: `;
-
-          if (!content.body.startsWith(pmpPrefix)) {
-            // to prevent double-prefixing when the fallback is already present
-            content.body = pmpPrefix + content.body;
-          }
-
-          /**
-           * html escaped version of the display name
-           */
-          const escapedName = sanitizeText(perMessageProfile.displayname);
-
-          const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
-
-          if (content.formatted_body && !content.formatted_body.startsWith(htmlPrefix)) {
-            content.formatted_body = htmlPrefix + content.formatted_body;
-          } else {
-            // we don't have a formatted body, but we need one
-            content.format = 'org.matrix.custom.html';
-            const escapedBody = sanitizeText(plainText).replaceAll('\n', '<br/>');
-            content.formatted_body = `${htmlPrefix}${escapedBody}`;
-          }
-        }
-      }
-
       if (replyDraft) {
         content['m.relates_to'] = getReplyContent(replyDraft, room);
       }
