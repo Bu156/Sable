@@ -528,7 +528,7 @@ export function EmojiBoard({
     error: gifsError,
     searchGifs,
     cancelSearch: cancelGifSearch,
-  } = useGifSearch(favoriteGifs, showGifPicker, gifSearch);
+  } = useGifSearch(favoriteGifs, showGifPicker && gifTab, gifSearch);
   const [emojiGroupItems, stickerGroupItems, gifGroupItems] = useGroups(tab, imagePacks, gifs);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(true);
   const groupsByTab = {
@@ -588,11 +588,11 @@ export function EmojiBoard({
   }, [gifTab, initialGifSearch, searchGifs, resetGifSearch]);
 
   useEffect(() => {
-    if (!showGifPicker) {
+    if (!showGifPicker || !gifTab) {
       handleOnChange.cancel();
       cancelGifSearch();
     }
-  }, [cancelGifSearch, handleOnChange, showGifPicker]);
+  }, [cancelGifSearch, gifTab, handleOnChange, showGifPicker]);
 
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const virtualBaseRef = useRef<HTMLDivElement>(null);
