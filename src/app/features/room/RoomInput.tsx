@@ -129,6 +129,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 import {
   delayedEventsSupportedAtom,
+  getScheduledMessageStateKey,
   roomIdToScheduledTimeAtomFamily,
   roomIdToEditingScheduledDelayIdAtomFamily,
   serverMaxDelayMsAtom,
@@ -515,11 +516,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const queryClient = useQueryClient();
     const delayedEventsSupported = useAtomValue(delayedEventsSupportedAtom);
+    const scheduledStateKey = getScheduledMessageStateKey(mx.getSafeUserId(), roomId);
     const [roomScheduledTime, setRoomScheduledTime] = useAtom(
-      roomIdToScheduledTimeAtomFamily(roomId)
+      roomIdToScheduledTimeAtomFamily(scheduledStateKey)
     );
     const [roomEditingScheduledDelayId, setRoomEditingScheduledDelayId] = useAtom(
-      roomIdToEditingScheduledDelayIdAtomFamily(roomId)
+      roomIdToEditingScheduledDelayIdAtomFamily(scheduledStateKey)
     );
     const scheduledTime = threadRootId ? null : roomScheduledTime;
     const editingScheduledDelayId = threadRootId ? null : roomEditingScheduledDelayId;

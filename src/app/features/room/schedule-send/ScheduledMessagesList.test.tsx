@@ -54,6 +54,7 @@ vi.mock('$state/scheduledMessages', async () => {
 
   return {
     delayedEventsSupportedAtom: atom(true),
+    getScheduledMessageStateKey: (userId: string, roomId: string) => `${userId}\0${roomId}`,
     roomIdToScheduledTimeAtomFamily: () => scheduledTimeAtom,
     roomIdToEditingScheduledDelayIdAtomFamily: () => editingScheduledDelayIdAtom,
   };
