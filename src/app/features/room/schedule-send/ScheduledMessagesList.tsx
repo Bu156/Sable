@@ -21,6 +21,7 @@ import {
 } from '$utils/delayedEvents';
 import {
   delayedEventsSupportedAtom,
+  getScheduledMessageStateKey,
   roomIdToScheduledTimeAtomFamily,
   roomIdToEditingScheduledDelayIdAtomFamily,
 } from '$state/scheduledMessages';
@@ -159,11 +160,12 @@ export function ScheduledMessagesList({ room, onEditMessage }: ScheduledMessages
   const mx = useMatrixClient();
   const queryClient = useQueryClient();
   const supported = useAtomValue(delayedEventsSupportedAtom);
-  const setScheduledTime = useSetAtom(roomIdToScheduledTimeAtomFamily(room.roomId));
+  const scheduledStateKey = getScheduledMessageStateKey(mx.getSafeUserId(), room.roomId);
+  const setScheduledTime = useSetAtom(roomIdToScheduledTimeAtomFamily(scheduledStateKey));
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [expanded, setExpanded] = useState(false);
   const [editingDelayId, setEditingDelayId] = useAtom(
-    roomIdToEditingScheduledDelayIdAtomFamily(room.roomId)
+    roomIdToEditingScheduledDelayIdAtomFamily(scheduledStateKey)
   );
   const [cancellationStates, setCancellationStates] = useState<Record<string, CancellationState>>(
     {}
