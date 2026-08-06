@@ -1234,4 +1234,24 @@ describe('RoomInput submit regressions', () => {
     );
     expect(onCancelEdit).toHaveBeenCalledOnce();
   });
+
+  it('sends a mobile edit as a replacement, not a reply, when a reply draft exists', async () => {
+    testState.isMobile = true;
+    testState.editingEvent = {
+      getId: () => '$original',
+      getContent: () => ({ body: 'original', msgtype: 'm.text' }),
+    };
+    const onCancelEdit = vi.fn();
+    render(<RoomInputHarness editId="$original" onCancelEdit={onCancelEdit} initialReply />);
+
+    await waitFor(() => expect(screen.getByTestId('room-input-editor')).toBeInTheDocument());
+    fireEvent.input(screen.getByTestId('room-input-editor'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send your composed Message' }));
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    const sentContent = testState.matrix.sendMessage.mock.calls[0]![1];
+    expect(sentContent['m.relates_to']).toEqual(expect.objectContaining({ rel_type: 'm.replace' }));
+    expect(sentContent['m.relates_to']).not.toHaveProperty('m.in_reply_to');
+    expect(onCancelEdit).toHaveBeenCalledOnce();
+  });
 });
