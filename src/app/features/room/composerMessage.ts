@@ -121,6 +121,9 @@ const applyPerMessageProfileFallback = (
 
   // Per spec a per-message profile must ship a fallback prefix for clients that ignore it.
   const pmpPrefix = `${profile.displayname}: `;
+  const bodyWithoutFallback = content.body.startsWith(pmpPrefix)
+    ? content.body.slice(pmpPrefix.length)
+    : content.body;
   // guard against double-prefixing when the fallback is already present
   if (!content.body.startsWith(pmpPrefix)) content.body = pmpPrefix + content.body;
 
@@ -130,7 +133,7 @@ const applyPerMessageProfileFallback = (
   } else {
     // we don't have a formatted body, but the fallback needs one
     content.format = 'org.matrix.custom.html';
-    const escapedBody = sanitizeText(content.body).replaceAll('\n', '<br/>');
+    const escapedBody = sanitizeText(bodyWithoutFallback).replaceAll('\n', '<br/>');
     content.formatted_body = `${htmlPrefix}${escapedBody}`;
   }
 };

@@ -153,8 +153,9 @@ describe('buildOutgoingMessage', () => {
     const result = await build('hello');
     if (result.kind !== 'message') throw new Error('expected a message');
     expect(result.content.body).toBe('Alter: hello');
-    expect(result.content.formatted_body).toContain('data-mx-profile-fallback');
-    expect(result.content.formatted_body).toContain('Alter: ');
+    expect(result.content.formatted_body).toBe(
+      '<strong data-mx-profile-fallback>Alter: </strong>hello'
+    );
   });
 
   it('does not double-prefix a body that already carries the fallback', async () => {
@@ -162,6 +163,9 @@ describe('buildOutgoingMessage', () => {
     const result = await build('Alter: hello');
     if (result.kind !== 'message') throw new Error('expected a message');
     expect(result.content.body).toBe('Alter: hello');
+    expect(result.content.formatted_body).toBe(
+      '<strong data-mx-profile-fallback>Alter: </strong>hello'
+    );
   });
 
   it('prefers the room profile over the account profile', async () => {
