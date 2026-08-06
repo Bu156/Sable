@@ -199,7 +199,7 @@ export function ScheduledMessagesList({ room, onEditMessage }: ScheduledMessages
       }));
 
       try {
-        await roomScheduleCoordinator.run(room.roomId, () => cancelDelayedEvent(mx, delayId));
+        await roomScheduleCoordinator.run(mx, room.roomId, () => cancelDelayedEvent(mx, delayId));
         invalidateEvents();
         setCancellationStates((states) => {
           const next = { ...states };

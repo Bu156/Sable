@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { roomScheduleCoordinator } from './roomScheduleCoordinator';
 
+const account = (userId: string) => ({ getSafeUserId: () => userId });
+const alice = account('@alice:example.org');
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((resolvePromise) => {
@@ -14,12 +17,12 @@ describe('roomScheduleCoordinator', () => {
     const first = deferred();
     const order: string[] = [];
 
-    const firstOperation = roomScheduleCoordinator.run('!room:example.org', async () => {
+    const firstOperation = roomScheduleCoordinator.run(alice, '!room:example.org', async () => {
       order.push('first-start');
       await first.promise;
       order.push('first-end');
     });
-    const secondOperation = roomScheduleCoordinator.run('!room:example.org', async () => {
+    const secondOperation = roomScheduleCoordinator.run(alice, '!room:example.org', async () => {
       order.push('second');
     });
 
@@ -35,11 +38,11 @@ describe('roomScheduleCoordinator', () => {
     const second = vi.fn<() => Promise<string>>(async () => 'completed');
 
     await expect(
-      roomScheduleCoordinator.run('!room:example.org', async () => {
+      roomScheduleCoordinator.run(alice, '!room:example.org', async () => {
         throw new Error('cancel failed');
       })
     ).rejects.toThrow('cancel failed');
-    await expect(roomScheduleCoordinator.run('!room:example.org', second)).resolves.toBe(
+    await expect(roomScheduleCoordinator.run(alice, '!room:example.org', second)).resolves.toBe(
       'completed'
     );
 
@@ -50,8 +53,34 @@ describe('roomScheduleCoordinator', () => {
     const first = deferred();
     const second = vi.fn<() => Promise<string>>(async () => 'completed');
 
-    const firstOperation = roomScheduleCoordinator.run('!first:example.org', () => first.promise);
-    const secondOperation = roomScheduleCoordinator.run('!second:example.org', second);
+    const firstOperation = roomScheduleCoordinator.run(
+      alice,
+      '!first:example.org',
+      () => first.promise
+    );
+    const secondOperation = roomScheduleCoordinator.run(alice, '!second:example.org', second);
+
+    await expect(secondOperation).resolves.toBe('completed');
+    expect(second).toHaveBeenCalledOnce();
+
+    first.resolve();
+    await firstOperation;
+  });
+
+  it('does not serialize the same room ID across accounts', async () => {
+    const first = deferred();
+    const second = vi.fn<() => Promise<string>>(async () => 'completed');
+
+    const firstOperation = roomScheduleCoordinator.run(
+      alice,
+      '!room:example.org',
+      () => first.promise
+    );
+    const secondOperation = roomScheduleCoordinator.run(
+      account('@bob:example.org'),
+      '!room:example.org',
+      second
+    );
 
     await expect(secondOperation).resolves.toBe('completed');
     expect(second).toHaveBeenCalledOnce();

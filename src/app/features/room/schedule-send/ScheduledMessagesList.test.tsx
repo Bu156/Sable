@@ -144,8 +144,8 @@ describe('ScheduledMessagesList cancellation', () => {
     testState.cancelDelayedEvent.mockReset();
     testState.coordinatorRun.mockReset();
     testState.invalidateQueries.mockReset();
-    testState.coordinatorRun.mockImplementation((_roomId: string, operation: () => unknown) =>
-      operation()
+    testState.coordinatorRun.mockImplementation(
+      (_mx: unknown, _roomId: string, operation: () => unknown) => operation()
     );
   });
 
@@ -157,7 +157,11 @@ describe('ScheduledMessagesList cancellation', () => {
     fireEvent.click(cancel);
     fireEvent.click(cancel);
 
-    expect(testState.coordinatorRun).toHaveBeenCalledWith(room.roomId, expect.any(Function));
+    expect(testState.coordinatorRun).toHaveBeenCalledWith(
+      testState.matrix,
+      room.roomId,
+      expect.any(Function)
+    );
     expect(testState.cancelDelayedEvent).toHaveBeenCalledOnce();
     expect(cancel).toBeDisabled();
     expect(cancel).toHaveAttribute('aria-busy', 'true');
