@@ -264,6 +264,7 @@ export interface Settings {
   autoplayStickers: boolean;
   autoplayEmojis: boolean;
   nameColorLightnessCorrection: 'off' | 'weak' | 'strong';
+  nameColorLightnessCorrectionMigrated: boolean;
 
   // furry stuff
   renderAnimals: boolean;
@@ -446,7 +447,8 @@ export const defaultSettings: Settings = {
   widgetSidebarWidth: 420,
   isShowingAllRoomsInHome: false,
   sendIndividualAttachmentAsCaption: true,
-  nameColorLightnessCorrection: 'off',
+  nameColorLightnessCorrection: 'strong',
+  nameColorLightnessCorrectionMigrated: true,
 
   // furry stuff
   renderAnimals: true,
@@ -513,6 +515,17 @@ function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
     parsed.saturationLevel = 100;
   }
   delete parsed.monochromeMode;
+
+  if (parsed.nameColorLightnessCorrectionMigrated !== true) {
+    delete parsed.nameColorLightnessCorrection;
+    parsed.nameColorLightnessCorrectionMigrated = true;
+  } else if (
+    parsed.nameColorLightnessCorrection !== 'off' &&
+    parsed.nameColorLightnessCorrection !== 'weak' &&
+    parsed.nameColorLightnessCorrection !== 'strong'
+  ) {
+    delete parsed.nameColorLightnessCorrection;
+  }
 
   if (typeof parsed.renderUserCards === 'boolean') {
     parsed.renderUserCards = parsed.renderUserCards ? 'both' : 'none';
