@@ -1,5 +1,5 @@
 import type { ChangeEventHandler, FormEventHandler } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, IconButton, Input, Avatar, Button, config, Spinner } from 'folds';
 import { menuIcon, Star, Sun, X } from '$components/icons/phosphor';
 import { useSetAtom } from 'jotai';
@@ -440,16 +440,23 @@ function ProfileExtended({ profile, userId }: Readonly<ProfileProps>) {
   const [newColorOnLight, setNewColorOnLight] = useState<string | null>(null);
 
   // Deletes the depricated key, the color specific ones should be depricated too at a later date
-  if (profile.nameColor || (profile.extended?.[prefix.MATRIX_UNSTABLE_COLORS] as string)) {
-    const fallback =
-      profile.nameColor ?? (profile.extended?.[prefix.MATRIX_UNSTABLE_COLORS] as string);
-    if (!newColorOnLight || !newColorOnDark)
-      handleSaveField(prefix.MATRIX_UNSTABLE_COLORS, {
-        on_dark: newColorOnDark ?? fallback,
-        on_light: newColorOnLight ?? fallback,
-      });
-    handleSaveField(prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME, null);
-  }
+  const legacyColor = profile.nameColor;
+  const migratedLegacyColor = useRef(false);
+  useEffect(() => {
+    if (!legacyColor || migratedLegacyColor.current) return;
+    migratedLegacyColor.current = true;
+
+    const migrate = async () => {
+      if (!colorOnDark || !colorOnLight) {
+        await handleSaveField(prefix.MATRIX_UNSTABLE_COLORS, {
+          on_dark: colorOnDark ?? legacyColor,
+          on_light: colorOnLight ?? legacyColor,
+        });
+      }
+      await handleSaveField(prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME, null);
+    };
+    migrate();
+  }, [legacyColor, colorOnDark, colorOnLight, handleSaveField]);
 
   return (
     <Box direction="Column" gap="100">

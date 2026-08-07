@@ -32,6 +32,25 @@ describe('mergePersistedSettings', () => {
     expect(merged.saturationLevel).toBe(0);
   });
 
+  it('seeds the name color correction once for clients persisted before the migration', () => {
+    localStorage.setItem('settings', JSON.stringify({ nameColorLightnessCorrection: 'off' }));
+    const merged = mergePersistedSettings(localStorage.getItem('settings'), {});
+    expect(merged.nameColorLightnessCorrection).toBe('strong');
+    expect(merged.nameColorLightnessCorrectionMigrated).toBe(true);
+  });
+
+  it('keeps the name color correction once the migration has run', () => {
+    localStorage.setItem(
+      'settings',
+      JSON.stringify({
+        nameColorLightnessCorrection: 'off',
+        nameColorLightnessCorrectionMigrated: true,
+      })
+    );
+    const merged = mergePersistedSettings(localStorage.getItem('settings'), {});
+    expect(merged.nameColorLightnessCorrection).toBe('off');
+  });
+
   it('migrates persisted ringtone preferences to valid values', () => {
     localStorage.setItem(
       'settings',
