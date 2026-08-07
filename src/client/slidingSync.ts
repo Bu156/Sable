@@ -22,6 +22,7 @@ import {
   EventTimeline,
   EventEmitterEvents,
   ClientEvent,
+  UNSTABLE_ELEMENT_FUNCTIONAL_USERS,
 } from '$types/matrix-sdk';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
@@ -159,6 +160,8 @@ const buildListRequiredState = (): MSC3575RoomSubscription['required_state'] => 
   [EventType.RoomMember, MSC3575_STATE_KEY_ME],
   [EventType.GroupCallPrefix, ''],
   [EventType.GroupCallMemberPrefix, MSC3575_WILDCARD],
+  // Feeds functional-member filtering for bridged DM names/avatars.
+  [UNSTABLE_ELEMENT_FUNCTIONAL_USERS.name, ''],
 ];
 
 const SPACE_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
@@ -196,6 +199,7 @@ const ACTIVE_ROOM_REQUIRED_STATE: MSC3575RoomSubscription['required_state'] = [
   [EventType.SpaceParent, MSC3575_WILDCARD],
   [EventType.GroupCallPrefix, ''],
   [EventType.GroupCallMemberPrefix, MSC3575_WILDCARD],
+  [UNSTABLE_ELEMENT_FUNCTIONAL_USERS.name, ''],
   ...Object.values(CustomStateEvent).map((type) => [type, MSC3575_WILDCARD] as [string, string]),
 ];
 

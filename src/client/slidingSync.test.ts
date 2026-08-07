@@ -4,7 +4,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatrixClient, MatrixEvent, MSC3575List } from '$types/matrix-sdk';
-import { EventType, KnownMembership, SlidingSyncEvent, SlidingSyncState } from '$types/matrix-sdk';
+import {
+  EventType,
+  KnownMembership,
+  SlidingSyncEvent,
+  SlidingSyncState,
+  UNSTABLE_ELEMENT_FUNCTIONAL_USERS,
+} from '$types/matrix-sdk';
 
 import { scopeEphemeralExtensions, SlidingSyncManager } from './slidingSync';
 import type { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
@@ -170,8 +176,9 @@ describe('SlidingSyncManager initial request', () => {
 
     expect(joined?.ranges).toEqual([[0, 29]]);
     expect(joined?.timeline_limit).toBe(1);
-    expect(joined?.required_state).toHaveLength(10);
+    expect(joined?.required_state).toHaveLength(11);
     expect(joined?.required_state).toContainEqual([EventType.RoomJoinRules, '']);
+    expect(joined?.required_state).toContainEqual([UNSTABLE_ELEMENT_FUNCTIONAL_USERS.name, '']);
     expect(joined?.required_state).not.toContainEqual(['m.space.child', '*']);
     expect(updates).toMatchObject({
       ranges: [[0, 29]],
@@ -706,6 +713,10 @@ describe('SlidingSyncManager room subscription coordination', () => {
     expect(activeRoom).toBeDefined();
     expect(activeRoom![1].timeline_limit).toBe(50);
     expect(activeRoom![1].required_state).toContainEqual([EventType.RoomMember, '$LAZY']);
+    expect(activeRoom![1].required_state).toContainEqual([
+      UNSTABLE_ELEMENT_FUNCTIONAL_USERS.name,
+      '',
+    ]);
 
     expect(sidebarRoom).toBeDefined();
     expect(sidebarRoom![1].timeline_limit).toBe(1);
