@@ -121,18 +121,20 @@ const applyPerMessageProfileFallback = (
   const bodyWithoutFallback = content.body.startsWith(pmpPrefix)
     ? content.body.slice(pmpPrefix.length)
     : content.body;
-  // guard against double-prefixing when the fallback is already present
-  if (!content.body.startsWith(pmpPrefix)) content.body = pmpPrefix + content.body;
 
   const htmlPrefix = `<strong data-mx-profile-fallback>${sanitizeText(profile.displayname)}: </strong>`;
   if (content.formatted_body && !content.formatted_body.startsWith(htmlPrefix)) {
     content.formatted_body = htmlPrefix + content.formatted_body;
   } else {
     // we don't have a formatted body, but the fallback needs one
+    // set before content.body so we don't double fallback
     content.format = 'org.matrix.custom.html';
     const escapedBody = sanitizeText(bodyWithoutFallback).replaceAll('\n', '<br/>');
     content.formatted_body = `${htmlPrefix}${escapedBody}`;
   }
+
+  // guard against double-prefixing when the fallback is already present
+  if (!content.body.startsWith(pmpPrefix)) content.body = pmpPrefix + content.body;
 };
 
 export async function buildOutgoingMessage(
