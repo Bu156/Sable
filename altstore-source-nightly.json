@@ -20,12 +20,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.20.1786137016",
-          "buildVersion": "1.20.1786137016",
-          "date": "2026-08-07T21:23:08Z",
-          "size": 18944819,
-          "downloadURL": "https://github.com/SableClient/Sable/releases/download/nightly/Sable-1.20.1-nightly.260807211016-ios-arm64.ipa",
-          "localizedDescription": "Sable 1.20.1-nightly.260807211016"
+          "version": "1.20.1786140968",
+          "buildVersion": "1.20.1786140968",
+          "date": "2026-08-07T22:28:52Z",
+          "size": 18945046,
+          "downloadURL": "https://github.com/SableClient/Sable/releases/download/nightly/Sable-1.20.1-nightly.260807221608-ios-arm64.ipa",
+          "localizedDescription": "Sable 1.20.1-nightly.260807221608"
         }
       ],
       "appPermissions": {
