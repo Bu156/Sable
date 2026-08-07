@@ -216,11 +216,6 @@ export interface Settings {
   showEasterEggs: boolean;
   hideReads: boolean;
   emojiSuggestThreshold: number;
-  underlineLinks: boolean;
-  reducedMotion: boolean;
-  autoplayGifs: boolean;
-  autoplayStickers: boolean;
-  autoplayEmojis: boolean;
   oldSidebar: boolean;
   pixelatedImageRendering: PixelatedImageRenderingMode;
   incomingInlineImagesDefaultHeight: number;
@@ -261,6 +256,14 @@ export interface Settings {
   widgetSidebarWidth: number;
   isShowingAllRoomsInHome: boolean;
   sendIndividualAttachmentAsCaption: boolean;
+
+  // accessibility stuff
+  underlineLinks: boolean;
+  reducedMotion: boolean;
+  autoplayGifs: boolean;
+  autoplayStickers: boolean;
+  autoplayEmojis: boolean;
+  nameColorLightnessCorrection: 'off' | 'weak' | 'strong';
 
   // furry stuff
   renderAnimals: boolean;
@@ -443,6 +446,8 @@ export const defaultSettings: Settings = {
   widgetSidebarWidth: 420,
   isShowingAllRoomsInHome: false,
   sendIndividualAttachmentAsCaption: true,
+  nameColorLightnessCorrection: 'off',
+
   // furry stuff
   renderAnimals: true,
   animalKind: undefined,
