@@ -7,12 +7,12 @@ use std::{
 
 use base64::Engine;
 use futures_util::StreamExt;
-use reqwest::{
+use serde::Serialize;
+use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
+use tauri_plugin_http::reqwest::{
     header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE},
     Body, Client, ClientBuilder, Method, Url,
 };
-use serde::Serialize;
-use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
 use tokio::{
     fs::{File, OpenOptions},
     io::AsyncWriteExt,

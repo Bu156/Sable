@@ -337,6 +337,14 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       [enterForNewline, isComposing, editor, handleSave, onCancel]
     );
 
+    const detectAutocomplete = useCallback(() => {
+      const prevWordRange = getPrevWorldRange(editor);
+      const query = prevWordRange
+        ? getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES)
+        : undefined;
+      setAutocompleteQuery(query);
+    }, [editor]);
+
     const handleKeyUp: KeyboardEventHandler = useCallback(
       (evt) => {
         if (isKeyHotkey('escape', evt)) {
@@ -344,13 +352,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           return;
         }
 
-        const prevWordRange = getPrevWorldRange(editor);
-        const query = prevWordRange
-          ? getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES)
-          : undefined;
-        setAutocompleteQuery(query);
+        detectAutocomplete();
       },
-      [editor]
+      [detectAutocomplete]
     );
 
     const handleCloseAutocomplete = useCallback(() => {

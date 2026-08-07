@@ -607,8 +607,42 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
     const [hasText, setHasText] = useState(false);
     const lastEncryptionPreparationAt = useRef(0);
+    const detectAutocomplete = useCallback(() => {
+      const firstPosition = Editor.start(editor, []);
+      const secondChar = Editor.after(editor, firstPosition, {
+        distance: 2,
+        unit: 'character',
+      });
+      const quickReactPrefix = Editor.string(
+        editor,
+        Editor.range(editor, firstPosition, secondChar)
+      );
+      if (quickReactPrefix === '+#') {
+        setQuickTextReact(true);
+        setAutocompleteQuery(undefined);
+        return;
+      }
+      setQuickTextReact(false);
+
+      const prevWordRange = getPrevWorldRange(editor);
+      if (!prevWordRange) {
+        setAutocompleteQuery(undefined);
+        return;
+      }
+
+      const isRangeAtBeginning = !Point.isAfter(Range.start(prevWordRange), firstPosition);
+      const query =
+        (isRangeAtBeginning
+          ? getAutocompleteQuery(editor, prevWordRange, BEGINNING_AUTOCOMPLETE_PREFIXES)
+          : undefined) ??
+        getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES);
+
+      setAutocompleteQuery(query);
+    }, [editor]);
+
     const handleEditorChange = useCallback(() => {
       setHasText(!isEmptyEditor(editor));
+      detectAutocomplete();
       if (!room.hasEncryptionStateEvent()) return;
 
       const now = Date.now();
@@ -616,7 +650,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       lastEncryptionPreparationAt.current = now;
       mx.getCrypto()?.prepareToEncrypt(room);
-    }, [editor, mx, room]);
+    }, [editor, detectAutocomplete, mx, room]);
     const hasContent = hasText || selectedFiles.length > 0;
 
     const isComposing = useComposingCheck();
@@ -1774,38 +1808,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           sendTypingStatus(!isEmptyEditor(editor));
         }
 
-        const firstPosition = Editor.start(editor, []);
-        const secondChar = Editor.after(editor, firstPosition, {
-          distance: 2,
-          unit: 'character',
-        });
-        const quickReactPrefix = Editor.string(
-          editor,
-          Editor.range(editor, firstPosition, secondChar)
-        );
-        if (quickReactPrefix === '+#') {
-          setQuickTextReact(true);
-          setAutocompleteQuery(undefined);
-          return;
-        }
-        setQuickTextReact(false);
-
-        const prevWordRange = getPrevWorldRange(editor);
-        if (!prevWordRange) {
-          setAutocompleteQuery(undefined);
-          return;
-        }
-
-        const isRangeAtBeginning = !Point.isAfter(Range.start(prevWordRange), firstPosition);
-        const query =
-          (isRangeAtBeginning
-            ? getAutocompleteQuery(editor, prevWordRange, BEGINNING_AUTOCOMPLETE_PREFIXES)
-            : undefined) ??
-          getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES);
-
-        setAutocompleteQuery(query);
+        detectAutocomplete();
       },
-      [editor, sendTypingStatus, hideActivity]
+      [editor, sendTypingStatus, hideActivity, detectAutocomplete]
     );
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
