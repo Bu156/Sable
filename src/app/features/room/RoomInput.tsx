@@ -1897,7 +1897,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           const content = await getGifMsgContent(mx, gif, url, spoiler);
           if (!content) throw new Error('Unsendable GIF content');
 
-          return await handleSendContents({ contents: [content], submission, isLive });
+          const sent = await handleSendContents({ contents: [content], submission, isLive });
+          // When the editor has text, the reply is not attached to the GIF, so hand the
+          // claim back for the follow-up message to carry it.
+          if (sent && submission.replyClaim && toPlainText(submission.children).trim().length > 0)
+            restoreReplyClaim(submission.replyClaim);
+          return sent;
         } catch (error) {
           log.error('failed to send gif', { roomId }, error);
           restoreReplyClaim(submission.replyClaim);
@@ -1905,8 +1910,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
       });
     };
-
-    if (isEditInitializing) return <div ref={ref} />;
 
     return (
       <div ref={ref}>
