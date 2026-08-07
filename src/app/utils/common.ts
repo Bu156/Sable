@@ -151,3 +151,7 @@ export const splitWithSpace = (content: string): string[] => {
   if (trimmedContent === '') return [];
   return trimmedContent.split(' ');
 };
+
+export const xor = (left: unknown, right: unknown): boolean => {
+  return !left !== !right;
+};
