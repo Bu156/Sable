@@ -6957,7 +6957,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/SableClient/tauri-runtime-cef?branch=main#c0d9ff8ecf0eac8504c1947932274e7fe7d9fb8c"
+source = "git+https://github.com/SableClient/tauri-runtime-cef?branch=main#6aee1cdbe137b53cb28201417ec302b75a93330a"
 dependencies = [
  "base64 0.22.1",
  "cef",
