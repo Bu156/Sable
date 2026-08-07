@@ -113,10 +113,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'enable-pmp-picker',
   ],
   appearance: [
-    'autoplay-emojis',
     'old-sidebar',
-    'autoplay-gifs',
-    'autoplay-stickers',
     'blur-avatars',
     'blur-emotes',
     'blur-media',
@@ -153,7 +150,6 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'pronoun-pill-max-count',
     'pronoun-pill-max-length',
     'pronoun-pills-for-all',
-    'saturation',
     'selected-language-for-pronouns',
     'show-easter-eggs',
     'show-pronoun-pills',
@@ -170,6 +166,10 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'link-preview-image-max-height',
   ],
   accessibility: [
+    'autoplay-emojis',
+    'autoplay-gifs',
+    'autoplay-stickers',
+    'saturation',
     'underline-links',
     'reduced-motion',
     'render-global-username-colors',
@@ -280,6 +280,15 @@ export const normalizeSettingsFocusId = (focus?: string): string | undefined => 
 const isShareableSettingsFocusId = (section: SettingsSectionId, focus: string): boolean =>
   settingsLinkFocusIdsBySectionSet[section].has(focus);
 
+// Focus ids may live under a different section than the link claims when
+// settings get reorganized; redirect to the owning section.
+const settingsSectionByFocusId = settingsSections.reduce((acc, section) => {
+  for (const focusId of settingsLinkFocusIdsBySection[section.id]) {
+    acc.set(focusId, section.id);
+  }
+  return acc;
+}, new Map<string, SettingsSectionId>());
+
 const parseSettingsLinkQuery = (
   search: string
 ): { focus?: string; hasActionMarker: boolean } | undefined => {
@@ -343,7 +352,9 @@ const parseSettingsAppPath = (appPath: string): SettingsLink | undefined => {
   if (!query) return undefined;
 
   if (query.focus && !isShareableSettingsFocusId(section, query.focus)) {
-    return undefined;
+    const owningSection = settingsSectionByFocusId.get(query.focus);
+    if (!owningSection) return undefined;
+    return { section: owningSection, focus: query.focus };
   }
 
   return { section, focus: query.focus };

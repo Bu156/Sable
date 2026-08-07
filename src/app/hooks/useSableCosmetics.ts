@@ -8,9 +8,7 @@ import { useRoomCreatorsTag } from './useRoomCreatorsTag';
 import { usePowerLevelTags } from './usePowerLevelTags';
 import { useTheme } from './useTheme';
 import { useUserProfile } from './useUserProfile';
-import { useSetting } from '$state/hooks/settings';
-import { settingsAtom } from '$state/settings';
-import { accessibleColor, accessibleColorWeakCorrection } from '$plugins/color';
+import { useAccessibleNameColor } from './useAccessibleNameColor';
 
 export function useSableCosmetics(
   userId: string,
@@ -28,21 +26,10 @@ export function useSableCosmetics(
   const getPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
 
   const accessibleTagColors = useAccessiblePowerTagColors(theme.kind, creatorsTag, powerLevelTags);
-  const [nameColorLightnessCorrection] = useSetting(settingsAtom, 'nameColorLightnessCorrection');
+  const accessibleNameColor = useAccessibleNameColor(theme.kind);
 
   return useMemo(() => {
     if (!room || !userId) return { color: undefined, font: undefined };
-
-    const accessibleNameColor = (color: string | undefined) => {
-      if (!color || nameColorLightnessCorrection === 'off') {
-        return color;
-      } else if (nameColorLightnessCorrection === 'strong') {
-        return accessibleColor(theme.kind, color);
-      } else {
-        /* weak color correction */
-        return accessibleColorWeakCorrection(theme.kind, color);
-      }
-    };
 
     let finalColor = accessibleNameColor(
       isUserHero ? profile.heroNameColor : profile.resolvedColor
@@ -68,7 +55,6 @@ export function useSableCosmetics(
     profile.resolvedFont,
     getPowerTag,
     accessibleTagColors,
-    nameColorLightnessCorrection,
-    theme.kind,
+    accessibleNameColor,
   ]);
 }

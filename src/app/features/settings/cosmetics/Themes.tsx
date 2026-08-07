@@ -1,6 +1,6 @@
 import type { ChangeEventHandler, KeyboardEventHandler } from 'react';
 import { type MouseEventHandler, useEffect, useMemo, useState } from 'react';
-import { Box, Chip, config, Input, Switch, Text, toRem } from 'folds';
+import { Box, Chip, Input, Switch, Text, toRem } from 'folds';
 import { CaretDown, menuIcon } from '$components/icons/phosphor';
 import { isKeyHotkey } from 'is-hotkey';
 
@@ -211,7 +211,6 @@ const onNumberInputKeyDown =
   };
 
 function ThemeVisualPreferences() {
-  const [saturation, setSaturation] = useSetting(settingsAtom, 'saturationLevel');
   const [oldSidebar, setOldSidebar] = useSetting(settingsAtom, 'oldSidebar');
   const [pixelatedImageRendering, setPixelatedImageRendering] = useSetting(
     settingsAtom,
@@ -270,32 +269,6 @@ function ThemeVisualPreferences() {
     <Box direction="Column" gap="100">
       <Text size="L400">Display</Text>
 
-      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
-        <SettingTile
-          title="Saturation"
-          focusId="saturation"
-          description={`${saturation}%`}
-          after={
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={saturation}
-              onChange={(e) => setSaturation(Number.parseInt(e.target.value, 10))}
-              style={{
-                width: toRem(160),
-                cursor: 'pointer',
-                appearance: 'none',
-                height: toRem(6),
-                borderRadius: config.radii.Pill,
-                backgroundColor: 'var(--sable-surface-container-line)',
-                accentColor: 'var(--sable-primary-main)',
-              }}
-            />
-          }
-        />
-      </SequenceCard>
       <SettingToggle
         title="Go back to old sidebar"
         focusId="old-sidebar"
