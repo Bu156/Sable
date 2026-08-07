@@ -281,7 +281,13 @@ pub fn run() {
     // this should always be the first
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-        let _ = show_or_create_main_window(app);
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            let app_handle = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let _ = show_or_create_main_window(&app_handle);
+            });
+        });
     }));
 
     // macOS needs a standard menu (with the Edit submenu) for keyboard
