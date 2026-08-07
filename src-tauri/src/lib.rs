@@ -281,13 +281,26 @@ pub fn run() {
     // this should always be the first
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-        let handle = app.clone();
-        std::thread::spawn(move || {
-            let app_handle = handle.clone();
-            let _ = handle.run_on_main_thread(move || {
-                let _ = show_or_create_main_window(&app_handle);
+        #[cfg(windows)]
+        {
+            let handle = app.clone();
+            std::thread::spawn(move || {
+                let app_handle = handle.clone();
+                let scheduled = handle.run_on_main_thread(move || {
+                    if let Err(error) = show_or_create_main_window(&app_handle) {
+                        log::warn!("Failed to show main window for second instance: {error}");
+                    }
+                });
+                if let Err(error) = scheduled {
+                    log::warn!("Failed to schedule main window show for second instance: {error}");
+                }
             });
-        });
+        }
+
+        #[cfg(not(windows))]
+        if let Err(error) = show_or_create_main_window(app) {
+            log::warn!("Failed to show main window for second instance: {error}");
+        }
     }));
 
     // macOS needs a standard menu (with the Edit submenu) for keyboard
