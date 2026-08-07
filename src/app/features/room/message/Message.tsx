@@ -134,6 +134,7 @@ export type MessageProps = {
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
 import { shouldIgnoreMessageLongPress } from './messageTouch';
+import { accessibleColor } from '$plugins/color';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -477,6 +478,11 @@ function MessageInternal(
     false,
     isVisible
   );
+
+  const accessibleNameColor = useCallback((color: any) => 
+    (color) ? accessibleColor(activeTheme.kind, color) : color
+  , [])
+
   const senderFallbackName = getMxIdLocalPart(senderId) ?? senderId;
   const resolvedSenderDisplayName =
     senderDisplayName === senderFallbackName || senderDisplayName === senderId
@@ -588,7 +594,7 @@ function MessageInternal(
             <Username
               as="button"
               style={{
-                color: pmpNameColor ?? usernameColor,
+                color: accessibleNameColor(pmpNameColor ?? usernameColor),
                 fontFamily: usernameFont,
               }}
               data-user-id={senderId}
@@ -606,7 +612,7 @@ function MessageInternal(
             {showPronouns && (
               <Pronouns
                 pronouns={mergedPronouns}
-                tagColor={pmpNameColor ?? usernameColor ?? 'currentColor'}
+                tagColor={accessibleNameColor(pmpNameColor ?? usernameColor) ?? 'currentColor'}
               />
             )}
             {showPmPInfo && (
