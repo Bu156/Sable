@@ -654,11 +654,15 @@ export function RoomTimeline({
         initialScrollTimerRef.current = undefined;
         if (processedEventsRef.current.length > 0) {
           scrollToBottom();
-          // Only mark ready once we've successfully scrolled.  If processedEvents
-          // was empty when the timer fired (e.g. the onLifecycle reset cleared the
-          // timeline within the 80 ms window), defer setIsReady until the recovery
-          // effect below fires once events repopulate.
-          setIsReady(true);
+          // Re-scroll after measurement; defer setIsReady to avoid a flash.
+          requestAnimationFrame(() => {
+            if (processedEventsRef.current.length > 0) {
+              scrollToBottom();
+              setIsReady(true);
+            } else {
+              pendingReadyRef.current = true;
+            }
+          });
         } else {
           pendingReadyRef.current = true;
         }
@@ -860,16 +864,18 @@ export function RoomTimeline({
   }, [syncAtBottom, scrollToBottom]);
 
   // Decrypting rows and late-loading images grow without changing eventsLength,
-  // so useTimelineSync's auto-scroll never re-fires for them.
+  // so useTimelineSync's auto-scroll never re-fires for them. Also catches
+  // scrollSize shrinkage from VList's initial over-estimate being corrected
+  // once items are measured.
   const lastScrollSizeRef = useRef(0);
   useLayoutEffect(() => {
     const v = vListRef.current;
     if (!v) return;
 
-    const grew = v.scrollSize > lastScrollSizeRef.current;
+    const changed = v.scrollSize !== lastScrollSizeRef.current;
     lastScrollSizeRef.current = v.scrollSize;
 
-    if (!grew || !atBottomRef.current || !liveTimelineLinkedRef.current) return;
+    if (!changed || !atBottomRef.current || !liveTimelineLinkedRef.current) return;
 
     scrollToBottom();
   });
