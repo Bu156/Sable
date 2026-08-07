@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatrixClient } from '$types/matrix-sdk';
 import type { Session } from '$state/sessions';
+import type * as PlatformModule from '$utils/platform';
 import { ACTIVE_SESSION_KEY, MATRIX_SESSIONS_KEY } from '$state/sessions';
-import { newSlidingSyncConnId, ownsActiveMediaSession, supportsSlidingSync } from './initMatrix';
+
+const { isMobileTauri } = vi.hoisted(() => ({
+  isMobileTauri: vi.fn<() => boolean>(),
+}));
+
+vi.mock('$utils/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof PlatformModule>()),
+  isMobileTauri,
+}));
+
+import {
+  newSlidingSyncConnId,
+  ownsActiveMediaSession,
+  resolvePollTimeoutMs,
+  supportsSlidingSync,
+} from './initMatrix';
 
 const alice = { userId: '@alice:example.org' } as Session;
 const bob = { userId: '@bob:example.org' } as Session;
@@ -110,5 +126,29 @@ describe('supportsSlidingSync', () => {
         baseUrl
       )
     ).resolves.toEqual({ supported: false, reason: 'unknown' });
+  });
+});
+
+describe('resolvePollTimeoutMs', () => {
+  beforeEach(() => {
+    isMobileTauri.mockReset();
+  });
+
+  it('uses the shorter poll on mobile tauri', () => {
+    isMobileTauri.mockReturnValue(true);
+
+    expect(resolvePollTimeoutMs(undefined)).toBe(30000);
+  });
+
+  it('uses the default poll elsewhere', () => {
+    isMobileTauri.mockReturnValue(false);
+
+    expect(resolvePollTimeoutMs(undefined)).toBe(45000);
+  });
+
+  it('prefers an explicitly configured timeout on mobile', () => {
+    isMobileTauri.mockReturnValue(true);
+
+    expect(resolvePollTimeoutMs(5000)).toBe(5000);
   });
 });

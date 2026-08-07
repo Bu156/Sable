@@ -2,8 +2,11 @@ import type { IContent, IMentions } from '$types/matrix-sdk';
 import { MsgType, RelationType } from '$types/matrix-sdk';
 import { customHtmlEqualsPlainText } from '$components/editor';
 import { sanitizeText } from '$utils/sanitize';
-import type { PerMessageProfile } from '$hooks/usePerMessageProfile';
-import { convertPerMessageProfileToBeeperFormat } from '$hooks/usePerMessageProfile';
+import type { PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
+import {
+  convertPerMessageProfileToBeeperFormat,
+  stripPerMessageProfileFormattedBody,
+} from '$hooks/usePerMessageProfile';
 import { MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME } from '$unstable/prefixes';
 
 /**
@@ -17,7 +20,8 @@ export function buildReplacementContent(
   eventId: string,
   mMentions: IMentions,
   linkPreviews: { matched_url: string }[],
-  perMessageProfile: unknown
+  perMessageProfile: unknown,
+  pmpNoFallback: boolean
 ): IContent {
   const pmpDisplayname =
     perMessageProfile !== null &&
@@ -31,7 +35,7 @@ export function buildReplacementContent(
   let adjustedPlainText = plainText;
   let adjustedCustomHtml = customHtml;
 
-  if (pmpDisplayname) {
+  if (!pmpNoFallback && pmpDisplayname) {
     const bodyPrefix = `${pmpDisplayname}: `;
     if (!adjustedPlainText.startsWith(bodyPrefix))
       adjustedPlainText = bodyPrefix + adjustedPlainText;
@@ -100,7 +104,7 @@ export function buildReplacementContent(
 export function buildReplacementPmpContent(
   oldContent: IContent,
   eventId: string,
-  newProfile: PerMessageProfile | undefined
+  newProfile: PerMessageProfileMsc4461 | undefined
 ) {
   const profileBeeperFormat =
     newProfile && convertPerMessageProfileToBeeperFormat(newProfile, true);
@@ -111,17 +115,16 @@ export function buildReplacementPmpContent(
     let newPlainBody = plainBody?.replace(/^.*?: /, '');
 
     const formattedBody = oldContent.formatted_body;
-    let newFormattedBody = formattedBody?.replace(
-      /^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/,
-      ''
-    );
+    let newFormattedBody = formattedBody
+      ? stripPerMessageProfileFormattedBody(formattedBody)
+      : undefined;
 
     oldContent.formatted_body = newFormattedBody;
     oldContent.body = newPlainBody;
   }
 
   if (newProfile) {
-    const escapedName = sanitizeText(newProfile.name);
+    const escapedName = sanitizeText(newProfile.displayname);
     const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
 
     if (oldContent.formatted_body) {
@@ -133,7 +136,7 @@ export function buildReplacementPmpContent(
       oldContent.formatted_body = `${htmlPrefix}${escapedBody}`;
     }
 
-    const pmpPrefix = `${newProfile.name}: `;
+    const pmpPrefix = `${newProfile.displayname}: `;
     oldContent.body = pmpPrefix + oldContent.body;
   }
 

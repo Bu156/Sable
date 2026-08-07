@@ -133,6 +133,7 @@ export type MessageProps = {
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
+import { useAccessibleNameColor } from '$hooks/useAccessibleNameColor';
 import { shouldIgnoreMessageLongPress } from './messageTouch';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
@@ -458,8 +459,8 @@ function MessageInternal(
 
   const pmpNameColor = useMemo(() => {
     if (!renderPersonaColors) return undefined;
-    const pmpNameColorLight = parsedPMPContent?.colors?.on_light;
-    const pmpNameColorDark = parsedPMPContent?.colors?.on_dark;
+    const pmpNameColorLight = parsedPMPContent?.['eu.she-a.color']?.on_light;
+    const pmpNameColorDark = parsedPMPContent?.['eu.she-a.color']?.on_dark;
 
     return activeTheme.kind === ThemeKind.Dark ? pmpNameColorDark : pmpNameColorLight;
   }, [parsedPMPContent, activeTheme, renderPersonaColors]);
@@ -468,7 +469,7 @@ function MessageInternal(
    * boolean to indicate wheather we should indicate to the user that it is a pmp
    * We want to not show it, when the name is unset, or whitespace only
    */
-  const showPmPInfo = parsedPMPContent?.name && parsedPMPContent.name?.trim() !== '';
+  const showPmPInfo = parsedPMPContent?.displayname && parsedPMPContent.displayname?.trim() !== '';
   // Profiles and Colors
   const profile = useUserProfile(senderId, room, undefined, true, isVisible);
   const { color: usernameColor, font: usernameFont } = useSableCosmetics(
@@ -477,6 +478,9 @@ function MessageInternal(
     false,
     isVisible
   );
+
+  const accessibleNameColor = useAccessibleNameColor(activeTheme.kind);
+
   const senderFallbackName = getMxIdLocalPart(senderId) ?? senderId;
   const resolvedSenderDisplayName =
     senderDisplayName === senderFallbackName || senderDisplayName === senderId
@@ -488,7 +492,7 @@ function MessageInternal(
    * otherwise we fall back to the profile pronouns.
    * This allows users to set pronouns on a per-message basis, while still falling back to their profile pronouns if they don't set any for a specific message.
    */
-  const pronouns = parsedPMPContent?.pronouns ?? profile.pronouns;
+  const pronouns = parsedPMPContent?.['io.fsky.nyx.pronouns'] ?? profile.pronouns;
 
   const [highlightMentions] = useSetting(settingsAtom, 'highlightMentions');
 
@@ -588,7 +592,7 @@ function MessageInternal(
             <Username
               as="button"
               style={{
-                color: pmpNameColor ?? usernameColor,
+                color: accessibleNameColor(pmpNameColor) ?? usernameColor,
                 fontFamily: usernameFont,
               }}
               data-user-id={senderId}
@@ -606,7 +610,7 @@ function MessageInternal(
             {showPronouns && (
               <Pronouns
                 pronouns={mergedPronouns}
-                tagColor={pmpNameColor ?? usernameColor ?? 'currentColor'}
+                tagColor={accessibleNameColor(pmpNameColor) ?? usernameColor ?? 'currentColor'}
               />
             )}
             {showPmPInfo && (

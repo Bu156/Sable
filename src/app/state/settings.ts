@@ -216,11 +216,6 @@ export interface Settings {
   showEasterEggs: boolean;
   hideReads: boolean;
   emojiSuggestThreshold: number;
-  underlineLinks: boolean;
-  reducedMotion: boolean;
-  autoplayGifs: boolean;
-  autoplayStickers: boolean;
-  autoplayEmojis: boolean;
   oldSidebar: boolean;
   pixelatedImageRendering: PixelatedImageRenderingMode;
   incomingInlineImagesDefaultHeight: number;
@@ -243,6 +238,7 @@ export interface Settings {
   pmpProxying: boolean;
   pmpLatching: boolean;
   pmpPicker: boolean;
+  pmpNoFallback: boolean;
   mentionInReplies: boolean;
   profileChangePropagation: ProfileChangePropagation;
   showPersonaSetting: boolean;
@@ -260,6 +256,14 @@ export interface Settings {
   widgetSidebarWidth: number;
   isShowingAllRoomsInHome: boolean;
   sendIndividualAttachmentAsCaption: boolean;
+
+  // accessibility stuff
+  underlineLinks: boolean;
+  reducedMotion: boolean;
+  autoplayGifs: boolean;
+  autoplayStickers: boolean;
+  autoplayEmojis: boolean;
+  nameColorLightnessCorrection: 'off' | 'weak' | 'strong';
 
   // furry stuff
   renderAnimals: boolean;
@@ -424,6 +428,7 @@ export const defaultSettings: Settings = {
   pmpProxying: false,
   pmpLatching: false,
   pmpPicker: false,
+  pmpNoFallback: false,
   mentionInReplies: true,
   profileChangePropagation: 'unchanged',
   showPersonaSetting: false,
@@ -441,6 +446,8 @@ export const defaultSettings: Settings = {
   widgetSidebarWidth: 420,
   isShowingAllRoomsInHome: false,
   sendIndividualAttachmentAsCaption: true,
+  nameColorLightnessCorrection: 'off',
+
   // furry stuff
   renderAnimals: true,
   animalKind: undefined,
@@ -483,6 +490,19 @@ const isCallToneId = (value: unknown): value is CallRingtoneId => CALL_TONE_ID_S
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 
 function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
+  if (typeof parsed.backgroundPushEnabled !== 'boolean') {
+    const legacyProvider = parsed.useUnifiedPush === true ? 'unifiedpush' : null;
+    if (
+      legacyProvider !== null ||
+      typeof parsed.usePushNotifications === 'boolean' ||
+      typeof parsed.useUnifiedPush === 'boolean'
+    ) {
+      parsed.backgroundPushEnabled =
+        legacyProvider !== null || parsed.usePushNotifications === true;
+      parsed.backgroundPushProvider = legacyProvider;
+    }
+  }
+
   const shortcutOverrides = sanitizeShortcutOverrides(parsed.shortcutOverrides);
   if (shortcutOverrides) parsed.shortcutOverrides = shortcutOverrides;
   else delete parsed.shortcutOverrides;

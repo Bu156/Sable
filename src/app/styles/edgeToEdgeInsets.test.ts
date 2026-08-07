@@ -48,6 +48,13 @@ describe('android edge-to-edge inset contract', () => {
     expect(systemBarShell).toContain('ref={onPortalContainerChange}');
   });
 
+  it('keeps mobile sheets above Folds overlays', () => {
+    const messageStyles = readWorkspaceFile('src/app/features/room/message/styles.css.ts');
+
+    expect(messageStyles).toContain('const mobileSheetZIndex = `calc(${config.zIndex.Max} + 1)`;');
+    expect(messageStyles.match(/zIndex: mobileSheetZIndex/g)).toHaveLength(2);
+  });
+
   it('uses the App shell as the only safe-area owner', () => {
     const appShell = readWorkspaceFile('src/app/components/app-shell/AppShell.tsx');
     const systemBarShell = readWorkspaceFile('src/app/components/app-shell/SystemBarShell.tsx');

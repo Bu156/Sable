@@ -987,7 +987,9 @@ describe('live-arrive edge cases', () => {
 
     await act(async () => {
       mxEmitter.emit(MatrixEventEvent.Decrypted, { getRoomId: () => room.roomId });
-      await Promise.resolve();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => resolve(undefined));
+      });
     });
 
     expect(result.current.timeline).not.toBe(before);
@@ -1000,7 +1002,9 @@ describe('live-arrive edge cases', () => {
 
     await act(async () => {
       mxEmitter.emit(MatrixEventEvent.Decrypted, { getRoomId: () => '!other:test' });
-      await Promise.resolve();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => resolve(undefined));
+      });
     });
 
     expect(result.current.timeline).toBe(before);
@@ -1243,4 +1247,86 @@ describe('sync transport fuzz', () => {
       }
     }
   );
+});
+
+const flushFrame = async () => {
+  await act(async () => {
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => resolve(undefined));
+    });
+  });
+};
+
+describe('decryption refresh coalescing', () => {
+  // Counts distinct timeline objects, not renders: unrelated re-renders reuse the object.
+  const renderTrackingHook = (room: FakeRoom) => {
+    const seen: unknown[] = [];
+    renderHook(() => {
+      const sync = useTimelineSync({
+        room: room as Room,
+        mx: makeMx(),
+        isAtBottom: true,
+        isAtBottomRef: { current: true },
+        scrollToBottom: vi.fn<() => void>(),
+        unreadInfo: undefined,
+        setUnreadInfo: vi.fn<() => void>(),
+        hideReadsRef: { current: false },
+        readUptoEventIdRef: { current: undefined },
+      });
+      if (!seen.includes(sync.timeline)) seen.push(sync.timeline);
+      return sync;
+    });
+    return seen;
+  };
+
+  // One act() per event mirrors decryptions landing in separate tasks.
+  const emitDecryptedAcrossTasks = async (room: FakeRoom, eventCount: number) => {
+    for (let i = 0; i < eventCount; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => {
+        mxEmitter.emit(MatrixEventEvent.Decrypted, { getRoomId: () => room.roomId });
+      });
+    }
+  };
+
+  it('collapses a backlog decryption burst into a single timeline update', async () => {
+    const { room } = createRoom();
+    const seen = renderTrackingHook(room);
+    const initial = seen.length;
+
+    await emitDecryptedAcrossTasks(room, 25);
+    await flushFrame();
+
+    // Uncoalesced this is 25. A frame boundary may split the burst, so allow a small range.
+    expect(seen.length - initial).toBeGreaterThan(0);
+    expect(seen.length - initial).toBeLessThan(5);
+  });
+
+  it('re-arms for the next burst', async () => {
+    const { room } = createRoom();
+    const seen = renderTrackingHook(room);
+    const initial = seen.length;
+
+    await emitDecryptedAcrossTasks(room, 5);
+    await flushFrame();
+    const afterFirstBurst = seen.length;
+    await emitDecryptedAcrossTasks(room, 5);
+    await flushFrame();
+
+    expect(afterFirstBurst).toBeGreaterThan(initial);
+    expect(seen.length).toBeGreaterThan(afterFirstBurst);
+  });
+
+  it('ignores decryption bursts from another room', async () => {
+    const { room } = createRoom();
+    const seen = renderTrackingHook(room);
+    const initial = seen.length;
+
+    await act(async () => {
+      mxEmitter.emit(MatrixEventEvent.Decrypted, { getRoomId: () => '!other:test' });
+    });
+    await flushFrame();
+
+    expect(seen.length).toBe(initial);
+  });
 });

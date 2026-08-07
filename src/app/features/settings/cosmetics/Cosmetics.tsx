@@ -407,16 +407,6 @@ function IdentityCosmetics() {
   );
   const [showPronouns, setShowPronouns] = useSetting(settingsAtom, 'showPronouns');
   const [parsePronouns, setParsePronouns] = useSetting(settingsAtom, 'parsePronouns');
-  const [renderGlobalColors, setRenderGlobalColors] = useSetting(
-    settingsAtom,
-    'renderGlobalNameColors'
-  );
-  const [renderRoomColors, setRenderRoomColors] = useSetting(settingsAtom, 'renderRoomColors');
-  const [renderPersonaColors, setRenderPersonaColors] = useSetting(
-    settingsAtom,
-    'renderPersonaColors'
-  );
-  const [renderRoomFonts, setRenderRoomFonts] = useSetting(settingsAtom, 'renderRoomFonts');
   const [uniformIcons, setUniformIcons] = useSetting(settingsAtom, 'uniformIcons');
 
   return (
@@ -477,34 +467,6 @@ function IdentityCosmetics() {
           after={<SelectRenderCustomProfileCards />}
         />
       </SequenceCard>
-      <SettingToggle
-        title="Render Global Username Colors"
-        focusId="render-global-username-colors"
-        description="Display the username colors anyone can set in their account settings."
-        value={renderGlobalColors}
-        onChange={setRenderGlobalColors}
-      />
-      <SettingToggle
-        title="Render Space/Room Username Colors"
-        focusId="render-space-room-username-colors"
-        description="Display the username colors that can be set with /color."
-        value={renderRoomColors}
-        onChange={setRenderRoomColors}
-      />
-      <SettingToggle
-        title="Render Persona Username Colors"
-        focusId="render-persona-username-colors"
-        description="Display the username colors that can be set on personas."
-        value={renderPersonaColors}
-        onChange={setRenderPersonaColors}
-      />
-      <SettingToggle
-        title="Render Space/Room Fonts"
-        focusId="render-space-room-fonts"
-        description="Display the username fonts that can be set with /font."
-        value={renderRoomFonts}
-        onChange={setRenderRoomFonts}
-      />
       <SettingToggle
         title="Consistent Icon Style"
         focusId="consistent-icon-style"

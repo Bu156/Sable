@@ -45,12 +45,6 @@ export const getFileTypeIconComponent = (fileType: string): PhosphorIcon => {
   return File;
 };
 
-export const fulfilledPromiseSettledResult = <T>(prs: PromiseSettledResult<T>[]): T[] =>
-  prs.reduce<T[]>((values, pr) => {
-    if (pr.status === 'fulfilled') values.push(pr.value);
-    return values;
-  }, []);
-
 export const promiseFulfilledResult = <T>(
   settledResult: PromiseSettledResult<T>
 ): T | undefined => {
@@ -156,4 +150,8 @@ export const splitWithSpace = (content: string): string[] => {
   const trimmedContent = content.trim();
   if (trimmedContent === '') return [];
   return trimmedContent.split(' ');
+};
+
+export const xor = (left: unknown, right: unknown): boolean => {
+  return !left !== !right;
 };

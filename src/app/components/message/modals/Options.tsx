@@ -62,12 +62,15 @@ import {
 } from '$features/bookmarks';
 import { CopyIcon } from '@phosphor-icons/react';
 import * as OptionsCss from './Options.css';
-import { MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS } from '$unstable/prefixes';
+import {
+  MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS,
+  MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME,
+} from '$unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import type { IImageInfo } from '$types/matrix/common';
 import { getIncomingMediaMxcUrl } from '../MsgTypeRenderers';
 import { TemporaryPersonaPicker } from '$features/room/persona-picker/PersonaPicker';
-import { type PerMessageProfile } from '$hooks/usePerMessageProfile';
+import { type PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
 import { buildReplacementPmpContent } from '$features/room/buildReplacementContent';
 import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
@@ -172,7 +175,8 @@ const MessageCopyTextItem = as<
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const handleCopy = () => {
     const content = mEvent.getContent();
-    const body = content?.body;
+    const pmp = content[MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME];
+    const body = pmp ? content?.body?.replace(`${pmp.displayname}: `, '') : content?.body;
 
     if (body) copyToClipboard(body);
     onClose();
@@ -414,7 +418,7 @@ function OptionsReproxyPersonaPicker({
   closeMenu,
   anchor,
 }: OptionsReproxyPersonaPickerProps) {
-  const reproxyMessage = async (profile: PerMessageProfile | undefined) => {
+  const reproxyMessage = async (profile: PerMessageProfileMsc4461 | undefined) => {
     const content = buildReplacementPmpContent(mEvent.getContent(), mEvent.getId()!, profile);
     await mx.sendMessage(roomId, content as RoomMessageEventContent);
 

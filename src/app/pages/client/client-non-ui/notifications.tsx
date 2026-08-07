@@ -34,6 +34,7 @@ import { settingsAtom } from '$state/settings';
 import { nicknamesAtom } from '$state/nicknames';
 import { mDirectAtom } from '$state/mDirectList';
 import { allInvitesAtom } from '$state/room-list/inviteList';
+import { markAsRead } from '$utils/notifications';
 import { usePreviousValue } from '$hooks/usePreviousValue';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { getStateEvent } from '$utils/room/hierarchy';
@@ -79,7 +80,7 @@ export function InviteNotifications() {
 
   const navigate = useNavigate();
   const [showSystemNotifications] = useSetting(settingsAtom, 'useSystemNotifications');
-  const [usePushNotifications] = useSetting(settingsAtom, 'usePushNotifications');
+  const [backgroundPushEnabled] = useSetting(settingsAtom, 'backgroundPushEnabled');
   const [notificationSound] = useSetting(settingsAtom, 'isNotificationSounds');
   const [backgroundNotificationSounds] = useSetting(settingsAtom, 'backgroundNotificationSounds');
 
@@ -127,7 +128,7 @@ export function InviteNotifications() {
     if (invites.length <= perviousInviteLen || mx.getSyncState() !== SyncState.Syncing) return;
 
     // SW push (via Sygnal) handles invite notifications when the app is backgrounded.
-    if (!isPageVisible() && usePushNotifications) return;
+    if (!isPageVisible() && backgroundPushEnabled) return;
 
     const withSound = notificationSound && (isWindowFocused() || backgroundNotificationSounds);
     let soundOnNotification = false;
@@ -153,7 +154,7 @@ export function InviteNotifications() {
     invites,
     perviousInviteLen,
     showSystemNotifications,
-    usePushNotifications,
+    backgroundPushEnabled,
     notificationSound,
     backgroundNotificationSounds,
     notify,
@@ -704,6 +705,7 @@ function registerNativeNotificationListener(
 // payload attached in sendNativeTauriNotification.
 export function NativeNotificationClickRouting() {
   const setPending = useSetAtom(pendingNotificationAtom);
+  const setActiveSessionId = useSetAtom(activeSessionIdAtom);
   const navigate = useNavigate();
 
   useEffect(
@@ -716,6 +718,8 @@ export function NativeNotificationClickRouting() {
               .catch(() => {});
           }
           if (!data) return;
+          if (!data.user_id) return;
+          setActiveSessionId(data.user_id);
           if (data.type === 'invite') {
             navigate(getInboxInvitesPath());
             return;
@@ -729,7 +733,7 @@ export function NativeNotificationClickRouting() {
           }
         })
       ),
-    [setPending, navigate]
+    [setPending, setActiveSessionId, navigate]
   );
 
   return null;
@@ -740,6 +744,7 @@ const SABLE_REPLY_ACTION = 'sable-reply';
 
 export function NativeNotificationActionRouting() {
   const mx = useMatrixClient();
+  const [hideReads] = useSetting(settingsAtom, 'hideReads');
   const queue = useAtomValue(nativeNotificationRepliesAtom);
   const sessions = useAtomValue(sessionsAtom);
   const sessionsRef = useRef(sessions);
@@ -811,6 +816,9 @@ export function NativeNotificationActionRouting() {
     setInFlight((previous: Set<string>) => new Set(previous).add(item.key));
     void mx
       .sendMessage(item.roomId, null, { msgtype: MsgType.Text, body: item.text })
+      // Replying is reading; otherwise the room stays unread and its
+      // notification lingers while later pushes stack onto it.
+      .then(() => markAsRead(mx, item.roomId, hideReads).catch(() => undefined))
       .catch(() => {
         showToast('Reply was not sent. Open the room to retry.');
       })
@@ -823,7 +831,7 @@ export function NativeNotificationActionRouting() {
         remove(item.key);
       });
     return clearExpiryTimer;
-  }, [mx, queue, remove, setActiveSessionId, inFlight, setInFlight, replyWakeup]);
+  }, [mx, queue, remove, setActiveSessionId, inFlight, setInFlight, replyWakeup, hideReads]);
 
   return null;
 }
