@@ -416,7 +416,7 @@ export const buildSettingsLink = (
   focus?: string
 ): string => withOriginBaseUrl(baseUrl, withSettingsLinkAction(getSettingsPath(section, focus)));
 
-const humanizeSettingsLinkPart = (value: string): string =>
+export const humanizeSettingsLinkPart = (value: string): string =>
   value
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
