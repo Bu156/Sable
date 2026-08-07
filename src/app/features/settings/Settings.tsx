@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
-import { DesktopIcon, type IconProps } from '@phosphor-icons/react';
+import { DesktopIcon, PersonSimpleCircleIcon, type IconProps } from '@phosphor-icons/react';
 import { Avatar, Box, Button, config, Text } from 'folds';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useUserProfile } from '$hooks/useUserProfile';
@@ -46,10 +46,12 @@ import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
 import { Desktop } from './desktop';
 import { isDesktopTauri } from '$utils/platform';
+import { Accessibility } from './accessibility/Accessibility';
 
 enum SettingsPages {
   GeneralPage,
   AccountPage,
+  AccessibilityPage,
   PerMessageProfilesPage,
   NotificationPage,
   DevicesPage,
@@ -79,6 +81,7 @@ const settingsMenuIcons: Record<
   account: { icon: User },
   persona: { icon: UsersThree },
   appearance: { icon: Palette },
+  accessibility: { icon: PersonSimpleCircleIcon },
   notifications: { icon: Bell },
   devices: { icon: DevicesIcon },
   desktop: { icon: DesktopIcon },
@@ -92,6 +95,7 @@ const settingsMenuIcons: Record<
 const settingsPageToSectionId: Record<SettingsPages, SettingsSectionId> = {
   [SettingsPages.GeneralPage]: 'general',
   [SettingsPages.AccountPage]: 'account',
+  [SettingsPages.AccessibilityPage]: 'accessibility',
   [SettingsPages.PerMessageProfilesPage]: 'persona',
   [SettingsPages.NotificationPage]: 'notifications',
   [SettingsPages.DevicesPage]: 'devices',
@@ -109,6 +113,7 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
   account: SettingsPages.AccountPage,
   persona: SettingsPages.PerMessageProfilesPage,
   appearance: SettingsPages.CosmeticsPage,
+  accessibility: SettingsPages.AccessibilityPage,
   notifications: SettingsPages.NotificationPage,
   devices: SettingsPages.DevicesPage,
   desktop: SettingsPages.DesktopPage,
@@ -124,6 +129,7 @@ const settingsSectionComponents = {
   account: Account,
   persona: PerMessageProfilePage,
   appearance: Cosmetics,
+  accessibility: Accessibility,
   notifications: Notifications,
   devices: Devices,
   desktop: Desktop,
