@@ -162,12 +162,16 @@ type AccessibilityProps = {
 };
 
 export function Accessibility({ requestBack, requestClose }: AccessibilityProps) {
-  const appearanceScrollRef = useRef<HTMLDivElement | null>(null);
+  const accessibilityScrollRef = useRef<HTMLDivElement | null>(null);
 
   return (
-    <SettingsSectionPage title="Appearance" requestBack={requestBack} requestClose={requestClose}>
+    <SettingsSectionPage
+      title="Accessibility"
+      requestBack={requestBack}
+      requestClose={requestClose}
+    >
       <Box grow="Yes">
-        <Scroll ref={appearanceScrollRef} hideTrack visibility="Hover">
+        <Scroll ref={accessibilityScrollRef} hideTrack visibility="Hover">
           <PageContent>
             <Box direction="Column" gap="700">
               <TextColorPreferences />

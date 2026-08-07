@@ -133,8 +133,8 @@ export type MessageProps = {
 
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
+import { useAccessibleNameColor } from '$hooks/useAccessibleNameColor';
 import { shouldIgnoreMessageLongPress } from './messageTouch';
-import { accessibleColor, accessibleColorWeakCorrection } from '$plugins/color';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -374,7 +374,6 @@ function MessageInternal(
   const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined');
   const activeTheme = useActiveTheme();
   const [renderPersonaColors] = useSetting(settingsAtom, 'renderPersonaColors');
-  const [nameColorLightnessCorrection] = useSetting(settingsAtom, 'nameColorLightnessCorrection');
 
   useEffect(() => {
     const element = messageRef.current;
@@ -480,19 +479,7 @@ function MessageInternal(
     isVisible
   );
 
-  const accessibleNameColor = useCallback(
-    (color: string | undefined) => {
-      if (!color || nameColorLightnessCorrection === 'off') {
-        return color;
-      } else if (nameColorLightnessCorrection === 'strong') {
-        return accessibleColor(activeTheme.kind, color);
-      } else {
-        /* weak color correction */
-        return accessibleColorWeakCorrection(activeTheme.kind, color);
-      }
-    },
-    [nameColorLightnessCorrection, activeTheme]
-  );
+  const accessibleNameColor = useAccessibleNameColor(activeTheme.kind);
 
   const senderFallbackName = getMxIdLocalPart(senderId) ?? senderId;
   const resolvedSenderDisplayName =

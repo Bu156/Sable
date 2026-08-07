@@ -68,7 +68,7 @@ import {
   convertBeeperFormatToOurPerMessageProfile,
   stripPerMessageProfileFormattedBody,
 } from '$hooks/usePerMessageProfile';
-import { accessibleColor, accessibleColorWeakCorrection } from '$plugins/color';
+import { useAccessibleNameColor } from '$hooks/useAccessibleNameColor';
 
 const ROOM_REPLY_TIMELINE_EVENT_TYPES = new Set<string>([
   EventType.RoomMessage as string,
@@ -298,27 +298,12 @@ export const Reply = as<'div', ReplyProps>(
     const { color: usernameColor, font: usernameFont } = useSableCosmetics(sender ?? '', room);
     const activeTheme = useActiveTheme();
 
-    const [nameColorLightnessCorrection] = useSetting(settingsAtom, 'nameColorLightnessCorrection');
-    const accessibleNameColor = useCallback(
-      (nameColor: string | undefined) => {
-        const colorCorrection =
-          nameColorLightnessCorrection === 'strong'
-            ? accessibleColor
-            : nameColorLightnessCorrection === 'weak'
-              ? accessibleColorWeakCorrection
-              : () => nameColor;
-
-        return nameColor ? colorCorrection(activeTheme.kind, nameColor) : nameColor;
-      },
-      [nameColorLightnessCorrection, activeTheme]
-    );
+    const accessibleNameColor = useAccessibleNameColor(activeTheme.kind);
     const pmpNameColor = useMemo(() => {
-      return accessibleNameColor(
-        activeTheme.kind === ThemeKind.Dark
-          ? pmp?.['eu.she-a.color']?.on_dark
-          : pmp?.['eu.she-a.color']?.on_light
-      );
-    }, [activeTheme, pmp, accessibleNameColor]);
+      return activeTheme.kind === ThemeKind.Dark
+        ? pmp?.['eu.she-a.color']?.on_dark
+        : pmp?.['eu.she-a.color']?.on_light;
+    }, [activeTheme, pmp]);
 
     const nicknames = useAtomValue(nicknamesAtom);
     const cachedProfiles = useAtomValue(profilesCacheAtom);
