@@ -1,16 +1,25 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
-const { pause, resume, getSlidingSyncManager, listen, listenOff, mockIsTauri, mockCallEmbed } =
-  vi.hoisted(() => ({
-    pause: vi.fn<() => void>(),
-    resume: vi.fn<() => void>(),
-    getSlidingSyncManager: vi.fn<() => unknown>(),
-    listen: vi.fn<(_event: string, _cb: () => void) => Promise<() => void>>(),
-    listenOff: vi.fn<() => void>(),
-    mockIsTauri: { value: false },
-    mockCallEmbed: { value: undefined as unknown },
-  }));
+const {
+  pause,
+  resume,
+  getSlidingSyncManager,
+  listen,
+  listenOff,
+  mockIsTauri,
+  mockIsMobileTauri,
+  mockCallEmbed,
+} = vi.hoisted(() => ({
+  pause: vi.fn<() => void>(),
+  resume: vi.fn<() => void>(),
+  getSlidingSyncManager: vi.fn<() => unknown>(),
+  listen: vi.fn<(_event: string, _cb: () => void) => Promise<() => void>>(),
+  listenOff: vi.fn<() => void>(),
+  mockIsTauri: { value: false },
+  mockIsMobileTauri: { value: true },
+  mockCallEmbed: { value: undefined as unknown },
+}));
 
 vi.mock('$client/initMatrix', () => ({ getSlidingSyncManager }));
 
@@ -28,6 +37,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => mockIsTauri.value }));
 
+vi.mock('$utils/platform', () => ({ isMobileTauri: () => mockIsMobileTauri.value }));
+
 import { useBackgroundSyncPause } from './useBackgroundSyncPause';
 
 const setVisibility = (state: 'visible' | 'hidden') =>
@@ -42,6 +53,7 @@ describe('useBackgroundSyncPause', () => {
     listen.mockReset().mockResolvedValue(listenOff);
     getSlidingSyncManager.mockReset().mockReturnValue({ pause, resume });
     mockIsTauri.value = false;
+    mockIsMobileTauri.value = true;
     mockCallEmbed.value = undefined;
   });
 
@@ -86,6 +98,17 @@ describe('useBackgroundSyncPause', () => {
     cb();
 
     expect(resume).toHaveBeenCalled();
+  });
+
+  it('keeps polling when a browser tab is hidden', () => {
+    mockIsMobileTauri.value = false;
+    setVisibility('visible');
+    renderHook(() => useBackgroundSyncPause({ clientRunning: true } as never));
+
+    setVisibility('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(pause).not.toHaveBeenCalled();
   });
 
   it('does nothing without a client', () => {

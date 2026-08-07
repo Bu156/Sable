@@ -1445,6 +1445,23 @@ describe('SlidingSyncManager pause/resume', () => {
     }
   });
 
+  it('keeps the watchdog silent when the aborted poll emits a lifecycle event', () => {
+    vi.useFakeTimers();
+    try {
+      const manager = makeManager(makeMockMx());
+      manager.attach();
+      manager.pause();
+      mocks.slidingSyncInstance.resend.mockClear();
+
+      fireLifecycle(SlidingSyncState.RequestFinished, {});
+      vi.advanceTimersByTime(DEFAULT_DEADLINE_MS * 3);
+
+      expect(mocks.slidingSyncInstance.resend).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('re-arms the poll watchdog on resume', () => {
     vi.useFakeTimers();
     try {

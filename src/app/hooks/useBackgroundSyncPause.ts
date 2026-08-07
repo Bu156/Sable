@@ -4,6 +4,7 @@ import { TauriEvent, listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { getSlidingSyncManager } from '$client/initMatrix';
+import { isMobileTauri } from '$utils/platform';
 import { callEmbedAtom } from '../state/callEmbed';
 
 /**
@@ -17,7 +18,7 @@ export const useBackgroundSyncPause = (mx: MatrixClient | undefined): void => {
   const callActive = callEmbed !== undefined;
 
   useEffect(() => {
-    if (!mx) return undefined;
+    if (!mx || !isMobileTauri()) return undefined;
 
     const resume = () => getSlidingSyncManager(mx)?.resume();
     const applyVisibility = () => {
