@@ -706,7 +706,7 @@ export class SlidingSyncManager {
    * `continue`s without emitting a lifecycle event.
    */
   private armPollWatchdog(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.paused) return;
     globalThis.clearTimeout(this.pollWatchdogTimer);
     this.pollWatchdogTimer = globalThis.setTimeout(() => {
       this.pollWatchdogTimer = undefined;
