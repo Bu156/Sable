@@ -6,7 +6,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => false,
 }));
 
-import { clearMediaObjectUrls, ensureMediaObjectUrl, getMediaObjectUrl } from './mediaObjectUrlCache';
+import {
+  clearMediaObjectUrls,
+  ensureMediaObjectUrl,
+  getMediaObjectUrl,
+} from './mediaObjectUrlCache';
 
 beforeEach(() => {
   stubObjectUrls();

@@ -87,12 +87,14 @@ describe('useUserProfile', () => {
     const requested: string[] = [];
     const release: (() => void)[] = [];
     const mx = {
-      getProfileInfo: vi.fn((userId: string) => {
-        requested.push(userId);
-        return new Promise((resolve) => {
-          release.push(() => resolve({ displayname: userId }));
-        });
-      }),
+      getProfileInfo: vi.fn<(userId: string) => Promise<{ displayname: string }>>(
+        (userId: string) => {
+          requested.push(userId);
+          return new Promise((resolve) => {
+            release.push(() => resolve({ displayname: userId }));
+          });
+        }
+      ),
       getUser: vi.fn<() => void>(),
       getUserId: vi.fn<() => string>().mockReturnValue('@me:example.org'),
     } as unknown as MatrixClient;
