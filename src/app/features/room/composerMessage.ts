@@ -127,7 +127,6 @@ const applyPerMessageProfileFallback = (
     content.formatted_body = htmlPrefix + content.formatted_body;
   } else {
     // we don't have a formatted body, but the fallback needs one
-    // set before content.body so we don't double fallback
     content.format = 'org.matrix.custom.html';
     const escapedBody = sanitizeText(bodyWithoutFallback).replaceAll('\n', '<br/>');
     content.formatted_body = `${htmlPrefix}${escapedBody}`;
@@ -223,12 +222,11 @@ export async function buildOutgoingMessage(
   // PluralKit-style proxy wrappers must be stripped before building `content`, otherwise
   // the wrapper itself gets sent verbatim.
   const catalog = new ProfileCatalog(mx);
-  const personas = await catalog.list({ migrate: false });
   let proxiedPerMessageProfile: PerMessageProfileMsc4461 | undefined;
   let proxyStripped = false;
   if (pmpProxyingEnable) {
     const proxy = resolvePersonaProxy(
-      personas,
+      await catalog.list({ migrate: false }),
       toPlainText(serializedChildren, true, false, nicknameReplacement).trim()
     );
     if (proxy) {

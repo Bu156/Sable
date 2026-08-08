@@ -55,7 +55,6 @@ import { useSetting } from '$state/hooks/settings';
 import type { EditorButtonId } from '$state/settings';
 import { MessageLayout, RightSwipeAction, settingsAtom } from '$state/settings';
 import { SettingTile, SettingToggle } from '$components/setting-tile';
-import { downloadJsonFile } from '$utils/common';
 import { getDebugLogger } from '$utils/debugLogger';
 import { KeySymbol } from '$utils/key-symbol';
 import { isDesktopTauri, isMacOS, isMobileOrTablet, isMobileTauri } from '$utils/platform';
@@ -66,7 +65,7 @@ import { settingsSyncLastSyncedAtom, settingsSyncStatusAtom } from '$hooks/useSe
 import { sanitizeDiagnosticsLogs } from '$utils/sentryScrubbers';
 import { diagnosticCaptureActiveAtom } from '$state/debugLogger';
 import { exportSettingsAsJson, importSettingsFromJson } from '$utils/settingsSync';
-import { saveFileToDevice } from '$utils/download';
+import { downloadJsonFile, saveFileToDevice } from '$utils/download';
 import { CallSoundSettings } from './CallSoundSettings';
 
 type DateHintProps = {
@@ -1353,7 +1352,7 @@ function DiagnosticsAndPrivacy() {
           setDiagnosticsState('error');
           return;
         }
-        downloadJsonFile(sanitizedLogs, 'sable-web-diagnostics');
+        await downloadJsonFile(sanitizedLogs, 'sable-web-diagnostics');
       }
       setDiagnosticsState('success');
       setCaptureCompleted(false);
