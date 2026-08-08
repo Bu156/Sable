@@ -408,10 +408,6 @@ function PersonaPickerMenu({
       <IconButton
         aria-pressed={!!AddPersonaMenuAnchor}
         onClick={(evt) => {
-          // getAllPerMessageProfiles can return an empty list during initial startup.
-          if (profiles?.length === 0) {
-            void fetchProfiles(mx);
-          }
           setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
         }}
         onPointerDown={suppressEditorRefocus}
