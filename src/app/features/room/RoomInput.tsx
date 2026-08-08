@@ -1,4 +1,10 @@
-import type { KeyboardEventHandler, MouseEvent, ReactElement, RefObject } from 'react';
+import type {
+  KeyboardEventHandler,
+  MouseEvent,
+  PointerEvent,
+  ReactElement,
+  RefObject,
+} from 'react';
 import {
   forwardRef,
   Fragment,
@@ -408,6 +414,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const uploadBoardHandlers = useRef<UploadBoardImperativeHandlers>();
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
+    const sentOnPointerUpRef = useRef(false);
     const suppressBlurRefocusRef = useRef(false);
     const editorRafIdsRef = useRef(new Set<number>());
     const scheduleEditorRaf = useCallback((callback: () => void) => {
@@ -2518,6 +2525,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       isLongPress.current = false;
                       return;
                     }
+                    if (sentOnPointerUpRef.current) return;
                     submit();
                     return;
                   }
@@ -2530,6 +2538,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   if (hasContent) e.preventDefault();
                 }}
                 onPointerDown={() => {
+                  sentOnPointerUpRef.current = false;
                   if (showAudioRecorder) return;
                   if (hasContent) {
                     isLongPress.current = false;
@@ -2577,11 +2586,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   window.addEventListener('pointerup', onUp);
                   window.addEventListener('pointercancel', discardRecording);
                 }}
-                onPointerUp={() => {
+                onPointerUp={(evt: PointerEvent<HTMLButtonElement>) => {
                   if (longPressTimer.current !== null) {
                     clearTimeout(longPressTimer.current);
                     longPressTimer.current = null;
                   }
+                  // iOS drops the synthesized click when the page mutates during a tap.
+                  if (evt.pointerType === 'mouse') return;
+                  if (showAudioRecorder || !hasContent || isLongPress.current) return;
+                  // Touch implicitly captures the pointer, so a release off the button lands here too.
+                  const rect = evt.currentTarget.getBoundingClientRect();
+                  if (
+                    evt.clientX < rect.left ||
+                    evt.clientX > rect.right ||
+                    evt.clientY < rect.top ||
+                    evt.clientY > rect.bottom
+                  ) {
+                    return;
+                  }
+                  sentOnPointerUpRef.current = true;
+                  submit();
                 }}
                 onPointerCancel={() => {
                   if (longPressTimer.current !== null) {
