@@ -115,6 +115,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'pmp-list-export',
   ],
   appearance: [
+    'app-icon',
     'old-sidebar',
     'blur-avatars',
     'blur-emotes',
