@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { DesktopIcon, PersonSimpleCircleIcon, type IconProps } from '@phosphor-icons/react';
-import { Avatar, Box, Button, config, Text } from 'folds';
+import { Avatar, Box, Button, config, Input, MenuItem, Text } from 'folds';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
@@ -20,9 +20,11 @@ import {
   GearSix,
   Info,
   Keyboard,
+  MagnifyingGlass,
   menuIcon,
   SignOut,
   Palette,
+  sizedIcon,
   Smiley,
   Terminal,
   User,
@@ -41,6 +43,7 @@ import { KeyboardShortcuts } from './keyboard-shortcuts';
 import { Notifications } from './notifications';
 import { PerMessageProfilePage } from './Persona/ProfilesPage';
 import { settingsSections, type SettingsSectionId } from './routes';
+import { searchSettings, type SettingsSearchEntry } from './settingsSearch';
 import { useSettingsFocus } from './useSettingsFocus';
 import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
@@ -146,6 +149,7 @@ const settingsSectionComponents = {
 type ControlledSettingsProps = {
   activeSection?: SettingsSectionId | null;
   onSelectSection?: (section: SettingsSectionId) => void;
+  onSelectSetting?: (section: SettingsSectionId, focus: string) => void;
   onBack?: () => void;
   requestClose: () => void;
   initialPage?: SettingsPages;
@@ -165,6 +169,7 @@ function SettingsSectionProvider({ children, section, baseUrl }: SectionWrapperP
 export function Settings({
   activeSection,
   onSelectSection,
+  onSelectSetting,
   onBack,
   requestClose,
   initialPage,
@@ -273,6 +278,16 @@ export function Settings({
     [showPersona, isDesktop]
   );
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchResults = useMemo(() => searchSettings(searchQuery), [searchQuery]);
+  const isSearching = searchQuery.trim().length > 0;
+  const menuItemTextSize = screenSize === ScreenSize.Mobile ? 'T400' : 'T300';
+
+  const handleSearchResultSelect = (entry: SettingsSearchEntry) => {
+    setSearchQuery('');
+    onSelectSetting?.(entry.section, entry.focusId);
+  };
+
   const renderHeader = useMemo(
     () =>
       (closeButton: ReactNode): ReactNode => (
@@ -305,8 +320,48 @@ export function Settings({
       requestClose={handleRequestClose}
       renderHeader={renderHeader}
       showCloseInHeader={visibleSection === null}
-      menuItemTextSize={screenSize === ScreenSize.Mobile ? 'T400' : 'T300'}
+      menuItemTextSize={menuItemTextSize}
       closeButtonAriaLabel="Close settings"
+      searchBar={
+        <Input
+          variant="SurfaceVariant"
+          size="400"
+          placeholder="Search settings"
+          maxLength={50}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
+          before={sizedIcon(MagnifyingGlass, '50')}
+          style={{ width: '100%' }}
+        />
+      }
+      searchResults={
+        isSearching ? (
+          searchResults.length > 0 ? (
+            searchResults.map((entry) => (
+              <MenuItem
+                key={`${entry.section}-${entry.focusId}`}
+                variant="Background"
+                radii="400"
+                before={sizedIcon(MagnifyingGlass, '50')}
+                onClick={() => handleSearchResultSelect(entry)}
+              >
+                <Box direction="Column">
+                  <Text size={menuItemTextSize} truncate>
+                    {entry.label}
+                  </Text>
+                  <Text size="T200" truncate>
+                    {entry.sectionLabel}
+                  </Text>
+                </Box>
+              </MenuItem>
+            ))
+          ) : (
+            <Box style={{ padding: config.space.S300 }} alignItems="Center" justifyContent="Center">
+              <Text size="T300">No results found</Text>
+            </Box>
+          )
+        ) : undefined
+      }
       renderSection={(viewport) =>
         visibleSection ? (
           <SettingsSectionProvider section={visibleSection} baseUrl={settingsLinkBaseUrl}>
