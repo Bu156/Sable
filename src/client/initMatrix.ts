@@ -226,6 +226,8 @@ const isMismatch = (err: unknown): boolean => {
   );
 };
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 type BuiltClient = {
   mx: MatrixClient;
   indexedDBStore: IndexedDBStore;
@@ -261,6 +263,7 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
     cryptoCallbacks: cryptoCallbacks as unknown as CryptoCallbacks,
     verificationMethods: ['m.sas.v1'],
     tokenRefreshFunction: tokenRefresher?.tokenRefreshFunction,
+    localTimeoutMs: REQUEST_TIMEOUT_MS,
   });
 
   return { mx, indexedDBStore };
