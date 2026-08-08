@@ -14,10 +14,12 @@ use tauri::{
 };
 
 mod crypto;
+mod lane;
 mod response;
 mod session;
 
 use crypto::EncryptionStore;
+use lane::{LanePermit, LifoLane};
 use response::{
     apply_cors_headers, error_response, ok_response, read_full, serve_range, serve_range_memory,
     session_unavailable_response, sniff_image_content_type,
@@ -27,10 +29,7 @@ use tauri_plugin_http::reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client, Url,
 };
-use tokio::{
-    sync::{Mutex as AsyncMutex, Semaphore},
-    time::Instant,
-};
+use tokio::{sync::Mutex as AsyncMutex, time::Instant};
 
 pub const MEDIA_URI_SCHEME: &str = "sable-media";
 const MEDIA_SESSION_MARKER: &str = "__sable_media_session";
@@ -60,8 +59,8 @@ pub struct MediaSessionState {
     session_store: SessionStore,
     encryption: EncryptionStore,
     client: OnceLock<Client>,
-    thumbnail_semaphore: Semaphore,
-    download_semaphore: Semaphore,
+    thumbnail_lane: LifoLane,
+    download_lane: LifoLane,
     cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
     negative_cache: Mutex<HashMap<String, (StatusCode, Instant)>>,
 }
@@ -72,8 +71,8 @@ impl Default for MediaSessionState {
             session_store: SessionStore::default(),
             encryption: EncryptionStore::default(),
             client: OnceLock::new(),
-            thumbnail_semaphore: Semaphore::new(MAX_CONCURRENT_THUMBNAIL_REQUESTS),
-            download_semaphore: Semaphore::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
+            thumbnail_lane: LifoLane::new(MAX_CONCURRENT_THUMBNAIL_REQUESTS),
+            download_lane: LifoLane::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
             cache_miss_gates: Mutex::new(HashMap::new()),
             negative_cache: Mutex::new(HashMap::new()),
         }
@@ -488,23 +487,29 @@ async fn ensure_cached_with_limits(
 }
 
 // Thumbnails queue separately so a few large downloads cannot stall a painting timeline.
-async fn acquire_lane<'a>(
-    state: &'a MediaSessionState,
-    media_url: &Url,
-) -> Result<tokio::sync::SemaphorePermit<'a>, StatusCode> {
-    let semaphore = if is_thumbnail_request(media_url) {
-        &state.thumbnail_semaphore
+async fn acquire_lane<'a>(state: &'a MediaSessionState, media_url: &Url) -> LanePermit<'a> {
+    let lane = if is_thumbnail_request(media_url) {
+        &state.thumbnail_lane
     } else {
-        &state.download_semaphore
+        &state.download_lane
     };
-    semaphore
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    lane.acquire().await
 }
 
 fn is_thumbnail_request(media_url: &Url) -> bool {
-    media_url.path().contains("/thumbnail/")
+    let Some(segments) = media_url.path_segments() else {
+        return false;
+    };
+    let mut after_media = segments.skip_while(|segment| *segment != "media").skip(1);
+    match after_media.next() {
+        // The legacy endpoints carry a version segment before the action.
+        Some(segment) if is_media_api_version(segment) => after_media.next() == Some("thumbnail"),
+        segment => segment == Some("thumbnail"),
+    }
+}
+
+fn is_media_api_version(segment: &str) -> bool {
+    matches!(segment, "v1" | "v3" | "r0")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -521,7 +526,7 @@ async fn fetch_and_cache(
     max_persistent_cache_bytes: u64,
     max_temp_cache_bytes: u64,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
-    let permit = acquire_lane(state, &media_url).await?;
+    let permit = acquire_lane(state, &media_url).await;
 
     let mut upstream = state
         .client()
@@ -1408,6 +1413,16 @@ mod tests {
                 .unwrap();
         assert!(super::is_thumbnail_request(&thumbnail));
         assert!(!super::is_thumbnail_request(&download));
+
+        let legacy =
+            super::Url::parse("https://matrix.example.org/_matrix/media/v3/thumbnail/x/y").unwrap();
+        assert!(super::is_thumbnail_request(&legacy));
+
+        // A media id spelled "thumbnail" is still a download.
+        let lookalike =
+            super::Url::parse("https://matrix.example.org/_matrix/media/v3/download/x/thumbnail")
+                .unwrap();
+        assert!(!super::is_thumbnail_request(&lookalike));
     }
 
     #[test]

@@ -1,3 +1,5 @@
+import { clearMediaObjectUrls } from './mediaObjectUrlCache';
+
 const CACHE_NAME = 'sable-media-v2';
 const LEGACY_CACHE_NAMES = ['sable-media-v1'];
 const MAX_ENTRIES = 500;
@@ -11,6 +13,7 @@ let legacyCachesCleaned = false;
 
 export async function clearMediaCache(): Promise<void> {
   pendingBlobs.clear();
+  clearMediaObjectUrls();
   writesSinceEviction = 0;
   if (typeof caches === 'undefined') return;
   try {
