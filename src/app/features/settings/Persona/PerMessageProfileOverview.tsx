@@ -17,7 +17,7 @@ import {
   MATRIX_UNSTABLE_COLORS,
   MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
 } from '$unstable/prefixes';
-import { downloadJsonFile } from '$app/utils/common';
+import { downloadJsonFile } from '$app/utils/download';
 import { selectFile } from '$app/utils/dom';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { AsyncError } from '$components/AsyncError';
@@ -96,7 +96,7 @@ export function PerMessageProfileOverview({
     useCallback(async () => {
       const personas = await new ProfileCatalog(mx).list();
       const data = { personas };
-      downloadJsonFile(JSON.stringify(data), 'persona');
+      await downloadJsonFile(JSON.stringify(data), 'persona');
     }, [mx])
   );
 
