@@ -1,7 +1,8 @@
 import type { MouseEventHandler, ReactNode } from 'react';
 import { useCallback, useState } from 'react';
 import type { RectCords } from 'folds';
-import { Box, Text, Chip, PopOut, Menu, config, MenuItem, color } from 'folds';
+import { Box, Text, Chip, Menu, config, MenuItem, color } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import { CaretDown, sizedIcon } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
 import type { SecretStorageKeyContent } from '$types/matrix/accountData';

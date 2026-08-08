@@ -3,6 +3,7 @@ import { Box, Text, color, config, toRem } from 'folds';
 
 import { Check, sizedIcon } from '$components/icons/phosphor';
 import { useToastMessage } from '$state/toast';
+import { OVERLAY_LAYER_TOP } from '$components/overlay-stack';
 
 type ToastProps = {
   container: HTMLElement | null;
@@ -22,7 +23,7 @@ export function Toast({ container }: ToastProps) {
         display: 'flex',
         justifyContent: 'center',
         pointerEvents: 'none',
-        zIndex: 9999,
+        zIndex: OVERLAY_LAYER_TOP,
       }}
     >
       <Box

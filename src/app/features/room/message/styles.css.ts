@@ -1,9 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { DefaultReset, FocusOutline, color, config, toRem } from 'folds';
 
-// Sheets can be opened from an existing Folds overlay, whose maximum layer is Z9999.
-const mobileSheetZIndex = `calc(${config.zIndex.Max} + 1)`;
-
 export const MessageBase = style({
   position: 'relative',
   maxWidth: '100%',
@@ -96,8 +93,6 @@ export const PreventSelect = style({
   userSelect: 'none',
   MozUserSelect: 'none',
 });
-//I have zero clue where these numbers and vars are from but they should be changed
-//I just copied the hardcoded value in a more correct place
 
 export const MessageMobileOptionsWrapped = style({
   position: 'fixed',
@@ -105,7 +100,6 @@ export const MessageMobileOptionsWrapped = style({
   left: 0,
   right: 0,
   bottom: 0,
-  zIndex: mobileSheetZIndex,
   width: '100vw',
   height: '100%',
   backgroundColor: color.Other.Overlay,
@@ -121,7 +115,6 @@ export const MessageMobileOptionsContainer = style({
   bottom: 0,
   left: 0,
   right: 0,
-  zIndex: mobileSheetZIndex,
   width: '100%',
   maxHeight: '85dvh',
   display: 'flex',

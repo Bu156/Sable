@@ -2,7 +2,8 @@ import type { MouseEventHandler } from 'react';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { RectCords } from 'folds';
-import { Box, Text, Button, color, config, Badge, Menu, MenuItem, PopOut } from 'folds';
+import { Box, Text, Button, color, config, Badge, Menu, MenuItem } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 
 import { debugLoggerEnabledAtom, debugLogsAtom, clearDebugLogsAtom } from '$state/debugLogger';

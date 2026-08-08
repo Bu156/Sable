@@ -2,18 +2,8 @@ import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import type { RectCords } from 'folds';
-import {
-  Box,
-  Chip,
-  IconButton,
-  Overlay,
-  OverlayBackdrop,
-  PopOut,
-  Spinner,
-  Text,
-  as,
-  config,
-} from 'folds';
+import { Box, Chip, IconButton, OverlayBackdrop, Spinner, Text, as, config } from 'folds';
+import { Overlay, PopOut } from '$components/overlay-stack';
 import { composerIcon, Smiley } from '$components/icons/phosphor';
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';

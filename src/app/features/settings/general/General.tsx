@@ -18,12 +18,12 @@ import {
   IconButton,
   Input,
   Menu,
-  PopOut,
   Scroll,
   Switch,
   Text,
   toRem,
 } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import {
   ArrowUp,
   composerIcon,

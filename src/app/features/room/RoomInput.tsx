@@ -36,15 +36,14 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Overlay,
   OverlayBackdrop,
   OverlayCenter,
-  PopOut,
   Scroll,
   Spinner,
   Text,
   toRem,
 } from 'folds';
+import { Overlay, PopOut } from '$components/overlay-stack';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import type { AutocompleteQuery } from '$components/editor';

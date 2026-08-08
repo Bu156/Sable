@@ -1,17 +1,8 @@
 // oxlint-disable no-console
 import type { RectCords } from 'folds';
-import {
-  Avatar,
-  Box,
-  Chip,
-  PopOut,
-  Text,
-  Tooltip,
-  TooltipProvider,
-  as,
-  config,
-  toRem,
-} from 'folds';
+import { Avatar, Box, Chip, Text, Tooltip, as, config, toRem } from 'folds';
+import { TooltipProvider } from '$components/overlay-stack';
+import { PopOut } from '$components/overlay-stack';
 import type { KeyboardEventHandler, MouseEventHandler, MouseEvent, ReactNode } from 'react';
 import {
   memo,

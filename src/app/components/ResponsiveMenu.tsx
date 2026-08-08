@@ -1,7 +1,8 @@
 import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { RectCords } from 'folds';
-import { Box, Overlay, OverlayBackdrop, OverlayCenter, PopOut } from 'folds';
+import { Box, OverlayBackdrop, OverlayCenter } from 'folds';
+import { Overlay, PopOut } from '$components/overlay-stack';
 import FocusTrap from 'focus-trap-react';
 import { useCompactLayout } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
