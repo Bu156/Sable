@@ -2,6 +2,7 @@ import { sanitizeThemeRemoteTweakFavorites, type Settings } from '$state/setting
 import { isLocalImportTweakUrl } from '../theme/localImportUrls';
 import { sanitizeShortcutOverrides } from '../keyboard/shortcuts';
 import { saveFileToDevice } from './download';
+import { readFileToString } from './file';
 
 /**
  * Keys excluded from cross-device sync.
@@ -178,17 +179,12 @@ export const importSettingsFromJson = (currentSettings: Settings): Promise<Setti
         resolve(null);
         return;
       }
-      const reader = new FileReader();
-      reader.addEventListener('load', (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string);
-          resolve(deserializeFromSync(data, currentSettings));
-        } catch {
-          resolve(null);
-        }
-      });
-      reader.addEventListener('error', () => resolve(null));
-      reader.readAsText(file);
+
+      readFileToString(file)
+        .then((result) => {
+          resolve(deserializeFromSync(JSON.parse(result), currentSettings));
+        })
+        .catch(() => resolve(null));
     });
     // oncancel is not widely supported; clicking away without selecting resolves naturally via onchange with empty files
     input.click();

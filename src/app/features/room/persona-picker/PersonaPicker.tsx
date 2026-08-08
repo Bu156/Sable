@@ -25,6 +25,7 @@ import {
   Text,
   toRem,
   Badge,
+  color,
 } from 'folds';
 import type { MatrixClient } from 'matrix-js-sdk';
 import {
@@ -361,12 +362,24 @@ function PersonaPickerMenu({
                       </Avatar>
                     }
                   >
-                    <Text
-                      truncate
-                      style={{ color: nameColor(profile) ?? undefined, maxWidth: toRem(150) }}
-                    >
-                      {profile.displayname}
-                    </Text>
+                    <Box direction="Column">
+                      <Text
+                        truncate
+                        style={{ color: nameColor(profile) ?? undefined, maxWidth: toRem(150) }}
+                      >
+                        {profile.displayname}
+                      </Text>
+                      <Text
+                        truncate
+                        size="T200"
+                        style={{
+                          color: `color-mix(${color.Surface.OnContainer}, transparent 20%)`,
+                          maxWidth: toRem(150),
+                        }}
+                      >
+                        {profile.id}
+                      </Text>
+                    </Box>
                   </MenuItem>
                 ))}
               </Scroll>

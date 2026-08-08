@@ -4,6 +4,7 @@ import type {
   MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_CIRCUMFIX_PROPERTY_NAME,
   MATRIX_SABLE_UNSTABLE_MSC4461_TRIGGER_SUFFIX_PROPERTY_NAME,
   MATRIX_UNSTABLE_COLORS,
+  MATRIX_UNSTABLE_PROFILE_PKIT_IMPORT_PROPERTY_NAME,
   MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
 } from '$unstable/prefixes';
 import type { ColorSet } from '$hooks/useUserProfile';
@@ -17,12 +18,20 @@ export type ProfileTrigger = {
   }[];
 };
 
+export type PkitImport = {
+  id: string;
+  uuid?: string;
+  description?: string;
+  avatar_url?: string;
+};
+
 export type PerMessageProfileMsc4461 = {
   id: string;
   displayname: string;
   avatar_url?: string;
   [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]?: PronounSet[];
   [MATRIX_UNSTABLE_COLORS]?: ColorSet;
+  [MATRIX_UNSTABLE_PROFILE_PKIT_IMPORT_PROPERTY_NAME]?: PkitImport;
   trigger: ProfileTrigger;
   compat?: AccountDataCompatVersion;
 };

@@ -14,6 +14,12 @@ const mocked = vi.hoisted(() => ({
   setAccount: vi.fn<(...args: unknown[]) => Promise<void>>(),
 }));
 
+const grabPersonaButton = (name: string) => {
+  const btn = screen.getByText(name).parentElement!.parentElement!;
+  if (btn.tagName !== 'BUTTON') throw new Error('Not a button, DOM layout changed!');
+  return btn;
+};
+
 vi.mock('$app/persona/catalog', () => ({
   ProfileCatalog: class {
     constructor(private readonly mx: MatrixClient) {}
@@ -100,6 +106,7 @@ vi.mock('folds', async () => {
     Scroll: TestContainer,
     Text: TestContainer,
     config: { space: { S200: 0 } },
+    color: { Surface: { OnContainer: '#000000' } },
     toRem: (value: number) => `${value}rem`,
   };
 });
@@ -187,10 +194,7 @@ describe('PersonaPicker async flows', () => {
     renderPicker();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'First' })).toHaveAttribute(
-        'aria-selected',
-        'true'
-      );
+      expect(grabPersonaButton('First')).toHaveAttribute('aria-selected', 'true');
     });
 
     roomSync.reject(new Error('room sync failed'));
@@ -204,17 +208,14 @@ describe('PersonaPicker async flows', () => {
     renderPicker();
     await screen.findByText('First');
 
-    fireEvent.click(screen.getByRole('button', { name: 'First' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
+    fireEvent.click(grabPersonaButton('First'));
+    fireEvent.click(grabPersonaButton('Second'));
 
     firstWrite.reject(new Error('first write failed'));
     secondWrite.resolve();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Second' })).toHaveAttribute(
-        'aria-selected',
-        'true'
-      );
+      expect(grabPersonaButton('Second')).toHaveAttribute('aria-selected', 'true');
     });
   });
 
@@ -227,7 +228,7 @@ describe('PersonaPicker async flows', () => {
     const view = renderPicker(mx);
     await screen.findByText('First');
 
-    fireEvent.click(screen.getByRole('button', { name: 'First' }));
+    fireEvent.click(grabPersonaButton('First'));
     view.rerender(
       <TemporaryPersonaPicker
         tab={PersonaPickerTab.PerRoom}
@@ -238,16 +239,13 @@ describe('PersonaPicker async flows', () => {
         latchedPersona={undefined}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
+    fireEvent.click(grabPersonaButton('Second'));
 
     globalWrite.reject(new Error('global write failed'));
     roomWrite.resolve();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Second' })).toHaveAttribute(
-        'aria-selected',
-        'true'
-      );
+      expect(grabPersonaButton('Second')).toHaveAttribute('aria-selected', 'true');
     });
 
     view.rerender(
@@ -260,10 +258,7 @@ describe('PersonaPicker async flows', () => {
         latchedPersona={undefined}
       />
     );
-    expect(screen.getByRole('button', { name: 'First' })).not.toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(grabPersonaButton('First')).not.toHaveAttribute('aria-selected', 'true');
   });
 
   it('reconciles an optimistic selection when its write is rejected', async () => {
@@ -271,13 +266,10 @@ describe('PersonaPicker async flows', () => {
     renderPicker();
     await screen.findByText('First');
 
-    fireEvent.click(screen.getByRole('button', { name: 'First' }));
+    fireEvent.click(grabPersonaButton('First'));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'First' })).not.toHaveAttribute(
-        'aria-selected',
-        'true'
-      );
+      expect(grabPersonaButton('First')).not.toHaveAttribute('aria-selected', 'true');
     });
   });
 });

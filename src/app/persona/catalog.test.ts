@@ -161,8 +161,8 @@ describe('ProfileCatalog', () => {
     const catalog = new ProfileCatalog(mx);
 
     await Promise.all([
-      catalog.upsert({ id: 'first', displayname: 'First', trigger: { prefix: [] } }),
-      catalog.upsert({ id: 'second', displayname: 'Second', trigger: { prefix: [] } }),
+      catalog.merge({ id: 'first', displayname: 'First', trigger: { prefix: [] } }),
+      catalog.merge({ id: 'second', displayname: 'Second', trigger: { prefix: [] } }),
     ]);
 
     await expect(catalog.list()).resolves.toEqual([
