@@ -2356,7 +2356,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </IconButton>
                 </>
               )}
-              {pmpPickerEnable && (
+              {pmpPickerEnable && !editingEvent && (
                 <PersistentPersonaPicker
                   tab={personaPickerTab}
                   mx={mx}
