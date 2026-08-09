@@ -76,7 +76,10 @@ vi.mock('$components/info-card/InfoCard.tsx', () => ({
 }));
 vi.mock('@phosphor-icons/react', () => ({ InfoIcon: {} }));
 vi.mock('$utils/matrix.ts', () => ({ mxcUrlToHttp: () => undefined }));
-vi.mock('$utils/platform', () => ({ isMobileOrTablet: () => false }));
+vi.mock('$utils/platform', () => ({
+  hasServiceWorker: () => false,
+  isMobileOrTablet: () => false,
+}));
 vi.mock('$utils/common', () => ({ nameInitials: (name: string) => name.slice(0, 1) }));
 vi.mock('./PersonaPicker.css.ts', () => ({
   PersonaPickerMenuItem: '',
@@ -198,6 +201,20 @@ describe('PersonaPicker async flows', () => {
     });
 
     roomSync.reject(new Error('room sync failed'));
+  });
+
+  it('clears the optimistic selection when disabling the active persona', async () => {
+    mocked.getAccount.mockResolvedValue(profiles[0]);
+    renderPicker();
+
+    await waitFor(() => {
+      expect(grabPersonaButton('First')).toHaveAttribute('aria-selected', 'true');
+    });
+
+    fireEvent.click(grabPersonaButton('First'));
+
+    expect(grabPersonaButton('First')).not.toHaveAttribute('aria-selected', 'true');
+    expect(mocked.setAccount).toHaveBeenCalledWith(expect.anything(), undefined, undefined, true);
   });
 
   it('keeps the latest optimistic selection when an earlier write fails', async () => {
