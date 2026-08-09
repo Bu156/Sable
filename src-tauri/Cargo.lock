@@ -5499,6 +5499,7 @@ dependencies = [
  "ts-rs",
  "webkit2gtk",
  "windows 0.62.2",
+ "zbus",
  "zip 8.6.0",
 ]
 
@@ -7037,7 +7038,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/SableClient/tauri-runtime-cef?branch=main#8d5870aaa48575bf1d07d8bbf8654703c16317ad"
+source = "git+https://github.com/SableClient/tauri-runtime-cef?rev=6fb4fabcc759c1f5407def192540ce149f666fe8#6fb4fabcc759c1f5407def192540ce149f666fe8"
 dependencies = [
  "base64 0.22.1",
  "cef",
