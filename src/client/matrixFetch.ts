@@ -43,8 +43,7 @@ export const createMatrixFetch = (baseFetch: typeof fetch = fetch): typeof fetch
     }
 
     const timeout = AbortSignal.timeout(EVENT_SEND_TIMEOUT_MS);
-    const existingSignal =
-      init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const existingSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const signal = existingSignal ? mergeAbortSignals([existingSignal, timeout]) : timeout;
 
     return baseFetch(input, { ...init, signal });
