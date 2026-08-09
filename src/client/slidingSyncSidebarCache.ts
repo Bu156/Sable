@@ -10,7 +10,7 @@ import { CustomAccountDataEvent } from '$types/matrix/accountData';
 import { CustomStateEvent } from '$types/matrix/room';
 
 const CACHE_VERSION = 1;
-const CACHE_KEY_PREFIX = 'sable.slidingSyncSidebarCache.';
+export const SIDEBAR_CACHE_KEY_PREFIX = 'sable.slidingSyncSidebarCache.';
 const CACHE_WRITE_DELAY_MS = 500;
 const MAX_CACHED_ROOMS = 2000;
 const HYDRATION_BATCH_SIZE = 50;
@@ -169,7 +169,9 @@ const hydrateRoomBatch = async (
 export class SlidingSyncSidebarCache {
   public static clear(userId: string): void {
     try {
-      globalThis.localStorage?.removeItem(`${CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`);
+      globalThis.localStorage?.removeItem(
+        `${SIDEBAR_CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`
+      );
     } catch {
       // Storage can be disabled for this origin.
     }
@@ -184,7 +186,7 @@ export class SlidingSyncSidebarCache {
   private idleWriteHandle: number | undefined;
 
   public constructor(private readonly userId: string) {
-    this.storageKey = `${CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`;
+    this.storageKey = `${SIDEBAR_CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`;
     let stored: string | null = null;
     try {
       stored = globalThis.localStorage?.getItem(this.storageKey) ?? null;

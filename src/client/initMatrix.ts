@@ -43,6 +43,10 @@ import { PresenceSyncManager } from './presenceSync';
 import { SlidingSyncSidebarCache } from './slidingSyncSidebarCache';
 import { clearCachedUserProfiles } from './userProfileCache';
 import {
+  clearLocalNotificationCache,
+  destroyLocalNotificationCache,
+} from './localNotificationCache';
+import {
   primeVersionsFromCache,
   revalidateVersionsCache,
   clearCachedVersions,
@@ -652,6 +656,8 @@ export const logoutClient = async (mx: MatrixClient, session?: Session) => {
     clearCachedVersions(session.baseUrl, session.userId);
     clearCachedUserProfiles(session.userId);
     clearSecretStorageKeys();
+    destroyLocalNotificationCache(session.userId);
+    clearLocalNotificationCache(session.userId);
     const storeName: SessionStoreName = getSessionStoreName(session);
     await mx.clearStores({ cryptoDatabasePrefix: storeName.rustCryptoPrefix });
     await deleteDatabase(storeName.sync);

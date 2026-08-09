@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MatrixClient, MatrixEvent } from '$types/matrix-sdk';
-import { ReceiptType } from '$types/matrix-sdk';
+import { NotificationCountType } from '$types/matrix-sdk';
 import { markAsRead } from './notifications';
 
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
@@ -25,12 +25,11 @@ const makeMx = (events: MatrixEvent[], readUpTo: string | null) => {
       ) => Promise<void>
     >()
     .mockResolvedValue();
-  const sendReadReceipt = vi
-    .fn<(event: MatrixEvent, receiptType: ReceiptType) => Promise<void>>()
-    .mockResolvedValue();
+  const setUnreadNotificationCount = vi.fn<(type: NotificationCountType, count: number) => void>();
   const room = {
     getLiveTimeline: () => ({ getEvents: () => events }),
     getEventReadUpTo: () => readUpTo,
+    setUnreadNotificationCount,
   };
 
   return {
@@ -38,10 +37,9 @@ const makeMx = (events: MatrixEvent[], readUpTo: string | null) => {
       getRoom: (id: string) => (id === roomId ? room : null),
       getUserId: () => userId,
       setRoomReadMarkers,
-      sendReadReceipt,
     } as unknown as MatrixClient,
     setRoomReadMarkers,
-    sendReadReceipt,
+    setUnreadNotificationCount,
   };
 };
 
@@ -49,7 +47,7 @@ const makeMx = (events: MatrixEvent[], readUpTo: string | null) => {
 // defects belong in the sliding-sync layer, not here.
 describe('markAsRead', () => {
   it('marks read up to the last event in the timeline', async () => {
-    const { mx, setRoomReadMarkers, sendReadReceipt } = makeMx(
+    const { mx, setRoomReadMarkers, setUnreadNotificationCount } = makeMx(
       [event('$older'), event('$newest')],
       null
     );
@@ -57,12 +55,12 @@ describe('markAsRead', () => {
     await markAsRead(mx, roomId, false);
 
     expect(setRoomReadMarkers).toHaveBeenCalledWith(roomId, '$newest', expect.anything());
-    expect(sendReadReceipt).toHaveBeenCalledWith(expect.anything(), ReceiptType.Read);
-    expect(sendReadReceipt.mock.calls[0]?.[0].getId()).toBe('$newest');
+    expect(setUnreadNotificationCount).toHaveBeenCalledWith(NotificationCountType.Total, 0);
+    expect(setUnreadNotificationCount).toHaveBeenCalledWith(NotificationCountType.Highlight, 0);
   });
 
   it('does nothing when the last event is already read', async () => {
-    const { mx, setRoomReadMarkers, sendReadReceipt } = makeMx(
+    const { mx, setRoomReadMarkers, setUnreadNotificationCount } = makeMx(
       [event('$older'), event('$newest')],
       '$newest'
     );
@@ -70,19 +68,19 @@ describe('markAsRead', () => {
     await markAsRead(mx, roomId, false);
 
     expect(setRoomReadMarkers).not.toHaveBeenCalled();
-    expect(sendReadReceipt).not.toHaveBeenCalled();
+    expect(setUnreadNotificationCount).not.toHaveBeenCalled();
   });
 
   it('ignores events that are still sending', async () => {
-    const { mx, sendReadReceipt } = makeMx([event('$confirmed'), event('$local', true)], null);
+    const { mx, setRoomReadMarkers } = makeMx([event('$confirmed'), event('$local', true)], null);
 
     await markAsRead(mx, roomId, false);
 
-    expect(sendReadReceipt.mock.calls[0]?.[0].getId()).toBe('$confirmed');
+    expect(setRoomReadMarkers.mock.calls[0]?.[1]).toBe('$confirmed');
   });
 
   it('sends a private receipt when reads are hidden', async () => {
-    const { mx, setRoomReadMarkers, sendReadReceipt } = makeMx([event('$newest')], null);
+    const { mx, setRoomReadMarkers } = makeMx([event('$newest')], null);
 
     await markAsRead(mx, roomId, true);
 
@@ -92,15 +90,14 @@ describe('markAsRead', () => {
       undefined,
       expect.anything()
     );
-    expect(sendReadReceipt).toHaveBeenCalledWith(expect.anything(), ReceiptType.ReadPrivate);
   });
 
   it('does nothing for an empty timeline', async () => {
-    const { mx, setRoomReadMarkers, sendReadReceipt } = makeMx([], null);
+    const { mx, setRoomReadMarkers, setUnreadNotificationCount } = makeMx([], null);
 
     await markAsRead(mx, roomId, false);
 
     expect(setRoomReadMarkers).not.toHaveBeenCalled();
-    expect(sendReadReceipt).not.toHaveBeenCalled();
+    expect(setUnreadNotificationCount).not.toHaveBeenCalled();
   });
 });
