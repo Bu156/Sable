@@ -21,7 +21,6 @@ import { ScreenSizeProvider } from '$hooks/useScreenSize';
 import { isReactQueryDevtoolsEnabled } from '$pages/reactQueryDevtoolsGate';
 import { useDesktopSetting } from '$state/hooks/desktopSettings';
 import { getCustomTitlebarKind } from '$utils/tauriTitlebar';
-import { AppIconRuntimeFeature } from '$features/settings/cosmetics/AppIconSettings';
 import { SystemBarShell } from './SystemBarShell';
 
 const ReactQueryDevtools = lazy(async () => {
@@ -86,7 +85,6 @@ function AppShellFrame({ children, portalContainer, onPortalContainerChange }: A
     <>
       <TauriFrontendReady />
       <TauriWindowFocus />
-      <AppIconRuntimeFeature />
       <div
         style={{
           display: 'flex',
