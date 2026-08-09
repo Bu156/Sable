@@ -384,9 +384,13 @@ pub fn run() {
             mobile::set_app_handle(app.handle().clone());
 
             // CEF is initialized during runtime construction; initialize GTK afterward
-            // on the main thread for the Linux tray menu.
+            // on the main thread for the Linux tray menu. GTK's X11 backend replaces the
+            // X error handlers during init, so the runtime's have to go back on after.
             #[cfg(all(feature = "cef", target_os = "linux"))]
-            gtk::init()?;
+            {
+                gtk::init()?;
+                tauri_runtime_cef::install_x_error_handlers();
+            }
 
             network::native_upload::cleanup_uploads(app.handle());
 
