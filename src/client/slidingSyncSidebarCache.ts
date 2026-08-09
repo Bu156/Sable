@@ -169,7 +169,9 @@ const hydrateRoomBatch = async (
 export class SlidingSyncSidebarCache {
   public static clear(userId: string): void {
     try {
-      globalThis.localStorage?.removeItem(`${SIDEBAR_CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`);
+      globalThis.localStorage?.removeItem(
+        `${SIDEBAR_CACHE_KEY_PREFIX}${encodeURIComponent(userId)}`
+      );
     } catch {
       // Storage can be disabled for this origin.
     }
