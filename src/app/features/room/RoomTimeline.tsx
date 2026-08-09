@@ -78,6 +78,7 @@ import type { IImageContent } from '$types/matrix/common';
 import { useTimelineRendererContext } from '$hooks/timeline/useTimelineRendererContext';
 import { TimelineScrollingProvider, useScrollActivity } from '$hooks/useTimelineScrollActivity';
 import * as css from './RoomTimeline.css';
+import type { Persona } from '$app/persona';
 
 const MAX_VIEWPORT_FILL_PAGINATIONS = 5;
 
@@ -926,6 +927,7 @@ export function RoomTimeline({
       roomId: string,
       spaceId: string | undefined,
       userId: string,
+      pmp: Persona | undefined,
       rect: DOMRect,
       undefinedArg?: undefined,
       options?: unknown

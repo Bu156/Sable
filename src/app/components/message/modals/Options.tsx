@@ -430,7 +430,6 @@ function OptionsReproxyPersonaPicker({
     <>
       <TemporaryPersonaPicker
         mx={mx}
-        hideTabs={true}
         onPersonaSelect={reproxyMessage}
         requestClose={closeMenu}
         anchor={anchor}

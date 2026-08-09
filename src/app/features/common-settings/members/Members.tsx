@@ -142,7 +142,13 @@ export function Members({ requestBack, requestClose }: MembersProps) {
     const btn = evt.currentTarget as HTMLButtonElement;
     const userId = btn.getAttribute('data-user-id');
     if (userId) {
-      openProfile(room.roomId, space?.roomId, userId, getMouseEventCords(evt.nativeEvent));
+      openProfile(
+        room.roomId,
+        space?.roomId,
+        userId,
+        undefined,
+        getMouseEventCords(evt.nativeEvent)
+      );
     }
   };
 

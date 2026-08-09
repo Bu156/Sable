@@ -10,6 +10,11 @@ import { resolvePersonaProxy } from '$app/persona/proxy';
 import { resolvePersona } from '$app/persona/selection';
 import { ProfileCatalog } from '$app/persona/catalog';
 import type { PerMessageProfileMsc4461, Persona } from '$app/persona';
+import { useMediaAuthentication } from './useMediaAuthentication';
+import { mxcUrlToHttp } from '$app/utils/mediaUrl';
+import { useCallback } from 'react';
+import { useAccessibleNameColor } from './useAccessibleNameColor';
+import { useActiveTheme, ThemeKind } from './useTheme';
 
 // Compatibility exports for existing callers while persona persistence lives in the catalog.
 export * from '$app/persona/catalog';
@@ -86,4 +91,38 @@ export async function getCurrentlyUsedPerMessageProfileForAccount(
   mx: MatrixClient
 ): Promise<PerMessageProfileMsc4461 | undefined> {
   return (await new ProfileCatalog(mx).getSelection('account'))?.persona;
+}
+
+export function usePersonaCosmetics(mx: MatrixClient | undefined, smallAvatar: boolean = true) {
+  const useAuthentication = useMediaAuthentication();
+  const activeTheme = useActiveTheme();
+  const accessibleNameColor = useAccessibleNameColor(activeTheme.kind);
+
+  const nameColor = useCallback(
+    (persona: PerMessageProfileMsc4461) =>
+      accessibleNameColor(
+        activeTheme.kind === ThemeKind.Dark
+          ? persona['eu.she-a.color']?.on_dark
+          : persona['eu.she-a.color']?.on_light
+      ),
+    [activeTheme, accessibleNameColor]
+  );
+
+  const avatarUrl = useCallback(
+    (profile: PerMessageProfileMsc4461) => {
+      if (profile.avatar_url !== undefined) {
+        return (
+          (smallAvatar
+            ? mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication, 96, 96, 'crop')
+            : mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication)) ?? undefined
+        );
+      } else {
+        return undefined;
+      }
+    },
+    [mx, useAuthentication, smallAvatar]
+  );
+
+  if (!mx) return { avatarUrl: undefined, nameColor: undefined };
+  return { nameColor, avatarUrl };
 }

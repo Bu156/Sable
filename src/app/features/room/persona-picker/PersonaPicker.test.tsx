@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { PerMessageProfileMsc4461 } from '$app/persona';
-import { TemporaryPersonaPicker, PersonaPickerTab } from './PersonaPicker';
+import { PersonaPicker, PersonaPickerTab, useProfiles } from './PersonaPicker';
 
 const mocked = vi.hoisted(() => ({
   getAll: vi.fn<(mx: MatrixClient) => Promise<PerMessageProfileMsc4461[]>>(),
@@ -49,6 +49,12 @@ vi.mock('$app/persona/catalog', () => ({
   },
 }));
 vi.mock('$hooks/useMediaAuthentication.ts', () => ({ useMediaAuthentication: () => false }));
+vi.mock('$hooks/usePerMessageProfile.ts', () => ({
+  usePersonaCosmetics: () => ({
+    avatarUrl: () => undefined,
+    nameColor: () => undefined,
+  }),
+}));
 // useActiveTheme reaches for window.matchMedia, which jsdom does not provide.
 vi.mock('$hooks/useTheme.ts', () => ({
   ThemeKind: { Light: 'light', Dark: 'dark' },
@@ -76,7 +82,10 @@ vi.mock('$components/info-card/InfoCard.tsx', () => ({
 }));
 vi.mock('@phosphor-icons/react', () => ({ InfoIcon: {} }));
 vi.mock('$utils/matrix.ts', () => ({ mxcUrlToHttp: () => undefined }));
-vi.mock('$utils/platform', () => ({ isMobileOrTablet: () => false }));
+vi.mock('$utils/platform', () => ({
+  hasServiceWorker: () => false,
+  isMobileOrTablet: () => false,
+}));
 vi.mock('$utils/common', () => ({ nameInitials: (name: string) => name.slice(0, 1) }));
 vi.mock('./PersonaPicker.css.ts', () => ({
   PersonaPickerMenuItem: '',
@@ -128,7 +137,7 @@ const profiles: PerMessageProfileMsc4461[] = [
 
 function renderPicker(mx = {} as MatrixClient, tab = PersonaPickerTab.Global) {
   return render(
-    <TemporaryPersonaPicker
+    <PersonaPicker
       tab={tab}
       mx={mx}
       roomId="!room:example.org"
@@ -158,22 +167,25 @@ describe('PersonaPicker async flows', () => {
       client === firstClient ? firstFetch.promise : secondFetch.promise
     );
 
-    const view = renderPicker(firstClient);
-    view.rerender(
-      <TemporaryPersonaPicker
-        mx={secondClient}
-        roomId="!room:example.org"
-        suppressEditorRefocus={vi.fn<() => void>()}
-        onTabChange={vi.fn<(tab: PersonaPickerTab) => void>()}
-        latchedPersona={undefined}
-      />
-    );
+    const mountedRef = { current: true };
+    const generationRef = { current: 0 };
+    const view = renderHook(({ mx }) => useProfiles(mx, mountedRef, generationRef), {
+      initialProps: { mx: firstClient },
+    });
+    await waitFor(() => expect(mocked.getAll).toHaveBeenCalledWith(firstClient));
+    view.rerender({ mx: secondClient });
 
-    secondFetch.resolve([{ id: 'new', displayname: 'New', trigger: { prefix: [] } }]);
-    expect(await screen.findByText('New')).toBeInTheDocument();
-    firstFetch.resolve([{ id: 'old', displayname: 'Old', trigger: { prefix: [] } }]);
+    await act(async () => {
+      secondFetch.resolve([{ id: 'new', displayname: 'New', trigger: { prefix: [] } }]);
+      await secondFetch.promise;
+    });
+    await waitFor(() => expect(view.result.current.profiles?.[0]?.id).toBe('new'));
+    await act(async () => {
+      firstFetch.resolve([{ id: 'old', displayname: 'Old', trigger: { prefix: [] } }]);
+      await firstFetch.promise;
+    });
 
-    await waitFor(() => expect(screen.queryByText('Old')).not.toBeInTheDocument());
+    expect(view.result.current.profiles?.[0]?.id).toBe('new');
   });
 
   it('does not update state when an in-flight profile fetch resolves after unmount', async () => {
@@ -198,6 +210,20 @@ describe('PersonaPicker async flows', () => {
     });
 
     roomSync.reject(new Error('room sync failed'));
+  });
+
+  it('clears the optimistic selection when disabling the active persona', async () => {
+    mocked.getAccount.mockResolvedValue(profiles[0]);
+    renderPicker();
+
+    await waitFor(() => {
+      expect(grabPersonaButton('First')).toHaveAttribute('aria-selected', 'true');
+    });
+
+    fireEvent.click(grabPersonaButton('First'));
+
+    expect(grabPersonaButton('First')).not.toHaveAttribute('aria-selected', 'true');
+    expect(mocked.setAccount).toHaveBeenCalledWith(expect.anything(), undefined, undefined, true);
   });
 
   it('keeps the latest optimistic selection when an earlier write fails', async () => {
@@ -230,7 +256,7 @@ describe('PersonaPicker async flows', () => {
 
     fireEvent.click(grabPersonaButton('First'));
     view.rerender(
-      <TemporaryPersonaPicker
+      <PersonaPicker
         tab={PersonaPickerTab.PerRoom}
         mx={mx}
         roomId="!room:example.org"
@@ -249,7 +275,7 @@ describe('PersonaPicker async flows', () => {
     });
 
     view.rerender(
-      <TemporaryPersonaPicker
+      <PersonaPicker
         tab={PersonaPickerTab.Global}
         mx={mx}
         roomId="!room:example.org"

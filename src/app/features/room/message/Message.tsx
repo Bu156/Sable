@@ -665,6 +665,7 @@ function MessageInternal(
             as="button"
             size="300"
             data-user-id={senderId}
+            data-parent-message-id={mEvent.getId() ?? ':3'}
             onClick={onUserClick}
           >
             <UserAvatar

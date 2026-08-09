@@ -311,7 +311,7 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
     // BODGE, dependent on menuItem height staying at toRem(40)
     cords.y = Math.min(cords.y, window.innerHeight - 42);
 
-    openUserRoomProfile(room.roomId, space?.roomId, userId, cords, 'Left');
+    openUserRoomProfile(room.roomId, space?.roomId, userId, undefined, cords, 'Left');
   };
 
   const [memberSidebarWidth, setMemberSidebarWidth] = useSetting(

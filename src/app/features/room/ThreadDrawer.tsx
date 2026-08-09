@@ -46,6 +46,7 @@ import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollo
 import * as css from './ThreadDrawer.css';
 import { SidebarResizer } from '$pages/client/sidebar/SidebarResizer';
 import { isMobileOrTablet } from '$utils/platform';
+import type { Persona } from '$app/persona';
 
 type ThreadDrawerProps = {
   room: Room;
@@ -150,6 +151,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
       roomId: string,
       spaceId: string | undefined,
       userId: string,
+      pmp: Persona | undefined,
       rect: DOMRect,
       undefinedArg?: undefined,
       options?: unknown

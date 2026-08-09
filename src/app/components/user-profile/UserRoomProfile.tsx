@@ -63,6 +63,8 @@ import { KnownMembership } from '$types/matrix-sdk';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import * as css from './styles.css';
 import * as prefix from '$unstable/prefixes';
+import type { Persona } from '$app/persona';
+import { usePersonaCosmetics } from '$hooks/usePerMessageProfile';
 
 const KNOWN_KEYS = new Set([
   prefix.MATRIX_SABLE_UNSTABLE_PROFILE_BIOGRAPHY_PROPERTY_NAME,
@@ -81,6 +83,7 @@ const KNOWN_KEYS = new Set([
 
 type UserExtendedSectionProps = {
   profile: UserProfile;
+  pmp?: Persona;
   htmlReactParserOptions: HTMLReactParserOptions;
   linkifyOpts: LinkifyOpts;
   innerColor?: string;
@@ -97,6 +100,7 @@ const renderValue = (val: unknown) => {
 
 function UserExtendedSection({
   profile,
+  pmp,
   htmlReactParserOptions,
   linkifyOpts,
   innerColor,
@@ -129,7 +133,7 @@ function UserExtendedSection({
   const languagesToFilterFor = getSettings().filterPronounsLanguages ?? ['en'];
 
   const pronouns = filterPronounsByLanguage(
-    profile.pronouns,
+    pmp?.['io.fsky.nyx.pronouns'] ?? profile.pronouns,
     languageFilterEnabled,
     languagesToFilterFor
   )
@@ -408,11 +412,13 @@ function UserExtendedSection({
 
 type UserRoomProfileProps = {
   userId: string;
+  pmp?: Persona;
   initialProfile?: Partial<UserProfile>;
   onSurfaceColorChange?: (color: string) => void;
 };
 export function UserRoomProfile({
   userId,
+  pmp: initialPmp,
   initialProfile,
   onSurfaceColorChange,
 }: Readonly<UserRoomProfileProps>) {
@@ -461,8 +467,17 @@ export function UserRoomProfile({
 
   useRoomMemberHydration(room, userId);
 
+  const [pmp, setPmp] = useState(initialPmp);
+  const { avatarUrl: getPmpAvatarUrl } = usePersonaCosmetics(mx, false);
+  const pmpAvatarUrl = pmp?.avatar_url ? getPmpAvatarUrl?.(pmp) : null;
+
+  const handleClearPmp = () => {
+    setPmp(undefined);
+  };
+
   const avatarMxc = getMemberAvatarMxc(room, userId) ?? extendedProfile.avatarUrl;
-  const avatarUrl = (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
+  const avatarUrl =
+    pmpAvatarUrl ?? (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
 
   const parsedBanner =
     typeof extendedProfile.bannerUrl === 'string'
@@ -612,10 +627,13 @@ export function UserRoomProfile({
         >
           <Box gap="200" alignItems="Center" wrap="Wrap" style={{ color: textColor }}>
             <UserHeroName
-              displayName={displayName}
+              mx={mx}
+              displayName={pmp?.displayname ?? displayName}
               userId={userId}
               customHeroCards={showCustomHeroCard}
               server={server}
+              pmp={pmp}
+              clearPmp={handleClearPmp}
             />
             {userId !== myUserId && (
               <Button
@@ -638,6 +656,7 @@ export function UserRoomProfile({
           </Box>
           <UserExtendedSection
             profile={extendedProfile}
+            pmp={pmp}
             htmlReactParserOptions={htmlReactParserOptions}
             linkifyOpts={linkifyOpts}
             innerColor={innerColor}
