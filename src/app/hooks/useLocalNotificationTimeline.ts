@@ -3,114 +3,153 @@ import { useAtomValue } from 'jotai';
 import { RoomEvent } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { allRoomsAtom } from '$state/room-list/roomList';
+import { roomToUnreadAtom } from '$state/room/roomToUnread';
+import { useSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
 import { getLocalNotificationCache } from '$client/localNotificationCache';
-import { sliceNotificationPage, type StoredNotification } from '$utils/localNotifications';
-import { groupNotifications } from '$utils/groupNotifications';
-import { throttleTrailing } from '$utils/throttleTrailing';
+import { backfillLocalNotifications } from '$utils/localNotificationBackfill';
+import {
+  isStoredNotificationRead,
+  sliceNotificationPage,
+  type NotificationTab,
+  type StoredNotification,
+} from '$utils/localNotifications';
 
-type RoomNotificationsGroup = {
-  roomId: string;
-  notifications: StoredNotification[];
-};
-type NotificationTimeline = {
-  nextToken?: string;
-  groups: RoomNotificationsGroup[];
-};
-const RELOAD_THROTTLE_MS = 500;
-
-type LoadTimeline = (from?: string) => Promise<void>;
-
-export const sameNotificationTimeline = (
-  a: NotificationTimeline,
-  b: NotificationTimeline
-): boolean => {
-  if (a.nextToken !== b.nextToken || a.groups.length !== b.groups.length) return false;
-
-  return a.groups.every((group, i) => {
-    const other = b.groups[i];
-    if (!other) return false;
-    if (group.roomId !== other.roomId) return false;
-    if (group.notifications.length !== other.notifications.length) return false;
-
-    return group.notifications.every((notification, j) => {
-      const otherNotification = other.notifications[j];
-      if (!otherNotification) return false;
-      return (
-        notification.event.event_id === otherNotification.event.event_id &&
-        // Changes when an encrypted snapshot is replaced by its decrypted one.
-        notification.event.type === otherNotification.event.type &&
-        notification.dismissed === otherNotification.dismissed
-      );
-    });
-  });
+export type NotificationQuery = {
+  tab: NotificationTab;
+  includeRead: boolean;
+  limit: number;
 };
 
-export const useLocalNotificationTimeline = (
-  paginationLimit: number,
-  filterMode: 'all' | 'mentions' = 'mentions',
-  includeDone?: boolean
-): [NotificationTimeline, LoadTimeline] => {
+export type NotificationPage = {
+  items: StoredNotification[];
+  canLoadOlder: boolean;
+};
+
+export const useLocalNotificationTimeline = (query: NotificationQuery) => {
   const mx = useMatrixClient();
-  const allRooms = useAtomValue(allRoomsAtom);
-  const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
-
-  const [notificationTimeline, setNotificationTimeline] = useState<NotificationTimeline>({
-    groups: [],
-  });
-  // Re-render on our own read receipts so the per-notification unread dots follow
-  // them; the timeline itself is unchanged, so this must not touch it.
-  const [, bumpReceiptVersion] = useState(0);
-
+  const joinedRooms = useAtomValue(allRoomsAtom);
+  const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const [storeContent] = useSetting(settingsAtom, 'showMessageContentInNotifications');
+  const [storeEncryptedContent] = useSetting(
+    settingsAtom,
+    'showMessageContentInEncryptedNotifications'
+  );
+  const allowedRooms = useMemo(() => new Set(joinedRooms), [joinedRooms]);
   const cache = getLocalNotificationCache(mx.getSafeUserId());
-  const loadedLimitRef = useRef(paginationLimit);
-
-  // Always recomputed from offset 0 over a growing window, so a reload cannot
-  // rewind pagination and re-trigger the caller's load-more effect.
-  const applyUpTo = useCallback(
-    (limit: number) => {
-      const allEntries = cache.getEntries().filter((entry) => allJoinedRooms.has(entry.room_id));
-      const { page, nextToken } = sliceNotificationPage(
-        allEntries,
-        0,
-        limit,
-        filterMode,
-        includeDone
-      );
-      const next: NotificationTimeline = {
-        nextToken,
-        groups: groupNotifications(page, allJoinedRooms),
-      };
-      setNotificationTimeline((current) =>
-        sameNotificationTimeline(current, next) ? current : next
-      );
-    },
-    [cache, filterMode, includeDone, allJoinedRooms]
-  );
-
-  const loadTimeline: LoadTimeline = useCallback(
-    async (from) => {
-      const limit = from ? Number(from) + paginationLimit : paginationLimit;
-      loadedLimitRef.current = limit;
-      applyUpTo(limit);
-    },
-    [applyUpTo, paginationLimit]
-  );
+  const loadedLimit = useRef(query.limit);
+  const [entries, setEntries] = useState(() => cache.getEntries());
+  const [historyCutoff, setHistoryCutoff] = useState(() => cache.getHistoryCutoff(query.tab));
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [error, setError] = useState<Error>();
+  const refresh = useCallback(() => {
+    setEntries(cache.getEntries());
+    setHistoryCutoff(cache.getHistoryCutoff(query.tab));
+  }, [cache, query.tab]);
 
   useEffect(() => {
-    const reload = throttleTrailing(() => {
-      applyUpTo(loadedLimitRef.current);
-      bumpReceiptVersion((v) => v + 1);
-    }, RELOAD_THROTTLE_MS);
+    loadedLimit.current = query.limit;
+    refresh();
+  }, [query, refresh]);
 
-    const unsubscribe = cache.subscribe(reload);
-    mx.on(RoomEvent.Receipt, reload);
-
+  useEffect(() => {
+    refresh();
+    const unsubscribe = cache.subscribe(refresh);
+    mx.on(RoomEvent.Receipt, refresh);
     return () => {
       unsubscribe();
-      mx.off(RoomEvent.Receipt, reload);
-      reload.cancel();
+      mx.off(RoomEvent.Receipt, refresh);
     };
-  }, [mx, cache, applyUpTo]);
+  }, [cache, mx, refresh]);
 
-  return [notificationTimeline, loadTimeline];
+  useEffect(() => {
+    const controller = new AbortController();
+    void backfillLocalNotifications(
+      mx,
+      mx.getSafeUserId(),
+      {
+        storeContent,
+        storeEncryptedContent: storeContent && storeEncryptedContent,
+      },
+      { signal: controller.signal, tab: query.tab }
+    ).catch((reason: unknown) => {
+      if (!controller.signal.aborted) {
+        setError(reason instanceof Error ? reason : new Error(String(reason)));
+      }
+    });
+    return () => controller.abort();
+  }, [mx, query.tab, roomToUnread, storeContent, storeEncryptedContent]);
+
+  const page = useMemo<NotificationPage>(() => {
+    const visibleEntries = entries.filter((entry) => allowedRooms.has(entry.room_id));
+    const unreadRemaining = new Map<string, number>();
+    const unreadIds = new Set<string>();
+    for (const entry of visibleEntries) {
+      if (query.tab === 'dms' && !entry.isDM) continue;
+      if (query.tab === 'mentions' && !entry.highlight) continue;
+      const room = mx.getRoom(entry.room_id);
+      if (!room || isStoredNotificationRead(room, mx.getSafeUserId(), entry)) continue;
+      const remaining =
+        unreadRemaining.get(entry.room_id) ??
+        (query.tab === 'mentions'
+          ? roomToUnread.get(entry.room_id)?.highlight
+          : roomToUnread.get(entry.room_id)?.total) ??
+        0;
+      unreadRemaining.set(entry.room_id, Math.max(0, remaining - 1));
+      if (remaining > 0) unreadIds.add(entry.event.event_id);
+    }
+    const orderedEntries = visibleEntries.filter(
+      (entry) =>
+        unreadIds.has(entry.event.event_id) ||
+        (query.includeRead && historyCutoff !== undefined && entry.ts >= historyCutoff)
+    );
+    const { page: items, nextToken } = sliceNotificationPage(
+      orderedEntries,
+      0,
+      loadedLimit.current,
+      query.tab,
+      true,
+      () => false
+    );
+    return {
+      items,
+      canLoadOlder: query.includeRead || nextToken !== undefined,
+    };
+  }, [allowedRooms, entries, historyCutoff, mx, query, roomToUnread]);
+
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder) return;
+    setLoadingOlder(true);
+    setError(undefined);
+    try {
+      if (query.includeRead) {
+        await backfillLocalNotifications(
+          mx,
+          mx.getSafeUserId(),
+          {
+            storeContent,
+            storeEncryptedContent: storeContent && storeEncryptedContent,
+          },
+          { includeRead: true, tab: query.tab }
+        );
+      }
+      loadedLimit.current += query.limit;
+      refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason : new Error(String(reason)));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [
+    loadingOlder,
+    mx,
+    query.includeRead,
+    query.limit,
+    query.tab,
+    refresh,
+    storeContent,
+    storeEncryptedContent,
+  ]);
+
+  return { page, loadingOlder, error, refresh, loadOlder };
 };

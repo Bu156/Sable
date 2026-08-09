@@ -1,4 +1,3 @@
-
 import type { IContent, IEvent, MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
 import { EventType, MatrixEventEvent, ReceiptType } from '$types/matrix-sdk';
 import { NotificationType } from '$types/matrix/room';
@@ -10,14 +9,15 @@ export type StoredNotification = {
   ts: number;
   highlight: boolean;
   isDM: boolean;
-  dismissed?: boolean;
 };
+
+export type NotificationTab = 'dms' | 'mentions' | 'all';
 
 export const MAX_BODY_LENGTH = 120;
 
 const truncateContent = (content: IContent, storeContent: boolean): IContent => {
   if (content.ciphertext !== undefined) {
-    return typeof content.algorithm === 'string' ? { algorithm: content.algorithm } : {};
+    return { ...content };
   }
 
   if (!storeContent) {
@@ -166,43 +166,19 @@ export const sliceNotificationPage = (
   all: StoredNotification[],
   offset: number,
   limit: number,
-  filterMode: 'all' | 'mentions',
-  includeDone?: boolean
+  tab: NotificationTab,
+  includeRead: boolean,
+  isRead: (entry: StoredNotification) => boolean
 ): { page: StoredNotification[]; nextToken?: string } => {
-  let filtered = all;
-  if (filterMode === 'mentions') filtered = filtered.filter((n) => n.highlight || n.isDM);
-  if (!includeDone) filtered = filtered.filter((n) => !n.dismissed);
-  const sorted = [...filtered].toSorted((a, b) => b.ts - a.ts);
+  const sorted = all
+    .filter((entry) => {
+      if (tab === 'dms' && !entry.isDM) return false;
+      if (tab === 'mentions' && !entry.highlight) return false;
+      return includeRead || !isRead(entry);
+    })
+    .toSorted((a, b) => b.ts - a.ts);
   const page = sorted.slice(offset, offset + limit);
   const nextOffset = offset + limit;
   const nextToken = nextOffset < sorted.length ? String(nextOffset) : undefined;
   return { page, nextToken };
 };
-
-
-export const GAP_THRESHOLD_MS = 5 * 60 * 1000;
-export const MAX_BACKFILL_ROOMS = 30;
-const GAP_PAGES_MULTIPLIER_MS = 30 * 60 * 1000;
-
-export type BackfillRoomInfo = {
-  roomId: string;
-  lastActiveTs: number;
-  isSpaceRoom: boolean;
-  isMuted: boolean;
-};
-
-export const shouldBackfill = (lastSeenTs: number | undefined, now: number): number | undefined => {
-  if (lastSeenTs === undefined) return undefined;
-  if (now - lastSeenTs < GAP_THRESHOLD_MS) return undefined;
-  return lastSeenTs;
-};
-
-export const selectBackfillRooms = (rooms: BackfillRoomInfo[], lastSeenTs: number): string[] =>
-  rooms
-    .filter((r) => !r.isSpaceRoom && !r.isMuted && r.lastActiveTs > lastSeenTs)
-    .toSorted((a, b) => b.lastActiveTs - a.lastActiveTs)
-    .slice(0, MAX_BACKFILL_ROOMS)
-    .map((r) => r.roomId);
-
-export const backfillPageCount = (lastSeenTs: number, now: number): number =>
-  now - lastSeenTs > GAP_PAGES_MULTIPLIER_MS ? 2 : 1;
