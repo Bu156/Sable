@@ -781,6 +781,51 @@ describe('RoomInput submit regressions', () => {
     );
   });
 
+  it('sends on touch pointerup when the tap never produces a click', async () => {
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+    fireEvent.pointerDown(sendButton(), { pointerType: 'touch' });
+    fireEvent.pointerUp(sendButton(), { pointerType: 'touch' });
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+  });
+
+  it('sends once when a touch tap produces both a pointerup and a click', async () => {
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+    const submit = sendButton();
+    fireEvent.pointerDown(submit, { pointerType: 'touch' });
+    fireEvent.pointerUp(submit, { pointerType: 'touch' });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+  });
+
+  it('cancels a touch send released outside the button', () => {
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+    fireEvent.pointerDown(sendButton(), { pointerType: 'touch' });
+    fireEvent.pointerUp(sendButton(), { pointerType: 'touch', clientX: 200, clientY: 200 });
+
+    expect(testState.matrix.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('leaves mouse taps on the click path', async () => {
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+    const submit = sendButton();
+    fireEvent.pointerDown(submit, { pointerType: 'mouse' });
+    fireEvent.pointerUp(submit, { pointerType: 'mouse' });
+    expect(testState.matrix.sendMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+  });
+
   it('waits for an attachment transaction instead of sending text independently', async () => {
     const upload = deferred<{ content_uri: string }>();
     const file = new File(['attachment'], 'attachment.txt', { type: 'text/plain' });

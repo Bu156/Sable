@@ -13,6 +13,7 @@ import {
   SyncState,
 } from '$types/matrix-sdk';
 import { fetch } from '$utils/fetch';
+import { matrixFetch } from './matrixFetch';
 import { clearMediaCache } from '$utils/mediaCache';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
@@ -250,7 +251,7 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
 
   const mx = createClient({
     baseUrl: session.baseUrl,
-    fetchFn: fetch,
+    fetchFn: matrixFetch,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     userId: session.userId,
