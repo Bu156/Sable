@@ -110,7 +110,7 @@ import { matchesShortcut } from '../../keyboard/shortcuts';
 import { getEditedEvent, getThreadReplyEvents } from '$utils/room/relations';
 import { htmlToMarkdown } from '$plugins/markdown';
 import { Command, useCommands } from '$hooks/useCommands';
-import { isMobileOrTablet } from '$utils/platform';
+import { isMobileOrTablet, isMobileTauri } from '$utils/platform';
 import { Reply, ThreadIndicator } from '$components/message';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { nicknamesAtom } from '$state/nicknames';
@@ -158,7 +158,6 @@ import {
   dropzoneIcon,
   File as FileIcon,
   Gif,
-  Image as ImageIcon,
   ListBullets,
   MapPinPlusIcon,
   menuIcon,
@@ -211,6 +210,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 import { createComposerController, type ComposerController } from './composerController';
 import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
+import { pickNativeFile } from './nativeFilePicker';
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -501,7 +501,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     }, []);
 
     const handleFiles = useCallback(
-      async (files: File[], audioMeta?: { waveform: number[]; audioDuration: number }) => {
+      async (
+        files: File[],
+        audioMeta?: { waveform: number[]; audioDuration: number },
+        options?: { alreadyInMemory?: boolean }
+      ) => {
         const epoch = draftEpochRef.current;
         fileIngestionCountRef.current += 1;
         setIngestingFiles(true);
@@ -511,18 +515,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           if (epoch !== draftEpochRef.current || !mountedRef.current) return;
 
           // Eager-read to avoid Android content URI expiry after SAF picker
-          const blobbedFiles = isMobileOrTablet()
-            ? await Promise.all(
-                safeFiles.map(async (f) => {
-                  try {
-                    const buf = await f.arrayBuffer();
-                    return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
-                  } catch {
-                    return f;
-                  }
-                })
-              )
-            : safeFiles;
+          const blobbedFiles =
+            isMobileOrTablet() && !options?.alreadyInMemory
+              ? await Promise.all(
+                  safeFiles.map(async (f) => {
+                    try {
+                      const buf = await f.arrayBuffer();
+                      return new File([buf], f.name, {
+                        type: f.type,
+                        lastModified: f.lastModified,
+                      });
+                    } catch {
+                      return f;
+                    }
+                  })
+                )
+              : safeFiles;
           if (epoch !== draftEpochRef.current || !mountedRef.current) return;
           blobbedFiles.forEach((file) => removedUploadFilesRef.current.delete(file));
 
@@ -596,6 +604,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [room, setSelectedFiles]
     );
     const pickFile = useFilePicker(handleFiles, true);
+    const pickAttachment = useCallback(
+      async (pickerMode: 'media' | 'document', accept: string) => {
+        if (!isMobileTauri()) {
+          await pickFile(accept);
+          return;
+        }
+
+        try {
+          const files = await pickNativeFile(pickerMode, (source, error) => {
+            log.warn('Native attachment file error:', source, error);
+          });
+          if (files.length > 0) await handleFiles(files, undefined, { alreadyInMemory: true });
+        } catch (error) {
+          log.error('Failed to open native attachment picker', { roomId }, error);
+        }
+      },
+      [handleFiles, pickFile, roomId]
+    );
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
     const [hasText, setHasText] = useState(false);
@@ -2233,10 +2259,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       {() => (
                         <AttachmentContent
                           onPickPhotos={() => {
-                            pickFile('image/*,.tgs');
+                            void pickAttachment('media', 'image/*,video/*,.tgs');
                           }}
                           onPickFile={() => {
-                            pickFile('*');
+                            void pickAttachment('document', '*');
                           }}
                           onPickPoll={() => {
                             setShowPollPicker(true);
@@ -2289,17 +2315,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                               before={menuIcon(MapPinPlusIcon)}
                             >
                               <Text size="B300">Add Location</Text>
-                            </MenuItem>
-                            <MenuItem
-                              size="300"
-                              radii="300"
-                              onClick={() => {
-                                pickFile('image/*,.tgs');
-                                setAddMenuAnchor(undefined);
-                              }}
-                              before={menuIcon(ImageIcon)}
-                            >
-                              <Text size="B300">Photos</Text>
                             </MenuItem>
                             <MenuItem
                               size="300"
