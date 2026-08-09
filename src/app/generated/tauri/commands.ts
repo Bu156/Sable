@@ -66,6 +66,10 @@ export async function playNotificationSound(params: types.PlayNotificationSoundP
   return invoke('play_notification_sound', params);
 }
 
+export async function prepareLoopbackVideo(params: types.PrepareLoopbackVideoParams): Promise<string> {
+  return invoke('prepare_loopback_video', params);
+}
+
 export async function saveDownload(params: types.SaveDownloadParams): Promise<boolean> {
   return invoke('save_download', params);
 }

@@ -13,11 +13,15 @@ use tauri::{
     AppHandle, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder,
 };
 
+#[cfg(target_os = "android")]
+mod android_loopback;
 mod crypto;
 mod lane;
 mod response;
 mod session;
 
+#[cfg(target_os = "android")]
+use android_loopback::LoopbackMediaServer;
 use crypto::EncryptionStore;
 use lane::{LanePermit, LifoLane};
 use response::{
@@ -63,6 +67,8 @@ pub struct MediaSessionState {
     download_lane: LifoLane,
     cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
     negative_cache: Mutex<HashMap<String, (StatusCode, Instant)>>,
+    #[cfg(target_os = "android")]
+    loopback: Option<LoopbackMediaServer>,
 }
 
 impl Default for MediaSessionState {
@@ -75,6 +81,8 @@ impl Default for MediaSessionState {
             download_lane: LifoLane::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
             cache_miss_gates: Mutex::new(HashMap::new()),
             negative_cache: Mutex::new(HashMap::new()),
+            #[cfg(target_os = "android")]
+            loopback: LoopbackMediaServer::start().ok(),
         }
     }
 }
@@ -105,12 +113,26 @@ impl MediaSessionState {
     }
 
     fn set_session(&self, session: MediaSession) -> Result<(), String> {
-        self.session_store
-            .set(session, || self.forget_client_errors())
+        self.session_store.set(session, || {
+            self.forget_client_errors();
+            #[cfg(target_os = "android")]
+            self.clear_loopback_media();
+        })
     }
 
     fn clear_session(&self) -> Result<(), String> {
-        self.session_store.clear(|| self.forget_client_errors())
+        self.session_store.clear(|| {
+            self.forget_client_errors();
+            #[cfg(target_os = "android")]
+            self.clear_loopback_media();
+        })
+    }
+
+    #[cfg(target_os = "android")]
+    fn clear_loopback_media(&self) {
+        if let Some(loopback) = &self.loopback {
+            loopback.clear();
+        }
     }
 
     // Shared across requests so the connection pool and TLS sessions stay warm.
@@ -240,6 +262,24 @@ pub fn set_media_encryption(
         .register(&url, &key, &iv, &sha256, &version, mime_type)
 }
 
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn prepare_loopback_video<R: Runtime>(
+    app: AppHandle<R>,
+    url: String,
+) -> Result<String, String> {
+    let uri = url.parse::<Uri>().map_err(|err| err.to_string())?;
+    let response = handle_request(&app, uri, None, true)
+        .await
+        .map_err(|status| status.to_string())?;
+    response
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .ok_or_else(|| "loopback media server unavailable".to_owned())
+}
+
 fn media_session_marker(uri: &Uri) -> Result<Option<String>, StatusCode> {
     let Some(query) = uri.query() else {
         return Ok(None);
@@ -295,7 +335,7 @@ pub fn respond<R: Runtime>(
     let range = header_value(header::RANGE);
     let origin = header_value(header::ORIGIN);
     tauri::async_runtime::spawn(async move {
-        let mut response = handle_request(&app, uri, range)
+        let mut response = handle_request(&app, uri, range, false)
             .await
             .unwrap_or_else(error_response);
         apply_cors_headers(&mut response, origin.as_deref());
@@ -307,7 +347,11 @@ async fn handle_request<R: Runtime>(
     app: &AppHandle<R>,
     uri: Uri,
     range: Option<String>,
+    loopback: bool,
 ) -> Result<Response<Vec<u8>>, StatusCode> {
+    #[cfg(not(target_os = "android"))]
+    let _ = loopback;
+
     let target = percent_encoding::percent_decode_str(uri.path().trim_start_matches('/'))
         .decode_utf8()
         .map_err(|_| StatusCode::BAD_REQUEST)?
@@ -347,6 +391,13 @@ async fn handle_request<R: Runtime>(
 
     let (content_type, in_memory_body, disk_path) =
         ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
+
+    #[cfg(target_os = "android")]
+    if loopback && in_memory_body.is_none() && content_type.starts_with("video/") {
+        if let Some(loopback) = &state.loopback {
+            return Ok(loopback.redirect_response(&session, &key, disk_path, &content_type));
+        }
+    }
 
     match (range, in_memory_body) {
         (Some(range_header), Some(body)) => {
