@@ -521,7 +521,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   safeFiles.map(async (f) => {
                     try {
                       const buf = await f.arrayBuffer();
-                      return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+                      return new File([buf], f.name, {
+                        type: f.type,
+                        lastModified: f.lastModified,
+                      });
                     } catch {
                       return f;
                     }
