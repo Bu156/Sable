@@ -107,6 +107,11 @@ export interface PlayNotificationSoundParams {
   [key: string]: unknown;
 }
 
+export interface PrepareLoopbackVideoParams {
+  url: string;
+  [key: string]: unknown;
+}
+
 export interface SaveDownloadParams {
   filename: string;
   bytes: number[];
@@ -188,4 +193,3 @@ export interface UploadWriteChunkParams {
   chunk: string;
   [key: string]: unknown;
 }
-
