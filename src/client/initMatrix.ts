@@ -13,6 +13,7 @@ import {
   SyncState,
 } from '$types/matrix-sdk';
 import { fetch } from '$utils/fetch';
+import { matrixFetch } from './matrixFetch';
 import { clearMediaCache } from '$utils/mediaCache';
 
 import { clearNavToActivePathStore } from '$state/navToActivePath';
@@ -226,8 +227,6 @@ const isMismatch = (err: unknown): boolean => {
   );
 };
 
-const REQUEST_TIMEOUT_MS = 30_000;
-
 type BuiltClient = {
   mx: MatrixClient;
   indexedDBStore: IndexedDBStore;
@@ -252,7 +251,7 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
 
   const mx = createClient({
     baseUrl: session.baseUrl,
-    fetchFn: fetch,
+    fetchFn: matrixFetch,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     userId: session.userId,
@@ -263,7 +262,6 @@ const buildClient = async (session: Session): Promise<BuiltClient> => {
     cryptoCallbacks: cryptoCallbacks as unknown as CryptoCallbacks,
     verificationMethods: ['m.sas.v1'],
     tokenRefreshFunction: tokenRefresher?.tokenRefreshFunction,
-    localTimeoutMs: REQUEST_TIMEOUT_MS,
   });
 
   return { mx, indexedDBStore };
