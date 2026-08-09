@@ -256,7 +256,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           requestClose={closeMenu}
           align="Start"
           offset={0}
-          mobileZIndex={2_147_483_647}
           mobile="inline-dialog"
           menu={
             <Menu

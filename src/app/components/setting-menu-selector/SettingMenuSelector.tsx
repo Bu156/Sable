@@ -1,5 +1,5 @@
 import type { RectCords } from 'folds';
-import type { PopOut } from 'folds';
+import type { PopOut } from '$components/overlay-stack';
 import { Box, Button, config, Menu, MenuItem, Scroll, Spinner, Text, toRem } from 'folds';
 import { CaretDown, sizedIcon } from '$components/icons/phosphor';
 import {

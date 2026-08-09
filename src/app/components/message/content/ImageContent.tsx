@@ -11,12 +11,12 @@ import {
   Spinner,
   Text,
   Tooltip,
-  TooltipProvider,
   as,
   color,
   config,
   toRem,
 } from 'folds';
+import { TooltipProvider } from '$components/overlay-stack';
 import {
   Eye,
   EyeSlash,

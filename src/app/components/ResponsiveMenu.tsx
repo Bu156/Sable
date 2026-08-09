@@ -1,7 +1,8 @@
 import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { RectCords } from 'folds';
-import { Box, Overlay, OverlayBackdrop, OverlayCenter, PopOut } from 'folds';
+import { Box, OverlayBackdrop, OverlayCenter } from 'folds';
+import { Overlay, PopOut, useOverlayLayer } from '$components/overlay-stack';
 import FocusTrap from 'focus-trap-react';
 import { useCompactLayout } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
@@ -31,8 +32,6 @@ type ResponsiveMenuProps = {
    *  option pickers, which a sheet makes look like an action menu. */
   mobile?: 'sheet' | 'dialog' | 'inline-dialog';
   surfaceColor?: string;
-  /** Raises a mobile sheet above a parent fullscreen overlay. */
-  mobileZIndex?: number;
   overlayDragHandle?: boolean;
 };
 
@@ -65,16 +64,15 @@ function InlineMenuDialog({
   anchor,
   requestClose,
   focusTrapOptions,
-  zIndex,
   children,
 }: {
   anchor: RectCords;
   requestClose: () => void;
   focusTrapOptions: FocusTrapOptions;
-  zIndex: number;
   children: ReactNode;
 }) {
   useDismissOnBack(requestClose);
+  const zIndex = useOverlayLayer();
 
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
@@ -139,7 +137,6 @@ export function ResponsiveMenu({
   arrowNavigation = 'vertical',
   mobile = 'sheet',
   surfaceColor,
-  mobileZIndex,
   overlayDragHandle = false,
 }: ResponsiveMenuProps) {
   const isMobile = useCompactLayout();
@@ -171,7 +168,6 @@ export function ResponsiveMenu({
               anchor={anchor}
               requestClose={requestClose}
               focusTrapOptions={focusTrapOptions}
-              zIndex={mobileZIndex ?? 2_147_483_647}
             >
               {menu}
             </InlineMenuDialog>
@@ -196,7 +192,6 @@ export function ResponsiveMenu({
           <MobileSwipeDownModal
             requestClose={requestClose}
             sheetStyle={sheetStyle}
-            zIndex={mobileZIndex}
             overlayDragHandle={overlayDragHandle}
           >
             {() => (

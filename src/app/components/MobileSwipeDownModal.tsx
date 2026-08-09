@@ -12,6 +12,7 @@ import { Box } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useDrag } from '@use-gesture/react';
 import * as css from '$features/room/message/styles.css';
+import { useOverlayLayer } from '$components/overlay-stack';
 import { useDismissOnBack } from '$utils/androidBack';
 import { stopPropagation } from '$utils/keyboard';
 import { getMobileSheetTiming, useMobileSheetAnimation } from './mobileSheetAnimation';
@@ -28,7 +29,6 @@ interface MobileSwipeDownModalProps {
   sheetClassName?: string;
   sheetStyle?: CSSProperties;
   keyboardAware?: boolean;
-  zIndex?: number;
   overlayDragHandle?: boolean;
 }
 
@@ -105,7 +105,6 @@ export function MobileSwipeDownModal({
   sheetClassName,
   sheetStyle,
   keyboardAware = false,
-  zIndex,
   overlayDragHandle = false,
 }: MobileSwipeDownModalProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -115,6 +114,7 @@ export function MobileSwipeDownModal({
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const { shouldReduceMotion } = useMobileSheetAnimation();
+  const zIndex = useOverlayLayer();
 
   // Keyboard and drag offsets share one transform; `bottom` would relayout the subtree.
   const applySheetOffset = useCallback(
@@ -367,8 +367,8 @@ export function MobileSwipeDownModal({
       }`}
       data-gestures="ignore"
       style={{
-        ...(closing ? { opacity: 0, transition: 'opacity 100ms ease-out' } : undefined),
         zIndex,
+        ...(closing ? { opacity: 0, transition: 'opacity 100ms ease-out' } : undefined),
       }}
       onClick={handleBackdropClick}
       // Touch events deliberately propagate: the drag binds them on `document`, and
@@ -387,6 +387,7 @@ export function MobileSwipeDownModal({
           portalRef ? css.MessageMobileOptionsContainerContained : ''
         } ${animationCss.SheetEntrance}`}
         style={{
+          zIndex,
           ...(overlayDragHandle ? { overflow: 'hidden' } : undefined),
           ...(shouldReduceMotion ? { animation: 'none' } : undefined),
           ...sheetStyle,

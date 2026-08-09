@@ -1,16 +1,6 @@
 import type { RectCords } from 'folds';
-import {
-  Box,
-  Button,
-  config,
-  Dialog,
-  IconButton,
-  Menu,
-  MenuItem,
-  PopOut,
-  Spinner,
-  Text,
-} from 'folds';
+import { Box, Button, config, Dialog, IconButton, Menu, MenuItem, Spinner, Text } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { HttpApiEvent } from '$types/matrix-sdk';
 import FocusTrap from 'focus-trap-react';

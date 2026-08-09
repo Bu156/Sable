@@ -1,5 +1,6 @@
 import { keyframes, style } from '@vanilla-extract/css';
 import { color, config, toRem } from 'folds';
+import { OVERLAY_LAYER_TOP } from '$components/overlay-stack/layers';
 
 const slideIn = keyframes({
   from: {
@@ -34,7 +35,7 @@ export const BannerContainer = style({
   top: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
   left: 0,
   right: 0,
-  zIndex: 9999,
+  zIndex: OVERLAY_LAYER_TOP,
   display: 'flex',
   flexDirection: 'column',
   gap: config.space.S200,

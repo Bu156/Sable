@@ -1,7 +1,8 @@
 import { useRef } from 'react';
 import type { ComponentProps, MutableRefObject, ReactNode } from 'react';
 import FocusTrap from 'focus-trap-react';
-import { Box, Modal, Overlay, OverlayBackdrop, OverlayCenter } from 'folds';
+import { Box, Modal, OverlayBackdrop, OverlayCenter } from 'folds';
+import { Overlay } from '$components/overlay-stack';
 import { ScreenSize, useScreenSizeOptionally } from '$hooks/useScreenSize';
 import { stopPropagation } from '$utils/keyboard';
 import { useDismissOnBack } from '$utils/androidBack';
