@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { RoomMediaViewer, type RoomMediaItem } from './RoomMediaViewer';
 
 vi.mock('$hooks/useScreenSize', () => ({
@@ -14,10 +15,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn<() => Promise<void>>(),
 }));
 
+const downloadEncryptedMedia = vi.fn<() => Promise<ArrayBuffer>>();
 vi.mock('$utils/matrix', () => ({
   mxcUrlToHttp: (_mx: unknown, url: string) => `https://hs.example/${url}`,
   rewriteAuthenticatedMediaUrl: (url: string | null) => url,
-  downloadEncryptedMedia: vi.fn<() => Promise<ArrayBuffer>>(),
+  downloadEncryptedMedia: (...args: []) => downloadEncryptedMedia(...args),
   decryptFile: vi.fn<() => Promise<ArrayBuffer>>(),
   downloadMedia: vi.fn<() => Promise<Blob>>(),
 }));
@@ -27,7 +29,10 @@ vi.mock('$hooks/useMediaAuthentication', () => ({ useMediaAuthentication: () => 
 vi.mock('$hooks/useRenderableMediaUrl', () => ({
   useRenderableMediaUrl: (url: string | undefined) => url,
 }));
-const createObjectURL = (value: string) => Promise.resolve(value);
+const createObjectURL = vi.fn<(object: Blob | Promise<Blob>) => Promise<string>>(async (value) => {
+  await value;
+  return 'blob:resolved';
+});
 vi.mock('$hooks/useObjectURL', () => ({ useCreateObjectURL: () => createObjectURL }));
 
 const items: RoomMediaItem[] = [
@@ -84,5 +89,31 @@ describe('RoomMediaViewer', () => {
     );
 
     await waitFor(() => expect(requestClose).toHaveBeenCalled());
+  });
+
+  it('shows retry when encrypted media resolution fails', async () => {
+    downloadEncryptedMedia.mockRejectedValueOnce(new Error('download failed'));
+    const encInfo = { key: {}, iv: 'iv', hashes: {} } as EncryptedAttachmentInfo;
+    const encryptedItems: RoomMediaItem[] = [
+      {
+        eventId: '$enc',
+        body: 'secret.png',
+        url: 'mxc://example.org/enc',
+        encInfo,
+        mimeType: 'image/png',
+      },
+    ];
+
+    render(
+      <RoomMediaViewer
+        items={encryptedItems}
+        selectedEventId="$enc"
+        requestClose={vi.fn<() => void>()}
+        selectEvent={vi.fn<(id: string) => void>()}
+      />
+    );
+
+    expect(await screen.findByText('Failed to load media')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

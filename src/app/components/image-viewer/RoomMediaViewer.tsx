@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Spinner } from 'folds';
+import { Box, Chip, Spinner, Text } from 'folds';
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useCreateObjectURL } from '$hooks/useObjectURL';
@@ -74,11 +74,14 @@ function ResolvedRoomMedia({
   );
 
   const [resolved, setResolved] = useState<ResolvedMedia>();
+  const [error, setError] = useState<Error>();
+  const [retryToken, setRetryToken] = useState(0);
   const requestRef = useRef(0);
 
   useEffect(() => {
     requestRef.current += 1;
     const request = requestRef.current;
+    setError(undefined);
     const resolve = async () => {
       const { encInfo, mimeType } = item;
       if (encInfo) {
@@ -101,14 +104,18 @@ function ResolvedRoomMedia({
         if (requestRef.current !== request) return;
         setResolved((prev) => (prev?.item === item && prev.src === src ? prev : { item, src }));
       })
-      .catch(() => undefined);
-  }, [item, rawMediaUrl, resolvedMediaUrl, createObjectURL]);
+      .catch((err) => {
+        if (requestRef.current !== request) return;
+        setError(err instanceof Error ? err : new Error('Failed to load media'));
+      });
+  }, [item, rawMediaUrl, resolvedMediaUrl, createObjectURL, retryToken]);
 
-  const loading = resolved?.item.eventId !== item.eventId;
+  const loading = !error && resolved?.item.eventId !== item.eventId;
+  const showingResolved = resolved?.item.eventId === item.eventId;
 
   return (
     <>
-      {resolved && (
+      {resolved && showingResolved && !error && (
         <ImageViewer
           alt={resolved.item.body}
           filename={resolved.item.filename}
@@ -129,6 +136,33 @@ function ResolvedRoomMedia({
           style={resolved ? { position: 'absolute', inset: 0, background: '#0009' } : undefined}
         >
           <Spinner variant="Secondary" size="400" />
+        </Box>
+      )}
+      {error && (
+        <Box
+          grow="Yes"
+          alignItems="Center"
+          justifyContent="Center"
+          direction="Column"
+          gap="200"
+          style={
+            resolved
+              ? { position: 'absolute', inset: 0, background: '#000c' }
+              : { background: '#000' }
+          }
+        >
+          <Text size="T300" style={{ color: '#fff' }}>
+            Failed to load media
+          </Text>
+          <Chip
+            as="button"
+            variant="Primary"
+            radii="300"
+            outlined
+            onClick={() => setRetryToken((token) => token + 1)}
+          >
+            <Text size="B300">Retry</Text>
+          </Chip>
         </Box>
       )}
     </>

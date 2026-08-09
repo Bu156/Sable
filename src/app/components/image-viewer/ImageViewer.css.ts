@@ -92,14 +92,13 @@ export const ImageViewerContent = style([
     backgroundColor: color.Background.Container,
     color: color.Background.OnContainer,
     overflow: 'hidden',
-    '@media': {
-      '(max-width: 600px)': {
-        backgroundColor: '#000',
-        color: '#fff',
-      },
-    },
   },
 ]);
+
+export const ImageViewerContentMobile = style({
+  backgroundColor: '#000',
+  color: '#fff',
+});
 
 export const ImageViewerInput = style([
   DefaultReset,
