@@ -93,7 +93,7 @@ export async function getCurrentlyUsedPerMessageProfileForAccount(
   return (await new ProfileCatalog(mx).getSelection('account'))?.persona;
 }
 
-export function usePersonaCosmetics(mx: MatrixClient | undefined) {
+export function usePersonaCosmetics(mx: MatrixClient | undefined, smallAvatar: boolean = true) {
   const useAuthentication = useMediaAuthentication();
   const activeTheme = useActiveTheme();
   const accessibleNameColor = useAccessibleNameColor(activeTheme.kind);
@@ -112,13 +112,15 @@ export function usePersonaCosmetics(mx: MatrixClient | undefined) {
     (profile: PerMessageProfileMsc4461) => {
       if (profile.avatar_url !== undefined) {
         return (
-          mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication, 96, 96, 'crop') ?? undefined
+          (smallAvatar
+            ? mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication, 96, 96, 'crop')
+            : mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication)) ?? undefined
         );
       } else {
         return undefined;
       }
     },
-    [mx, useAuthentication]
+    [mx, useAuthentication, smallAvatar]
   );
 
   if (!mx) return { avatarUrl: undefined, nameColor: undefined };

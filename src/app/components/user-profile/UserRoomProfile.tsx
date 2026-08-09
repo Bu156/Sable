@@ -463,7 +463,7 @@ export function UserRoomProfile({
   useRoomMemberHydration(room, userId);
 
   const [pmp, setPmp] = useState(initialPmp);
-  const { avatarUrl: getPmpAvatarUrl } = usePersonaCosmetics(mx);
+  const { avatarUrl: getPmpAvatarUrl } = usePersonaCosmetics(mx, false);
   const pmpAvatarUrl = pmp?.avatar_url ? getPmpAvatarUrl?.(pmp) : null;
 
   const handleClearPmp = () => {
