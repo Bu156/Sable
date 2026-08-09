@@ -78,7 +78,7 @@ type TemporaryPersonaPickerProps = {
   anchor?: RectCords;
 };
 
-function useProfileCosmetics(mx: MatrixClient) {
+export function useProfileCosmetics(mx: MatrixClient | undefined) {
   const useAuthentication = useMediaAuthentication();
   const activeTheme = useActiveTheme();
 
@@ -93,7 +93,9 @@ function useProfileCosmetics(mx: MatrixClient) {
   const avatarUrl = useCallback(
     (profile: PerMessageProfileMsc4461) => {
       if (profile.avatar_url !== undefined) {
-        return mxcUrlToHttp(mx, profile.avatar_url, useAuthentication, 96, 96, 'crop') ?? undefined;
+        return (
+          mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication, 96, 96, 'crop') ?? undefined
+        );
       } else {
         return undefined;
       }
@@ -101,6 +103,7 @@ function useProfileCosmetics(mx: MatrixClient) {
     [mx, useAuthentication]
   );
 
+  if (!mx) return { avatarUrl: undefined, nameColor: undefined };
   return { nameColor, avatarUrl };
 }
 function useProfiles(
@@ -403,7 +406,7 @@ export function PersonaPicker({
                     >
                       <UserAvatar
                         userId={profile.id}
-                        src={avatarUrl(profile)}
+                        src={avatarUrl?.(profile)}
                         fallbackColor={profile['eu.she-a.color']?.on_light ?? undefined}
                         renderFallback={() => (
                           <Text as="span" size="H4" aria-label="Avatar fallback">
@@ -418,7 +421,7 @@ export function PersonaPicker({
                   <Box direction="Column">
                     <Text
                       truncate
-                      style={{ color: nameColor(profile) ?? undefined, maxWidth: toRem(150) }}
+                      style={{ color: nameColor?.(profile) ?? undefined, maxWidth: toRem(150) }}
                     >
                       {profile.displayname}
                     </Text>
@@ -483,7 +486,7 @@ export function PersonaPicker({
             <UserAvatar
               className={css.PersonaPickerButtonAvatarImage}
               userId={defactoPersona()!.id}
-              src={avatarUrl(defactoPersona()!)}
+              src={avatarUrl?.(defactoPersona()!)}
               renderFallback={() => (
                 <Text as="span" size="H6" aria-label="Avatar fallback">
                   {nameInitials(defactoPersona()!.displayname)}
@@ -584,7 +587,7 @@ export function TemporaryPersonaPicker({
                     >
                       <UserAvatar
                         userId={profile.id}
-                        src={avatarUrl(profile)}
+                        src={avatarUrl?.(profile)}
                         fallbackColor={profile['eu.she-a.color']?.on_light ?? undefined}
                         renderFallback={() => (
                           <Text as="span" size="H4" aria-label="Avatar fallback">
@@ -599,7 +602,7 @@ export function TemporaryPersonaPicker({
                   <Box direction="Column">
                     <Text
                       truncate
-                      style={{ color: nameColor(profile) ?? undefined, maxWidth: toRem(150) }}
+                      style={{ color: nameColor?.(profile) ?? undefined, maxWidth: toRem(150) }}
                     >
                       {profile.displayname}
                     </Text>

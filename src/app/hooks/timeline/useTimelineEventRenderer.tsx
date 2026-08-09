@@ -91,8 +91,9 @@ import { EncryptedContent, Message, Reactions } from '$features/room/message';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { M_POLL_START } from 'matrix-js-sdk';
+import type { Persona } from '$app/persona';
 
-function DecoratedUser({ room, userId, userName }: DecoratedUserProps) {
+function DecoratedUser({ room, userId, userName, pmp }: DecoratedUserProps) {
   const { color, font } = useSableCosmetics(userId, room ?? ({} as Room));
 
   const openUserRoomProfile = useOpenUserRoomProfile();
@@ -104,10 +105,11 @@ function DecoratedUser({ room, userId, userName }: DecoratedUserProps) {
         room.roomId,
         undefined,
         userId,
+        pmp,
         evt.currentTarget.getBoundingClientRect()
       );
     },
-    [room, userId, openUserRoomProfile]
+    [room, userId, openUserRoomProfile, pmp]
   );
 
   return (
@@ -121,6 +123,7 @@ type DecoratedUserProps = {
   room: Room;
   userId: string;
   userName?: string;
+  pmp?: Persona;
 };
 
 type ThreadReplyChipProps = {

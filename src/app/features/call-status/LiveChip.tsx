@@ -65,6 +65,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
                           room.roomId,
                           undefined,
                           userId,
+                          undefined,
                           getMouseEventCords(evt.nativeEvent),
                           'Right'
                         )

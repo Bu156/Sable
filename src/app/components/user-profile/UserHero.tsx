@@ -43,6 +43,9 @@ import { useTimeoutToggle } from '$hooks/useTimeoutToggle';
 import { CopyIcon, CrossIcon } from '@phosphor-icons/react';
 import { useOpenSettings } from '$features/settings';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import type { Persona } from '$app/persona';
+import { useProfileCosmetics } from '$features/room/persona-picker/PersonaPicker';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 type UserHeroProps = {
   userId: string;
@@ -258,10 +261,13 @@ export function UserHero({
 }
 
 type UserHeroNameProps = {
+  mx?: MatrixClient;
   displayName?: string;
   userId: string;
   server?: string;
   customHeroCards?: boolean;
+  pmp?: Persona;
+  clearPmp?: () => void;
 };
 
 type UserHeroNameInnerProps = {
@@ -272,6 +278,8 @@ type UserHeroNameInnerProps = {
   color?: string;
   font?: string;
   customHeroCards?: boolean;
+  isPmp?: boolean;
+  clearPmp?: () => void;
 };
 
 function UserHeroNameInner({
@@ -281,6 +289,8 @@ function UserHeroNameInner({
   server,
   color,
   font,
+  isPmp,
+  clearPmp,
 }: UserHeroNameInnerProps) {
   const [copied, setCopied] = useTimeoutToggle();
   const [isHovered, setIsHovered] = useState(false);
@@ -332,26 +342,61 @@ function UserHeroNameInner({
             )
           }
         />
+        {isPmp && (
+          <>
+            {' - '}
+            <Chip
+              onClick={(evt) => {
+                evt.stopPropagation();
+                clearPmp?.();
+              }}
+              style={{ backgroundColor: 'transparent', color: 'inherit', padding: '0' }}
+              before={
+                <Text
+                  size="T200"
+                  className={classNames(BreakWord, LineClamp3, css.LinkUnderline)}
+                  truncate
+                >
+                  View account profile
+                </Text>
+              }
+            />
+          </>
+        )}
       </Box>
     </Box>
   );
 }
 
-export function UserHeroName({ displayName, userId, server, customHeroCards }: UserHeroNameProps) {
+export function UserHeroName({
+  mx,
+  displayName,
+  userId,
+  server,
+  customHeroCards,
+  pmp,
+  clearPmp,
+}: UserHeroNameProps) {
   const username = getMxIdLocalPart(userId);
   const nick = useNickname(userId);
 
+  // personas
+  const { nameColor: getPmpNameColor } = useProfileCosmetics(mx);
+  const pmpNameColor = pmp?.['eu.she-a.color'] ? getPmpNameColor?.(pmp) : null;
+
   // Sable username color and fonts
   const { color, font } = useSableCosmetics(userId, useRoom(), customHeroCards);
-  const shownName = nick ?? displayName ?? username ?? userId;
+  const shownName = pmp?.displayname ?? nick ?? displayName ?? username ?? userId;
 
   return (
     <UserHeroNameInner
       username={username}
+      isPmp={!!pmp}
       server={server}
       shownName={shownName}
-      color={color}
+      color={pmpNameColor ?? color}
       font={font}
+      clearPmp={clearPmp}
     />
   );
 }
