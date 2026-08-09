@@ -76,7 +76,7 @@ type TemporaryPersonaPickerProps = {
   anchor?: RectCords;
 };
 
-function useProfiles(
+export function useProfiles(
   mx: MatrixClient,
   mountedRef: MutableRefObject<boolean>,
   profileFetchGenerationRef: MutableRefObject<number>
