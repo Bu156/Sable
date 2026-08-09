@@ -106,7 +106,6 @@ export function CustomEmojiItem({
     >
       <MediaImage
         loading="lazy"
-        sessionCache
         className={css.CustomEmojiImg}
         alt={image.body || image.shortcode}
         info={image.info}
@@ -145,7 +144,6 @@ export function StickerItem({
     >
       <MediaImage
         loading="lazy"
-        sessionCache
         className={css.StickerImg}
         alt={image.body || image.shortcode}
         info={image.info}

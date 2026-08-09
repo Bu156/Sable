@@ -78,24 +78,6 @@ const getTauriMediaInnerTarget = (mediaUrl: string): string | undefined => {
   return mediaUrl;
 };
 
-const MEDIA_THUMBNAIL_PATH_PREFIXES = [
-  '/_matrix/client/v1/media/thumbnail/',
-  '/_matrix/media/v3/thumbnail/',
-  '/_matrix/media/r0/thumbnail/',
-];
-
-// Matches on the inner http(s) target so tauri-wrapped and plain URLs classify alike.
-export const isThumbnailMediaUrl = (mediaUrl: string): boolean => {
-  const innerTarget = getTauriMediaInnerTarget(mediaUrl);
-  if (!innerTarget) return false;
-  try {
-    const { pathname } = new URL(innerTarget);
-    return MEDIA_THUMBNAIL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  } catch {
-    return false;
-  }
-};
-
 // Embeds a retry revision as a fragment on the inner http(s) target (stripping the
 // outer cache/session markers, which the rewrite re-adds). The fragment makes Rust's
 // cache_key(scope, target) distinct but is stripped natively before the upstream
