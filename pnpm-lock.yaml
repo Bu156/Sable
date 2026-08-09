@@ -357,8 +357,8 @@ importers:
         specifier: ^0.24.0
         version: 0.24.0
       tauri-plugin-app-icon-api:
-        specifier: github:SableClient/tauri-plugin-app-icon#a2d972039992ef5b07a17827ee45bd497d230b73
-        version: https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/a2d972039992ef5b07a17827ee45bd497d230b73
+        specifier: github:SableClient/tauri-plugin-app-icon#6da508ab93ee8c791aa28112c8e171e42257cc3c
+        version: https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/6da508ab93ee8c791aa28112c8e171e42257cc3c
       testcontainers:
         specifier: ^12.0.4
         version: 12.0.4
@@ -5336,8 +5336,8 @@ packages:
   tauri-plugin-android-fs-api@28.4.0:
     resolution: {integrity: sha512-YOo1P+cRjuaoPbTNZprMhr56ruKO4hIDq7kJOum91NqkN+VWY9F+UPAdjZokhzJSsbkeY0nsb1VDLXb2/h3f3w==}
 
-  tauri-plugin-app-icon-api@https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/a2d972039992ef5b07a17827ee45bd497d230b73:
-    resolution: {tarball: https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/a2d972039992ef5b07a17827ee45bd497d230b73}
+  tauri-plugin-app-icon-api@https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/6da508ab93ee8c791aa28112c8e171e42257cc3c:
+    resolution: {tarball: https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/6da508ab93ee8c791aa28112c8e171e42257cc3c}
     version: 0.1.0
 
   teex@1.0.1:
@@ -10761,7 +10761,7 @@ snapshots:
       '@tauri-apps/api': 2.11.1
       create-web-stream: 1.1.3
 
-  tauri-plugin-app-icon-api@https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/a2d972039992ef5b07a17827ee45bd497d230b73:
+  tauri-plugin-app-icon-api@https://codeload.github.com/SableClient/tauri-plugin-app-icon/tar.gz/6da508ab93ee8c791aa28112c8e171e42257cc3c:
     dependencies:
       '@tauri-apps/api': 2.11.1
 

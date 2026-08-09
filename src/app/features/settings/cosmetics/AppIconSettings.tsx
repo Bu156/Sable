@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { SettingMenuSelector } from '$components/setting-menu-selector';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
-import { useSetting } from '$state/hooks/settings';
-import { settingsAtom } from '$state/settings';
 import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 import defaultIcon from './app-icons/default.png';
 import propelerIcon from './app-icons/propeler.png';
@@ -33,8 +31,10 @@ function AppIconPreview({ icon }: { icon: string }) {
   );
 }
 
-export function AppIconRuntimeFeature() {
-  const [appIconId] = useSetting(settingsAtom, 'appIconId');
+export function AppIconSettings() {
+  const [appIconId, setAppIconId] = useState<string>();
+  const [icons, setIcons] = useState<string[]>();
+  const [changing, setChanging] = useState(false);
 
   useEffect(() => {
     if (!isMobileTauri()) return;
@@ -44,34 +44,10 @@ export function AppIconRuntimeFeature() {
       invoke<string[]>('plugin:app-icon|get_available_icons'),
       invoke<string | null>('plugin:app-icon|get_current_icon'),
     ])
-      .then(async ([icons, current]) => {
-        const icon = icons.includes(appIconId ?? '') ? appIconId! : null;
-        if (!cancelled && current !== icon) {
-          await invoke('plugin:app-icon|set_icon', { request: { icon } });
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [appIconId]);
-
-  return null;
-}
-
-export function AppIconSettings() {
-  const [appIconId, setAppIconId] = useSetting(settingsAtom, 'appIconId');
-  const [icons, setIcons] = useState<string[]>();
-  const [changing, setChanging] = useState(false);
-
-  useEffect(() => {
-    if (!isMobileTauri()) return;
-
-    let cancelled = false;
-    invoke<string[]>('plugin:app-icon|get_available_icons')
-      .then((availableIcons) => {
-        if (!cancelled) setIcons(availableIcons);
+      .then(([availableIcons, currentIcon]) => {
+        if (cancelled) return;
+        setIcons(availableIcons);
+        setAppIconId(currentIcon && availableIcons.includes(currentIcon) ? currentIcon : undefined);
       })
       .catch(() => {
         if (!cancelled) setIcons([]);

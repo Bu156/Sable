@@ -1,21 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AppIconRuntimeFeature, AppIconSettings } from './AppIconSettings';
+import { AppIconSettings } from './AppIconSettings';
 
-const { invoke, isAndroidTauri, isMobileOrTablet, isMobileTauri, setAppIconId, settings } =
-  vi.hoisted(() => ({
-    invoke: vi.fn<(command: string, args?: unknown) => Promise<unknown>>(),
-    isAndroidTauri: vi.fn<() => boolean>(),
-    isMobileOrTablet: vi.fn<() => boolean>(),
-    isMobileTauri: vi.fn<() => boolean>(),
-    setAppIconId: vi.fn<(value: string | undefined) => void>(),
-    settings: { appIconId: undefined as string | undefined },
-  }));
+const { invoke, isAndroidTauri, isMobileOrTablet, isMobileTauri } = vi.hoisted(() => ({
+  invoke: vi.fn<(command: string, args?: unknown) => Promise<unknown>>(),
+  isAndroidTauri: vi.fn<() => boolean>(),
+  isMobileOrTablet: vi.fn<() => boolean>(),
+  isMobileTauri: vi.fn<() => boolean>(),
+}));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('$utils/platform', () => ({ isAndroidTauri, isMobileOrTablet, isMobileTauri }));
-vi.mock('$state/hooks/settings', () => ({ useSetting: () => [settings.appIconId, setAppIconId] }));
 vi.mock('$components/sequence-card', () => ({
   SequenceCard: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SequenceCardStyle: 'card',
@@ -53,8 +49,6 @@ describe('AppIconSettings', () => {
     isAndroidTauri.mockReturnValue(false);
     isMobileOrTablet.mockReturnValue(false);
     isMobileTauri.mockReset();
-    setAppIconId.mockReset();
-    settings.appIconId = undefined;
   });
 
   it('is hidden outside mobile Tauri', () => {
@@ -68,7 +62,7 @@ describe('AppIconSettings', () => {
 
   it('is hidden when the native bundle has no alternate icons', async () => {
     isMobileTauri.mockReturnValue(true);
-    invoke.mockResolvedValue([]);
+    invoke.mockResolvedValueOnce([]).mockResolvedValueOnce(null);
 
     render(<AppIconSettings />);
 
@@ -76,9 +70,12 @@ describe('AppIconSettings', () => {
     expect(screen.queryByText('App Icon')).not.toBeInTheDocument();
   });
 
-  it('persists an icon only after native selection succeeds', async () => {
+  it('changes the icon only after an explicit selection', async () => {
     isMobileTauri.mockReturnValue(true);
-    invoke.mockResolvedValueOnce(['propeler']).mockResolvedValueOnce(undefined);
+    invoke
+      .mockResolvedValueOnce(['propeler'])
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(undefined);
 
     render(<AppIconSettings />);
 
@@ -93,46 +90,29 @@ describe('AppIconSettings', () => {
         request: { icon: 'propeler' },
       });
     });
-    expect(setAppIconId).toHaveBeenCalledWith('propeler');
+  });
+
+  it('reads the current selection from the native plugin', async () => {
+    isMobileTauri.mockReturnValue(true);
+    invoke.mockResolvedValueOnce(['propeler']).mockResolvedValueOnce('propeler');
+
+    render(<AppIconSettings />);
+
+    await screen.findByText('App Icon');
+    expect(invoke).toHaveBeenNthCalledWith(1, 'plugin:app-icon|get_available_icons');
+    expect(invoke).toHaveBeenNthCalledWith(2, 'plugin:app-icon|get_current_icon');
+    expect(invoke).not.toHaveBeenCalledWith('plugin:app-icon|set_icon', expect.anything());
   });
 
   it('renders circular previews on Android', async () => {
     isMobileTauri.mockReturnValue(true);
     isAndroidTauri.mockReturnValue(true);
-    invoke.mockResolvedValue(['propeler']);
+    invoke.mockResolvedValueOnce(['propeler']).mockResolvedValueOnce(null);
 
     render(<AppIconSettings />);
 
     expect(await screen.findByTestId('app-icon-preview-propeler')).toHaveStyle({
       borderRadius: '50%',
     });
-  });
-
-  it('restores the persisted icon when an update resets the native selection', async () => {
-    isMobileTauri.mockReturnValue(true);
-    settings.appIconId = 'propeler';
-    invoke
-      .mockResolvedValueOnce(['propeler'])
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(undefined);
-
-    render(<AppIconRuntimeFeature />);
-
-    await waitFor(() => {
-      expect(invoke).toHaveBeenLastCalledWith('plugin:app-icon|set_icon', {
-        request: { icon: 'propeler' },
-      });
-    });
-  });
-
-  it('leaves the native selection alone when it already matches', async () => {
-    isMobileTauri.mockReturnValue(true);
-    settings.appIconId = 'propeler';
-    invoke.mockResolvedValueOnce(['propeler']).mockResolvedValueOnce('propeler');
-
-    render(<AppIconRuntimeFeature />);
-
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
-    expect(invoke).not.toHaveBeenCalledWith('plugin:app-icon|set_icon', expect.anything());
   });
 });
