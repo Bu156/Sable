@@ -212,7 +212,7 @@ import { AudioMessageRecorder } from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import { PollDialog } from './poll-modals';
 import { useClientConfig } from '$hooks/useClientConfig';
-import { PersistentPersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
+import { PersonaPicker, type PersonaPickerTab } from './persona-picker/PersonaPicker.tsx';
 import { createComposerController, type ComposerController } from './composerController';
 import { buildEditReplacement, buildOutgoingMessage } from './composerMessage';
 import { pickNativeFile } from './nativeFilePicker';
@@ -2356,8 +2356,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </IconButton>
                 </>
               )}
-              {pmpPickerEnable && !editingEvent && (
-                <PersistentPersonaPicker
+              {pmpPickerEnable && (isMobileOrTablet() ? !editingEvent : true) && (
+                <PersonaPicker
                   tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}

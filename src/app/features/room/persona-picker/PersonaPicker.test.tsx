@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { PerMessageProfileMsc4461 } from '$app/persona';
-import { TemporaryPersonaPicker, PersonaPickerTab } from './PersonaPicker';
+import { PersonaPicker, PersonaPickerTab } from './PersonaPicker';
 
 const mocked = vi.hoisted(() => ({
   getAll: vi.fn<(mx: MatrixClient) => Promise<PerMessageProfileMsc4461[]>>(),
@@ -128,7 +128,7 @@ const profiles: PerMessageProfileMsc4461[] = [
 
 function renderPicker(mx = {} as MatrixClient, tab = PersonaPickerTab.Global) {
   return render(
-    <TemporaryPersonaPicker
+    <PersonaPicker
       tab={tab}
       mx={mx}
       roomId="!room:example.org"
@@ -160,7 +160,7 @@ describe('PersonaPicker async flows', () => {
 
     const view = renderPicker(firstClient);
     view.rerender(
-      <TemporaryPersonaPicker
+      <PersonaPicker
         mx={secondClient}
         roomId="!room:example.org"
         suppressEditorRefocus={vi.fn<() => void>()}
@@ -230,7 +230,7 @@ describe('PersonaPicker async flows', () => {
 
     fireEvent.click(grabPersonaButton('First'));
     view.rerender(
-      <TemporaryPersonaPicker
+      <PersonaPicker
         tab={PersonaPickerTab.PerRoom}
         mx={mx}
         roomId="!room:example.org"
@@ -249,7 +249,7 @@ describe('PersonaPicker async flows', () => {
     });
 
     view.rerender(
-      <TemporaryPersonaPicker
+      <PersonaPicker
         tab={PersonaPickerTab.Global}
         mx={mx}
         roomId="!room:example.org"
