@@ -44,8 +44,8 @@ import { CopyIcon, CrossIcon } from '@phosphor-icons/react';
 import { useOpenSettings } from '$features/settings';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import type { Persona } from '$app/persona';
-import { useProfileCosmetics } from '$features/room/persona-picker/PersonaPicker';
 import type { MatrixClient } from 'matrix-js-sdk';
+import { usePersonaCosmetics } from '$hooks/usePerMessageProfile';
 
 type UserHeroProps = {
   userId: string;
@@ -381,7 +381,7 @@ export function UserHeroName({
   const nick = useNickname(userId);
 
   // personas
-  const { nameColor: getPmpNameColor } = useProfileCosmetics(mx);
+  const { nameColor: getPmpNameColor } = usePersonaCosmetics(mx);
   const pmpNameColor = pmp?.['eu.she-a.color'] ? getPmpNameColor?.(pmp) : null;
 
   // Sable username color and fonts

@@ -6,10 +6,8 @@ import {
 } from '$components/icons/phosphor';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { UserAvatar } from '$components/user-avatar/UserAvatar.tsx';
-import { useMediaAuthentication } from '$hooks/useMediaAuthentication.ts';
 import type { PerMessageProfileMsc4461, Persona } from '$app/persona';
 import { ProfileCatalog } from '$app/persona/catalog';
-import { mxcUrlToHttp } from '$utils/matrix.ts';
 import { isMobileOrTablet } from '$utils/platform';
 import { nameInitials } from '$utils/common';
 import {
@@ -40,7 +38,7 @@ import {
 import * as css from './PersonaPicker.css.ts';
 import { InfoCard } from '$components/info-card/InfoCard.tsx';
 import { InfoIcon } from '@phosphor-icons/react';
-import { ThemeKind, useActiveTheme } from '$hooks/useTheme.ts';
+import { usePersonaCosmetics } from '$hooks/usePerMessageProfile.ts';
 
 const pillStyles = {
   cursor: 'pointer',
@@ -78,34 +76,6 @@ type TemporaryPersonaPickerProps = {
   anchor?: RectCords;
 };
 
-export function useProfileCosmetics(mx: MatrixClient | undefined) {
-  const useAuthentication = useMediaAuthentication();
-  const activeTheme = useActiveTheme();
-
-  const nameColor = useCallback(
-    (persona: PerMessageProfileMsc4461) =>
-      activeTheme.kind === ThemeKind.Dark
-        ? persona['eu.she-a.color']?.on_dark
-        : persona['eu.she-a.color']?.on_light,
-    [activeTheme]
-  );
-
-  const avatarUrl = useCallback(
-    (profile: PerMessageProfileMsc4461) => {
-      if (profile.avatar_url !== undefined) {
-        return (
-          mxcUrlToHttp(mx!, profile.avatar_url, useAuthentication, 96, 96, 'crop') ?? undefined
-        );
-      } else {
-        return undefined;
-      }
-    },
-    [mx, useAuthentication]
-  );
-
-  if (!mx) return { avatarUrl: undefined, nameColor: undefined };
-  return { nameColor, avatarUrl };
-}
 function useProfiles(
   mx: MatrixClient,
   mountedRef: MutableRefObject<boolean>,
@@ -314,7 +284,7 @@ export function PersonaPicker({
     return persona.id === selectedPersona?.id ? true : undefined;
   };
 
-  const { nameColor, avatarUrl } = useProfileCosmetics(mx);
+  const { nameColor, avatarUrl } = usePersonaCosmetics(mx);
 
   const defactoPersona = () => selectedRoomPersona ?? selectedGlobalPersona;
 
@@ -528,7 +498,7 @@ export function TemporaryPersonaPicker({
     profileFetchGenerationRef
   );
 
-  const { nameColor, avatarUrl } = useProfileCosmetics(mx);
+  const { nameColor, avatarUrl } = usePersonaCosmetics(mx);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 

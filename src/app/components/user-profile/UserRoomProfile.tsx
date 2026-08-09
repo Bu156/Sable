@@ -63,7 +63,7 @@ import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import * as css from './styles.css';
 import * as prefix from '$unstable/prefixes';
 import type { Persona } from '$app/persona';
-import { useProfileCosmetics } from '$features/room/persona-picker/PersonaPicker';
+import { usePersonaCosmetics } from '$hooks/usePerMessageProfile';
 
 const KNOWN_KEYS = new Set([
   prefix.MATRIX_SABLE_UNSTABLE_PROFILE_BIOGRAPHY_PROPERTY_NAME,
@@ -463,7 +463,7 @@ export function UserRoomProfile({
   useRoomMemberHydration(room, userId);
 
   const [pmp, setPmp] = useState(initialPmp);
-  const { avatarUrl: getPmpAvatarUrl } = useProfileCosmetics(mx);
+  const { avatarUrl: getPmpAvatarUrl } = usePersonaCosmetics(mx);
   const pmpAvatarUrl = pmp?.avatar_url ? getPmpAvatarUrl?.(pmp) : null;
 
   const handleClearPmp = () => {
