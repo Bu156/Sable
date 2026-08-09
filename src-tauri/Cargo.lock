@@ -5499,6 +5499,7 @@ dependencies = [
  "ts-rs",
  "webkit2gtk",
  "windows 0.62.2",
+ "zbus",
  "zip 8.6.0",
 ]
 
