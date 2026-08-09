@@ -19,7 +19,7 @@ import { BreakWord, LineClamp3 } from '$styles/Text.css';
 import type { UserPresence } from '$hooks/useUserPresence';
 import { useRoom } from '$hooks/useRoom';
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
-import { useActiveTheme } from '$hooks/useTheme';
+import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
 import { useAccessibleNameColor } from '$hooks/useAccessibleNameColor';
 import { useNickname } from '$hooks/useNickname';
 import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
@@ -44,8 +44,6 @@ import { CopyIcon, CrossIcon } from '@phosphor-icons/react';
 import { useOpenSettings } from '$features/settings';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import type { Persona } from '$app/persona';
-import type { MatrixClient } from 'matrix-js-sdk';
-import { usePersonaCosmetics } from '$hooks/usePerMessageProfile';
 
 type UserHeroProps = {
   userId: string;
@@ -261,7 +259,6 @@ export function UserHero({
 }
 
 type UserHeroNameProps = {
-  mx?: MatrixClient;
   displayName?: string;
   userId: string;
   server?: string;
@@ -369,7 +366,6 @@ function UserHeroNameInner({
 }
 
 export function UserHeroName({
-  mx,
   displayName,
   userId,
   server,
@@ -381,8 +377,25 @@ export function UserHeroName({
   const nick = useNickname(userId);
 
   // personas
-  const { nameColor: getPmpNameColor } = usePersonaCosmetics(mx);
-  const pmpNameColor = pmp?.['eu.she-a.color'] ? getPmpNameColor?.(pmp) : null;
+  const profile = useUserProfile(userId, useRoom(), undefined, false, true);
+  const themeKind =
+    profile.heroBrightness === 'light'
+      ? ThemeKind.Light
+      : profile.heroBrightness === 'dark'
+        ? ThemeKind.Dark
+        : undefined;
+
+  // had to pull this out of usePersonaCosmetics because i couldn't pass around themeKind properly.
+  const activeTheme = useActiveTheme();
+  const accessibleNameColor = useAccessibleNameColor(themeKind ?? activeTheme.kind);
+
+  const pmpNameColor =
+    pmp &&
+    accessibleNameColor(
+      (themeKind ?? activeTheme.kind) === ThemeKind.Dark
+        ? pmp['eu.she-a.color']?.on_dark
+        : pmp['eu.she-a.color']?.on_light
+    );
 
   // Sable username color and fonts
   const { color, font } = useSableCosmetics(userId, useRoom(), customHeroCards);
