@@ -354,7 +354,7 @@ export function PerMessageProfileEditor({
   const [saveState, handleSave] = useAsyncCallback(
     useCallback(async () => {
       await addOrUpdatePerMessageProfile(mx, {
-        id: profileId,
+        id: currentId,
         displayname: newDisplayName,
         avatar_url: avatarMxc,
         [MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME]: newPronouns,
@@ -374,12 +374,12 @@ export function PerMessageProfileEditor({
       setChangingDisplayName(false);
       setDisableSetDisplayname(false);
       if (hasIdChange) {
-        await renamePerMessageProfile(mx, profileId, newId);
+        await renamePerMessageProfile(mx, currentId, newId);
         setCurrentId(newId);
       }
     }, [
       mx,
-      profileId,
+      currentId,
       newDisplayName,
       avatarMxc,
       newPronouns,
@@ -393,11 +393,11 @@ export function PerMessageProfileEditor({
 
   const [deleteState, handleDelete] = useAsyncCallback(
     useCallback(async () => {
-      await deletePerMessageProfile(mx, profileId);
+      await deletePerMessageProfile(mx, currentId);
       setCurrentDisplayName('');
       setCurrentPronouns([]);
-      if (onDelete) onDelete(profileId);
-    }, [mx, profileId, onDelete])
+      if (onDelete) onDelete(currentId);
+    }, [mx, currentId, onDelete])
   );
 
   const handleIdChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
