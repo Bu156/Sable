@@ -26,6 +26,7 @@ import { useUserPresence } from '$hooks/useUserPresence';
 import { useCloseUserRoomProfile } from '$state/hooks/userRoomProfile';
 import { useIgnoredUsers } from '$hooks/useIgnoredUsers';
 import { useMembership } from '$hooks/useMembership';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
@@ -104,6 +105,7 @@ function UserExtendedSection({
 }: Readonly<UserExtendedSectionProps>) {
   const [showMisc, setShowMisc] = useState(false);
   const [miscDataIndex, setMiscDataIndex] = useState(-1);
+  const screenSize = useScreenSizeContext();
 
   const [renderAnimals] = useSetting(settingsAtom, 'renderAnimals');
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
@@ -197,7 +199,10 @@ function UserExtendedSection({
         style={{
           position: 'absolute',
           zIndex: '100',
-          transform: `translateY(${toRem(32)})`,
+          transform:
+            screenSize === ScreenSize.Mobile && unknownFields.length > 1
+              ? `translateY(calc(-100% - ${toRem(32)}))`
+              : `translateY(${toRem(32)})`,
           backgroundColor: innerColor,
         }}
       >
@@ -230,7 +235,7 @@ function UserExtendedSection({
         ))}
       </Menu>
     );
-  }, [cardColor, innerColor, miscDataIndex, showMisc, textColor, unknownFields]);
+  }, [cardColor, innerColor, miscDataIndex, screenSize, showMisc, textColor, unknownFields]);
   const miscHeader = useMemo(
     () => (
       <Box justifyContent="Center" grow="Yes">
