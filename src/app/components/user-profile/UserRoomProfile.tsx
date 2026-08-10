@@ -627,7 +627,6 @@ export function UserRoomProfile({
         >
           <Box gap="200" alignItems="Center" wrap="Wrap" style={{ color: textColor }}>
             <UserHeroName
-              mx={mx}
               displayName={pmp?.displayname ?? displayName}
               userId={userId}
               customHeroCards={showCustomHeroCard}
