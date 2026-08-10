@@ -1,6 +1,12 @@
 import { style } from '@vanilla-extract/css';
 import { DefaultReset, color, config, toRem } from 'folds';
 
+// The viewer is a fullscreen overlay, so it sits outside the app shell's safe-area strips.
+export const safeAreaTop = 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
+const safeAreaBottom = 'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
+export const safeAreaLeft = 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))';
+export const safeAreaRight = 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))';
+
 export const ImageViewer = style([
   DefaultReset,
   {
@@ -32,6 +38,8 @@ export const ImageViewerHeader = style([
         borderBottomWidth: 0,
         color: '#fff',
         flexWrap: 'nowrap',
+        paddingLeft: `calc(${config.space.S200} + ${safeAreaLeft})`,
+        paddingRight: `calc(${config.space.S200} + ${safeAreaRight})`,
       },
     },
   },
@@ -47,7 +55,7 @@ export const ImageViewerMobileHeader = style({
     top: 0,
     left: 0,
     right: 0,
-    height: toRem(132),
+    height: `calc(${toRem(132)} + ${safeAreaTop})`,
     background: scrimStops('bottom'),
     pointerEvents: 'none',
     zIndex: -1,
@@ -74,7 +82,10 @@ export const ImageViewerMobileCaption = style({
   left: 0,
   right: 0,
   zIndex: 1,
-  padding: `${toRem(48)} ${config.space.S400} ${config.space.S400}`,
+  paddingTop: toRem(48),
+  paddingLeft: `calc(${config.space.S400} + ${safeAreaLeft})`,
+  paddingRight: `calc(${config.space.S400} + ${safeAreaRight})`,
+  paddingBottom: `calc(${config.space.S400} + ${safeAreaBottom})`,
   background: scrimStops('top'),
   color: '#fff',
   pointerEvents: 'none',
@@ -144,10 +155,10 @@ const mobileGalleryControl = {
 
 export const ImageViewerPrevious = style({
   ...mobileGalleryControl,
-  left: config.space.S100,
+  left: `calc(${config.space.S100} + ${safeAreaLeft})`,
 });
 
 export const ImageViewerNext = style({
   ...mobileGalleryControl,
-  right: config.space.S100,
+  right: `calc(${config.space.S100} + ${safeAreaRight})`,
 });
