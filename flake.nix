@@ -204,6 +204,7 @@
             pkgs.nil
             pkgs.nixd
             pkgs.jdk
+            pkgs.mise
           ];
         in
         {
