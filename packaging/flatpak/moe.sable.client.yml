@@ -1,9 +1,3 @@
-# Flathub manifest. Submit this to https://github.com/flathub/flathub by opening
-# a PR against the `new-pr` branch; Flathub builds it on their own infra.
-#
-# It consumes the release tarball GoReleaser publishes rather than building from
-# source: Flathub builds have no network, and a source build would need Cargo and
-# pnpm vendored plus the ~1GB CEF distribution declared as a source.
 id: moe.sable.client
 
 runtime: org.freedesktop.Platform
@@ -42,25 +36,20 @@ modules:
   - name: sable
     buildsystem: simple
     build-commands:
-      - mkdir -p ${FLATPAK_DEST}/sable
-      # build.rs sets rpath=$ORIGIN, so libcef.so and the CEF resources have to
-      # stay beside the binary rather than going into /app/lib.
-      - find . -mindepth 1 -maxdepth 1 -not -name applications -not -name icons
-        -not -name 'moe.sable.client.*' -not -name sable.sh -exec cp -r {} ${FLATPAK_DEST}/sable/
-        \;
-      - chmod +x ${FLATPAK_DEST}/sable/sable
+      - install -Dm755 apply_extra ${FLATPAK_DEST}/bin/apply_extra
       - install -Dm755 sable.sh ${FLATPAK_DEST}/bin/sable
       - install -Dm644 moe.sable.client.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
       - install -Dm644 moe.sable.client.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
-      - for s in 32x32 64x64 128x128 256x256; do install -Dm644 "icons/hicolor/$s/apps/sable.png"
-        "${FLATPAK_DEST}/share/icons/hicolor/$s/apps/${FLATPAK_ID}.png"; done
+      - install -Dm644 32x32.png ${FLATPAK_DEST}/share/icons/hicolor/32x32/apps/${FLATPAK_ID}.png
+      - install -Dm644 64x64.png ${FLATPAK_DEST}/share/icons/hicolor/64x64/apps/${FLATPAK_ID}.png
+      - install -Dm644 128x128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
+      - install -Dm644 256x256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
     sources:
-      - type: archive
-        # The GoReleaser archive has no wrapper directory.
-        strip-components: 0
-        # Seed values rewritten by x-checker-data below on each release.
+      - type: extra-data
+        filename: sable.tar.gz
         url: https://github.com/SableClient/Sable/releases/download/v1.21.0/Sable-1.21.0-linux-x86_64.tar.gz
         sha256: '0000000000000000000000000000000000000000000000000000000000000000'
+        size: 0
         only-arches: [x86_64]
         x-checker-data:
           type: json
@@ -69,9 +58,28 @@ modules:
           url-query: .assets[] | select(.name == "Sable-" + $version + "-linux-x86_64.tar.gz")
             | .browser_download_url
           is-main-source: true
+      - type: script
+        dest-filename: apply_extra
+        commands:
+          - set -eu
+          - mkdir -p sable
+          - tar --no-same-owner -xzf sable.tar.gz -C sable
+          - rm sable.tar.gz
       - type: file
         path: sable.sh
       - type: file
         path: moe.sable.client.desktop
       - type: file
         path: moe.sable.client.metainfo.xml
+      - type: file
+        path: icons/32x32.png
+        dest-filename: 32x32.png
+      - type: file
+        path: icons/64x64.png
+        dest-filename: 64x64.png
+      - type: file
+        path: icons/128x128.png
+        dest-filename: 128x128.png
+      - type: file
+        path: icons/256x256.png
+        dest-filename: 256x256.png
