@@ -1,5 +1,5 @@
 import type { MouseEventHandler } from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Box,
   Modal,
@@ -27,6 +27,7 @@ import { useRelations } from '$hooks/useRelations';
 import { stopPropagation } from '$utils/keyboard';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useDismissOnBack } from '$utils/androidBack';
+import { useMobileLongPress } from '$hooks/useMobileLongPress';
 import { ReactionViewer } from '$features/room/reaction-viewer';
 import * as css from './styles.css';
 
@@ -58,6 +59,10 @@ export const Reactions = as<'div', ReactionsProps>(
     const useAuthentication = useMediaAuthentication();
     const [viewer, setViewer] = useState<boolean | string>(false);
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+    const pressedReactionKey = useRef<string>();
+    const reactionLongPress = useMobileLongPress(() => {
+      if (pressedReactionKey.current) setViewer(pressedReactionKey.current);
+    });
     // Android back closes the mobile emoji board instead of navigating away.
     useDismissOnBack(() => setEmojiBoardAnchor(undefined), emojiBoardAnchor !== undefined);
     const myUserId = mx.getUserId();
@@ -116,9 +121,26 @@ export const Reactions = as<'div', ReactionsProps>(
                   mx={mx}
                   reaction={key}
                   count={events.size}
-                  onClick={canToggle ? () => onReactionToggle(mEventId, key) : undefined}
+                  onClick={
+                    canToggle
+                      ? () => {
+                          if (reactionLongPress.firedRef.current) {
+                            reactionLongPress.firedRef.current = false;
+                            return;
+                          }
+                          onReactionToggle(mEventId, key);
+                        }
+                      : undefined
+                  }
                   onContextMenu={handleViewReaction}
-                  onTouchStart={(evt) => evt.stopPropagation()}
+                  onTouchStart={(evt) => {
+                    evt.stopPropagation();
+                    pressedReactionKey.current = key;
+                    reactionLongPress.onTouchStart(evt);
+                  }}
+                  onTouchEnd={reactionLongPress.onTouchEnd}
+                  onTouchMove={reactionLongPress.onTouchMove}
+                  onTouchCancel={reactionLongPress.onTouchCancel}
                   aria-disabled={!canToggle}
                   useAuthentication={useAuthentication}
                 />
