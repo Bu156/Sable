@@ -308,8 +308,8 @@ export const TableContainer = style([
   {
     overflowX: 'auto',
     maxWidth: '100%',
-  }
-])
+  },
+]);
 
 export const Table = style([
   DefaultReset,
@@ -326,7 +326,7 @@ export const Th = style([
     backgroundColor: color.SurfaceVariant.Container,
     color: color.SurfaceVariant.OnContainer,
     minWidth: toRem(100),
-  }
+  },
 ]);
 
 export const Td = style([
@@ -337,5 +337,5 @@ export const Td = style([
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,
     minWidth: toRem(100),
-  }
+  },
 ]);
