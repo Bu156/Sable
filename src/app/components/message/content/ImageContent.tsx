@@ -311,6 +311,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             requestClose={() => setViewer(false)}
             mobile="fullscreen"
             background="#000"
+            respectSafeArea={false}
           >
             {isMobile ? (
               viewerContent
