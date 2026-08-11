@@ -762,9 +762,11 @@ export const getReactCustomHtmlParser = (
 
         if (name === 'table') {
           return (
-            <table {...props} className={css.Table}>
-              {renderChildren()}
-            </table>
+            <div className={css.TableContainer}>
+              <table {...props} className={css.Table}>
+                {renderChildren()}
+              </table>
+            </div>
           );
         }
         if (name === 'th') {
