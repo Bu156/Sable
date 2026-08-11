@@ -1,9 +1,7 @@
-# Flathub manifest. Submit this to https://github.com/flathub/flathub by opening
-# a PR against the `new-pr` branch; Flathub builds it on their own infra.
-#
-# It consumes the release tarball GoReleaser publishes rather than building from
-# source: Flathub builds have no network, and a source build would need Cargo and
-# pnpm vendored plus the ~1GB CEF distribution declared as a source.
+# Direct-distribution Flatpak manifest. CI replaces the archive source with the
+# GoReleaser tarball built in the same release job, then uploads the `.flatpak`
+# bundle to GitHub Releases. It is not suitable for Flathub, which requires a
+# source build.
 id: moe.sable.client
 
 runtime: org.freedesktop.Platform
@@ -58,7 +56,7 @@ modules:
       - type: archive
         # The GoReleaser archive has no wrapper directory.
         strip-components: 0
-        # Seed values rewritten by x-checker-data below on each release.
+        # CI replaces these seed values with its local release archive.
         url: https://github.com/SableClient/Sable/releases/download/v1.21.0/Sable-1.21.0-linux-x86_64.tar.gz
         sha256: '0000000000000000000000000000000000000000000000000000000000000000'
         only-arches: [x86_64]
