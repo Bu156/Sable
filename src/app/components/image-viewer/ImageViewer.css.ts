@@ -109,6 +109,7 @@ export const ImageViewerContent = style([
 export const ImageViewerContentMobile = style({
   backgroundColor: '#000',
   color: '#fff',
+  paddingBottom: safeAreaBottom,
 });
 
 export const ImageViewerInput = style([

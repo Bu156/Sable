@@ -374,7 +374,7 @@ export const useImageGestures = (
       const imageWidth = img instanceof HTMLCanvasElement ? img.width : img.naturalWidth;
       const heightRatio = height / imageHeight;
       const widthRatio = width / imageWidth;
-      const fitZoom = Math.min(heightRatio, widthRatio);
+      const fitZoom = Math.min(heightRatio, widthRatio, 1);
 
       img.style.transition = 'none';
       setFitRatio(fitZoom);
