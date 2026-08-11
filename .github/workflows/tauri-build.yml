@@ -732,39 +732,6 @@ jobs:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: goreleaser ${{ steps.gr.outputs.args }}
 
-      - name: Install Flatpak build tools
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes flatpak flatpak-builder
-          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install --system --noninteractive flathub \
-            org.freedesktop.Platform//25.08 \
-            org.freedesktop.Sdk//25.08 \
-            org.electronjs.Electron2.BaseApp//25.08
-
-      - name: Build Flatpak bundle
-        shell: bash
-        run: |
-          archive=".goreleaser-dist/Sable-${VERSION}-linux-x86_64.tar.gz"
-          [ -f "$archive" ] || { echo "Linux tarball not found: $archive" >&2; exit 1; }
-
-          flatpak_dir="$RUNNER_TEMP/flatpak"
-          cp -a packaging/flatpak "$flatpak_dir"
-          cp "$archive" "$flatpak_dir/sable.tar.gz"
-          sed -i \
-            -e 's|^        url: https://github.com/SableClient/Sable/releases/download/.*|        path: sable.tar.gz|' \
-            -e '/^        sha256: /d' \
-            "$flatpak_dir/moe.sable.client.yml"
-
-          flatpak-builder --force-clean --disable-cache \
-            --repo "$RUNNER_TEMP/flatpak-repo" \
-            "$RUNNER_TEMP/flatpak-build" \
-            "$flatpak_dir/moe.sable.client.yml"
-          flatpak build-bundle "$RUNNER_TEMP/flatpak-repo" \
-            ".goreleaser-dist/Sable-${VERSION}-linux-x86_64.flatpak" \
-            moe.sable.client
-
       - name: Build the AppImage
         shell: bash
         run: |
@@ -789,7 +756,6 @@ jobs:
             .goreleaser-dist/*.deb
             .goreleaser-dist/*.rpm
             .goreleaser-dist/*.pkg.tar.zst
-            .goreleaser-dist/*.flatpak
             src-tauri/target/release/bundle/appimage/*.AppImage
             src-tauri/target/release/bundle/appimage/*.sig
 
@@ -802,7 +768,6 @@ jobs:
                    .goreleaser-dist/Sable-*.rpm \
                    .goreleaser-dist/Sable-*.pkg.tar.zst \
                    .goreleaser-dist/Sable-*-linux-x86_64.tar.gz \
-                   .goreleaser-dist/Sable-*-linux-x86_64.flatpak \
                    src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage \
                    src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage.sig; do
             [ -e "$f" ] || continue

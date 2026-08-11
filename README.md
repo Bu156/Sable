@@ -21,7 +21,7 @@ You can also download our desktop app for Windows and Linux from [releases](http
 &nbsp;
 <a href="https://snapcraft.io/sable"><img alt="Snap Store" src="https://img.shields.io/badge/Install_via_Snap-82BEA0?style=for-the-badge&logo=snapcraft"></a>
 &nbsp;
-<a href="https://github.com/SableClient/Sable/releases/latest"><img alt="Download Flatpak" src="https://img.shields.io/badge/Download_Flatpak-4A86CF?style=for-the-badge&logo=flatpak"></a>
+<a href="https://flathub.org/apps/moe.sable.client"><img alt="Flathub" src="https://img.shields.io/badge/Install_via_Flathub-4A86CF?style=for-the-badge&logo=flathub"></a>
 
 On macOS, via our [Homebrew tap](https://github.com/SableClient/homebrew-sable):
 
