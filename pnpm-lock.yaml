@@ -158,8 +158,8 @@ importers:
         specifier: ^12.0.3
         version: 12.0.3(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       folds:
-        specifier: ^2.6.2
-        version: 2.6.2(@vanilla-extract/css@1.21.1)(@vanilla-extract/recipes@0.5.7(@vanilla-extract/css@1.21.1))(classnames@2.5.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^2.7.1
+        version: 2.7.1(@vanilla-extract/css@1.21.1)(@vanilla-extract/recipes@0.5.7(@vanilla-extract/css@1.21.1))(classnames@2.5.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       html-dom-parser:
         specifier: ^8.0.0
         version: 8.0.0
@@ -3944,8 +3944,8 @@ packages:
   focus-trap@8.2.2:
     resolution: {integrity: sha512-qV0g8hRYBqgACcFOH3f9wXc4zPKhr/0z9RI2a6ZijZ72EeBi4g8oBy8zAWuUR1TsMpOzwpUMFvjdasrC41Joug==}
 
-  folds@2.6.2:
-    resolution: {integrity: sha512-1HemxxSnBm8/U5kq1pDQrFkpltWgQN90DmWCZWkZb7D2pe8BhOJSwIRLjk9WxHcw6nn69oz2XNYIXtSw0LvX1w==}
+  folds@2.7.1:
+    resolution: {integrity: sha512-A1XGXJ4hp1W0cpFUIjYj9gPSzKVxqj9BlTBJTqmmtTUiEFDzXvhBITJdcqmlDsmcd756tu/iygSAzdky5fDcrg==}
     peerDependencies:
       '@vanilla-extract/css': 1.9.2
       '@vanilla-extract/recipes': 0.3.0
@@ -9162,7 +9162,7 @@ snapshots:
     dependencies:
       tabbable: 6.5.0
 
-  folds@2.6.2(@vanilla-extract/css@1.21.1)(@vanilla-extract/recipes@0.5.7(@vanilla-extract/css@1.21.1))(classnames@2.5.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  folds@2.7.1(@vanilla-extract/css@1.21.1)(@vanilla-extract/recipes@0.5.7(@vanilla-extract/css@1.21.1))(classnames@2.5.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@vanilla-extract/css': 1.21.1
       '@vanilla-extract/recipes': 0.5.7(@vanilla-extract/css@1.21.1)
