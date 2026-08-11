@@ -13,6 +13,7 @@ export const countInboxNotifications = (
   mDirects: Set<string>
 ): number =>
   rooms.reduce((count, room) => {
+    if (room.isSpaceRoom()) return count;
     const unread = roomToUnread.get(room.roomId);
     if (!unread) return count;
     return count + (isDMRoom(room, mDirects) ? unread.total : unread.highlight);

@@ -20,4 +20,19 @@ describe('countInboxNotifications', () => {
 
     expect(countInboxNotifications(rooms, unread, new Set(['!dm']))).toBe(6);
   });
+
+  it('skips space rooms so aggregated space counts are not double-counted', () => {
+    const space = {
+      roomId: '!space',
+      isSpaceRoom: () => true,
+      getJoinedMemberCount: () => 3,
+    } as unknown as Room;
+    const rooms = [room('!room'), space];
+    const unread = new Map([
+      ['!room', { total: 4, highlight: 1, from: null }],
+      ['!space', { total: 4, highlight: 1, from: new Set(['!room']) }],
+    ]) as RoomToUnread;
+
+    expect(countInboxNotifications(rooms, unread, new Set())).toBe(1);
+  });
 });
