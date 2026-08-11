@@ -328,4 +328,4 @@ export const Td = style([
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,
   }
-])
+]);
