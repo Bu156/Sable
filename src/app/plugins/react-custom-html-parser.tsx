@@ -760,6 +760,28 @@ export const getReactCustomHtmlParser = (
           );
         }
 
+        if (name === 'table') {
+          return (
+            <table {...props} className={css.Table}>
+              {renderChildren()}
+            </table>
+          );
+        }
+        if (name === 'th') {
+          return (
+            <th {...props} className={css.Th}>
+              {renderChildren()}
+            </th>
+          );
+        }
+        if (name === 'td') {
+          return (
+            <td {...props} className={css.Td}>
+              {renderChildren()}
+            </td>
+          );
+        }
+
         if (name === 'code') {
           if (parent && 'name' in parent && parent.name === 'pre') {
             const codeContent = renderChildren();

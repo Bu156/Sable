@@ -301,3 +301,31 @@ export const HorizontalRule = style([
     userSelect: 'none',
   },
 ]);
+
+export const Table = style([
+  DefaultReset,
+  MarginSpaced,
+  {
+    borderCollapse: 'collapse',
+  },
+]);
+
+export const Th = style([
+  DefaultReset,
+  {
+    padding: `${config.space.S100}`,
+    border: `${config.borderWidth.B300} solid var(--sable-surface-container-line)`,
+    backgroundColor: "var(--sable-surface-var-container)",
+    color: "var(--sable-surface-var-on-container)",
+  }
+]);
+
+export const Td = style([
+  DefaultReset,
+  {
+    padding: `${config.space.S100}`,
+    border: `${config.borderWidth.B300} solid var(--sable-surface-container-line)`,
+    backgroundColor: "var(--sable-surface-container)",
+    color: "var(--sable-surface-on-container)",
+  }
+])
