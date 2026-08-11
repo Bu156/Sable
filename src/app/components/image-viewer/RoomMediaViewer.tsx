@@ -185,7 +185,13 @@ export function RoomMediaViewer({
   if (!item) return null;
 
   return (
-    <ModalOverlay open requestClose={requestClose} mobile="fullscreen" background="#000">
+    <ModalOverlay
+      open
+      requestClose={requestClose}
+      mobile="fullscreen"
+      background="#000"
+      respectSafeArea={false}
+    >
       <ResolvedRoomMedia
         item={item}
         requestClose={requestClose}

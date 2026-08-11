@@ -12,6 +12,13 @@ import * as messageCss from '$features/room/message/styles.css';
 type FocusTrapOptions = ComponentProps<typeof FocusTrap>['focusTrapOptions'];
 type ModalSize = '300' | '400' | '500';
 
+const safeArea = {
+  top: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
+  bottom: 'var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))',
+  left: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
+  right: 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))',
+};
+
 type ModalOverlayProps = {
   open?: boolean;
   requestClose: () => void;
@@ -30,6 +37,8 @@ type ModalOverlayProps = {
   escapeDeactivates?: FocusTrapOptions['escapeDeactivates'];
   /** Fills the mobile fullscreen wrapper, for content that does not paint its own. */
   background?: string;
+  /** Set false for full-bleed viewers that inset their own controls. */
+  respectSafeArea?: boolean;
   children: ReactNode;
 };
 
@@ -42,6 +51,7 @@ export function ModalOverlay({
   contentRef,
   escapeDeactivates = stopPropagation,
   background,
+  respectSafeArea = true,
   children,
 }: ModalOverlayProps) {
   // Null outside a provider, where desktop is the safe assumption.
@@ -75,6 +85,10 @@ export function ModalOverlay({
               display: 'flex',
               flexDirection: 'column',
               background,
+              paddingTop: respectSafeArea ? safeArea.top : undefined,
+              paddingBottom: respectSafeArea ? safeArea.bottom : undefined,
+              paddingLeft: respectSafeArea ? safeArea.left : undefined,
+              paddingRight: respectSafeArea ? safeArea.right : undefined,
             }}
           >
             {children}
