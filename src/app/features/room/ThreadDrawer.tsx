@@ -244,6 +244,7 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
           ?.map((r) => `${r[0]}:${r[1].size}`)
           .join(',') ?? '',
       content: ev.getContent(),
+      sendStatus: ev.getAssociatedStatus(),
     }));
     // forceUpdateCounter makes this recompute whenever events arrive
   }, [room, threadRootId, thread, processedEvents, forceUpdateCounter]);
@@ -534,16 +535,9 @@ export function ThreadDrawer({ room, threadRootId, onClose, overlay }: ThreadDra
     }
   }, [mx, threadRootId, handleEdit]);
 
-  // Map jumpToEventId to a focusItem index for useTimelineEventRenderer highlighting
-  const jumpIndex = jumpToEventId ? processedEvents.findIndex((e) => e.id === jumpToEventId) : -1;
-  const focusItem =
-    jumpIndex >= 0 && processedEvents[jumpIndex]
-      ? {
-          index: processedEvents[jumpIndex].itemIndex,
-          highlight: true,
-          scrollTo: false as const,
-        }
-      : undefined;
+  const focusItem = jumpToEventId
+    ? { eventId: jumpToEventId, highlight: true, scrollTo: false as const }
+    : undefined;
 
   const renderMatrixEvent = useTimelineEventRenderer({
     room,

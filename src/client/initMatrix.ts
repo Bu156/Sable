@@ -35,7 +35,7 @@ import { revokeOAuthToken } from './oauthTokenRevocation';
 import { clearSecretStorageKeys, cryptoCallbacks } from './secretStorageKeys';
 import type { SlidingSyncDiagnostics } from './slidingSync';
 import {
-  markExpandedTimelinesLimited,
+  prepareSlidingSyncTimelines,
   scopeTypingExtension,
   SlidingSyncManager,
 } from './slidingSync';
@@ -161,13 +161,20 @@ type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & {
 export const newSlidingSyncConnId = (): string =>
   `sable-${globalThis.crypto?.randomUUID?.().slice(0, 8) ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 
-function installSlidingSyncRequestPatch(mx: MatrixClient, manager: SlidingSyncManager): void {
+export function installSlidingSyncRequestPatch(
+  mx: MatrixClient,
+  manager: SlidingSyncManager
+): void {
   slidingSyncRequestCleanupByClient.get(mx)?.();
 
   const connId = newSlidingSyncConnId();
   const mxWritable = mx as MatrixClientWithWritableSlidingSync;
   const original = mx.slidingSync.bind(mx) as SlidingSyncMethod;
   mxWritable.slidingSync = async (reqBody, baseUrl, abortSignal) => {
+    const req = reqBody as SlidingSyncRequestWithConnId;
+    const subscribedRoomIds = new Set(Object.keys(req.room_subscriptions ?? {}));
+    const trackResponse = manager.trackSubscriptionRequest(subscribedRoomIds);
+
     // AbortError makes the SDK loop `continue` and reissue at the same `pos`, no sleep.
     if (manager.isPaused()) {
       await manager.waitForResume();
@@ -176,7 +183,6 @@ function installSlidingSyncRequestPatch(mx: MatrixClient, manager: SlidingSyncMa
       throw aborted;
     }
 
-    const req = reqBody as SlidingSyncRequestWithConnId;
     if (req.conn_id === undefined) {
       req.conn_id = connId;
     }
@@ -185,10 +191,14 @@ function installSlidingSyncRequestPatch(mx: MatrixClient, manager: SlidingSyncMa
     scopeTypingExtension(req.extensions, roomIds);
 
     const response = await original(reqBody, baseUrl, abortSignal);
+    trackResponse(response);
     // Must run before the SDK processes the response. A throw would reach the SDK's
     // loop, which drops the response and retries the same `pos` forever.
     try {
-      markExpandedTimelinesLimited(response);
+      const completeTimelineReset = prepareSlidingSyncTimelines(response, mx, subscribedRoomIds);
+      if (completeTimelineReset) {
+        manager.trackTimelineResetCompletion(response, completeTimelineReset);
+      }
       manager.sanitizeOptimisticJoinResponse(response);
     } catch (error) {
       Sentry.captureException(error, { tags: { area: 'sliding_sync_response' } });
