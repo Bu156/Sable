@@ -314,9 +314,9 @@ export const Th = style([
   DefaultReset,
   {
     padding: `${config.space.S100}`,
-    border: `${config.borderWidth.B300} solid var(--sable-surface-container-line)`,
-    backgroundColor: "var(--sable-surface-var-container)",
-    color: "var(--sable-surface-var-on-container)",
+    border: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
+    backgroundColor: color.SurfaceVariant.Container,
+    color: color.SurfaceVariant.OnContainer,
   }
 ]);
 
@@ -324,8 +324,8 @@ export const Td = style([
   DefaultReset,
   {
     padding: `${config.space.S100}`,
-    border: `${config.borderWidth.B300} solid var(--sable-surface-container-line)`,
-    backgroundColor: "var(--sable-surface-container)",
-    color: "var(--sable-surface-on-container)",
+    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+    backgroundColor: color.Surface.Container,
+    color: color.Surface.OnContainer,
   }
 ])
