@@ -4,7 +4,7 @@
 # It consumes the release tarball GoReleaser publishes rather than building from
 # source: Flathub builds have no network, and a source build would need Cargo and
 # pnpm vendored plus the ~1GB CEF distribution declared as a source.
-app-id: moe.sable.client
+id: moe.sable.client
 
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
@@ -30,6 +30,8 @@ finish-args:
   # Keyring, where the E2EE session store keeps its secret.
   - --talk-name=org.freedesktop.secrets
   - --talk-name=org.freedesktop.Notifications
+  # Tauri's single-instance plugin owns this service.
+  - --own-name=moe.sable.client.SingleInstance
   # Tray icon.
   - --talk-name=org.kde.StatusNotifierWatcher
   # Saving and attaching files.
