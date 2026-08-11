@@ -313,7 +313,7 @@ export const Table = style([
 export const Th = style([
   DefaultReset,
   {
-    padding: `${config.space.S100}`,
+    padding: `${config.space.S100} ${config.space.S200}`,
     border: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
     backgroundColor: color.SurfaceVariant.Container,
     color: color.SurfaceVariant.OnContainer,
@@ -323,7 +323,7 @@ export const Th = style([
 export const Td = style([
   DefaultReset,
   {
-    padding: `${config.space.S100}`,
+    padding: `${config.space.S100} ${config.space.S200}`,
     border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,
