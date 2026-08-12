@@ -21,6 +21,7 @@ import { ScreenSizeProvider } from '$hooks/useScreenSize';
 import { isReactQueryDevtoolsEnabled } from '$pages/reactQueryDevtoolsGate';
 import { useDesktopSetting } from '$state/hooks/desktopSettings';
 import { getCustomTitlebarKind } from '$utils/tauriTitlebar';
+import { getCspNonce } from '$utils/cspNonce';
 import { SystemBarShell } from './SystemBarShell';
 
 const ReactQueryDevtools = lazy(async () => {
@@ -57,7 +58,10 @@ export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppS
                 </JotaiProvider>
                 {reactQueryDevtoolsEnabled && (
                   <Suspense fallback={null}>
-                    <ReactQueryDevtools initialIsOpen={false} />
+                    <ReactQueryDevtools
+                      initialIsOpen={false}
+                      styleNonce={getCspNonce() || undefined}
+                    />
                   </Suspense>
                 )}
               </QueryClientProvider>
