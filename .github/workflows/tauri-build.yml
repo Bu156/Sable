@@ -781,6 +781,8 @@ jobs:
           name: sable-linux-deb
           path: .goreleaser-dist/Sable-*.deb
           retention-days: 1
+          include-hidden-files: true
+          if-no-files-found: error
 
   distribute-nightly-aur:
     name: Publish nightly to AUR
