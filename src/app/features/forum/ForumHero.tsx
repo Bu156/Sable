@@ -1,4 +1,4 @@
-import { Avatar, Overlay, OverlayBackdrop, OverlayCenter, Text } from 'folds';
+import { Avatar, OverlayBackdrop, OverlayCenter, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import type { Room } from 'matrix-js-sdk';
 import { useRoomAvatar, useRoomName, useRoomTopic } from '$hooks/useRoomMeta';
@@ -11,6 +11,7 @@ import { PageHero } from '$components/page';
 import { onEnterOrSpace, stopPropagation } from '$utils/keyboard';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
+import { Overlay } from '$components/overlay-stack';
 import * as css from './ForumView.css';
 
 type ForumHeroProps = {

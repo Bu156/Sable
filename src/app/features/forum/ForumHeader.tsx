@@ -1,17 +1,7 @@
 import type { MouseEventHandler } from 'react';
 import { useEffect, useState } from 'react';
 import type { RectCords } from 'folds';
-import {
-  Avatar,
-  Badge,
-  Box,
-  IconButton,
-  PopOut,
-  Text,
-  Tooltip,
-  TooltipProvider,
-  toRem,
-} from 'folds';
+import { Avatar, Badge, Box, IconButton, Text, Tooltip, toRem } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import type { Room } from 'matrix-js-sdk';
 import { PageHeader } from '$components/page';
@@ -35,6 +25,7 @@ import { BackRouteHandler } from '$components/BackRouteHandler';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '$hooks/useRoomPinnedEvents';
+import { PopOut, TooltipProvider } from '$components/overlay-stack';
 import { RoomPinMenu } from '$features/room/room-pin-menu';
 import { ForumMenu } from './ForumMenu';
 import * as css from './ForumView.css';
