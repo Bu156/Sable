@@ -3,8 +3,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MatrixClient, MatrixEvent, MSC3575List } from '$types/matrix-sdk';
+import type {
+  MatrixClient,
+  MatrixEvent,
+  MSC3575List,
+  MSC3575SlidingSyncResponse,
+} from '$types/matrix-sdk';
 import {
+  EventTimeline,
   EventType,
   KnownMembership,
   SlidingSyncEvent,
@@ -13,7 +19,7 @@ import {
 } from '$types/matrix-sdk';
 
 import {
-  markExpandedTimelinesLimited,
+  prepareSlidingSyncTimelines,
   scopeTypingExtension,
   SlidingSyncManager,
 } from './slidingSync';
@@ -207,6 +213,135 @@ describe('SlidingSyncManager initial request', () => {
     await Promise.resolve();
     expect(manager.isResponseProcessing()).toBe(false);
     expect(settled).toHaveBeenCalledOnce();
+  });
+
+  it('settles a prepared room after the response carrying its subscription completes', () => {
+    const manager = makeManager(makeMockMx());
+    const ready = vi.fn<() => void>();
+    manager.attach();
+    const trackStaleResponse = manager.trackSubscriptionRequest([]);
+    manager.prepareRoomSubscription('!target:example.com', ready);
+
+    const staleResponse = {
+      rooms: { '!target:example.com': { timeline: [] } },
+    } as unknown as MSC3575SlidingSyncResponse;
+    trackStaleResponse(staleResponse);
+    fireLifecycle(SlidingSyncState.RequestFinished, staleResponse);
+    fireRoomData('!target:example.com', { timeline: [] });
+    fireLifecycle(SlidingSyncState.Complete, staleResponse);
+    expect(ready).not.toHaveBeenCalled();
+
+    const unrelatedResponse = { rooms: {} } as unknown as MSC3575SlidingSyncResponse;
+    manager.trackSubscriptionRequest([])(unrelatedResponse);
+    fireLifecycle(SlidingSyncState.RequestFinished, unrelatedResponse);
+    fireLifecycle(SlidingSyncState.Complete, unrelatedResponse);
+    expect(ready).not.toHaveBeenCalled();
+
+    const subscriptionResponse = { rooms: {} } as unknown as MSC3575SlidingSyncResponse;
+    manager.trackSubscriptionRequest(['!target:example.com'])(subscriptionResponse);
+    fireLifecycle(SlidingSyncState.RequestFinished, subscriptionResponse);
+    fireLifecycle(SlidingSyncState.Complete, subscriptionResponse);
+
+    expect(ready).toHaveBeenCalledOnce();
+  });
+
+  it('settles an already-active room only after a request started for the notification', () => {
+    const roomId = '!target:example.com';
+    const manager = makeManager(makeMockMx());
+    manager.attach();
+    manager.subscribeToRoom(roomId);
+    mocks.slidingSyncInstance.resend.mockClear();
+
+    const trackStaleResponse = manager.trackSubscriptionRequest([]);
+    const ready = vi.fn<() => void>();
+    manager.prepareRoomSubscription(roomId, ready);
+    expect(mocks.slidingSyncInstance.resend).toHaveBeenCalledOnce();
+
+    const staleResponse = {
+      rooms: { [roomId]: { timeline: [] } },
+    } as unknown as MSC3575SlidingSyncResponse;
+    trackStaleResponse(staleResponse);
+    fireLifecycle(SlidingSyncState.RequestFinished, staleResponse);
+    fireLifecycle(SlidingSyncState.Complete, staleResponse);
+    expect(ready).not.toHaveBeenCalled();
+
+    const nextResponse = { rooms: {} } as unknown as MSC3575SlidingSyncResponse;
+    manager.trackSubscriptionRequest([])(nextResponse);
+    fireLifecycle(SlidingSyncState.RequestFinished, nextResponse);
+    fireLifecycle(SlidingSyncState.Complete, nextResponse);
+    expect(ready).toHaveBeenCalledOnce();
+  });
+
+  it('restores reset timeline events only when their response completes', () => {
+    const manager = makeManager(makeMockMx());
+    const completion = vi.fn<() => void>();
+    const response = { rooms: {} } as unknown as MSC3575SlidingSyncResponse;
+    manager.attach();
+    manager.trackTimelineResetCompletion(response, completion);
+
+    fireLifecycle(SlidingSyncState.Complete, {
+      rooms: {},
+    } as unknown as MSC3575SlidingSyncResponse);
+    expect(completion).not.toHaveBeenCalled();
+
+    fireLifecycle(SlidingSyncState.Complete, response);
+    expect(completion).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a prepared room active when the route adopts it', () => {
+    vi.useFakeTimers();
+    try {
+      const roomId = '!target:example.com';
+      const manager = makeManager(makeMockMx());
+      manager.prepareRoomSubscription(roomId, () => {});
+      manager.releaseRoomSubscriptionUnlessRouted(roomId);
+
+      manager.setActiveRoomSubscriptions([roomId]);
+      vi.runAllTimers();
+      expect(manager.isRoomActive(roomId)).toBe(true);
+
+      manager.setActiveRoomSubscriptions([]);
+      expect(manager.isRoomActive(roomId)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases a prepared room when the route does not adopt it', () => {
+    vi.useFakeTimers();
+    try {
+      const roomId = '!target:example.com';
+      const manager = makeManager(makeMockMx());
+      manager.prepareRoomSubscription(roomId, () => {});
+      manager.releaseRoomSubscriptionUnlessRouted(roomId);
+
+      vi.runAllTimers();
+
+      expect(manager.isRoomActive(roomId)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not release a room claimed by a newer notification', () => {
+    vi.useFakeTimers();
+    try {
+      const roomId = '!target:example.com';
+      const manager = makeManager(makeMockMx());
+      manager.prepareRoomSubscription(roomId, () => {});
+      manager.releaseRoomSubscriptionUnlessRouted(roomId);
+
+      manager.prepareRoomSubscription(roomId, () => {});
+      vi.runAllTimers();
+
+      expect(manager.isRoomActive(roomId)).toBe(true);
+
+      manager.releaseRoomSubscriptionUnlessRouted(roomId);
+      vi.runAllTimers();
+      expect(manager.isRoomActive(roomId)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('includes receipt-only and account-data-only rooms in the settled unread delta', async () => {
@@ -866,15 +1001,19 @@ describe('scopeTypingExtension', () => {
   });
 });
 
-describe('markExpandedTimelinesLimited', () => {
+describe('prepareSlidingSyncTimelines', () => {
   it('marks an expanded timeline limited so the SDK reconciles the gap', () => {
     const resp = {
       rooms: {
-        '!dm:example.com': { unstable_expanded_timeline: true, prev_batch: 't1-2' },
+        '!dm:example.com': {
+          unstable_expanded_timeline: true,
+          timeline: [{}],
+          prev_batch: 't1-2',
+        },
       },
-    } as unknown as Parameters<typeof markExpandedTimelinesLimited>[0];
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
 
-    markExpandedTimelinesLimited(resp);
+    prepareSlidingSyncTimelines(resp);
 
     expect(resp?.rooms['!dm:example.com']).toMatchObject({ limited: true });
   });
@@ -884,27 +1023,162 @@ describe('markExpandedTimelinesLimited', () => {
       rooms: {
         '!quiet:example.com': { limited: false, prev_batch: 't1-2' },
       },
-    } as unknown as Parameters<typeof markExpandedTimelinesLimited>[0];
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
 
-    markExpandedTimelinesLimited(resp);
+    prepareSlidingSyncTimelines(resp);
 
     expect(resp?.rooms['!quiet:example.com']).toMatchObject({ limited: false });
   });
 
-  it('keeps an expanded timeline unlimited when there is no pagination token', () => {
+  it('leaves an all-live timeline untouched', () => {
     const resp = {
       rooms: {
-        '!dm:example.com': { unstable_expanded_timeline: true },
+        '!active:example.com': { timeline: [{}, {}], num_live: 2 },
       },
-    } as unknown as Parameters<typeof markExpandedTimelinesLimited>[0];
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
 
-    markExpandedTimelinesLimited(resp);
+    prepareSlidingSyncTimelines(resp);
+
+    expect(resp?.rooms['!active:example.com']).not.toHaveProperty('limited');
+  });
+
+  it('leaves an initial timeline untouched', () => {
+    const resp = {
+      rooms: {
+        '!initial:example.com': { initial: true, timeline: [{}, {}], num_live: 0 },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    prepareSlidingSyncTimelines(resp);
+
+    expect(resp?.rooms['!initial:example.com']).not.toHaveProperty('limited');
+  });
+
+  it('marks an expanded timeline limited even when the response omits prev_batch', () => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { unstable_expanded_timeline: true, timeline: [{}] },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    prepareSlidingSyncTimelines(resp);
+
+    expect(resp?.rooms['!dm:example.com']).toHaveProperty('limited', true);
+  });
+
+  it('carries the room back-pagination token forward when prev_batch is omitted', () => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { unstable_expanded_timeline: true, timeline: [{}] },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+    const mx = {
+      getRoom: () => ({
+        getLiveTimeline: () => ({ getEvents: () => [], getPaginationToken: () => 't1-9' }),
+        getUnfilteredTimelineSet: () => ({
+          getLiveTimeline: () => ({ getEvents: () => [], getPaginationToken: () => 't1-9' }),
+          getTimelines: () => [{}],
+          resetLiveTimeline: vi.fn<() => void>(),
+        }),
+      }),
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[1];
+
+    prepareSlidingSyncTimelines(resp, mx);
+
+    expect(resp?.rooms['!dm:example.com']).toMatchObject({ limited: true, prev_batch: 't1-9' });
+  });
+
+  it('accepts the stable MSC4186 expanded_timeline flag', () => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { expanded_timeline: true, timeline: [{}], prev_batch: 't1-3' },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    prepareSlidingSyncTimelines(resp);
+
+    expect(resp?.rooms['!dm:example.com']).toHaveProperty('limited', true);
+  });
+
+  it('does not clear pagination state for an empty expanded response', () => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { expanded_timeline: true },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    prepareSlidingSyncTimelines(resp);
 
     expect(resp?.rooms['!dm:example.com']).not.toHaveProperty('limited');
   });
 
+  it.each([
+    {
+      name: 'historic events before a known event',
+      timeline: ['$old', '$known'],
+      expected: true,
+    },
+    {
+      name: 'historic and new events around a known event',
+      timeline: ['$old', '$known', '$new'],
+      expected: true,
+    },
+    { name: 'an ordinary live overlap', timeline: ['$known', '$new'], expected: false },
+    { name: 'only unknown events', timeline: ['$old', '$new'], expected: false },
+    { name: 'only known events', timeline: ['$known'], expected: false },
+  ])('classifies $name without expansion metadata', ({ timeline, expected }) => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { timeline: timeline.map((event_id) => ({ event_id })) },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+    const mx = {
+      getRoom: () => ({
+        getLiveTimeline: () => ({
+          getEvents: () => [{ getId: () => '$known', isSending: () => false }],
+          getPaginationToken: () => 't1-9',
+        }),
+        getUnfilteredTimelineSet: () => ({
+          getLiveTimeline: () => ({
+            getEvents: () => [{ getId: () => '$known', isSending: () => false }],
+            getPaginationToken: () => 't1-9',
+          }),
+          getTimelines: () => [{}],
+          resetLiveTimeline: vi.fn<() => void>(),
+        }),
+      }),
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[1];
+
+    prepareSlidingSyncTimelines(resp, mx);
+
+    expect(resp?.rooms['!dm:example.com']?.limited).toBe(expected ? true : undefined);
+  });
+
+  it.each([-1, 1.5, 3])('ignores invalid num_live value %s', (numLive) => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { timeline: [{ event_id: '$new' }], num_live: numLive },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    prepareSlidingSyncTimelines(resp);
+
+    expect(resp?.rooms['!dm:example.com']).not.toHaveProperty('limited');
+  });
+
+  it('ignores malformed timeline data', () => {
+    const resp = {
+      rooms: {
+        '!dm:example.com': { timeline: {} },
+      },
+    } as unknown as Parameters<typeof prepareSlidingSyncTimelines>[0];
+
+    expect(() => prepareSlidingSyncTimelines(resp)).not.toThrow();
+    expect(resp?.rooms['!dm:example.com']).not.toHaveProperty('limited');
+  });
+
   it('tolerates a response without rooms', () => {
-    expect(() => markExpandedTimelinesLimited(null)).not.toThrow();
+    expect(() => prepareSlidingSyncTimelines(null)).not.toThrow();
   });
 });
 
@@ -1622,5 +1896,202 @@ describe('SlidingSyncManager — membership leave auto-unsubscribe', () => {
     fireMembershipEvent(mx, 'leave');
 
     expect(mocks.slidingSyncInstance.modifyRoomSubscriptions).not.toHaveBeenCalled();
+  });
+});
+
+const makeTimelineResetRoom = (eventIds: string[], sendingEventIds: string[] = []) => {
+  const sending = new Set(sendingEventIds);
+  const currentState = {};
+  const oldState = {};
+  let startState = oldState;
+  let events = eventIds.map((id) => ({
+    getId: () => id,
+    isSending: () => sending.has(id),
+  }));
+  const liveTimeline = {
+    getEvents: () => events,
+    getPaginationToken: () => 't1-old',
+    getState: (direction: string) =>
+      direction === EventTimeline.BACKWARDS ? startState : currentState,
+  };
+  const resetTimelineSet = vi.fn<(back?: string) => void>(() => {
+    events = [];
+    startState = {};
+  });
+  const resetRoomTimeline = vi.fn<() => void>();
+  const addEventToTimeline = vi.fn<(event: (typeof events)[number]) => void>((event) => {
+    events.push(event);
+  });
+  const timelineSet = {
+    addEventToTimeline,
+    findEventById: (eventId: string) => events.find((event) => event.getId() === eventId),
+    getLiveTimeline: () => liveTimeline,
+    resetLiveTimeline: resetTimelineSet,
+  };
+  const clearLoadedMembersIfNeeded = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  const room = {
+    oldState,
+    currentState,
+    clearLoadedMembersIfNeeded,
+    emit: vi.fn<() => void>(),
+    getLiveTimeline: () => liveTimeline,
+    getUnfilteredTimelineSet: () => timelineSet,
+    resetLiveTimeline: resetRoomTimeline,
+  };
+  return {
+    room,
+    addEventToTimeline,
+    clearLoadedMembersIfNeeded,
+    resetRoomTimeline,
+    resetTimelineSet,
+    startState: () => startState,
+  };
+};
+
+const prepareRoomTimelineResponse = (
+  room: unknown,
+  roomData: Record<string, unknown>,
+  resetNotif = vi.fn<() => void>()
+) =>
+  prepareSlidingSyncTimelines(
+    { rooms: { '!room:example.org': roomData } } as unknown as MSC3575SlidingSyncResponse,
+    {
+      getRoom: () => room,
+      resetNotifTimelineSet: resetNotif,
+    } as unknown as MatrixClient
+  );
+
+describe('prepareSlidingSyncTimelines reset boundary', () => {
+  it.each([
+    [
+      'limited gap',
+      ['$old'],
+      { limited: true, timeline: [{ event_id: '$new' }], prev_batch: 't' },
+      true,
+    ],
+    [
+      'limited overlap',
+      ['$old'],
+      { limited: true, timeline: [{ event_id: '$old' }, { event_id: '$new' }] },
+      false,
+    ],
+    [
+      'initial gap',
+      ['$old'],
+      { initial: true, timeline: [{ event_id: '$new' }], prev_batch: 't' },
+      true,
+    ],
+    [
+      'initial overlap',
+      ['$old'],
+      { initial: true, timeline: [{ event_id: '$old' }, { event_id: '$new' }] },
+      false,
+    ],
+    ['initial empty', ['$old'], { initial: true, timeline: [] }, false],
+    ['ordinary update', ['$old'], { timeline: [{ event_id: '$new' }] }, false],
+    ['empty cache', [], { limited: true, timeline: [{ event_id: '$new' }] }, false],
+  ])('%s reset decision', (_name, eventIds, roomData, shouldReset) => {
+    const { room, resetTimelineSet } = makeTimelineResetRoom(eventIds as string[]);
+
+    prepareRoomTimelineResponse(room, roomData as Record<string, unknown>);
+
+    expect(resetTimelineSet).toHaveBeenCalledTimes(shouldReset ? 1 : 0);
+  });
+
+  it('flushes lazily loaded members only when the server reports limited', () => {
+    const overlapping = makeTimelineResetRoom(['$old']);
+    prepareRoomTimelineResponse(overlapping.room, {
+      limited: true,
+      timeline: [{ event_id: '$old' }, { event_id: '$new' }],
+    });
+    expect(overlapping.resetTimelineSet).not.toHaveBeenCalled();
+    expect(overlapping.clearLoadedMembersIfNeeded).toHaveBeenCalledOnce();
+
+    const expanded = makeTimelineResetRoom(['$old']);
+    prepareRoomTimelineResponse(expanded.room, {
+      expanded_timeline: true,
+      timeline: [{ event_id: '$old' }, { event_id: '$new' }],
+    });
+    expect(expanded.clearLoadedMembersIfNeeded).not.toHaveBeenCalled();
+  });
+
+  it('resets a gapped timeline even while a room shows a focused jump window', () => {
+    const { room, clearLoadedMembersIfNeeded, resetTimelineSet } = makeTimelineResetRoom(['$old']);
+    const roomData = { limited: true, timeline: [{ event_id: '$new' }], prev_batch: 't' };
+
+    prepareRoomTimelineResponse(room, { ...roomData });
+    expect(resetTimelineSet).toHaveBeenCalledTimes(1);
+    expect(clearLoadedMembersIfNeeded).toHaveBeenCalledOnce();
+  });
+
+  it('restores a sending event after the response is merged', () => {
+    const { room, addEventToTimeline, resetTimelineSet } = makeTimelineResetRoom(
+      ['$old', '~local'],
+      ['~local']
+    );
+
+    const completeTimelineReset = prepareRoomTimelineResponse(room, {
+      limited: true,
+      timeline: [{ event_id: '$new' }],
+      prev_batch: 't',
+    });
+    completeTimelineReset?.();
+
+    expect(resetTimelineSet).toHaveBeenCalledOnce();
+    expect(addEventToTimeline).toHaveBeenCalledOnce();
+  });
+
+  it('resets only the unfiltered timeline and updates the room state references', () => {
+    const { room, resetRoomTimeline, resetTimelineSet, startState } = makeTimelineResetRoom([
+      '$old',
+    ]);
+
+    prepareRoomTimelineResponse(room, {
+      limited: true,
+      timeline: [{ event_id: '$new' }],
+      prev_batch: 'back-token',
+    });
+
+    expect(resetTimelineSet).toHaveBeenCalledWith('back-token');
+    expect(resetRoomTimeline).not.toHaveBeenCalled();
+    expect(room.oldState).toBe(startState());
+    expect(room.currentState).toBe(room.getLiveTimeline().getState(EventTimeline.FORWARDS));
+  });
+
+  it('resets the notification timeline once for a multi-room response', () => {
+    const first = makeTimelineResetRoom(['$old-a']);
+    const second = makeTimelineResetRoom(['$old-b']);
+    const resetNotifTimelineSet = vi.fn<() => void>();
+
+    prepareSlidingSyncTimelines(
+      {
+        rooms: {
+          '!a:example.org': { limited: true, timeline: [{ event_id: '$new-a' }], prev_batch: 't' },
+          '!b:example.org': { limited: true, timeline: [{ event_id: '$new-b' }], prev_batch: 't' },
+        },
+      } as unknown as MSC3575SlidingSyncResponse,
+      {
+        getRoom: (roomId: string) => (roomId === '!a:example.org' ? first.room : second.room),
+        resetNotifTimelineSet,
+      } as unknown as MatrixClient
+    );
+
+    expect(first.resetTimelineSet).toHaveBeenCalledOnce();
+    expect(second.resetTimelineSet).toHaveBeenCalledOnce();
+    expect(resetNotifTimelineSet).toHaveBeenCalledOnce();
+  });
+
+  it('caps room subscriptions at the MSC4186 maximum', () => {
+    const manager = makeManager(makeMockMx());
+    manager.attach();
+
+    for (let i = 0; i < 140; i += 1) {
+      manager.subscribeToRoom(`!room${i}:example.com`);
+    }
+
+    const lastCall = mocks.slidingSyncInstance.modifyRoomSubscriptions.mock.calls.at(-1);
+    const requested = (lastCall as unknown as [ReadonlySet<string>])[0];
+    expect(requested.size).toBe(100);
+    expect(requested.has('!room0:example.com')).toBe(true);
   });
 });

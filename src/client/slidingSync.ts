@@ -7,8 +7,10 @@ import type {
   MSC3575RoomSubscription,
   MSC3575SlidingSyncResponse,
   Room,
+  EventTimelineSet,
 } from '$types/matrix-sdk';
 import {
+  EventStatus,
   KnownMembership,
   MatrixEvent,
   MSC3575_WILDCARD,
@@ -22,6 +24,7 @@ import {
   EventTimeline,
   EventEmitterEvents,
   ClientEvent,
+  RoomEvent,
   UNSTABLE_ELEMENT_FUNCTIONAL_USERS,
 } from '$types/matrix-sdk';
 import { createLogger } from '$utils/debug';
@@ -36,6 +39,10 @@ const debugLog = createDebugLogger('slidingSync');
 const LIST_JOINED = 'joined';
 const LIST_INVITES = 'invites';
 const LIST_TIMELINE_LIMIT = 1;
+
+// MSC4186 room_subscriptions maximum.
+const MAX_ROOM_SUBSCRIPTIONS = 100;
+
 const LIST_PAGE_SIZE = 30;
 const DEFAULT_POLL_TIMEOUT_MS = 45000;
 // Mirrors the js-sdk's own BUFFER_PERIOD_MS so our watchdog sits after its `clientTimeout`.
@@ -48,6 +55,7 @@ const SPACE_SUBSCRIPTION_KEY = 'space';
 const IMAGE_PACK_SUBSCRIPTION_KEY = 'image_packs';
 const SPACE_IMAGE_PACK_SUBSCRIPTION_KEY = 'space_image_packs';
 const ACTIVE_ROOM_TIMELINE_LIMIT = 50;
+const ROUTE_ADOPTION_TIMEOUT_MS = 30_000;
 const OPTIMISTIC_JOIN_MAX_SYNC_CYCLES = 10;
 const OPTIMISTIC_JOIN_VERIFY_AFTER_CYCLES = 3;
 
@@ -285,21 +293,167 @@ export const scopeTypingExtension = (
   scopedTyping.rooms = [...roomIds];
 };
 
-type ExpandedTimelineRoomData = MSC3575RoomData & { unstable_expanded_timeline?: boolean };
+type SlidingSyncTimelineRoomData = MSC3575RoomData & {
+  expanded_timeline?: boolean;
+  unstable_expanded_timeline?: boolean;
+};
 
-// Synapse flags history re-sent for a raised timeline_limit only as
-// `unstable_expanded_timeline`, but the SDK reconciles a gap on `limited`/`initial`,
-// so without this it lands after the newest event. Drop once the SDK reads the flag.
-export const markExpandedTimelinesLimited = (resp: MSC3575SlidingSyncResponse | null): void => {
-  if (!resp?.rooms) return;
+type PreparedRoomSubscription = {
+  afterRequestId: number;
+  requiresSubscriptionResponse: boolean;
+  listener: () => void;
+};
 
-  for (const roomData of Object.values(resp.rooms)) {
-    const expanded = roomData as ExpandedTimelineRoomData;
-    // Without a token the SDK would clear the back-pagination token.
-    if (expanded.unstable_expanded_timeline === true && typeof expanded.prev_batch === 'string') {
-      expanded.limited = true;
+type TrackedSlidingSyncResponse = {
+  requestId: number;
+  subscriptionRoomIds: ReadonlySet<string>;
+};
+
+type TimelineResetCompletion = () => void;
+
+export const prepareSlidingSyncTimelines = (
+  resp: MSC3575SlidingSyncResponse | null,
+  mx?: MatrixClient,
+  subscribedRoomIds?: ReadonlySet<string>
+): TimelineResetCompletion | null => {
+  if (!resp?.rooms) return null;
+  let didResetTimeline = false;
+  const pendingEventsToRestore: Array<{
+    timelineSet: EventTimelineSet;
+    events: MatrixEvent[];
+  }> = [];
+
+  for (const [roomId, roomData] of Object.entries(resp.rooms)) {
+    const timelineData = roomData as SlidingSyncTimelineRoomData;
+    const serverReportedLimited = timelineData.limited === true;
+    const hasExpandedFlag =
+      timelineData.expanded_timeline === true || timelineData.unstable_expanded_timeline === true;
+    const numLive = timelineData.num_live;
+    const timeline = Array.isArray(timelineData.timeline) ? timelineData.timeline : [];
+    const timelineLength = timeline.length;
+    const room = mx?.getRoom(roomId);
+    const timelineSet = room?.getUnfilteredTimelineSet();
+    const liveTimeline = room?.getLiveTimeline();
+    const liveEvents = liveTimeline?.getEvents() ?? [];
+    if (serverReportedLimited && room) {
+      void room.clearLoadedMembersIfNeeded().catch((error: unknown) => {
+        debugLog.warn('sync', 'Failed to flush lazily loaded members after a gap', {
+          roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    const liveEventIds: string[] = [];
+    for (const event of liveEvents) {
+      const eventId = event.getId();
+      if (eventId) liveEventIds.push(eventId);
+    }
+    const knownEventIds = new Set(liveEventIds);
+    const hasHistoricalEvents =
+      timelineData.initial !== true &&
+      typeof numLive === 'number' &&
+      Number.isInteger(numLive) &&
+      numLive >= 0 &&
+      numLive < timelineLength;
+    let hasHistoricalOverlap = false;
+    if (!hasExpandedFlag && !hasHistoricalEvents && timelineData.initial !== true) {
+      let sawUnknownEvent = false;
+      hasHistoricalOverlap = timeline.some((event) => {
+        const eventId = event.event_id;
+        if (typeof eventId !== 'string') return false;
+        if (knownEventIds.has(eventId)) return sawUnknownEvent;
+        sawUnknownEvent = true;
+        return false;
+      });
+    }
+
+    const responseEventIds = timeline
+      .map((event) => event.event_id)
+      .filter((eventId): eventId is string => typeof eventId === 'string');
+    const firstKnownResponseIndex = responseEventIds.findIndex((eventId) =>
+      knownEventIds.has(eventId)
+    );
+    const firstKnownLiveIndex =
+      firstKnownResponseIndex < 0
+        ? -1
+        : liveEventIds.indexOf(responseEventIds[firstKnownResponseIndex]!);
+    const hasSparseOverlap = firstKnownResponseIndex > 0 && firstKnownLiveIndex > 0;
+
+    const isRequestedExpansion =
+      subscribedRoomIds?.has(roomId) === true &&
+      knownEventIds.size > 0 &&
+      firstKnownResponseIndex < 0;
+
+    const shouldMarkLimited =
+      timelineLength > 0 &&
+      (hasExpandedFlag || hasHistoricalEvents || hasHistoricalOverlap || isRequestedExpansion);
+
+    if (shouldMarkLimited) timelineData.limited = true;
+
+    const isGapped = firstKnownResponseIndex < 0 || hasSparseOverlap;
+    if (
+      knownEventIds.size > 0 &&
+      room &&
+      timelineSet &&
+      isGapped &&
+      responseEventIds.length > 0 &&
+      typeof timelineData.prev_batch === 'string' &&
+      (timelineData.initial === true || timelineData.limited === true)
+    ) {
+      const pendingEvents = liveEvents.filter((event) => event.isSending());
+      if (pendingEvents.length > 0) {
+        pendingEventsToRestore.push({ timelineSet, events: pendingEvents });
+      }
+      const previousOldState = room.oldState;
+      timelineSet.resetLiveTimeline(
+        typeof timelineData.prev_batch === 'string' ? timelineData.prev_batch : undefined
+      );
+      const newLiveTimeline = timelineSet.getLiveTimeline();
+      room.oldState = newLiveTimeline.getState(EventTimeline.BACKWARDS)!;
+      room.currentState = newLiveTimeline.getState(EventTimeline.FORWARDS)!;
+      if (room.oldState !== previousOldState) {
+        room.emit(RoomEvent.OldStateUpdated, room, previousOldState, room.oldState);
+      }
+      didResetTimeline = true;
+      continue;
+    }
+
+    if (!shouldMarkLimited) {
+      continue;
+    }
+
+    if (typeof timelineData.prev_batch !== 'string') {
+      const token = mx
+        ?.getRoom(roomId)
+        ?.getLiveTimeline()
+        .getPaginationToken(EventTimeline.BACKWARDS);
+      if (typeof token === 'string') timelineData.prev_batch = token;
     }
   }
+
+  if (didResetTimeline) mx?.resetNotifTimelineSet();
+  if (pendingEventsToRestore.length === 0) return null;
+
+  return () => {
+    for (const { timelineSet, events } of pendingEventsToRestore) {
+      const liveTimeline = timelineSet.getLiveTimeline();
+      for (const event of events) {
+        const eventId = event.getId();
+        if (
+          event.status === null ||
+          event.status === EventStatus.CANCELLED ||
+          !eventId ||
+          timelineSet.findEventById(eventId)
+        ) {
+          continue;
+        }
+        timelineSet.addEventToTimeline(event, liveTimeline, {
+          toStartOfTimeline: false,
+          addToState: false,
+        });
+      }
+    }
+  };
 };
 
 export class SlidingSyncManager {
@@ -385,6 +539,29 @@ export class SlidingSyncManager {
   private readonly responseSettledListeners = new Set<
     (dirtyRoomIds: ReadonlySet<string>) => void
   >();
+
+  private readonly trackedResponses = new WeakMap<
+    MSC3575SlidingSyncResponse,
+    TrackedSlidingSyncResponse
+  >();
+
+  private readonly timelineResetCompletions = new WeakMap<
+    MSC3575SlidingSyncResponse,
+    TimelineResetCompletion
+  >();
+
+  private readonly preparedRoomSubscriptions = new Map<string, Set<PreparedRoomSubscription>>();
+
+  private readonly routeActiveRoomSubscriptions = new Set<string>();
+
+  private readonly temporaryRoomSubscriptions = new Set<string>();
+
+  private readonly pendingRouteReleaseTimers = new Map<
+    string,
+    ReturnType<typeof globalThis.setTimeout>
+  >();
+
+  private requestId = 0;
 
   private previousListCounts: Map<string, number> = new Map();
 
@@ -513,6 +690,8 @@ export class SlidingSyncManager {
 
       if (err || !resp || state !== SlidingSyncState.Complete) return;
 
+      this.timelineResetCompletions.get(resp)?.();
+      this.timelineResetCompletions.delete(resp);
       this.recordServerMembershipRooms(resp);
       this.reassertOptimisticJoins();
 
@@ -624,6 +803,8 @@ export class SlidingSyncManager {
           this.dirtyRoomIds.add(roomId);
         });
       });
+
+      this.resolvePreparedRoomSubscriptions(resp);
 
       globalThis.queueMicrotask(() => {
         if (this.disposed) return;
@@ -768,6 +949,11 @@ export class SlidingSyncManager {
     this.optimisticallyJoinedRoomIds.clear();
     this.responseProcessing = false;
     this.responseSettledListeners.clear();
+    this.preparedRoomSubscriptions.clear();
+    this.pendingRouteReleaseTimers.forEach((timer) => globalThis.clearTimeout(timer));
+    this.pendingRouteReleaseTimers.clear();
+    this.routeActiveRoomSubscriptions.clear();
+    this.temporaryRoomSubscriptions.clear();
     this.dirtyRoomIds.clear();
     this.roomDataAwaitingSyncCompletion.clear();
     this.roomSubscriptionStatusListeners.forEach((listeners) =>
@@ -1155,6 +1341,94 @@ export class SlidingSyncManager {
     return () => this.responseSettledListeners.delete(listener);
   }
 
+  public trackSubscriptionRequest(
+    roomIds: Iterable<string>
+  ): (response: MSC3575SlidingSyncResponse) => void {
+    const requestId = ++this.requestId;
+    const subscriptionRoomIds = new Set(roomIds);
+    return (response) => {
+      this.trackedResponses.set(response, { requestId, subscriptionRoomIds });
+    };
+  }
+
+  public trackTimelineResetCompletion(
+    response: MSC3575SlidingSyncResponse,
+    completion: TimelineResetCompletion
+  ): void {
+    this.timelineResetCompletions.set(response, completion);
+  }
+
+  public prepareRoomSubscription(roomId: string, listener: () => void): () => void {
+    this.cancelPendingRouteRelease(roomId);
+    const wasActive = this.isRoomActive(roomId);
+    const prepared: PreparedRoomSubscription = {
+      afterRequestId: this.requestId,
+      requiresSubscriptionResponse: !wasActive,
+      listener,
+    };
+    const listeners = this.preparedRoomSubscriptions.get(roomId) ?? new Set();
+    listeners.add(prepared);
+    this.preparedRoomSubscriptions.set(roomId, listeners);
+    if (!wasActive) this.subscribeToRoom(roomId);
+    else this.slidingSync.resend();
+    if (!wasActive && this.isRoomActive(roomId)) {
+      this.temporaryRoomSubscriptions.add(roomId);
+    }
+
+    return () => {
+      listeners.delete(prepared);
+      if (listeners.size === 0) this.preparedRoomSubscriptions.delete(roomId);
+    };
+  }
+
+  public releaseRoomSubscriptionUnlessRouted(roomId: string): void {
+    this.cancelPendingRouteRelease(roomId);
+    if (!this.temporaryRoomSubscriptions.has(roomId)) return;
+    if (this.routeActiveRoomSubscriptions.has(roomId)) {
+      this.temporaryRoomSubscriptions.delete(roomId);
+      return;
+    }
+
+    const timer = globalThis.setTimeout(() => {
+      this.pendingRouteReleaseTimers.delete(roomId);
+      if (
+        this.temporaryRoomSubscriptions.has(roomId) &&
+        !this.routeActiveRoomSubscriptions.has(roomId)
+      ) {
+        this.unsubscribeFromRoom(roomId);
+      }
+    }, ROUTE_ADOPTION_TIMEOUT_MS);
+    this.pendingRouteReleaseTimers.set(roomId, timer);
+  }
+
+  private cancelPendingRouteRelease(roomId: string): void {
+    const timer = this.pendingRouteReleaseTimers.get(roomId);
+    if (timer === undefined) return;
+    globalThis.clearTimeout(timer);
+    this.pendingRouteReleaseTimers.delete(roomId);
+  }
+
+  public isRoomSubscriptionTemporary(roomId: string): boolean {
+    return this.temporaryRoomSubscriptions.has(roomId);
+  }
+
+  private resolvePreparedRoomSubscriptions(response: MSC3575SlidingSyncResponse): void {
+    const tracked = this.trackedResponses.get(response);
+    if (!tracked) return;
+
+    this.preparedRoomSubscriptions.forEach((listeners, roomId) => {
+      [...listeners].forEach((prepared) => {
+        const ready =
+          tracked.requestId > prepared.afterRequestId &&
+          (!prepared.requiresSubscriptionResponse || tracked.subscriptionRoomIds.has(roomId));
+        if (!ready) return;
+        listeners.delete(prepared);
+        prepared.listener();
+      });
+      if (listeners.size === 0) this.preparedRoomSubscriptions.delete(roomId);
+    });
+  }
+
   /**
    * Re-assert join for rooms the SDK reverted to "invite" because the server's
    * sliding-sync proxy still sent invite_state after a successful join. Runs
@@ -1389,12 +1663,30 @@ export class SlidingSyncManager {
   }
 
   private syncRoomSubscriptions(): void {
-    const desiredSubscriptions = new Set([
-      ...this.activeRoomSubscriptions,
-      ...this.sidebarRoomSubscriptions,
-      ...this.spaceSubscriptions,
-      ...this.imagePackRoomSubscriptions,
-    ]);
+    // MSC4186 rejects a request carrying more than MAX_ROOM_SUBSCRIPTIONS with
+    // M_INVALID_PARAM, so fill by priority and drop the rest.
+    const desiredSubscriptions = new Set<string>();
+    let dropped = 0;
+    [
+      this.activeRoomSubscriptions,
+      this.sidebarRoomSubscriptions,
+      this.spaceSubscriptions,
+      this.imagePackRoomSubscriptions,
+    ].forEach((group) =>
+      group.forEach((roomId) => {
+        if (desiredSubscriptions.has(roomId)) return;
+        if (desiredSubscriptions.size >= MAX_ROOM_SUBSCRIPTIONS) {
+          dropped += 1;
+          return;
+        }
+        desiredSubscriptions.add(roomId);
+      })
+    );
+    if (dropped > 0) {
+      log.warn(
+        `Sliding Sync dropped ${dropped} room subscriptions over the ${MAX_ROOM_SUBSCRIPTIONS} cap`
+      );
+    }
 
     desiredSubscriptions.forEach((roomId) => {
       if (this.activeRoomSubscriptions.has(roomId)) {
@@ -1546,6 +1838,8 @@ export class SlidingSyncManager {
 
   private removeActiveRoomSubscription(roomId: string): boolean {
     if (!this.activeRoomSubscriptions.has(roomId)) return false;
+    this.cancelPendingRouteRelease(roomId);
+    this.temporaryRoomSubscriptions.delete(roomId);
     const pendingListener = this.pendingRoomDataListeners.get(roomId);
     if (pendingListener) {
       this.slidingSync.removeListener(SlidingSyncEvent.RoomData, pendingListener);
@@ -1572,6 +1866,14 @@ export class SlidingSyncManager {
   public setActiveRoomSubscriptions(roomIds: Iterable<string>): void {
     if (this.disposed) return;
     const next = new Set(roomIds);
+    this.routeActiveRoomSubscriptions.clear();
+    next.forEach((roomId) => {
+      this.routeActiveRoomSubscriptions.add(roomId);
+      this.temporaryRoomSubscriptions.delete(roomId);
+    });
+    this.pendingRouteReleaseTimers.forEach((_timer, roomId) =>
+      this.cancelPendingRouteRelease(roomId)
+    );
     let changed = false;
 
     this.activeRoomSubscriptions.forEach((roomId) => {
@@ -1593,12 +1895,15 @@ export class SlidingSyncManager {
   }
 
   public subscribeToRoom(roomId: string): void {
+    this.cancelPendingRouteRelease(roomId);
+    this.temporaryRoomSubscriptions.delete(roomId);
     if (this.disposed || !this.addActiveRoomSubscription(roomId)) return;
     this.syncRoomSubscriptions();
     this.reportActiveSubscriptionCount();
   }
 
   public unsubscribeFromRoom(roomId: string): void {
+    this.cancelPendingRouteRelease(roomId);
     if (this.disposed || !this.removeActiveRoomSubscription(roomId)) return;
     this.syncRoomSubscriptions();
     this.reportActiveSubscriptionCount();

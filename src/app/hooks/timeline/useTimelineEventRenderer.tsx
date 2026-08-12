@@ -87,6 +87,7 @@ import * as customHtmlCss from '$styles/CustomHtml.css';
 import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
 import type { ForwardedMessageProps } from '$features/room/message';
 import { EncryptedContent, Message, Reactions } from '$features/room/message';
+import type { TimelineFocusItem } from '$hooks/timeline/useTimelineSync';
 
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
@@ -294,11 +295,8 @@ function ThreadReplyChip({
     </Chip>
   );
 }
-// Merged relation rows share the itemIndex -1 sentinel, so -1 targets nothing.
-const isFocusHighlighted = (
-  focusItem: { index: number; highlight: boolean } | undefined,
-  item: number
-) => item >= 0 && focusItem?.index === item && focusItem.highlight;
+const isFocusHighlighted = (focusItem: TimelineFocusItem | undefined, mEventId: string) =>
+  focusItem?.eventId === mEventId && focusItem.highlight;
 
 export interface TimelineEventRendererOptions {
   room: Room;
@@ -328,7 +326,7 @@ export interface TimelineEventRendererOptions {
     hideThreadChip?: boolean;
   };
   state: {
-    focusItem?: { index: number; highlight: boolean; scrollTo: boolean };
+    focusItem?: TimelineFocusItem;
     editId?: string;
     activeReplyId?: string;
     openThreadId?: string;
@@ -424,7 +422,7 @@ export function useTimelineEventRenderer({
     timelineSet: EventTimelineSet,
     markedVariant: 'suppress' | 'plain' = 'suppress'
   ) {
-    const highlighted = isFocusHighlighted(focusItem, item);
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked =
       markedVariant === 'plain'
         ? activeReplyId === mEventId
@@ -453,7 +451,7 @@ export function useTimelineEventRenderer({
     item: number,
     timelineSet: EventTimelineSet
   ) {
-    const highlighted = isFocusHighlighted(focusItem, item);
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked = activeReplyId === mEventId && !suppressMark;
     const senderId = mEvent.getSender() ?? '';
     const senderName = getSenderDisplayName(senderId);
@@ -521,7 +519,7 @@ export function useTimelineEventRenderer({
   ) => {
     if (!hiddenEventEdits) return null;
 
-    const highlighted = isFocusHighlighted(focusItem, item);
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked = activeReplyId === mEventId && suppressMark !== true;
     const senderId = mEvent.getSender() ?? '';
     const senderName = getSenderDisplayName(senderId);
