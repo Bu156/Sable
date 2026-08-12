@@ -43,6 +43,7 @@ import type { IImageInfo } from '$types/matrix/common';
 import { CheckerboardIcon, CopyIcon, ImagesIcon } from '@phosphor-icons/react';
 import { copyImageToClipboard } from '$utils/dom';
 import { getDownloadFilename, saveFileToDevice, saveMediaToGallery } from '$utils/download';
+import { getTauriMediaSourceUrl } from '$utils/mediaUrl';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { isAndroidTauri, iosApp } from '$utils/platform';
 import { setImmersiveMode } from '$generated/tauri/commands';
@@ -160,7 +161,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       }
       let fileContent: Blob;
       try {
-        fileContent = await downloadMedia(src);
+        fileContent = await downloadMedia(getTauriMediaSourceUrl(src) ?? src);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
         showToast(`Failed to download file: ${message}`);

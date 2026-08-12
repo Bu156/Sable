@@ -95,6 +95,19 @@ describe('ImageViewer', () => {
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'kitten.png');
   });
 
+  it("downloads the Matrix source behind Android's sable-media URL", async () => {
+    const source = 'https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten';
+    const src = `https://sable-media.localhost/${encodeURIComponent(source)}?__sable_media_cache=3`;
+    downloadMedia.mockResolvedValue(new Blob(['image']));
+
+    renderViewer({ src });
+    fireEvent.click(screen.getByText('Download'));
+
+    await waitFor(() => {
+      expect(downloadMedia).toHaveBeenCalledWith(source);
+    });
+  });
+
   it('activates the download control on the first touch sequence', async () => {
     screenMocks.isMobile = true;
     downloadMedia.mockClear();

@@ -109,6 +109,7 @@ export const ImageViewerContent = style([
 export const ImageViewerContentMobile = style({
   backgroundColor: '#000',
   color: '#fff',
+  paddingBottom: safeAreaBottom,
 });
 
 export const ImageViewerInput = style([
@@ -135,13 +136,11 @@ export const ImageViewerImg = style([
     maxHeight: 'none',
     backgroundColor: color.Surface.Container,
     transition: 'transform 100ms linear',
-    willChange: 'transform',
   },
 ]);
 
 export const ImageViewerImgPixelated = style({
   imageRendering: 'pixelated',
-  willChange: 'auto',
 });
 
 const mobileGalleryControl = {
