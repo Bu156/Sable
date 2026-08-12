@@ -42,7 +42,7 @@ overrides:
       - nspr
       - mesa-libgbm
       - libdrm
-      - libxkbcommon
+      - libxkbcommon.so.0()(64bit)
       - alsa-lib
       - cups-libs
       - xdg-utils
