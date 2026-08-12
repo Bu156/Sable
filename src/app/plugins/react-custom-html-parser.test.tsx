@@ -494,7 +494,7 @@ describe('react custom html parser', () => {
 describe('matrix: URI mentions', () => {
   const roomMx = () =>
     createMatrixClient({
-      getRoom: () => ({ roomId: '!room:example.org', name: 'Lobby' }),
+      getRoom: () => ({ roomId: '!room:example.org', name: 'Lobby', getMember: () => undefined }),
       getRooms: () => [],
     });
 
