@@ -261,7 +261,7 @@ export function PersonaPicker({
   const mountedRef = useRef(false);
   const profileFetchGenerationRef = useRef(0);
 
-  const { profiles } = useProfiles(mx, mountedRef, profileFetchGenerationRef);
+  const { profiles, fetchProfiles } = useProfiles(mx, mountedRef, profileFetchGenerationRef);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { filteredProfiles, filter, clearFilter } = useFilteredProfiles(
@@ -433,6 +433,7 @@ export function PersonaPicker({
       <IconButton
         aria-pressed={!!AddPersonaMenuAnchor}
         onClick={(evt) => {
+          if (profiles && profiles.length === 0) fetchProfiles(); // HACK: Sometimes getting this fails on first load.
           setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
         }}
         onPointerDown={suppressEditorRefocus}
