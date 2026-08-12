@@ -7,7 +7,8 @@ import {
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { UserAvatar } from '$components/user-avatar/UserAvatar.tsx';
 import type { PerMessageProfileMsc4461, Persona } from '$app/persona';
-import { ProfileCatalog } from '$app/persona/catalog';
+import { isPersonaAccountDataEvent, ProfileCatalog } from '$app/persona/catalog';
+import { useAccountDataCallback } from '$hooks/useAccountDataCallback';
 import { isMobileOrTablet } from '$utils/platform';
 import { nameInitials } from '$utils/common';
 import {
@@ -103,6 +104,16 @@ export function useProfiles(
     };
   }, [fetchProfiles, profileFetchGenerationRef]);
 
+  useAccountDataCallback(
+    mx,
+    useCallback(
+      (event) => {
+        if (isPersonaAccountDataEvent(event.getType())) void fetchProfiles();
+      },
+      [fetchProfiles]
+    )
+  );
+
   return { profiles, fetchProfiles };
 }
 
@@ -172,6 +183,15 @@ function useSelectedProfiles(
   // per-room selections are independent, so one must not invalidate the other's rollback.
   const globalSelectionRef = useRef(0);
   const roomSelectionRef = useRef(0);
+  const [accountDataGeneration, setAccountDataGeneration] = useState(0);
+
+  useAccountDataCallback(
+    mx,
+    useCallback((event) => {
+      if (isPersonaAccountDataEvent(event.getType()))
+        setAccountDataGeneration((generation) => generation + 1);
+    }, [])
+  );
 
   const toggle = async (profile: Persona, isGlobal: boolean) => {
     const previousPersona = isGlobal ? selectedGlobalPersona : selectedRoomPersona;
@@ -237,7 +257,7 @@ function useSelectedProfiles(
     return () => {
       cancelled = true;
     };
-  }, [mx, roomId, latchedPersona, selectedRoomPersona]);
+  }, [mx, roomId, latchedPersona, selectedRoomPersona, accountDataGeneration]);
 
   return {
     room: selectedRoomPersona,
@@ -261,7 +281,7 @@ export function PersonaPicker({
   const mountedRef = useRef(false);
   const profileFetchGenerationRef = useRef(0);
 
-  const { profiles, fetchProfiles } = useProfiles(mx, mountedRef, profileFetchGenerationRef);
+  const { profiles } = useProfiles(mx, mountedRef, profileFetchGenerationRef);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { filteredProfiles, filter, clearFilter } = useFilteredProfiles(
@@ -433,7 +453,6 @@ export function PersonaPicker({
       <IconButton
         aria-pressed={!!AddPersonaMenuAnchor}
         onClick={(evt) => {
-          if (profiles && profiles.length === 0) fetchProfiles(); // HACK: Sometimes getting this fails on first load.
           setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
         }}
         onPointerDown={suppressEditorRefocus}
