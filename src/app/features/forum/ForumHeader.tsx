@@ -35,10 +35,16 @@ import { BackRouteHandler } from '$components/BackRouteHandler';
 import { mxcUrlToHttp } from '$utils/matrix';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '$hooks/useRoomPinnedEvents';
-import { getPinsHash } from '$utils/room';
 import { RoomPinMenu } from '$features/room/room-pin-menu';
 import { ForumMenu } from './ForumMenu';
 import * as css from './ForumView.css';
+
+const getPinsHash = async (pinnedIds: string[]): Promise<string> =>
+  crypto.subtle
+    .digest('SHA-256', new TextEncoder().encode(pinnedIds.join()))
+    .then((hash) =>
+      Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')
+    );
 
 type ForumHeaderProps = {
   room: Room;

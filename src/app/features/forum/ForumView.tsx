@@ -14,7 +14,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { Page, PageContent, PageContentCenter, PageHeroSection } from '$components/page';
 import { CaretUp, Chats, composerIcon, sizedIcon } from '$components/icons/phosphor';
 import { MembersDrawer } from '$features/room/MembersDrawer';
-import { ThreadDrawer, getThreadReplyEvents } from '$features/room/ThreadDrawer';
+import { ThreadDrawer } from '$features/room/ThreadDrawer';
 import { useSetting } from '$state/hooks/settings';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { settingsAtom } from '$state/settings';
@@ -26,7 +26,7 @@ import { PowerLevelsContextProvider, usePowerLevels } from '$hooks/usePowerLevel
 import { roomIdToOpenThreadAtomFamily } from '$state/room/roomToOpenThread';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useRoomMembers } from '$hooks/useRoomMembers';
-import { reactionOrEditEvent } from '$utils/room';
+import { getThreadReplyEvents, reactionOrEditEvent } from '$utils/room/relations';
 import { mxcUrlToHttp, toggleReaction } from '$utils/matrix';
 import { useStateEvent } from '$hooks/useStateEvent';
 import { useRoomCreators } from '$hooks/useRoomCreators';
@@ -341,6 +341,7 @@ export function ForumView() {
         room.roomId,
         undefined,
         userId,
+        undefined,
         evt.currentTarget.getBoundingClientRect()
       );
     },
@@ -358,6 +359,7 @@ export function ForumView() {
         room.roomId,
         undefined,
         userId,
+        undefined,
         evt.currentTarget.getBoundingClientRect()
       );
     },
@@ -467,7 +469,6 @@ export function ForumView() {
                             editor={editor}
                             roomId={room.roomId}
                             fileDropContainerRef={roomViewRef}
-                            showUploadCardBottom
                           />
                         )}
                         {!canMessage && (

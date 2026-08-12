@@ -598,6 +598,7 @@ export type OptionMenuProps = {
   onEditId?: (eventId?: string) => void;
   onReproxyId?: (profileId?: string) => void;
   hideReadReceipts?: boolean;
+  hideReplyButton?: boolean;
   showDeveloperTools?: boolean;
   canPinEvent?: boolean;
   canDelete?: boolean;
@@ -622,6 +623,7 @@ function OptionMenu({
   onReplyClick,
   onEditId,
   hideReadReceipts,
+  hideReplyButton,
   showDeveloperTools,
   canPinEvent,
   canDelete,
@@ -808,20 +810,22 @@ function OptionMenu({
               {isGif && isModal && (
                 <MessageFavoriteGifItem room={room} mEvent={mEvent} onClose={closeMenu} />
               )}
-              <MenuItem
-                size="300"
-                after={menuIcon(ArrowBendUpLeftIcon)}
-                radii="300"
-                data-event-id={mEvent.getId()}
-                onClick={(evt) => {
-                  onReplyClick(evt);
-                  onTotalClose();
-                }}
-              >
-                <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-                  Reply
-                </Text>
-              </MenuItem>
+              {!hideReplyButton && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(ArrowBendUpLeftIcon)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={(evt) => {
+                    onReplyClick(evt);
+                    onTotalClose();
+                  }}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Reply
+                  </Text>
+                </MenuItem>
+              )}
               {!isThreadedMessage && (
                 <MenuItem
                   size="300"

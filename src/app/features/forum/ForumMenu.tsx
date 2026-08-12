@@ -2,8 +2,6 @@ import { forwardRef, useState } from 'react';
 import { Box, Line, Menu, MenuItem, Text, config, toRem } from 'folds';
 import type { Room } from 'matrix-js-sdk';
 import { useNavigate } from 'react-router-dom';
-import { UseStateProvider } from '$components/UseStateProvider';
-import { LeaveRoomPrompt } from '$components/leave-room-prompt';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useIsDirectRoom } from '$hooks/useRoom';
@@ -20,15 +18,7 @@ import { getCanonicalAliasOrRoomId, isRoomAlias } from '$utils/matrix';
 import { getHomeRoomPath, getDirectRoomPath, getSpaceRoomPath } from '$pages/pathUtils';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
-import {
-  Checks,
-  GearSix,
-  Link,
-  menuIcon,
-  SignOut,
-  Terminal,
-  UserPlus,
-} from '$components/icons/phosphor';
+import { Checks, GearSix, Link, menuIcon, Terminal, UserPlus } from '$components/icons/phosphor';
 
 type ForumMenuProps = {
   room: Room;
@@ -140,35 +130,6 @@ export const ForumMenu = forwardRef<HTMLDivElement, ForumMenuProps>(
               </Text>
             </MenuItem>
           )}
-        </Box>
-        <Line variant="Surface" size="300" />
-        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-          <UseStateProvider initial={false}>
-            {(promptLeave, setPromptLeave) => (
-              <>
-                <MenuItem
-                  onClick={() => setPromptLeave(true)}
-                  variant="Critical"
-                  fill="None"
-                  size="300"
-                  after={menuIcon(SignOut)}
-                  radii="300"
-                  aria-pressed={promptLeave}
-                >
-                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                    Leave Room
-                  </Text>
-                </MenuItem>
-                {promptLeave && (
-                  <LeaveRoomPrompt
-                    roomId={room.roomId}
-                    onDone={requestClose}
-                    onCancel={() => setPromptLeave(false)}
-                  />
-                )}
-              </>
-            )}
-          </UseStateProvider>
         </Box>
       </Menu>
     );

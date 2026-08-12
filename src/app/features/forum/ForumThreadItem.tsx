@@ -3,13 +3,13 @@ import type { Thread } from 'matrix-js-sdk/lib/models/thread';
 import { useAtomValue } from 'jotai';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { getMemberAvatarMxc, getMemberDisplayName } from '$utils/room';
+import { getMemberAvatarMxc, getMemberDisplayName } from '$utils/room/display';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { UserAvatar } from '$components/user-avatar';
 import { nicknamesAtom } from '$state/nicknames';
 import type { ThreadRootItemProps } from '$features/room/ThreadRootItem';
 import { ThreadRootItem } from '$features/room/ThreadRootItem';
-import { getThreadReplyEvents } from '$features/room/ThreadDrawer';
+import { getThreadReplyEvents } from '$utils/room/relations';
 import * as css from './ForumView.css';
 
 type ForumThreadItemProps = ThreadRootItemProps & {

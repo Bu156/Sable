@@ -270,16 +270,6 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
             >
               <Text size="T300">New Room</Text>
             </MenuItem>
-            <MenuItem
-              size="300"
-              radii="300"
-              variant="Primary"
-              fill="None"
-              onClick={() => handleCreateRoom(CreateRoomType.ForumRoom)}
-              after={<BetaNoticeBadge />}
-            >
-              <Text size="T300">Forum Room</Text>
-            </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
               <Text size="T300">Existing Room</Text>
             </MenuItem>
