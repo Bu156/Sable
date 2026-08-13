@@ -439,6 +439,22 @@ describe('RoomTimeline content ResizeObserver', () => {
     );
   });
 
+  it('re-pins to the bottom when the timeline viewport shrinks while pinned and live', async () => {
+    const { container } = renderTimeline();
+
+    await settleInitialScroll();
+    vListHandle.scrollToIndex.mockClear();
+
+    const timeline = container.querySelector('[data-testid="timeline"]');
+    expect(timeline).toBeTruthy();
+    act(() => fireResize(timeline!));
+
+    expect(vListHandle.scrollToIndex).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ align: 'end' })
+    );
+  });
+
   it('does not re-pin on content growth after scrolling off the bottom', async () => {
     const { container } = renderTimeline();
 

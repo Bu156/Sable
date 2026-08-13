@@ -953,6 +953,7 @@ export function RoomTimeline({
     }
 
     const observer = new ResizeObserver(() => {
+      if (scrollOwnerRef.current === 'live' && atBottomRef.current) scrollToBottom();
       syncAtBottom();
     });
 
