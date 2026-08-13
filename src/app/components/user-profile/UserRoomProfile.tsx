@@ -1,4 +1,5 @@
 import { Box, Button, color, config, Menu, MenuItem, Scroll, Text, toRem } from 'folds';
+import type { Position, RectCords } from 'folds';
 import type { CSSProperties } from 'react';
 import { useLayoutEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -416,12 +417,16 @@ type UserRoomProfileProps = {
   pmp?: Persona;
   initialProfile?: Partial<UserProfile>;
   onSurfaceColorChange?: (color: string) => void;
+  anchor: RectCords;
+  position?: Position;
 };
 export function UserRoomProfile({
   userId,
   pmp: initialPmp,
   initialProfile,
   onSurfaceColorChange,
+  anchor,
+  position,
 }: Readonly<UserRoomProfileProps>) {
   const theme = useTheme();
   const mx = useMatrixClient();
@@ -497,7 +502,7 @@ export function UserRoomProfile({
     navigate(withSearchParam(getDirectCreatePath(), directSearchParam));
   };
 
-  const mentionClickHandler = useMentionClickHandler(room.roomId);
+  const mentionClickHandler = useMentionClickHandler(room.roomId, anchor, position);
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
 
   const linkifyOpts = useMemo<LinkifyOpts>(

@@ -42,6 +42,8 @@ function UserRoomProfileContextMenu({ state }: { state: UserRoomProfileState }) 
                 initialProfile={initialProfile}
                 onSurfaceColorChange={setSurfaceColor}
                 pmp={pmp}
+                anchor={cords}
+                position={position}
               />
             </RoomProvider>
           </SpaceProvider>
