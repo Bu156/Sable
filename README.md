@@ -11,7 +11,7 @@ Forked from [Cinny](https://github.com/cinnyapp/cinny/).
 ## Getting started
 The stable web app is available at [app.sable.moe](https://app.sable.moe/) and tracks the [latest GitHub release](https://github.com/SableClient/Sable/releases/latest). Nightly builds are available at [dev.sable.moe](https://dev.sable.moe/) and from the [`nightly` GitHub release](https://github.com/SableClient/Sable/releases/tag/nightly).
 
-You can also download our desktop app for Windows and Linux from [releases](https://github.com/SableClient/Sable/releases/latest). Release artifacts include build attestations, and desktop installations update automatically.
+You can also download our desktop app for Windows and Linux from [releases](https://github.com/SableClient/Sable/releases/latest). Release artifacts include build attestations. AppImage and Windows installations update automatically; `.deb`, `.rpm`, and AUR installations update through their package manager.
 
 ### Desktop (Linux / macOS / Windows)
 
