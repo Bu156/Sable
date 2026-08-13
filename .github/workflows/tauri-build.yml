@@ -709,11 +709,14 @@ jobs:
         run: |
           pnpm tauri:cef build
           ! strings src-tauri/target/release/sable | grep -F 'http://localhost:8080'
+          cp src-tauri/target/release/sable src-tauri/target/release/sable-updater
+          pnpm tauri:cef build --no-updater
 
           DISPLAY_NAME=Sable
           [ "$IS_NIGHTLY" = "true" ] && DISPLAY_NAME="Sable Nightly"
           mise run cef:package "$VERSION" \
-            src-tauri/target/release/sable "$DISPLAY_NAME"
+            src-tauri/target/release/sable "$DISPLAY_NAME" \
+            src-tauri/target/release/sable-updater
 
           DEB="src-tauri/target/release/bundle/deb/Sable-${VERSION}-linux-x86_64.deb"
           dpkg-deb --contents "$DEB" | grep 'etc/apparmor.d/sable$' >/dev/null
