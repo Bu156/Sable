@@ -312,6 +312,12 @@ function DominantTile({
 }
 
 export function NativeCallSurface({ session, onHangup }: NativeCallSurfaceProps) {
+  const capabilities = session.capabilities ?? {
+    camera: true,
+    screenShare: Boolean(session.setScreenShareEnabled),
+    pictureInPicture: true,
+    audioRoutes: true,
+  };
   const { setScreenShareEnabled } = session;
   const isError = session.lifecycle === 'error';
   const connected = session.lifecycle === 'connected';
@@ -478,13 +484,16 @@ export function NativeCallSurface({ session, onHangup }: NativeCallSurfaceProps)
           cameraEnabled={session.cameraEnabled}
           setMicrophoneEnabled={session.setMicrophoneEnabled}
           setCameraEnabled={session.setCameraEnabled}
+          cameraAvailable={capabilities.camera}
           // The native setters reject unless the room is connected, so staying
           // enabled while reconnecting just makes the buttons silently do
           // nothing.
           disabled={!connected}
         />
-        {connected && <AudioRouteControl session={session} onMenuOpenChange={setRouteMenuOpen} />}
-        {session.cameraEnabled && connected && (
+        {connected && capabilities.audioRoutes && (
+          <AudioRouteControl session={session} onMenuOpenChange={setRouteMenuOpen} />
+        )}
+        {capabilities.camera && session.cameraEnabled && connected && (
           <button
             type="button"
             className={controlButton}

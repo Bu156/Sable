@@ -20,7 +20,7 @@ import { useSetting } from '$state/hooks/settings';
 import { acquireCallOwner } from '$state/callOwner';
 import { selectCallStartOwner } from '@sableclient/matrixrtc';
 import { useLivekitJsCallManager } from '$features/call/livekitJsCallManager';
-import { getNativeCallAvailability } from '$features/call/nativeCallProbe';
+import { getNativeCallCapabilities } from '$features/call/nativeCallProbe';
 import { getNativeCallManager } from '$features/call/nativeCallManager';
 import { useAutoDiscoveryInfo } from './useAutoDiscoveryInfo';
 
@@ -95,8 +95,10 @@ export const useCallStart = (dm = false) => {
         startPendingRef.current = true;
         // Resolved rather than cached in state so the first tap cannot race the
         // native capability probe and fall through to the JS backend.
-        void getNativeCallAvailability()
-          .then((nativeCallAvailable) => {
+        void getNativeCallCapabilities()
+          .then((nativeCapabilities) => {
+            const nativeCallAvailable =
+              nativeCapabilities?.supported === true && nativeCapabilities.microphone;
             if (
               selectCallStartOwner({ newCallsEnabled, nativeCallAvailable }) === 'livekit-mobile'
             ) {
@@ -107,6 +109,7 @@ export const useCallStart = (dm = false) => {
                 dm,
                 video: pref?.video,
                 microphone: pref?.microphone,
+                capabilities: nativeCapabilities,
               });
               return;
             }

@@ -170,6 +170,7 @@ export type CallMediaControlsProps = {
   cameraEnabled: boolean;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
   setCameraEnabled: (enabled: boolean) => Promise<void>;
+  cameraAvailable?: boolean;
   disabled?: boolean;
 };
 
@@ -178,20 +179,23 @@ export function CallMediaControls({
   cameraEnabled,
   setMicrophoneEnabled,
   setCameraEnabled,
+  cameraAvailable = true,
   disabled,
 }: CallMediaControlsProps) {
   return (
     <>
-      <CallMediaToggleButton
-        on={microphoneEnabled}
-        disabled={disabled}
-        label={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
-        onToggle={() => void setMicrophoneEnabled(!microphoneEnabled)}
-      >
-        {sizedIcon(microphoneEnabled ? Microphone : MicrophoneSlash, '300', {
-          filled: !microphoneEnabled,
-        })}
-      </CallMediaToggleButton>
+      {cameraAvailable && (
+        <CallMediaToggleButton
+          on={microphoneEnabled}
+          disabled={disabled}
+          label={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+          onToggle={() => void setMicrophoneEnabled(!microphoneEnabled)}
+        >
+          {sizedIcon(microphoneEnabled ? Microphone : MicrophoneSlash, '300', {
+            filled: !microphoneEnabled,
+          })}
+        </CallMediaToggleButton>
+      )}
       <CallMediaToggleButton
         on={cameraEnabled}
         disabled={disabled}

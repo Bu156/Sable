@@ -20,6 +20,37 @@ import {
   type CallOwnerLease,
 } from '$state/callOwner';
 
+const systemCalls = vi.hoisted(() => ({
+  drainPendingSystemCallActions: vi.fn<() => Promise<unknown[]>>(async () => []),
+  endSystemCall: vi.fn<() => Promise<void>>(async () => {}),
+  fulfillAnswerCall: vi.fn<() => Promise<void>>(async () => {}),
+  fulfillEndCall: vi.fn<() => Promise<void>>(async () => {}),
+  onSystemCallAction: vi.fn<(handler: (action: unknown) => void) => Promise<void>>(
+    async (handler) => {
+      systemCalls.handler = handler;
+    }
+  ),
+  reportSystemCallConnected: vi.fn<() => Promise<void>>(async () => {}),
+  setSystemCallMuted: vi.fn<() => Promise<void>>(async () => {}),
+  startSystemCall: vi.fn<() => Promise<void>>(async () => {}),
+  updateCallDisplay: vi.fn<() => Promise<void>>(async () => {}),
+  connectNativeCall: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  disconnectNativeCall: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  getAudioRoutes: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  getNativeCallState: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  listenNativeCallSnapshot: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  setAudioRoute: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  setNativeCallCameraEnabled: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  setNativeCallEncryptionKey: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  setNativeCallMicrophoneEnabled: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  setNativeCallPiPEnabled: vi.fn<() => Promise<void>>(async () => {}),
+  setNativeCallScreenShareEnabled: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  switchNativeCallCamera: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  handler: undefined as ((action: unknown) => void) | undefined,
+}));
+
+vi.mock('@sableclient/tauri-plugin-livekit-mobile', () => systemCalls);
+
 const OWN_IDENTITY = '@alice:example.org:DEVICE';
 const OWN_PARTS = {
   userId: '@alice:example.org',
@@ -230,9 +261,63 @@ const lastSession = (
 
 beforeEach(() => {
   resetCallOwnerForTests();
+  vi.clearAllMocks();
+  systemCalls.handler = undefined;
 });
 
 describe('native call controller', () => {
+  it('routes a system answer into the matching room call and fulfills its UUID', async () => {
+    const session = makeSession();
+    const { dependencies } = makeDependencies([]);
+    const controller = createNativeCallController(dependencies);
+    const onAnswer = vi.fn<(event: Event) => void>();
+    window.addEventListener('nativeCallAnswer', onAnswer);
+
+    try {
+      await vi.waitFor(() => expect(systemCalls.handler).toBeDefined());
+      systemCalls.handler?.({ action: 'answer', roomId: room.roomId, uuid: 'answer-uuid' });
+      expect(onAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: { roomId: room.roomId } })
+      );
+
+      const startPromise = controller.start(startOptions(session, false, true, unencryptedRoom));
+      await waitForMembershipListener(session);
+      emitOwnMembership(session);
+      await startPromise;
+
+      expect(systemCalls.startSystemCall).toHaveBeenCalledWith(
+        expect.objectContaining({ callId: 'call-id', uuid: 'answer-uuid' })
+      );
+      expect(systemCalls.fulfillAnswerCall).toHaveBeenCalledWith('answer-uuid');
+    } finally {
+      window.removeEventListener('nativeCallAnswer', onAnswer);
+    }
+  });
+
+  it('drains a queued system answer after the webview resumes', async () => {
+    const session = makeSession();
+    const { dependencies } = makeDependencies([]);
+    systemCalls.drainPendingSystemCallActions.mockResolvedValueOnce([
+      { action: 'answer', roomId: room.roomId, uuid: 'queued-answer-uuid' },
+    ]);
+    const onAnswer = vi.fn<(event: Event) => void>();
+    window.addEventListener('nativeCallAnswer', onAnswer);
+
+    try {
+      const controller = createNativeCallController(dependencies);
+      await vi.waitFor(() => expect(onAnswer).toHaveBeenCalledTimes(1));
+
+      const startPromise = controller.start(startOptions(session, false, true, unencryptedRoom));
+      await waitForMembershipListener(session);
+      emitOwnMembership(session);
+      await startPromise;
+
+      expect(systemCalls.fulfillAnswerCall).toHaveBeenCalledWith('queued-answer-uuid');
+    } finally {
+      window.removeEventListener('nativeCallAnswer', onAnswer);
+    }
+  });
+
   it('attaches the key forwarder before the Matrix join with managed media keys', async () => {
     const order: string[] = [];
     const session = makeSession(order);

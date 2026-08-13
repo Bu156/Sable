@@ -205,6 +205,18 @@ describe('createNativeTransport snapshots', () => {
     expect(transport.getState().connection).toBe('connected');
   });
 
+  it('ignores a snapshot older than the one already applied', async () => {
+    const transport = await connectedTransport();
+
+    emit(snapshot({ revision: 3, connectionState: 'reconnecting', microphoneEnabled: false }));
+    emit(snapshot({ revision: 2, connectionState: 'connected', microphoneEnabled: true }));
+
+    expect(transport.getState()).toMatchObject({
+      connection: 'reconnecting',
+      microphoneEnabled: false,
+    });
+  });
+
   it('ignores an idle snapshot with no callId before connect resolves', async () => {
     const transport = createNativeTransport(CALL_ID);
     await transport.ready;

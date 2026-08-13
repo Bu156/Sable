@@ -119,6 +119,7 @@ export const createNativeTransport = (
   };
   let connected = false;
   let disposed = false;
+  let revision = -1;
   const pendingKeys: CallEncryptionKey[] = [];
   const listeners = new Set<(next: CallTransportState) => void>();
 
@@ -136,6 +137,8 @@ export const createNativeTransport = (
 
   const apply = (snapshot: NativeCallSnapshot): void => {
     if (disposed) return;
+    if (snapshot.revision < revision) return;
+    revision = snapshot.revision;
     if (snapshot.connectionState === 'idle' || snapshot.connectionState === 'failed') {
       // A snapshot with no callId before our connect resolves reports the
       // plugin's own idle state, not the end of this call.

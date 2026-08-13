@@ -93,11 +93,19 @@ export function useNativeVideoOverlay(
     // moves the slot without resizing it. Capture phase reaches scrolls from
     // nested containers, which don't bubble.
     document.addEventListener('scroll', report, { capture: true, passive: true });
+    const mutationObserver = new MutationObserver(report);
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
     return () => {
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
       window.removeEventListener('resize', report);
       document.removeEventListener('scroll', report, { capture: true });
+      mutationObserver.disconnect();
     };
   }, [callId, active, slotNode]);
 
