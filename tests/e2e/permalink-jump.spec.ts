@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import { createRoom, registerUser, sendMessage, sendText } from './fixtures/continuwuity';
-import { wheelToBottomUntilVisible, wheelToTopUntilVisible } from './fixtures/timelineOrder';
+import {
+  timelineScroller,
+  wheelToBottomUntilVisible,
+  wheelToTopUntilVisible,
+} from './fixtures/timelineOrder';
 import { AppShell } from './pages/AppShell';
 
 const PASSWORD = 'test-passw0rd';
@@ -128,7 +132,9 @@ test.describe('permalink jumps', () => {
 
     const sentBody = `${tag}-after-jump`;
     await app.sendTextMessage(sentBody);
-    await expect(page.getByText(sentBody, { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(timelineScroller(page).getByText(sentBody, { exact: true })).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(app.messageByEventId(latestId)).toBeVisible({ timeout: 60_000 });
   });
 
