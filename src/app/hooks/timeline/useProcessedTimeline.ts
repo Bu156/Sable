@@ -111,6 +111,9 @@ type ProcessedEventDraft = Omit<
   | 'sendStatus'
 >;
 
+const getTimelineTimestamp = (mEvent: MatrixEvent): number =>
+  Number.isFinite(mEvent.localTimestamp) ? mEvent.localTimestamp : mEvent.getTs();
+
 type TimelineEventEntry = {
   mEvent: MatrixEvent;
   timelineSet: EventTimelineSet;
@@ -258,7 +261,14 @@ const mergeDraftsAndExtras = (
       eventSender: mEvent.getSender() ?? null,
     },
     parentId,
+    timelineTs: getTimelineTimestamp(mEvent),
   }));
+  const orderedExtraDrafts = [
+    ...extraDrafts.filter((extra) => extra.draft.itemIndex >= 0),
+    ...extraDrafts
+      .filter((extra) => extra.draft.itemIndex < 0)
+      .toSorted((a, b) => a.timelineTs - b.timelineTs),
+  ];
 
   const buckets: ProcessedEventDraft[][] = Array.from(
     { length: resultDrafts.length + 1 },
@@ -293,11 +303,23 @@ const mergeDraftsAndExtras = (
     return low === 0 ? 0 : timelineOrderIndex[low - 1]!.bucket;
   };
 
-  for (const extra of extraDrafts) {
+  for (const extra of orderedExtraDrafts) {
     const parentIdx = indexById.get(extra.parentId);
-    buckets[
-      parentIdx === undefined ? bucketByTimelineOrder(extra.draft.itemIndex) : parentIdx + 1
-    ]!.push(extra.draft);
+    if (extra.draft.itemIndex >= 0) {
+      buckets[bucketByTimelineOrder(extra.draft.itemIndex)]!.push(extra.draft);
+    } else if (parentIdx !== undefined) {
+      // SDK relation collections use insertion order, which is newest-first after scrollback.
+      let low = parentIdx + 1;
+      let high = resultDrafts.length;
+      while (low < high) {
+        const mid = low + Math.floor((high - low) / 2);
+        if (getTimelineTimestamp(resultDrafts[mid]!.mEvent) <= extra.timelineTs) low = mid + 1;
+        else high = mid;
+      }
+      buckets[low]!.push(extra.draft);
+    } else {
+      buckets[bucketByTimelineOrder(extra.draft.itemIndex)]!.push(extra.draft);
+    }
   }
 
   const mergedDrafts: ProcessedEventDraft[] = [...buckets[0]!];
