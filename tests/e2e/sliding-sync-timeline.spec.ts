@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './fixtures/test';
 import { createRoom, inviteUser, joinRoom, registerUser, sendText } from './fixtures/continuwuity';
+import { homeserverBaseUrl, loginAsFreshUser, PASSWORD } from './fixtures/session';
 import {
   expectTimelineAtBottom,
   timelineScroller,
@@ -8,50 +9,11 @@ import {
 } from './fixtures/timelineOrder';
 import { AppShell } from './pages/AppShell';
 
-const PASSWORD = 'test-passw0rd';
 const HISTORY_SIZE = 100;
 const SEND_DELAYS_MS = [0, 150, 0, 400, 50];
 const TEST_TIMEOUT = 300_000;
 const SYNC_TIMEOUT = 45_000;
 const UI_TIMEOUT = 30_000;
-
-type InjectedSession = {
-  baseUrl: string;
-  userId: string;
-  deviceId: string;
-  accessToken: string;
-  slidingSyncOptIn?: boolean;
-};
-
-async function homeserverBaseUrl(storageStatePath: string): Promise<string> {
-  const state = JSON.parse(await readFile(storageStatePath, 'utf8')) as {
-    origins: { localStorage: { name: string; value: string }[] }[];
-  };
-  const entry = state.origins[0]!.localStorage.find((item) => item.name === 'matrixSessions')!;
-  return (JSON.parse(entry.value) as InjectedSession[])[0]!.baseUrl;
-}
-
-async function loginAsFreshUser(
-  page: Page,
-  baseUrl: string,
-  name: string,
-  slidingSyncOptIn: boolean
-): Promise<{ accessToken: string }> {
-  const user = await registerUser(baseUrl, name, PASSWORD);
-  const session: InjectedSession = {
-    baseUrl,
-    userId: user.userId,
-    deviceId: user.deviceId,
-    accessToken: user.accessToken,
-    slidingSyncOptIn,
-  };
-  await page.addInitScript((injected: InjectedSession) => {
-    localStorage.setItem('matrixSessions', JSON.stringify([injected]));
-    localStorage.setItem('matrixActiveSession', JSON.stringify(injected.userId));
-    localStorage.setItem('dismissNotice', 'true');
-  }, session);
-  return user;
-}
 
 let txnCounter = 1;
 
