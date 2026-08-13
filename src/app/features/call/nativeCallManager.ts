@@ -5,6 +5,7 @@ import type { MatrixClient, Room } from '$types/matrix-sdk';
 import type { AutoDiscoveryInfo } from '../../cs-api';
 import { callInProgressAtom, nativeCallAtom } from '$state/nativeCall';
 import { isCallOngoing } from '@sableclient/matrixrtc';
+import type { NativeCallCapabilities } from '@sableclient/tauri-plugin-livekit-mobile';
 import {
   createNativeCallController,
   type NativeCallController,
@@ -18,6 +19,7 @@ export type NativeCallManagerStartOptions = {
   dm?: boolean;
   video?: boolean;
   microphone?: boolean;
+  capabilities?: NativeCallCapabilities;
 };
 
 export type NativeCallManager = {
@@ -35,7 +37,7 @@ export const createNativeCallManager = (
   });
 
   return {
-    start: ({ mx, room, discovery, dm, video, microphone }) => {
+    start: ({ mx, room, discovery, dm, video, microphone, capabilities }) => {
       if (store.get(callInProgressAtom)) return;
       void controller
         .start({
@@ -45,6 +47,7 @@ export const createNativeCallManager = (
           dm: dm ?? false,
           video: video ?? false,
           microphone: microphone ?? true,
+          capabilities,
           ongoing: isCallOngoing(mx, room),
         })
         .catch(() => undefined);

@@ -23,6 +23,7 @@ import {
   startSystemCall,
   updateCallDisplay,
   type NativeCallAudioRoute,
+  type NativeCallCapabilities as PluginNativeCallCapabilities,
   type SystemCallAction,
 } from '@sableclient/tauri-plugin-livekit-mobile';
 import {
@@ -67,6 +68,7 @@ export type NativeCallStartOptions = {
   video: boolean;
   microphone: boolean;
   ongoing: boolean;
+  capabilities?: PluginNativeCallCapabilities;
 };
 
 type NativeCallRecord = {
@@ -80,6 +82,7 @@ type NativeCallRecord = {
   cancelled: boolean;
   handles: CallSessionHandles;
   cleanupPromise?: Promise<void>;
+  capabilities: PluginNativeCallCapabilities;
 };
 
 export type NativeCallController = {
@@ -129,9 +132,9 @@ export const createNativeCallController = (
   // Register the system-call (CallKit) listener once at controller creation.
   // Events (answer, end, mute from lock-screen/system-UI) flow from the
   // native side regardless of call state.
-  let pendingSystemUuid: string | undefined;
+  const pendingSystemUuids = new Map<string, string>();
 
-  void onSystemCallAction((action: SystemCallAction) => {
+  const handleSystemCallAction = (action: SystemCallAction): void => {
     if (action.action === 'end') {
       // System UI ended the call: hang up if active, then fulfill the
       // pending CXEndCallAction so the system UI dismisses immediately.
@@ -144,15 +147,23 @@ export const createNativeCallController = (
         void fulfillEndCall(action.uuid).catch(ignoreNativeFailure('end-call fulfillment'));
       }
       void drainPendingSystemCallActions().catch(ignoreNativeFailure('pending-action drain'));
-    } else if (action.action === 'answer') {
-      // System UI answered an incoming call: store the uuid for the
-      // start path so it can map back to the system call.
-      pendingSystemUuid = action.uuid;
+    } else if (action.action === 'answer' && action.roomId) {
+      pendingSystemUuids.set(action.roomId, action.uuid);
+      window.dispatchEvent(
+        new CustomEvent('nativeCallAnswer', { detail: { roomId: action.roomId } })
+      );
     } else if (action.action === 'mute') {
       // System UI mute toggle: push to LiveKit.
       void activeRecord?.transport.setMicrophoneEnabled(!action.muted);
     }
-  }).catch(ignoreNativeFailure('system-action subscription'));
+  };
+
+  void onSystemCallAction(handleSystemCallAction).catch(
+    ignoreNativeFailure('system-action subscription')
+  );
+  void drainPendingSystemCallActions()
+    .then((actions) => actions.forEach(handleSystemCallAction))
+    .catch(ignoreNativeFailure('pending-action drain'));
 
   let activeRecord: NativeCallRecord | undefined;
   let displayedRecord: NativeCallRecord | undefined;
@@ -184,6 +195,12 @@ export const createNativeCallController = (
       microphoneEnabled: false,
       cameraEnabled: false,
       screenShareEnabled: false,
+      capabilities: {
+        camera: false,
+        screenShare: false,
+        pictureInPicture: false,
+        audioRoutes: false,
+      },
       ...noMediaControls,
       hangup,
     });
@@ -207,9 +224,15 @@ export const createNativeCallController = (
       microphoneEnabled: media?.microphoneEnabled ?? true,
       cameraEnabled: media?.cameraEnabled ?? false,
       screenShareEnabled: media?.screenShareEnabled ?? false,
+      capabilities: {
+        camera: record.capabilities.camera,
+        screenShare: record.capabilities.screenShare,
+        pictureInPicture: record.capabilities.pictureInPicture,
+        audioRoutes: record.capabilities.audioRoutes,
+      },
       setMicrophoneEnabled,
       setCameraEnabled,
-      ...(record.transport.capabilities.screenShare ? { setScreenShareEnabled } : {}),
+      ...(record.capabilities.screenShare ? { setScreenShareEnabled } : {}),
       switchCamera,
       listAudioRoutes,
       selectAudioRoute,
@@ -279,15 +302,22 @@ export const createNativeCallController = (
     publish(record, state.connection, state);
   };
 
-  const start = async ({
-    mx,
-    room,
-    discovery,
-    dm,
-    video,
-    microphone,
-    ongoing,
-  }: NativeCallStartOptions) => {
+  const start = async (options: NativeCallStartOptions) => {
+    const { mx, room, discovery, dm, video, microphone, ongoing } = options;
+    const capabilities = options.capabilities ?? {
+      supported: true,
+      microphone: true,
+      backgroundAudio: true,
+      nativeRoom: true,
+      camera: true,
+      nativeVideoOverlay: true,
+      screenShare: true,
+      pictureInPicture: true,
+      callKit: true,
+      systemCalls: true,
+      audioRoutes: true,
+      pushKit: true,
+    };
     if (activeRecord) {
       deps.onCleanup?.();
       return;
@@ -315,6 +345,7 @@ export const createNativeCallController = (
         ownerLease,
         cancelled: false,
         handles: createCallSessionHandles(),
+        capabilities,
       };
       const currentRecord = record;
       activeRecord = record;
@@ -373,9 +404,10 @@ export const createNativeCallController = (
       // Report the outgoing system call so CallKit shows the active-call UI.
       // Use the pending uuid (from an answer action) if present; otherwise
       // generate a new uuid. The native side maps callId to uuid internally.
+      const pendingSystemUuid = pendingSystemUuids.get(room.roomId);
       const systemUuid = pendingSystemUuid ?? crypto.randomUUID();
       const isIncomingAnswer = pendingSystemUuid !== undefined;
-      pendingSystemUuid = undefined;
+      pendingSystemUuids.delete(room.roomId);
       const callerName = room.name || room.roomId;
       void startSystemCall({ callId, uuid: systemUuid, callerName }).catch(
         ignoreNativeFailure('system-call start')
@@ -393,7 +425,8 @@ export const createNativeCallController = (
       void reportSystemCallConnected(systemUuid).catch(
         ignoreNativeFailure('system-call connected report')
       );
-      void transport.capabilities.pictureInPicture?.setEnabled(true);
+      if (capabilities.pictureInPicture)
+        void transport.capabilities.pictureInPicture?.setEnabled(true);
       // For system-initiated incoming answers: fulfill the deferred answer action.
       if (isIncomingAnswer) {
         void fulfillAnswerCall(systemUuid).catch(ignoreNativeFailure('answer-call fulfillment'));

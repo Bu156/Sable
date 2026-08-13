@@ -138,6 +138,20 @@ describe('useNativeVideoOverlay', () => {
     expect(set).not.toHaveBeenCalled();
   });
 
+  it('rechecks occlusion when a modal portal is added', async () => {
+    render(true);
+    clear.mockClear();
+    const modal = document.createElement('div');
+    elementFromPoint.mockReturnValue(modal);
+
+    await act(async () => {
+      document.body.appendChild(modal);
+      await Promise.resolve();
+    });
+
+    expect(clear).toHaveBeenCalledWith('call-1');
+  });
+
   it.each([
     ['collapsed', asRect(10, 20, 0, 0)],
     ['scrolled above the viewport', asRect(10, -400, 300, 200)],

@@ -18,6 +18,13 @@ export type NativeCallLifecycle =
   | 'reconnecting'
   | 'error';
 
+export type NativeCallCapabilities = {
+  camera: boolean;
+  screenShare: boolean;
+  pictureInPicture: boolean;
+  audioRoutes: boolean;
+};
+
 export type NativeCallSession = {
   backend: NativeCallBackend;
   roomId: string;
@@ -29,6 +36,7 @@ export type NativeCallSession = {
   microphoneEnabled: boolean;
   cameraEnabled: boolean;
   screenShareEnabled: boolean;
+  capabilities?: NativeCallCapabilities;
   /** Absent where the platform cannot publish a screen share. */
   setScreenShareEnabled?: (enabled: boolean) => Promise<void>;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;

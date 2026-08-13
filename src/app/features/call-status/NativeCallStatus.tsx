@@ -20,11 +20,13 @@ function NativeCallControl({ session, compact }: { session: NativeCallSession; c
           disabled={disabled}
         />
         {!compact && <StatusDivider />}
-        <VideoButton
-          enabled={session.cameraEnabled}
-          onToggle={() => session.setCameraEnabled(!session.cameraEnabled)}
-          disabled={disabled}
-        />
+        {(session.capabilities?.camera ?? true) && (
+          <VideoButton
+            enabled={session.cameraEnabled}
+            onToggle={() => session.setCameraEnabled(!session.cameraEnabled)}
+            disabled={disabled}
+          />
+        )}
       </Box>
       <StatusDivider />
       <HangupChip compact={compact} onHangup={session.hangup} />

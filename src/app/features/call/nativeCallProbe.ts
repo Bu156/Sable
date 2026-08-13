@@ -1,30 +1,36 @@
 import { isMobileTauri } from '$utils/platform';
 import {
-  getNativeCallCapabilities,
-  type NativeCallCapabilities,
+  getNativeCallCapabilities as probeNativeCallCapabilities,
+  type NativeCallCapabilities as PluginNativeCallCapabilities,
 } from '@sableclient/tauri-plugin-livekit-mobile';
 
-const supportsNativeCall = (capabilities: NativeCallCapabilities): boolean =>
+const supportsNativeCall = (capabilities: PluginNativeCallCapabilities): boolean =>
   capabilities.supported && capabilities.microphone;
 
-let availabilityPromise: Promise<boolean> | undefined;
+let availabilityPromise: Promise<PluginNativeCallCapabilities | undefined> | undefined;
 
-const isStableVerdict = (capabilities: NativeCallCapabilities): boolean =>
+const isStableVerdict = (capabilities: PluginNativeCallCapabilities): boolean =>
   !capabilities.supported || capabilities.microphone;
 
-export const getNativeCallAvailability = (): Promise<boolean> => {
-  if (!isMobileTauri()) return Promise.resolve(false);
-  const probe = (availabilityPromise ??= getNativeCallCapabilities().then(
+export const getNativeCallCapabilities = (): Promise<PluginNativeCallCapabilities | undefined> => {
+  if (!isMobileTauri()) return Promise.resolve(undefined);
+  return (availabilityPromise ??= probeNativeCallCapabilities().then(
     (capabilities) => {
       if (!isStableVerdict(capabilities)) availabilityPromise = undefined;
-      return supportsNativeCall(capabilities);
+      return capabilities;
     },
     () => {
       availabilityPromise = undefined;
-      return false;
+      return undefined;
     }
   ));
-  return probe;
+};
+
+export const getNativeCallAvailability = (): Promise<boolean> => {
+  if (!isMobileTauri()) return Promise.resolve(false);
+  return getNativeCallCapabilities().then((capabilities) =>
+    capabilities ? supportsNativeCall(capabilities) : false
+  );
 };
 
 export const resetNativeCallAvailabilityForTests = (): void => {
