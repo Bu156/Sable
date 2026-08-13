@@ -263,18 +263,15 @@ const mergeDraftsAndExtras = (
     parentId,
     timelineTs: getTimelineTimestamp(mEvent),
   }));
-  const orderedExtraDrafts = [
-    ...extraDrafts.filter((extra) => extra.draft.itemIndex >= 0),
-    ...extraDrafts
-      .filter((extra) => extra.draft.itemIndex < 0)
-      .toSorted((a, b) => a.timelineTs - b.timelineTs),
-  ];
+  const indexedExtraDrafts = extraDrafts.filter((extra) => extra.draft.itemIndex >= 0);
+  const fetchedExtraDrafts = extraDrafts
+    .filter((extra) => extra.draft.itemIndex < 0)
+    .toSorted((a, b) => a.timelineTs - b.timelineTs);
 
   const buckets: ProcessedEventDraft[][] = Array.from(
     { length: resultDrafts.length + 1 },
     () => []
   );
-  const indexById = new Map(resultDrafts.map((draft, index) => [draft.id, index]));
   let timelineOrderIndex: { itemIndex: number; bucket: number }[] | undefined;
 
   const bucketByTimelineOrder = (itemIndex: number): number => {
@@ -303,29 +300,31 @@ const mergeDraftsAndExtras = (
     return low === 0 ? 0 : timelineOrderIndex[low - 1]!.bucket;
   };
 
-  for (const extra of orderedExtraDrafts) {
-    const parentIdx = indexById.get(extra.parentId);
-    if (extra.draft.itemIndex >= 0) {
-      buckets[bucketByTimelineOrder(extra.draft.itemIndex)]!.push(extra.draft);
-    } else if (parentIdx !== undefined) {
-      // SDK relation collections use insertion order, which is newest-first after scrollback.
-      let low = parentIdx + 1;
-      let high = resultDrafts.length;
-      while (low < high) {
-        const mid = low + Math.floor((high - low) / 2);
-        if (getTimelineTimestamp(resultDrafts[mid]!.mEvent) <= extra.timelineTs) low = mid + 1;
-        else high = mid;
-      }
-      buckets[low]!.push(extra.draft);
-    } else {
-      buckets[bucketByTimelineOrder(extra.draft.itemIndex)]!.push(extra.draft);
-    }
+  for (const extra of indexedExtraDrafts) {
+    buckets[bucketByTimelineOrder(extra.draft.itemIndex)]!.push(extra.draft);
   }
 
   const mergedDrafts: ProcessedEventDraft[] = [...buckets[0]!];
   for (let i = 0; i < resultDrafts.length; i += 1) {
     mergedDrafts.push(resultDrafts[i]!);
     mergedDrafts.push(...buckets[i + 1]!);
+  }
+
+  for (const extra of fetchedExtraDrafts) {
+    const parentIdx = mergedDrafts.findIndex((draft) => draft.id === extra.parentId);
+    if (parentIdx < 0) {
+      mergedDrafts.push(extra.draft);
+      continue;
+    }
+
+    let insertionIdx = mergedDrafts.length;
+    for (let i = parentIdx + 1; i < mergedDrafts.length; i += 1) {
+      if (getTimelineTimestamp(mergedDrafts[i]!.mEvent) > extra.timelineTs) {
+        insertionIdx = i;
+        break;
+      }
+    }
+    mergedDrafts.splice(insertionIdx, 0, extra.draft);
   }
 
   return mergedDrafts;

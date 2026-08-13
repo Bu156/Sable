@@ -631,7 +631,37 @@ describe('useProcessedTimeline new-messages divider', () => {
     ]);
   });
 
-  it('uses the local homeserver timestamp to place a fetched reaction', () => {
+  it('places an older fetched reaction before a newer indexed reaction in the same gap', () => {
+    const parent = createEvent({ id: '$parent', ts: 1_000 });
+    const indexedReaction = createReaction('$indexed-newer', '$parent', 2_500);
+    const later = createEvent({ id: '$later', ts: 3_000 });
+    const fetchedReaction = createReaction('$fetched-older', '$parent', 2_000);
+    const events = [parent, indexedReaction, later];
+    const timeline = createTimeline(events, [fetchedReaction]);
+    const { result } = renderHook(() =>
+      useProcessedTimeline({
+        items: events.map((_, index) => index),
+        linkedTimelines: [timeline],
+        ignoredUsersSet: new Set(),
+        hiddenEvents: { ...hiddenEvents, hiddenEventReactions: true },
+        mxUserId: MY_USER,
+        readUptoEventId: undefined,
+        hideMembershipEvents: false,
+        hideNickAvatarEvents: false,
+        isReadOnly: false,
+        hideMemberInReadOnly: false,
+      })
+    );
+
+    expect(renderedIds(result.current)).toEqual([
+      '$parent',
+      '$fetched-older',
+      '$indexed-newer',
+      '$later',
+    ]);
+  });
+
+  it('uses the SDK local timestamp to place a fetched reaction', () => {
     const events = [
       createEvent({ id: '$parent', ts: 1_000 }),
       createEvent({ id: '$later', ts: 3_000 }),
