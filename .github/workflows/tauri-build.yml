@@ -172,19 +172,6 @@ jobs:
         shell: bash
         run: pnpm tauri build ${{ matrix.args }} $TAURI_BUILD_ARGS
 
-      - name: Package macOS .app for updater
-        if: ${{ matrix.name == 'macOS' }}
-        shell: bash
-        run: |
-          macos_dir="${{ matrix.bundle_path }}/macos"
-          if [ -d "$macos_dir" ]; then
-            for app in "$macos_dir"/*.app; do
-              [ -e "$app" ] || continue
-              echo "Packaging $(basename "$app") into .tar.gz"
-              tar czf "$app.tar.gz" -C "$macos_dir" "$(basename "$app")"
-            done
-          fi
-
       - name: Normalize desktop artifact names
         shell: bash
         env:
