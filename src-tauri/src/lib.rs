@@ -28,6 +28,13 @@ use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
+fn is_internal_navigation(url: &tauri::Url, dev: bool) -> bool {
+    url.scheme() == "tauri"
+        || url.scheme() == "javascript"
+        || url.host_str() == Some("tauri.localhost")
+        || (dev && url.host_str() == Some("localhost"))
+}
+
 #[cfg(desktop)]
 pub(crate) fn main_window_title(app: &AppHandle<crate::BrowserEngine>) -> &str {
     app.config().product_name.as_deref().unwrap_or("Sable")
@@ -150,9 +157,7 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     let builder = {
         let nav_handle = app.clone();
         builder.on_navigation(move |url| {
-            let internal = url.scheme() == "tauri"
-                || url.host_str() == Some("tauri.localhost")
-                || (cfg!(dev) && url.host_str() == Some("localhost"));
+            let internal = is_internal_navigation(url, cfg!(dev));
             if !internal {
                 // open in new thread
                 // open_url blocks on the ui thread but we are on the ui thread...
@@ -521,6 +526,13 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn javascript_navigation_stays_in_webview() {
+        let url = tauri::Url::parse("javascript:window.scrollTo(0,0)").unwrap();
+
+        assert!(crate::is_internal_navigation(&url, false));
+    }
+
     #[test]
     fn desktop_modules_are_grouped_under_desktop() {
         let _ = crate::desktop::settings::DesktopSettings {
