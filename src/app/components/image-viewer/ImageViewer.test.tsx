@@ -8,7 +8,7 @@ import type { IImageInfo } from '$types/matrix/common';
 
 const downloadMedia = vi.fn<(src: string) => Promise<Blob>>();
 const saveMediaToGallery =
-  vi.fn<(input: string, filename: string, mimeType: string) => Promise<void>>();
+  vi.fn<(input: Blob | string, filename: string, mimeType: string) => Promise<void>>();
 const toastMocks = vi.hoisted(() => ({
   showToast: vi.fn<(text: string, durationMs?: number) => void>(),
 }));
@@ -50,7 +50,7 @@ vi.mock('$utils/matrix', () => ({
 }));
 vi.mock('$utils/download', async (importOriginal) => ({
   ...(await importOriginal()),
-  saveMediaToGallery: (...args: [string, string, string]) => saveMediaToGallery(...args),
+  saveMediaToGallery: (...args: [Blob | string, string, string]) => saveMediaToGallery(...args),
 }));
 
 vi.mock('file-saver', () => ({
@@ -254,15 +254,19 @@ describe('ImageViewer', () => {
     mockPlatform('android');
     const source = 'https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten';
     const src = `https://sable-media.localhost/${encodeURIComponent(source)}?__sable_media_cache=3`;
+    const blob = new Blob(['image'], { type: 'image/png' });
     saveMediaToGallery.mockClear();
+    downloadMedia.mockClear();
+    downloadMedia.mockResolvedValue(blob);
 
     renderViewer({ src, info: { mimetype: 'image/png' } });
     fireEvent.contextMenu(screen.getByAltText('kitten.png'));
     fireEvent.click(screen.getByText('Save to Gallery'));
 
     await waitFor(() =>
-      expect(saveMediaToGallery).toHaveBeenCalledWith(source, 'kitten.png', 'image/png')
+      expect(saveMediaToGallery).toHaveBeenCalledWith(blob, 'kitten.png', 'image/png')
     );
+    expect(downloadMedia).toHaveBeenCalledWith(source);
   });
 
   it('labels the primary action Save to Photos on iOS without duplicating it in the overflow menu', () => {
@@ -277,8 +281,10 @@ describe('ImageViewer', () => {
 
   it('routes the primary iOS action for trusted images straight to Photos', async () => {
     mockPlatform('ios');
+    const blob = new Blob(['image'], { type: 'image/png' });
     saveMediaToGallery.mockClear();
     downloadMedia.mockClear();
+    downloadMedia.mockResolvedValue(blob);
     vi.mocked(FileSaver.saveAs).mockClear();
 
     renderViewer({ info: { mimetype: 'image/png' } });
@@ -286,13 +292,9 @@ describe('ImageViewer', () => {
     fireEvent.click(screen.getByText('Save to Photos'));
 
     await waitFor(() =>
-      expect(saveMediaToGallery).toHaveBeenCalledWith(
-        'https://example.org/kitten.png',
-        'kitten.png',
-        'image/png'
-      )
+      expect(saveMediaToGallery).toHaveBeenCalledWith(blob, 'kitten.png', 'image/png')
     );
-    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(downloadMedia).toHaveBeenCalledWith('https://example.org/kitten.png');
     expect(FileSaver.saveAs).not.toHaveBeenCalled();
   });
 
