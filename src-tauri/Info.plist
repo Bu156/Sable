@@ -19,8 +19,10 @@
       <string>AppIconAgender</string>
       <key>bisexual</key>
       <string>AppIconBisexual</string>
-      <key>gradient</key>
-      <string>AppIconGradient</string>
+      <key>trans</key>
+      <string>AppIconTrans</string>
+      <key>transgradient</key>
+      <string>AppIconTransgradient</string>
       <key>intersex</key>
       <string>AppIconIntersex</string>
       <key>lesbian</key>

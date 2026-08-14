@@ -77,7 +77,8 @@ describe('AppIconSettings', () => {
         'propeller',
         'agender',
         'bisexual',
-        'gradient',
+        'trans',
+        'transgradient',
         'intersex',
         'lesbian',
         'mlm',
@@ -93,7 +94,8 @@ describe('AppIconSettings', () => {
     expect(screen.getByTestId('app-icon-preview-propeller')).toBeInTheDocument();
     expect(screen.getByTestId('app-icon-preview-agender')).toBeInTheDocument();
     expect(screen.getByTestId('app-icon-preview-bisexual')).toBeInTheDocument();
-    expect(screen.getByTestId('app-icon-preview-gradient')).toBeInTheDocument();
+    expect(screen.getByTestId('app-icon-preview-trans')).toBeInTheDocument();
+    expect(screen.getByTestId('app-icon-preview-transgradient')).toBeInTheDocument();
     expect(screen.getByTestId('app-icon-preview-intersex')).toBeInTheDocument();
     expect(screen.getByTestId('app-icon-preview-lesbian')).toBeInTheDocument();
     expect(screen.getByTestId('app-icon-preview-mlm')).toBeInTheDocument();

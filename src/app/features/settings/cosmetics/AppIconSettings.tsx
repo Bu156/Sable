@@ -8,12 +8,13 @@ import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 import defaultIcon from './app-icons/default.png';
 import agenderIcon from '../../../../../src-tauri/icons/app-icons/agender.svg';
 import bisexualIcon from '../../../../../src-tauri/icons/app-icons/bisexual.svg';
-import gradientIcon from '../../../../../src-tauri/icons/app-icons/gradient.svg';
+import transGradientIcon from '../../../../../src-tauri/icons/app-icons/trans-gradient.svg';
 import intersexIcon from '../../../../../src-tauri/icons/app-icons/intersex.svg';
 import lesbianIcon from '../../../../../src-tauri/icons/app-icons/lesbian.svg';
 import mlmIcon from '../../../../../src-tauri/icons/app-icons/mlm.svg';
 import propellerIcon from './app-icons/propeller.png';
 import prideIcon from '../../../../../src-tauri/icons/app-icons/pride.svg';
+import transIcon from './app-icons/trans.png';
 
 const PRIMARY_ICON = 'primary';
 const PROPELLER_ICON = 'propeller';
@@ -22,7 +23,8 @@ const APP_ICON_PREVIEWS: Record<string, string> = {
   [PROPELLER_ICON]: propellerIcon,
   agender: agenderIcon,
   bisexual: bisexualIcon,
-  gradient: gradientIcon,
+  trans: transIcon,
+  transgradient: transGradientIcon,
   intersex: intersexIcon,
   lesbian: lesbianIcon,
   mlm: mlmIcon,
@@ -31,7 +33,8 @@ const APP_ICON_PREVIEWS: Record<string, string> = {
 const APP_ICON_LABELS: Record<string, string> = {
   agender: 'Agender',
   bisexual: 'Bisexual',
-  gradient: 'Gradient',
+  trans: 'Trans',
+  transgradient: 'Trans (Gradient)',
   intersex: 'Intersex',
   lesbian: 'Lesbian',
   mlm: 'MLM',
