@@ -6666,7 +6666,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-app-icon"
 version = "0.1.0"
-source = "git+https://github.com/SableClient/tauri-plugin-app-icon?rev=6da508ab93ee8c791aa28112c8e171e42257cc3c#6da508ab93ee8c791aa28112c8e171e42257cc3c"
+source = "git+https://github.com/SableClient/tauri-plugin-app-icon?rev=6b370991e26ef10a66eedeacfb0bc3cb0cd63959#6b370991e26ef10a66eedeacfb0bc3cb0cd63959"
 dependencies = [
  "serde",
  "tauri",
