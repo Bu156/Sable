@@ -122,6 +122,24 @@ describe('saveFileToDevice', () => {
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'file.txt');
   });
 
+  it('uses authenticated media transport before saving a URL in the browser', async () => {
+    vi.mocked(isTauri).mockReturnValue(false);
+    const blob = new Blob(['data'], { type: 'image/png' });
+    mocks.fetchMediaBlob.mockResolvedValue(blob);
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(FileSaver.saveAs).toHaveBeenCalledWith(blob, 'photo.png');
+  });
+
   it('uses authenticated media transport when saving a URL on Android', async () => {
     const blob = new Blob(['data'], { type: 'image/png' });
     mocks.fetchMediaBlob.mockResolvedValue(blob);
@@ -136,6 +154,26 @@ describe('saveFileToDevice', () => {
     expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
       'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
     );
+  });
+
+  it('uses authenticated media transport when saving a URL on desktop', async () => {
+    vi.mocked(osType).mockReturnValue('linux');
+    mocks.fetchMediaBlob.mockResolvedValue(new Blob(['data'], { type: 'image/png' }));
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(invoke).toHaveBeenCalledWith('save_download', {
+      filename: 'photo.png',
+      bytes: [100, 97, 116, 97],
+    });
   });
 });
 
@@ -268,6 +306,26 @@ describe('saveMediaToGallery', () => {
     });
     expect(showToast).toHaveBeenCalledWith('Saved to Photos');
     expect(androidFs.createNewPublicImageFile).not.toHaveBeenCalled();
+  });
+
+  it('uses authenticated media transport before saving a URL to iOS Photos', async () => {
+    vi.mocked(osType).mockReturnValue('ios');
+    mocks.fetchMediaBlob.mockResolvedValue(new Blob(['data'], { type: 'image/png' }));
+
+    await saveMediaToGallery(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+      'photo.png',
+      'image/png'
+    );
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(invoke).toHaveBeenCalledWith('save_media_to_photos', {
+      filename: 'photo.png',
+      mimeType: 'image/png',
+      bytes: [100, 97, 116, 97],
+    });
   });
 
   it('shows a failure toast when the iOS Photos command rejects', async () => {

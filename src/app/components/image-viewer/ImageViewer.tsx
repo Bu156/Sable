@@ -181,7 +181,11 @@ export const ImageViewer = as<'div', ImageViewerProps>(
         showToast(`Failed to download file: ${message}`);
         return;
       }
-      await saveFileToDevice(fileContent, downloadFilename);
+      await saveFileToDevice(
+        fileContent,
+        downloadFilename,
+        galleryMimeType || fileContent.type || undefined
+      );
     };
 
     const menu = useMenuAnchor<HTMLElement>();

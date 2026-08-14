@@ -11,6 +11,9 @@ const BIDI_CONTROL_CHARS = /[\u202a-\u202e\u2066-\u2069]/g;
 const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const MAX_FILENAME_LENGTH = 255;
 
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 const nonEmptyString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -99,8 +102,7 @@ export async function saveMediaToGallery(
       showToast('Saved to Gallery');
     } catch (error) {
       if (uri) await AndroidFs.removeFile(uri).catch(() => undefined);
-      const message = error instanceof Error ? error.message : 'unknown error';
-      showToast(`Failed to save to gallery: ${message}`);
+      showToast(`Failed to save to gallery: ${getErrorMessage(error)}`);
     }
     return;
   }
@@ -116,8 +118,7 @@ export async function saveMediaToGallery(
     });
     showToast('Saved to Photos');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown error';
-    showToast(`Failed to save to photos: ${message}`);
+    showToast(`Failed to save to photos: ${getErrorMessage(error)}`);
   }
 }
 
@@ -126,9 +127,16 @@ export async function saveFileToDevice(
   filename: string,
   mimeType?: string
 ): Promise<'saved' | 'cancelled' | 'failed'> {
+  let blob: Blob;
+  try {
+    blob = await resolveBlob(input);
+  } catch (error) {
+    showToast(`Failed to save file: ${getErrorMessage(error)}`);
+    return 'failed';
+  }
+
   if (isTauri()) {
     try {
-      const blob = await resolveBlob(input);
       const bytes = new Uint8Array(await blob.arrayBuffer());
 
       if (osType() === 'android') {
@@ -173,13 +181,12 @@ export async function saveFileToDevice(
       if (saved) showToast('File saved');
       return saved ? 'saved' : 'cancelled';
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      showToast(`Failed to save file: ${message}`);
+      showToast(`Failed to save file: ${getErrorMessage(error)}`);
       return 'failed';
     }
   }
 
-  FileSaver.saveAs(input, filename);
+  FileSaver.saveAs(blob, filename);
   return 'saved';
 }
 
