@@ -6,12 +6,37 @@ import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { SettingTile } from '$components/setting-tile';
 import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 import defaultIcon from './app-icons/default.png';
-import propelerIcon from './app-icons/propeler.png';
+import agenderIcon from '../../../../../src-tauri/icons/app-icons/agender.svg';
+import bisexualIcon from '../../../../../src-tauri/icons/app-icons/bisexual.svg';
+import gradientIcon from '../../../../../src-tauri/icons/app-icons/gradient.svg';
+import intersexIcon from '../../../../../src-tauri/icons/app-icons/intersex.svg';
+import lesbianIcon from '../../../../../src-tauri/icons/app-icons/lesbian.svg';
+import mlmIcon from '../../../../../src-tauri/icons/app-icons/mlm.svg';
+import propellerIcon from './app-icons/propeller.png';
+import prideIcon from '../../../../../src-tauri/icons/app-icons/pride.svg';
 
 const PRIMARY_ICON = 'primary';
+const PROPELLER_ICON = 'propeller';
 const APP_ICON_PREVIEWS: Record<string, string> = {
   [PRIMARY_ICON]: defaultIcon,
-  propeler: propelerIcon,
+  [PROPELLER_ICON]: propellerIcon,
+  agender: agenderIcon,
+  bisexual: bisexualIcon,
+  gradient: gradientIcon,
+  intersex: intersexIcon,
+  lesbian: lesbianIcon,
+  mlm: mlmIcon,
+  pride: prideIcon,
+};
+const APP_ICON_LABELS: Record<string, string> = {
+  agender: 'Agender',
+  bisexual: 'Bisexual',
+  gradient: 'Gradient',
+  intersex: 'Intersex',
+  lesbian: 'Lesbian',
+  mlm: 'MLM',
+  pride: 'Pride',
+  [PROPELLER_ICON]: 'Propeller',
 };
 
 function AppIconPreview({ icon }: { icon: string }) {
@@ -64,7 +89,7 @@ export function AppIconSettings() {
     { value: PRIMARY_ICON, label: 'Default', icon: <AppIconPreview icon={PRIMARY_ICON} /> },
     ...icons.map((icon) => ({
       value: icon,
-      label: icon === 'propeler' ? 'Propeler' : icon,
+      label: APP_ICON_LABELS[icon] ?? icon,
       icon: <AppIconPreview icon={icon} />,
     })),
   ];

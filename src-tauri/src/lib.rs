@@ -28,6 +28,7 @@ use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
+#[cfg(target_os = "android")]
 fn is_internal_navigation(url: &tauri::Url, dev: bool) -> bool {
     url.scheme() == "tauri"
         || url.scheme() == "javascript"
@@ -526,6 +527,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "android")]
     #[test]
     fn javascript_navigation_stays_in_webview() {
         let url = tauri::Url::parse("javascript:window.scrollTo(0,0)").unwrap();
