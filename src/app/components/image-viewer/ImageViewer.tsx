@@ -156,20 +156,26 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const downloadFilename = getDownloadFilename(filename, alt, 'image');
     const canSaveToGallery = isAndroidTauri() && (galleryMimeType?.startsWith('image/') ?? false);
 
+    const loadDownloadBlob = () =>
+      getDownloadBlob ? getDownloadBlob() : downloadMedia(getTauriMediaSourceUrl(src) ?? src);
+
+    const saveToGallery = async () => {
+      try {
+        await saveMediaToGallery(await loadDownloadBlob(), downloadFilename, galleryMimeType!);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        showToast(`Failed to save to gallery: ${message}`);
+      }
+    };
+
     const handleDownload = async () => {
       if (iosSaveToPhotos) {
-        await saveMediaToGallery(
-          getDownloadBlob ? await getDownloadBlob() : src,
-          downloadFilename,
-          galleryMimeType!
-        );
+        await saveToGallery();
         return;
       }
       let fileContent: Blob;
       try {
-        fileContent = await (getDownloadBlob
-          ? getDownloadBlob()
-          : downloadMedia(getTauriMediaSourceUrl(src) ?? src));
+        fileContent = await loadDownloadBlob();
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
         showToast(`Failed to download file: ${message}`);
@@ -214,7 +220,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const shareActivation = useMobileTapActivation(isMobile, () => {
       void (async () => {
         try {
-          const blob = await (getDownloadBlob ? getDownloadBlob() : downloadMedia(src));
+          const blob = await loadDownloadBlob();
           const file = new File([blob], downloadFilename, {
             type: blob.type || galleryMimeType || 'application/octet-stream',
           });
@@ -228,7 +234,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     });
     const copyImageActivation = useMobileTapActivation(isMobile, () => {
       closeMenu();
-      void (getDownloadBlob ? getDownloadBlob() : downloadMedia(src)).then(copyImageToClipboard);
+      void loadDownloadBlob().then(copyImageToClipboard);
     });
     const pixelatedMenuActivation = useMobileTapActivation(isMobile, () => {
       setIsPixelated(!isPixelated);
@@ -242,13 +248,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const nextActivation = useMobileTapActivation(isMobile, () => onNext?.());
     const galleryActivation = useMobileTapActivation(isMobile, () => {
       closeMenu();
-      void (async () => {
-        await saveMediaToGallery(
-          getDownloadBlob ? await getDownloadBlob() : (getTauriMediaSourceUrl(src) ?? src),
-          downloadFilename,
-          galleryMimeType!
-        );
-      })();
+      void saveToGallery();
     });
     const resetZoomMenuActivation = useMobileTapActivation(isMobile, () => {
       resetTransforms();

@@ -1,8 +1,9 @@
 import FileSaver from 'file-saver';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
-import { fetch } from '$utils/fetch';
 import { showToast } from '$state/toast';
+import { fetchMediaBlob } from '$utils/mediaTransport';
+import { getTauriMediaSourceUrl } from '$utils/mediaUrl';
 
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*]/g;
 const CONTROL_CHARS = /\p{Cc}/gu;
@@ -53,11 +54,7 @@ export const getDownloadFilename = (
 
 async function resolveBlob(input: Blob | string): Promise<Blob> {
   if (typeof input !== 'string') return input;
-  const response = await fetch(input);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
-  }
-  return response.blob();
+  return fetchMediaBlob(getTauriMediaSourceUrl(input) ?? input);
 }
 
 export async function saveMediaToGallery(

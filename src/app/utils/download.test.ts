@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   isTauri: vi.fn<() => boolean>(),
   osType: vi.fn<() => string>(),
   showToast: vi.fn<(text: string, durationMs?: number) => void>(),
-  fetch: vi.fn<(input: string) => Promise<Response>>(),
+  fetchMediaBlob: vi.fn<(input: string) => Promise<Blob>>(),
 }));
 const { androidFs, save, writeFile } = mocks;
 
@@ -34,7 +34,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 vi.mock('@tauri-apps/plugin-os', () => ({ type: mocks.osType }));
 vi.mock('$state/toast', () => ({ showToast: mocks.showToast }));
-vi.mock('$utils/fetch', () => ({ fetch: mocks.fetch }));
+vi.mock('$utils/mediaTransport', () => ({ fetchMediaBlob: mocks.fetchMediaBlob }));
 vi.mock('tauri-plugin-android-fs-api', () => ({
   AndroidFs: mocks.androidFs,
   AndroidPublicGeneralPurposeDir: { Download: 'Download' },
@@ -121,6 +121,22 @@ describe('saveFileToDevice', () => {
     expect(result).toBe('saved');
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'file.txt');
   });
+
+  it('uses authenticated media transport when saving a URL on Android', async () => {
+    const blob = new Blob(['data'], { type: 'image/png' });
+    mocks.fetchMediaBlob.mockResolvedValue(blob);
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+  });
 });
 
 describe('downloadJsonFile', () => {
@@ -171,7 +187,7 @@ describe('saveMediaToGallery', () => {
 
   it('writes all fetched Android image bytes before publishing the gallery file', async () => {
     const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    mocks.fetch.mockResolvedValueOnce(new Response(bytes, { status: 200 }));
+    mocks.fetchMediaBlob.mockResolvedValueOnce(new Blob([bytes]));
 
     await saveMediaToGallery('https://matrix.example.org/photo', 'photo.png', 'image/png');
 
@@ -180,6 +196,7 @@ describe('saveMediaToGallery', () => {
       androidFs.setPublicFilePending.mock.invocationCallOrder[0]!
     );
     expect(androidFs.setPublicFilePending).toHaveBeenCalledWith('content://media/image', false);
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith('https://matrix.example.org/photo');
   });
 
   it('does not create a gallery file when Android storage permission is denied', async () => {
@@ -288,7 +305,7 @@ describe('saveMediaToGallery', () => {
   });
 
   it('shows exactly one gallery failure toast when fetching the media fails on Android', async () => {
-    mocks.fetch.mockRejectedValueOnce(new Error('network down'));
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('network down'));
 
     await saveMediaToGallery('mxc://example/photo.png', 'photo.png', 'image/png');
 
@@ -301,9 +318,7 @@ describe('saveMediaToGallery', () => {
   });
 
   it('does not save an HTTP error response as an Android gallery image', async () => {
-    mocks.fetch.mockResolvedValueOnce(
-      new Response('not found', { status: 404, statusText: 'Not Found' })
-    );
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('Failed to fetch media: 404 Not Found'));
 
     await saveMediaToGallery('mxc://example/missing.png', 'missing.png', 'image/png');
 
@@ -317,10 +332,7 @@ describe('saveMediaToGallery', () => {
 
   it('shows exactly one photos failure toast when blob conversion fails on iOS', async () => {
     vi.mocked(osType).mockReturnValue('ios');
-    mocks.fetch.mockResolvedValueOnce({
-      ok: true,
-      blob: () => Promise.reject(new Error('decode failed')),
-    } as unknown as Response);
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('decode failed'));
 
     await saveMediaToGallery('mxc://example/photo.png', 'photo.png', 'image/png');
 
