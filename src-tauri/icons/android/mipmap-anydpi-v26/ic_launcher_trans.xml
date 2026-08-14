@@ -2,6 +2,6 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
   <foreground android:drawable="@mipmap/ic_launcher_trans_foreground"/>
   <background>
-    <color android:color="#5BCEFA"/>
+    <color android:color="#1A1C28"/>
   </background>
 </adaptive-icon>

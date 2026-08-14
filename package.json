@@ -129,7 +129,7 @@
     "workbox-precaching": "^7.4.1"
   },
   "devDependencies": {
-    "tauri-plugin-app-icon-api": "github:SableClient/tauri-plugin-app-icon#6b370991e26ef10a66eedeacfb0bc3cb0cd63959",
+    "tauri-plugin-app-icon-api": "github:SableClient/tauri-plugin-app-icon#8f35691b3eed512933f38f26aead10cbe8304648",
     "@cloudflare/vite-plugin": "^1.42.4",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@faker-js/faker": "^10.5.0",
