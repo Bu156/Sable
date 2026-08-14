@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ImageContent } from './ImageContent';
+import { downloadEncryptedMedia } from '$utils/matrix';
 
 const screenMocks = vi.hoisted(() => ({ isMobile: true, tauri: false }));
 vi.mock('$hooks/useScreenSize', () => ({
@@ -195,6 +196,35 @@ describe('ImageContent', () => {
         );
         expect(retriedSrc).toContain('__sable_media_cache=3');
       });
+    } finally {
+      screenMocks.tauri = false;
+    }
+  });
+
+  it('unwraps the Tauri media URL before downloading an encrypted image', async () => {
+    screenMocks.tauri = true;
+    const renderViewer = vi.fn<(props: { getDownloadBlob?: () => Promise<Blob> }) => ReactNode>(
+      () => <div>viewer</div>
+    );
+    vi.mocked(downloadEncryptedMedia).mockResolvedValue(new Blob(['encrypted']));
+    try {
+      render(
+        <ImageContent
+          url="mxc://example.org/abc123"
+          encInfo={{ key: {}, iv: 'iv', hashes: {} } as never}
+          renderImage={() => <img alt="preview" />}
+          renderViewer={renderViewer}
+        />
+      );
+
+      touchTap(screen.getByRole('button', { name: 'View' }));
+      await waitFor(() => expect(renderViewer).toHaveBeenCalledOnce());
+      await renderViewer.mock.calls[0]?.[0].getDownloadBlob?.();
+
+      expect(downloadEncryptedMedia).toHaveBeenCalledWith(
+        'https://hs.example/_matrix/client/v1/media/download/example.org/abc123?__sable_media_cache=3',
+        expect.any(Function)
+      );
     } finally {
       screenMocks.tauri = false;
     }

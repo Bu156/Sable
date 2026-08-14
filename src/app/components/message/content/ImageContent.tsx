@@ -40,7 +40,11 @@ import {
   mxcUrlToHttp,
   rewriteAuthenticatedMediaUrl,
 } from '$utils/matrix';
-import { addTauriMediaRetryRevision, getTauriMediaRetryTarget } from '$utils/mediaUrl';
+import {
+  addTauriMediaRetryRevision,
+  getTauriMediaRetryTarget,
+  getTauriMediaSourceUrl,
+} from '$utils/mediaUrl';
 import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { isTauri } from '@tauri-apps/api/core';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
@@ -288,8 +292,9 @@ export const ImageContent = as<'div', ImageContentProps>(
             getDownloadBlob:
               encInfo && rawMediaUrl
                 ? () =>
-                    downloadEncryptedMedia(rawMediaUrl, (buffer) =>
-                      decryptFile(buffer, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+                    downloadEncryptedMedia(
+                      getTauriMediaSourceUrl(rawMediaUrl) ?? rawMediaUrl,
+                      (buffer) => decryptFile(buffer, mimeType ?? FALLBACK_MIMETYPE, encInfo)
                     )
                 : undefined,
           })
