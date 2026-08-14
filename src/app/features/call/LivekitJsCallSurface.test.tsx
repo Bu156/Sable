@@ -374,6 +374,7 @@ describe('LiveKit JS call surface', () => {
     const toggle = screen.getByTestId('track-toggle');
     expect(toggle).toHaveAttribute('data-source', Track.Source.ScreenShare);
     expect(JSON.parse(toggle.getAttribute('data-capture-options') ?? '{}')).toMatchObject({
+      audio: false,
       selfBrowserSurface: 'exclude',
     });
   });

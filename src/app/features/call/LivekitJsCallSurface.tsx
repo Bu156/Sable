@@ -437,7 +437,9 @@ function LivekitJsCallContent({
               // itself.
               <TrackToggle
                 source={Track.Source.ScreenShare}
-                captureOptions={{ audio: true, selfBrowserSurface: 'exclude' }}
+                // PipeWire portals reliably provide the selected video surface;
+                // requesting system audio can reject the whole capture request.
+                captureOptions={{ audio: false, selfBrowserSurface: 'exclude' }}
                 showIcon
                 aria-label="Share screen"
                 onDeviceError={() => handleDeviceError({ source: Track.Source.ScreenShare })}
