@@ -66,7 +66,14 @@ vi.mock('$hooks/useScreenSize', () => ({
   useCompactLayout: () => screenMocks.isMobile,
 }));
 
-const renderViewer = (props: { alt?: string; src?: string; info?: IImageInfo } = {}) =>
+const renderViewer = (
+  props: {
+    alt?: string;
+    src?: string;
+    info?: IImageInfo;
+    getDownloadBlob?: () => Promise<Blob>;
+  } = {}
+) =>
   render(
     <ImageViewer
       alt="kitten.png"
@@ -106,6 +113,22 @@ describe('ImageViewer', () => {
     await waitFor(() => {
       expect(downloadMedia).toHaveBeenCalledWith(source);
     });
+  });
+
+  it('uses the supplied decrypted blob when downloading encrypted media', async () => {
+    const decryptedBlob = new Blob(['decrypted image'], { type: 'image/jpeg' });
+    const getDownloadBlob = vi.fn<() => Promise<Blob>>().mockResolvedValue(decryptedBlob);
+    downloadMedia.mockClear();
+
+    renderViewer({
+      src: 'sable-media://https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten',
+      getDownloadBlob,
+    });
+    fireEvent.click(screen.getByText('Download'));
+
+    await waitFor(() => expect(getDownloadBlob).toHaveBeenCalledOnce());
+    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(FileSaver.saveAs).toHaveBeenCalledWith(decryptedBlob, 'kitten.png');
   });
 
   it('activates the download control on the first touch sequence', async () => {

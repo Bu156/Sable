@@ -60,6 +60,7 @@ type ImageViewerProps = {
   sentAt?: string;
   onPrevious?: () => void;
   onNext?: () => void;
+  getDownloadBlob?: () => Promise<Blob>;
 };
 
 export const ImageViewer = as<'div', ImageViewerProps>(
@@ -75,6 +76,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       sentAt,
       onPrevious,
       onNext,
+      getDownloadBlob,
       ...props
     },
     ref
@@ -156,12 +158,18 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
     const handleDownload = async () => {
       if (iosSaveToPhotos) {
-        await saveMediaToGallery(src, downloadFilename, galleryMimeType!);
+        await saveMediaToGallery(
+          getDownloadBlob ? await getDownloadBlob() : src,
+          downloadFilename,
+          galleryMimeType!
+        );
         return;
       }
       let fileContent: Blob;
       try {
-        fileContent = await downloadMedia(getTauriMediaSourceUrl(src) ?? src);
+        fileContent = await (getDownloadBlob
+          ? getDownloadBlob()
+          : downloadMedia(getTauriMediaSourceUrl(src) ?? src));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
         showToast(`Failed to download file: ${message}`);
@@ -206,7 +214,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const shareActivation = useMobileTapActivation(isMobile, () => {
       void (async () => {
         try {
-          const blob = await downloadMedia(src);
+          const blob = await (getDownloadBlob ? getDownloadBlob() : downloadMedia(src));
           const file = new File([blob], downloadFilename, {
             type: blob.type || galleryMimeType || 'application/octet-stream',
           });
@@ -220,7 +228,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     });
     const copyImageActivation = useMobileTapActivation(isMobile, () => {
       closeMenu();
-      void downloadMedia(src).then(copyImageToClipboard);
+      void (getDownloadBlob ? getDownloadBlob() : downloadMedia(src)).then(copyImageToClipboard);
     });
     const pixelatedMenuActivation = useMobileTapActivation(isMobile, () => {
       setIsPixelated(!isPixelated);
@@ -234,11 +242,13 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const nextActivation = useMobileTapActivation(isMobile, () => onNext?.());
     const galleryActivation = useMobileTapActivation(isMobile, () => {
       closeMenu();
-      void saveMediaToGallery(
-        getTauriMediaSourceUrl(src) ?? src,
-        downloadFilename,
-        galleryMimeType!
-      );
+      void (async () => {
+        await saveMediaToGallery(
+          getDownloadBlob ? await getDownloadBlob() : (getTauriMediaSourceUrl(src) ?? src),
+          downloadFilename,
+          galleryMimeType!
+        );
+      })();
     });
     const resetZoomMenuActivation = useMobileTapActivation(isMobile, () => {
       resetTransforms();

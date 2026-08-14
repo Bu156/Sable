@@ -204,6 +204,7 @@ function getRequestKey(
 
 type MatrixMediaInfo = {
   mxcUrl: string;
+  operation: 'download' | 'thumbnail';
   query: string;
 };
 
@@ -216,20 +217,21 @@ function getMatrixMediaInfo(url: string): MatrixMediaInfo | undefined {
   }
 
   const match = parsed.pathname.match(
-    /^\/_matrix\/(?:media\/[^/]+|client\/v1\/media)\/(?:download|thumbnail)\/([^/]+)\/([^/?#]+)/
+    /^\/_matrix\/(?:media\/[^/]+|client\/v1\/media)\/(download|thumbnail)\/([^/]+)\/([^/?#]+)/
   );
   if (!match) return undefined;
 
-  const [, serverName, mediaId] = match;
+  const [, operation, serverName, mediaId] = match;
   return {
     mxcUrl: `mxc://${serverName}/${mediaId}`,
+    operation: operation as MatrixMediaInfo['operation'],
     query: parsed.search,
   };
 }
 
 function getStableMediaCacheKeyFragment(url: string): string {
   const info = getMatrixMediaInfo(url);
-  if (info) return `${info.mxcUrl}${info.query}`;
+  if (info) return `${info.mxcUrl}:${info.operation}${info.query}`;
   return url;
 }
 

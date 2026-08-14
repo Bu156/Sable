@@ -82,6 +82,7 @@ type RenderViewerProps = {
   filename?: string;
   requestClose: () => void;
   info?: IImageInfo;
+  getDownloadBlob?: () => Promise<Blob>;
 };
 type RenderImageProps = {
   alt: string;
@@ -284,6 +285,13 @@ export const ImageContent = as<'div', ImageContentProps>(
             filename,
             requestClose: () => setViewer(false),
             info,
+            getDownloadBlob:
+              encInfo && rawMediaUrl
+                ? () =>
+                    downloadEncryptedMedia(rawMediaUrl, (buffer) =>
+                      decryptFile(buffer, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+                    )
+                : undefined,
           })
         : null;
 
