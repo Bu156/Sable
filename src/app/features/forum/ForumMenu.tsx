@@ -18,7 +18,17 @@ import { getCanonicalAliasOrRoomId, isRoomAlias } from '$utils/matrix';
 import { getHomeRoomPath, getDirectRoomPath, getSpaceRoomPath } from '$pages/pathUtils';
 import { getMatrixToRoom } from '$plugins/matrix-to';
 import { getViaServers } from '$plugins/via-servers';
-import { Checks, GearSix, Link, menuIcon, Terminal, UserPlus } from '$components/icons/phosphor';
+import {
+  Checks,
+  GearSix,
+  Link,
+  menuIcon,
+  Terminal,
+  UserCircle,
+  UserPlus,
+} from '$components/icons/phosphor';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
+import { RoomSettingsPage } from '$state/roomSettings';
 
 type ForumMenuProps = {
   room: Room;
@@ -34,6 +44,7 @@ export const ForumMenu = forwardRef<HTMLDivElement, ForumMenuProps>(
     const permissions = useRoomPermissions(creators, powerLevels);
     const canInvite = permissions.action('invite', mx.getSafeUserId());
     const openRoomSettings = useOpenRoomSettings();
+    const screenSize = useScreenSizeContext();
     const navigate = useNavigate();
     const parentSpace = useSpaceOptionally();
     const isDirectRoom = useIsDirectRoom();
@@ -113,6 +124,21 @@ export const ForumMenu = forwardRef<HTMLDivElement, ForumMenuProps>(
               Copy Link
             </Text>
           </MenuItem>
+          {screenSize !== ScreenSize.Desktop && (
+            <MenuItem
+              onClick={() => {
+                openRoomSettings(room.roomId, parentSpace?.roomId, RoomSettingsPage.MembersPage);
+                requestClose();
+              }}
+              size="300"
+              after={menuIcon(UserCircle)}
+              radii="300"
+            >
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                Members
+              </Text>
+            </MenuItem>
+          )}
           <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Room Settings

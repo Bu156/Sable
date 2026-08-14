@@ -6,9 +6,11 @@ import {
   Checks,
   ClockCounterClockwise,
   GearSix,
+  GridFour,
   Link,
   menuIcon,
   SignOut,
+  UserCircle,
   UserPlus,
 } from '$components/icons/phosphor';
 import { UseStateProvider } from '$components/UseStateProvider';
@@ -23,6 +25,12 @@ import { RoomNotificationModeSwitcher } from '$components/RoomNotificationSwitch
 import { AsyncStatus } from '$hooks/useAsyncCallback';
 import { JumpToTime } from './jump-to-time';
 import { useRoomMenuActions } from '$hooks/useRoomMenuActions';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
+import { useOpenRoomSettings } from '$state/hooks/roomSettings';
+import { RoomSettingsPage } from '$state/roomSettings';
+import { useSpaceOptionally } from '$hooks/useSpace';
+import { useSetSetting } from '$state/hooks/settings';
+import { settingsAtom } from '$state/settings';
 
 type RoomMenuProps = {
   room: Room;
@@ -30,6 +38,10 @@ type RoomMenuProps = {
 };
 
 const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose }, ref) => {
+  const screenSize = useScreenSizeContext();
+  const space = useSpaceOptionally();
+  const openRoomSettings = useOpenRoomSettings();
+  const setWidgetDrawer = useSetSetting(settingsAtom, 'isWidgetDrawer');
   const {
     handleMarkAsRead,
     handleInvite,
@@ -50,6 +62,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
 
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const notificationMode = getRoomNotificationMode(notificationPreferences, room.roomId);
+  const compact = screenSize !== ScreenSize.Desktop;
 
   const wrappedClose = (reason: string) => () => {
     if (reason === 'invite') setInvitePrompt(false);
@@ -126,6 +139,36 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
             Invite
           </Text>
         </MenuItem>
+        {compact && (
+          <MenuItem
+            onClick={() => {
+              openRoomSettings(room.roomId, space?.roomId, RoomSettingsPage.MembersPage);
+              requestClose();
+            }}
+            size="300"
+            after={menuIcon(UserCircle)}
+            radii="300"
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              Members
+            </Text>
+          </MenuItem>
+        )}
+        {compact && (
+          <MenuItem
+            onClick={() => {
+              setWidgetDrawer(true);
+              requestClose();
+            }}
+            size="300"
+            after={menuIcon(GridFour)}
+            radii="300"
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              Widgets
+            </Text>
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             handleCopyLink();
