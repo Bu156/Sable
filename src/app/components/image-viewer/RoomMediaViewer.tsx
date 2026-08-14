@@ -126,6 +126,14 @@ function ResolvedRoomMedia({
           requestClose={requestClose}
           onPrevious={onPrevious}
           onNext={onNext}
+          getDownloadBlob={
+            item.encInfo && rawMediaUrl
+              ? () =>
+                  downloadEncryptedMedia(rawMediaUrl, (buffer) =>
+                    decryptFile(buffer, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo!)
+                  )
+              : undefined
+          }
         />
       )}
       {loading && (
