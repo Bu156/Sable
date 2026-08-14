@@ -13,6 +13,7 @@ import {
   mxcUrlToHttp,
   rewriteAuthenticatedMediaUrl,
 } from '$utils/matrix';
+import { getTauriMediaSourceUrl } from '$utils/mediaUrl';
 import { FALLBACK_MIMETYPE } from '$utils/mimeTypes';
 import { setMediaEncryption } from '$utils/tauriMediaEncryption';
 import { isTauri } from '@tauri-apps/api/core';
@@ -129,8 +130,10 @@ function ResolvedRoomMedia({
           getDownloadBlob={
             item.encInfo && rawMediaUrl
               ? () =>
-                  downloadEncryptedMedia(rawMediaUrl, (buffer) =>
-                    decryptFile(buffer, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo!)
+                  downloadEncryptedMedia(
+                    getTauriMediaSourceUrl(rawMediaUrl) ?? rawMediaUrl,
+                    (buffer) =>
+                      decryptFile(buffer, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo!)
                   )
               : undefined
           }
