@@ -1,5 +1,5 @@
 import type { MatrixClient, MatrixEvent, RoomMember } from '$types/matrix-sdk';
-import { RoomMemberEvent } from '$types/matrix-sdk';
+import { ClientEvent, RoomMemberEvent } from '$types/matrix-sdk';
 import { useEffect, useState } from 'react';
 import { hydrateAllRoomMembers } from '$client/roomMemberHydration';
 
@@ -20,15 +20,23 @@ export const useRoomMembers = (mx: MatrixClient, roomId: string, enabled = true)
       setMembers(room.getMembers());
     };
 
+    // A failed SDK member load must not trigger the direct roster fallback:
+    // classic sync already owns retries.
+    let refillAllowed = false;
+    const refillRoster = () => {
+      if (!room || disposed || !refillAllowed) return;
+      void hydrateAllRoomMembers(mx, roomId).then(() => updateMemberList());
+    };
+
     if (room) {
       setMembers(room.getMembers());
       // Sliding sync may retain an incomplete member set. Do not let its SDK
-      // request block incoming membership updates. A failed request must not
-      // trigger the direct roster fallback: classic sync already owns retries.
+      // request block incoming membership updates.
       void room.loadMembersIfNeeded().then(
         () => {
+          refillAllowed = true;
           updateMemberList();
-          void hydrateAllRoomMembers(mx, roomId).then(() => updateMemberList());
+          refillRoster();
         },
         () => updateMemberList()
       );
@@ -36,10 +44,13 @@ export const useRoomMembers = (mx: MatrixClient, roomId: string, enabled = true)
 
     mx.on(RoomMemberEvent.Membership, updateMemberList);
     mx.on(RoomMemberEvent.PowerLevel, updateMemberList);
+    // joined_count can rise after mount and emits no event of its own.
+    mx.on(ClientEvent.Sync, refillRoster);
     return () => {
       disposed = true;
       mx.removeListener(RoomMemberEvent.Membership, updateMemberList);
       mx.removeListener(RoomMemberEvent.PowerLevel, updateMemberList);
+      mx.removeListener(ClientEvent.Sync, refillRoster);
     };
   }, [enabled, mx, roomId]);
 
