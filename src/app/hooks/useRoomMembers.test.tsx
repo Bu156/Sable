@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { RoomMemberEvent } from '$types/matrix-sdk';
+import { ClientEvent, RoomMemberEvent } from '$types/matrix-sdk';
 import type { MatrixClient, MatrixEvent, Room, RoomMember } from '$types/matrix-sdk';
 
 const { hydrateAllRoomMembers } = vi.hoisted(() => ({
@@ -30,6 +30,58 @@ describe('useRoomMembers', () => {
 
     await waitFor(() => expect(room.loadMembersIfNeeded).toHaveBeenCalledOnce());
     await Promise.resolve();
+
+    expect(hydrateAllRoomMembers).not.toHaveBeenCalled();
+  });
+
+  it('refills the roster again on later sync responses', async () => {
+    hydrateAllRoomMembers.mockClear();
+    const room = {
+      roomId: '!room:example.org',
+      getMembers: () => [] as RoomMember[],
+      loadMembersIfNeeded: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Room;
+    const handlers = new Map<string, () => void>();
+    const mx = {
+      getRoom: () => room,
+      on: vi.fn<(event: string, handler: () => void) => void>((event, handler) => {
+        handlers.set(event, handler);
+      }),
+      removeListener: vi.fn<() => void>(),
+    } as unknown as MatrixClient;
+
+    renderHook(() => useRoomMembers(mx, room.roomId));
+
+    await waitFor(() => expect(hydrateAllRoomMembers).toHaveBeenCalledOnce());
+
+    act(() => handlers.get(ClientEvent.Sync)?.());
+
+    expect(hydrateAllRoomMembers).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not refill the roster on sync after a failed SDK member load', async () => {
+    hydrateAllRoomMembers.mockClear();
+    const room = {
+      roomId: '!room:example.org',
+      getMembers: () => [] as RoomMember[],
+      loadMembersIfNeeded: vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValue(new Error('NetworkError')),
+    } as unknown as Room;
+    const handlers = new Map<string, () => void>();
+    const mx = {
+      getRoom: () => room,
+      on: vi.fn<(event: string, handler: () => void) => void>((event, handler) => {
+        handlers.set(event, handler);
+      }),
+      removeListener: vi.fn<() => void>(),
+    } as unknown as MatrixClient;
+
+    renderHook(() => useRoomMembers(mx, room.roomId));
+
+    await waitFor(() => expect(room.loadMembersIfNeeded).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    act(() => handlers.get(ClientEvent.Sync)?.());
 
     expect(hydrateAllRoomMembers).not.toHaveBeenCalled();
   });
