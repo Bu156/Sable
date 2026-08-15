@@ -9,6 +9,8 @@ const ROOM_EMPTY = '!empty:example.com';
 const ROOM_MUTED = '!muted:example.com';
 const ROOM_LEFT = '!left:example.com';
 const MISSING = '!missing:example.com';
+const ME = '@user:example.com';
+const OTHER = '@other:example.com';
 
 const createEvent = (id: string, sender: string, type = 'm.room.message'): MatrixEvent =>
   ({
@@ -40,6 +42,7 @@ const createRoom = (
     highlight?: number;
     readUpTo?: string | null;
     events?: MatrixEvent[];
+    fullyRead?: string;
   } = {}
 ): Room => {
   const {
@@ -49,6 +52,7 @@ const createRoom = (
     highlight = 0,
     readUpTo = '$read',
     events = [],
+    fullyRead,
   } = opts;
 
   const client = createClient({ [roomId]: null as unknown as Room });
@@ -64,9 +68,20 @@ const createRoom = (
     }),
     getEventReadUpTo: () => readUpTo,
     getLiveTimeline: () => ({ getEvents: () => events }),
-    getAccountData: () => undefined,
+    getRoomUnreadNotificationCount: () => total,
+    hasUserReadEvent: () => false,
+    getAccountData: (type: string) =>
+      fullyRead && type === 'm.fully_read'
+        ? { getContent: () => ({ event_id: fullyRead }) }
+        : undefined,
     client,
   } as unknown as Room;
+};
+
+const bindRoom = (room: Room): MatrixClient => {
+  const mx = createClient({ [room.roomId]: room });
+  (room as unknown as { client: MatrixClient }).client = mx;
+  return mx;
 };
 
 describe('getUnreadInfosForRooms', () => {
@@ -123,6 +138,70 @@ describe('getUnreadInfosForRooms', () => {
 
     const { deleted } = getUnreadInfosForRooms(mx, [ROOM_MUTED]);
     expect(deleted).toContain(ROOM_MUTED);
+  });
+
+  it('badges an unvisited room that has no read data at all', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      events: [createEvent('$a', OTHER)],
+    });
+    const mx = bindRoom(room);
+
+    const { unread } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
+    expect(unread.find((u) => u.roomId === ROOM_UNREAD)?.total).toBe(1);
+  });
+
+  it('does not badge a room whose fully-read marker is outside the loaded window', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      fullyRead: '$older',
+      events: [createEvent('$a', OTHER)],
+    });
+    const mx = bindRoom(room);
+
+    const { unread, deleted } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
+    expect(unread).toHaveLength(0);
+    expect(deleted).toContain(ROOM_UNREAD);
+  });
+
+  it('does not badge a room without receipts where our own message is newest', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      events: [createEvent('$a', OTHER), createEvent('$b', ME)],
+    });
+    const mx = bindRoom(room);
+
+    const { unread, deleted } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
+    expect(unread).toHaveLength(0);
+    expect(deleted).toContain(ROOM_UNREAD);
+  });
+
+  it('does not badge a room whose only activity is its creation event', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      events: [createEvent('$create', OTHER, 'm.room.create')],
+    });
+    const mx = bindRoom(room);
+
+    const { unread, deleted } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
+    expect(unread).toHaveLength(0);
+    expect(deleted).toContain(ROOM_UNREAD);
+  });
+
+  it('does not badge a room where our own message follows the last foreign message', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: '$missing',
+      events: [
+        createEvent('$a', OTHER),
+        createEvent('$b', ME),
+        createEvent('$c', OTHER, 'm.room.member'),
+      ],
+    });
+    const mx = bindRoom(room);
+
+    const { unread, deleted } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
+    expect(unread).toHaveLength(0);
+    expect(deleted).toContain(ROOM_UNREAD);
   });
 
   it('deletes rooms whose unread has dropped to zero', () => {
