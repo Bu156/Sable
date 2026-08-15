@@ -614,16 +614,25 @@ jobs:
 
   # Nightlies use `--snapshot`, which packages without publishing.
   linux:
-    name: Build Linux (CEF)
+    name: Build Linux ${{ matrix.arch }} (CEF)
     needs: setup-release
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
     permissions:
       contents: write
       id-token: write
       attestations: write
       artifact-metadata: write
     env:
+      ARCH: ${{ matrix.arch }}
       TAG: ${{ needs.setup-release.outputs.tag }}
       VERSION: ${{ needs.setup-release.outputs.version }}
       VITE_APP_VERSION: ${{ needs.setup-release.outputs.version }}
@@ -652,6 +661,7 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: src-tauri
+          key: ${{ matrix.arch }}
 
       - name: Stamp release version into tauri.conf.json
         shell: bash
@@ -673,7 +683,7 @@ jobs:
             src-tauri/target/release/sable "$DISPLAY_NAME" \
             src-tauri/target/release/sable-updater
 
-          DEB="src-tauri/target/release/bundle/deb/Sable-${VERSION}-linux-x86_64.deb"
+          DEB="src-tauri/target/release/bundle/deb/Sable-${VERSION}-linux-${ARCH}.deb"
           dpkg-deb --contents "$DEB" | grep 'etc/apparmor.d/sable$' >/dev/null
           dpkg-deb --ctrl-tarfile "$DEB" | tar -t | grep -x './postinst' >/dev/null
           dpkg-deb --ctrl-tarfile "$DEB" | tar -t | grep -x './prerm' >/dev/null
@@ -685,14 +695,14 @@ jobs:
             src-tauri/target/release/cef-pkg/stage/share "$RELEASE_DIR/"
           test -f "$RELEASE_DIR/runtime/CEF-LICENSE.txt"
           tar -C "$RELEASE_DIR" -czf \
-            "src-tauri/target/release/bundle/Sable-${VERSION}-linux-x86_64.tar.gz" \
+            "src-tauri/target/release/bundle/Sable-${VERSION}-linux-${ARCH}.tar.gz" \
             sable runtime share
 
       - name: Sign the AppImage for the updater
         if: ${{ env.TAURI_SIGNING_PRIVATE_KEY != '' }}
         shell: bash
         run: |
-          for f in src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage; do
+          for f in src-tauri/target/release/bundle/appimage/Sable-*-linux-${ARCH}.AppImage; do
             [ -e "$f" ] || continue
             pnpm tauri signer sign "$f"
           done
@@ -714,9 +724,9 @@ jobs:
         run: |
           for f in src-tauri/target/release/bundle/deb/Sable-*.deb \
                    src-tauri/target/release/bundle/rpm/Sable-*.rpm \
-                   src-tauri/target/release/bundle/Sable-*-linux-x86_64.tar.gz \
-                   src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage \
-                   src-tauri/target/release/bundle/appimage/Sable-*-linux-x86_64.AppImage.sig; do
+                   src-tauri/target/release/bundle/Sable-*-linux-${ARCH}.tar.gz \
+                   src-tauri/target/release/bundle/appimage/Sable-*-linux-${ARCH}.AppImage \
+                   src-tauri/target/release/bundle/appimage/Sable-*-linux-${ARCH}.AppImage.sig; do
             [ -e "$f" ] || continue
             echo "Uploading $f"
             gh release upload "$TAG" "$f" --clobber
@@ -725,7 +735,7 @@ jobs:
       - name: Upload .deb as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sable-linux-deb
+          name: sable-linux-deb-${{ matrix.arch }}
           path: src-tauri/target/release/bundle/deb/Sable-*.deb
           if-no-files-found: error
           retention-days: 1
@@ -750,7 +760,7 @@ jobs:
       - name: Download .deb artifact and compute checksum
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: sable-linux-deb
+          name: sable-linux-deb-x86_64
           path: deb-artifact
 
       - name: Compute checksum
