@@ -107,7 +107,7 @@ export const VideoContent = as<'div', VideoContentProps>(
         if (!mediaUrl) throw new Error('Invalid media URL');
         const prepareAndroidLoopback = (source: string) =>
           isAndroidTauri()
-            ? invoke<string>('prepare_loopback_video', { url: source })
+            ? invoke<string>('prepare_loopback_media', { url: source })
             : Promise.resolve(source);
         if (!encInfo) {
           if (isTauri()) {
