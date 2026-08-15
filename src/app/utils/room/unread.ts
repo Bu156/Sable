@@ -92,7 +92,6 @@ export const getNotificationType = (mx: MatrixClient, roomId: string): Notificat
 };
 
 const NOTIFICATION_EVENT_TYPES = new Set<string>([
-  EventType.RoomCreate,
   EventType.RoomMessage,
   EventType.RoomMessageEncrypted,
   EventType.RoomMember,
@@ -149,16 +148,13 @@ export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
     return false;
   }
 
-  const latestEvent = liveEvents[liveEvents.length - 1];
-
-  if (latestEvent?.getSender() === userId) {
-    return false;
-  }
-
   for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
     const event = liveEvents[i];
     if (!event) return false;
     if (event.getId() === readUpToId) {
+      return false;
+    }
+    if (event.getSender() === userId) {
       return false;
     }
     if (isNotificationEvent(event, room, userId)) {
@@ -273,13 +269,22 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
         .getAccountData(EventType.FullyRead)
         ?.getContent<{ event_id?: string }>()?.event_id;
       let hasActivity = false;
+      let foundReadBoundary = false;
       for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
         const event = liveEvents[i];
-        if (!event || event.getId() === fullyReadEventId) break;
-        if (event.getSender() !== userId && isNotificationEvent(event, room, userId)) {
+        if (!event) break;
+        if (event.getId() === fullyReadEventId || event.getSender() === userId) {
+          foundReadBoundary = true;
+          break;
+        }
+        if (isNotificationEvent(event, room, userId)) {
           hasActivity = true;
           break;
         }
+      }
+
+      if (hasActivity && !foundReadBoundary && fullyReadEventId) {
+        hasActivity = false;
       }
 
       if (hasActivity) {
