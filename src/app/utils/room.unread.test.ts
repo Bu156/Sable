@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KnownMembership, NotificationCountType } from '$types/matrix-sdk';
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { getUnreadInfosForRooms } from './room/unread';
+import { getUnreadInfo, getUnreadInfosForRooms } from './room/unread';
 
 const SPACE = '!space:example.com';
 const ROOM_UNREAD = '!unread:example.com';
@@ -43,6 +43,8 @@ const createRoom = (
     readUpTo?: string | null;
     events?: MatrixEvent[];
     fullyRead?: string;
+    paginationToken?: string | null;
+    rawReceipt?: boolean;
   } = {}
 ): Room => {
   const {
@@ -53,6 +55,8 @@ const createRoom = (
     readUpTo = '$read',
     events = [],
     fullyRead,
+    paginationToken = 't0',
+    rawReceipt = false,
   } = opts;
 
   const client = createClient({ [roomId]: null as unknown as Room });
@@ -67,7 +71,12 @@ const createRoom = (
       return total;
     }),
     getEventReadUpTo: () => readUpTo,
-    getLiveTimeline: () => ({ getEvents: () => events }),
+    getReadReceiptForUserId: () => (rawReceipt ? { eventId: '$receipt-target' } : null),
+    findEventById: (eventId: string) => events.find((event) => event.getId() === eventId),
+    getLiveTimeline: () => ({
+      getEvents: () => events,
+      getPaginationToken: () => paginationToken,
+    }),
     getRoomUnreadNotificationCount: () => total,
     hasUserReadEvent: () => false,
     getAccountData: (type: string) =>
@@ -149,6 +158,101 @@ describe('getUnreadInfosForRooms', () => {
 
     const { unread } = getUnreadInfosForRooms(mx, [ROOM_UNREAD]);
     expect(unread.find((u) => u.roomId === ROOM_UNREAD)?.total).toBe(1);
+  });
+
+  it('marks the unread count of unvisited rooms as estimated', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      events: [createEvent('$a', OTHER)],
+    });
+    bindRoom(room);
+
+    expect(getUnreadInfo(room)).toEqual({
+      roomId: ROOM_UNREAD,
+      highlight: 0,
+      total: 1,
+      estimated: true,
+    });
+  });
+
+  it('counts real unreads when the timeline is fully loaded without read data', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      paginationToken: null,
+      events: [createEvent('$a', OTHER), createEvent('$b', OTHER), createEvent('$c', OTHER)],
+    });
+    bindRoom(room);
+
+    const unreadInfo = getUnreadInfo(room);
+    expect(unreadInfo.total).toBe(3);
+    expect(unreadInfo.estimated).toBeFalsy();
+  });
+
+  it('counts real unreads after the fully-read marker once it is loaded', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      fullyRead: '$a',
+      events: [createEvent('$a', OTHER), createEvent('$b', OTHER), createEvent('$c', OTHER)],
+    });
+    bindRoom(room);
+
+    const unreadInfo = getUnreadInfo(room);
+    expect(unreadInfo.total).toBe(2);
+    expect(unreadInfo.estimated).toBeFalsy();
+  });
+
+  it('stops counting at our own message when no read data exists', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      paginationToken: null,
+      events: [createEvent('$a', OTHER), createEvent('$b', ME), createEvent('$c', OTHER)],
+    });
+    bindRoom(room);
+
+    expect(getUnreadInfo(room).total).toBe(1);
+  });
+
+  it('stays badgeless but estimated when read evidence is outside the window', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: null,
+      rawReceipt: true,
+      events: [createEvent('$a', OTHER, 'm.room.topic')],
+    });
+    bindRoom(room);
+
+    expect(getUnreadInfo(room)).toEqual({
+      roomId: ROOM_UNREAD,
+      highlight: 0,
+      total: 0,
+      estimated: true,
+    });
+  });
+
+  it('marks the count as estimated when the receipt is below the loaded window', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: '$missing',
+      events: [createEvent('$a', OTHER), createEvent('$b', OTHER)],
+    });
+    bindRoom(room);
+
+    expect(getUnreadInfo(room)).toEqual({
+      roomId: ROOM_UNREAD,
+      highlight: 0,
+      total: 2,
+      estimated: true,
+    });
+  });
+
+  it('counts exactly once the receipt is inside the loaded window', () => {
+    const room = createRoom(ROOM_UNREAD, {
+      readUpTo: '$a',
+      events: [createEvent('$a', OTHER), createEvent('$b', OTHER), createEvent('$c', OTHER)],
+    });
+    bindRoom(room);
+
+    const unreadInfo = getUnreadInfo(room);
+    expect(unreadInfo.total).toBe(2);
+    expect(unreadInfo.estimated).toBe(false);
   });
 
   it('does not badge a room whose fully-read marker is outside the loaded window', () => {

@@ -1,8 +1,10 @@
 import type { IPushRule, IPushRules, MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
 import {
+  Direction,
   EventType,
   NotificationCountType,
   PushRuleActionName,
+  ReceiptType,
   RelationType,
 } from '$types/matrix-sdk';
 
@@ -169,6 +171,56 @@ type UnreadInfoOptions = {
   mDirects?: Set<string>;
 };
 
+export const getFullyReadEventId = (room: Room): string | undefined =>
+  room.getAccountData(EventType.FullyRead)?.getContent<{ event_id?: string }>()?.event_id;
+
+export const hasAnyReadReceipt = (room: Room, userId: string): boolean =>
+  !!room.getReadReceiptForUserId(userId) ||
+  !!room.getReadReceiptForUserId(userId, false, ReceiptType.ReadPrivate);
+
+export const isTimelineExhausted = (room: Room): boolean =>
+  !room.getLiveTimeline().getPaginationToken(Direction.Backward);
+
+export const isReadBoundaryLoaded = (room: Room, userId: string): boolean => {
+  const readUpToId = room.getEventReadUpTo(userId);
+  if (readUpToId && room.findEventById(readUpToId)) return true;
+  const fullyReadEventId = getFullyReadEventId(room);
+  if (fullyReadEventId && room.findEventById(fullyReadEventId)) return true;
+  return isTimelineExhausted(room);
+};
+
+type TimelineUnreadOptions = {
+  boundaryEventId?: string | null;
+  stopAtOwnEvent?: boolean;
+};
+
+export const countTimelineUnread = (
+  room: Room,
+  userId: string,
+  options: TimelineUnreadOptions = {}
+): { total: number; highlight: number } => {
+  const { boundaryEventId, stopAtOwnEvent = false } = options;
+  let total = 0;
+  let highlight = 0;
+  const pushProcessor = room.client.pushProcessor;
+  const liveEvents = room.getLiveTimeline().getEvents();
+  for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
+    const event = liveEvents[i];
+    if (!event) break;
+    if (boundaryEventId && event.getId() === boundaryEventId) break;
+    if (event.getSender() === userId) {
+      if (stopAtOwnEvent) break;
+      continue;
+    }
+    if (isNotificationEvent(event, room, userId)) {
+      total += 1;
+      const pushActions = pushProcessor?.actionsForEvent(event);
+      if (pushActions?.tweaks?.highlight) highlight += 1;
+    }
+  }
+  return { total, highlight };
+};
+
 const unreadInfoFixupInProgress = new WeakSet<Room>();
 
 export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadInfo => {
@@ -233,25 +285,15 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
   // and highlight colour reflect actual state rather than a hard-coded stub.
   if (total === 0 && highlight === 0 && userId && roomHasTimelineUnread()) {
     const readUpToId = room.getEventReadUpTo(userId);
-    const liveEvents = room.getLiveTimeline().getEvents();
-    let fallbackTotal = 0;
-    let fallbackHighlight = 0;
-    const pushProcessor = room.client.pushProcessor;
-    for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
-      const event = liveEvents[i];
-      if (!event) break;
-      if (event.getId() === readUpToId) break;
-      if (isNotificationEvent(event, room, userId) && event.getSender() !== userId) {
-        fallbackTotal += 1;
-        const pushActions = pushProcessor.actionsForEvent(event);
-        if (pushActions?.tweaks?.highlight) fallbackHighlight += 1;
-      }
-    }
-    if (fallbackTotal > 0) {
+    const counted = countTimelineUnread(room, userId, { boundaryEventId: readUpToId });
+    if (counted.total > 0) {
+      const countIsExact =
+        !!(readUpToId && room.findEventById(readUpToId)) || isTimelineExhausted(room);
       return {
         roomId: room.roomId,
-        highlight: fallbackHighlight,
-        total: fallbackTotal,
+        highlight: counted.highlight,
+        total: counted.total,
+        estimated: !countIsExact,
       };
     }
   }
@@ -265,9 +307,7 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
     // If we have no read receipt, SDK counts may be unreliable. Always check timeline.
     if (!readUpToId) {
       const liveEvents = room.getLiveTimeline().getEvents();
-      const fullyReadEventId = room
-        .getAccountData(EventType.FullyRead)
-        ?.getContent<{ event_id?: string }>()?.event_id;
+      const fullyReadEventId = getFullyReadEventId(room);
       let hasActivity = false;
       let foundReadBoundary = false;
       for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
@@ -283,17 +323,32 @@ export const getUnreadInfo = (room: Room, options?: UnreadInfoOptions): UnreadIn
         }
       }
 
-      if (hasActivity && !foundReadBoundary && fullyReadEventId) {
-        hasActivity = false;
-      }
+      const boundaryKnown = foundReadBoundary || isReadBoundaryLoaded(room, userId);
+      const hasDistantReadEvidence =
+        !boundaryKnown && (!!fullyReadEventId || hasAnyReadReceipt(room, userId));
 
-      if (hasActivity) {
-        // If SDK already has counts, use those. Otherwise show dot badge (count=1).
-        if (total === 0 && highlight === 0) {
-          return { roomId: room.roomId, highlight: 0, total: 1 };
+      if (hasActivity || hasDistantReadEvidence) {
+        if (hasActivity && (total > 0 || highlight > 0)) {
+          // SDK has counts but no receipt - trust the counts and show them
+          return { roomId: room.roomId, highlight, total };
         }
-        // SDK has counts but no receipt - trust the counts and show them
-        return { roomId: room.roomId, highlight, total };
+        if (total === 0 && highlight === 0) {
+          if (boundaryKnown) {
+            const counted = countTimelineUnread(room, userId, {
+              boundaryEventId: fullyReadEventId,
+              stopAtOwnEvent: true,
+            });
+            if (counted.total > 0 || counted.highlight > 0) {
+              return { roomId: room.roomId, highlight: counted.highlight, total: counted.total };
+            }
+          } else if (hasActivity && !fullyReadEventId) {
+            // No read evidence at all: dot badge with an unknown real count.
+            return { roomId: room.roomId, highlight: 0, total: 1, estimated: true };
+          } else {
+            // Cannot prove unread state until the distant boundary is loaded.
+            return { roomId: room.roomId, highlight: 0, total: 0, estimated: true };
+          }
+        }
       }
     }
   }
