@@ -550,6 +550,7 @@ function RoomInputHarness({
     nextEditor.children = [{ type: 'paragraph' as any, children: [{ text: '' }] }];
     return nextEditor;
   }, []);
+  const [, setEditorRevision] = useState(0);
   const fileDropContainerRef = useMemo(() => ({ current: null }), []);
   const [, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(room.roomId));
   const [, setSelectedFiles] = useAtom(roomIdToUploadItemsAtomFamily(room.roomId));
@@ -583,6 +584,7 @@ function RoomInputHarness({
     Transforms.select(editor, { path: [0, 0], offset: 0 });
     Transforms.insertText(editor, text);
     fireEvent.input(screen.getByTestId('room-input-editor'));
+    setEditorRevision((prev) => prev + 1);
   };
   const setCommand = (command: 'poll' | 'location') => {
     editor.children = [
@@ -1118,6 +1120,25 @@ describe('RoomInput submit regressions', () => {
         'updated while sending'
       )
     );
+  });
+
+  it('queues a second text message while the first send is in flight', async () => {
+    const firstSend = deferred<{ event_id: string }>();
+    testState.matrix.sendMessage.mockReturnValueOnce(firstSend.promise);
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    expect(sendButton()).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compose updated text' }));
+    fireEvent.click(sendButton());
+    firstSend.resolve({ event_id: '$first' });
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledTimes(2));
+    expect(testState.matrix.sendMessage.mock.calls[0]?.[2]?.body).toBe('retry me');
+    expect(testState.matrix.sendMessage.mock.calls[1]?.[2]?.body).toBe('updated while sending');
   });
 
   it('blocks submission while file preprocessing is pending', async () => {

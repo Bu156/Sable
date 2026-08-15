@@ -118,6 +118,7 @@ import { ClientRoomsNotificationPreferences } from './client/ClientRoomsNotifica
 import { Create } from './client/create';
 import { ToRoomEvent } from './client/ToRoomEvent';
 import { CallStatusRenderer } from './CallStatusRenderer';
+import { LivekitJsCallAudio } from '$features/call/LivekitJsCallAudio';
 import { UserQuickToolsProvider } from '$components/UserQuickToolsProvider';
 import { Navigate } from './client/navigate';
 import { ProfileMobile } from './client/profile';
@@ -256,6 +257,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
                             <ClientRouteOutlet />
                           </ClientLayout>
                           <CallStatusRenderer />
+                          <LivekitJsCallAudio />
                         </CallEmbedProvider>
                         <MobileFriendlyBottomNav>
                           <UserQuickToolsProvider />

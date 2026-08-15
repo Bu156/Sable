@@ -390,7 +390,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [uploadBoard, setUploadBoard] = useState(true);
     const [uploadSending, setUploadSending] = useState(false);
     const [uploadBusy, setUploadBusy] = useState(false);
-    const [isSending, setIsSending] = useState(false);
     const [ingestingFiles, setIngestingFiles] = useState(false);
     const fileIngestionCountRef = useRef(0);
     const submissionInFlightRef = useRef(false);
@@ -406,7 +405,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const uploadItemOverridesRef = useRef(new Map<TUploadContent, Partial<TUploadItem>>());
     const removedUploadFilesRef = useRef(new WeakSet<TUploadContent>());
     const isEncrypting = selectedFiles.some((f) => f.encrypting);
-    const sendBusy = isSending || uploadSending || isEncrypting || uploadBusy || ingestingFiles;
+    const sendBusy = uploadSending || isEncrypting || uploadBusy || ingestingFiles;
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -1456,224 +1455,218 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           return;
         }
 
-        setIsSending(true);
         const submittedReplyDraft = submission.replyClaim?.snapshot;
         const submittedSilentReply = submission.replyClaim?.silentReply ?? silentReply;
-        try {
-          if (editingEvent && isMobile) {
-            const content = buildEditReplacement(submission.children, {
-              mx,
-              room,
-              roomId,
-              editingEvent,
-              currentContent: getEditingContent(editingEvent),
-              pmpNoFallback,
-            });
-            if (!content) {
-              if (isLive()) onCancelEdit?.();
-              return;
-            }
-            await mx.sendMessage(roomId, content as RoomMessageEventContent);
-            if (isLive()) {
-              onCancelEdit?.();
-              sendTypingStatus(false);
-            }
-            return;
-          }
-
-          if (selectedFiles.some((f) => f.encrypting)) {
-            restoreSubmission(submission);
-            return;
-          }
-          if (selectedFiles.length > 0) {
-            const uploads = uploadBoardHandlers.current?.getSendableUploads() ?? [];
-            const sendUpload = handleSendUploadRef.current;
-            setUploadSending(true);
-            try {
-              if (await sendUpload(uploads, submission, isLive)) return;
-            } catch (error: unknown) {
-              log.error('failed to send attachments', { roomId }, error);
-              if (isLive()) {
-                setSendError('Failed to send attachments. Please try again.');
-              }
-              restoreSubmission(submission);
-              return;
-            } finally {
-              if (isLive()) setUploadSending(false);
-            }
-          }
-
-          const outgoing = await buildOutgoingMessage(submission.children, {
+        if (editingEvent && isMobile) {
+          const content = buildEditReplacement(submission.children, {
             mx,
             room,
             roomId,
-            nicknames,
-            replyEvent,
-            replyDraft: submittedReplyDraft,
-            silentReply: submittedSilentReply,
-            settingsLinkBaseUrl,
-            canSendReaction,
-            pkCompatEnable,
-            pmpProxyingEnable,
-            pmpLatchingEnable,
+            editingEvent,
+            currentContent: getEditingContent(editingEvent),
             pmpNoFallback,
-            latchedPersona,
-            isPKCommand: (text) => PKitCommandMessageHandler.isPKCommand(text),
-            imagePacksUsed: imagePacksUsedRef.current,
           });
+          if (!content) {
+            if (isLive()) onCancelEdit?.();
+            return;
+          }
+          await mx.sendMessage(roomId, content as RoomMessageEventContent);
+          if (isLive()) {
+            onCancelEdit?.();
+            sendTypingStatus(false);
+          }
+          return;
+        }
 
-          if (outgoing.kind === 'empty') return;
-          if (outgoing.kind === 'quickReact') {
-            handleQuickReact(outgoing.key);
-            return;
-          }
-          if (outgoing.kind === 'pkCommand') {
-            await pluralkitCmdMessageHandler.handleMessage(outgoing.plainText);
-            return;
-          }
-          if (outgoing.kind === 'gifSearch') {
-            restoreReplyClaim(submission.replyClaim);
-            setInitialGifSearch(outgoing.query);
-            setEmojiBoardTab(EmojiBoardTab.Gif);
-            return;
-          }
-          if (outgoing.kind === 'command') {
-            const { command, plainText, customHtml } = outgoing;
-            if (command === Command.Poll) {
-              restoreReplyClaim(submission.replyClaim);
-              setShowPollPicker(true);
-            } else if (command === Command.Location && plainText.trim().length === 0) {
-              restoreReplyClaim(submission.replyClaim);
-              setShowLocationPicker(true);
-            } else commands[command as Command]?.exe(plainText, customHtml);
-            return;
-          }
-
-          const { content } = outgoing;
-          if (outgoing.latchPersona) {
-            await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, outgoing.latchPersona.id);
-            if (isLive()) setLatchedPersona(outgoing.latchPersona);
-          }
-          if (submittedReplyDraft) {
-            content['m.relates_to'] = getReplyContent(submittedReplyDraft, room);
-          }
-          const invalidate = () => {
+        if (selectedFiles.some((f) => f.encrypting)) {
+          restoreSubmission(submission);
+          return;
+        }
+        if (selectedFiles.length > 0) {
+          const uploads = uploadBoardHandlers.current?.getSendableUploads() ?? [];
+          const sendUpload = handleSendUploadRef.current;
+          setUploadSending(true);
+          try {
+            if (await sendUpload(uploads, submission, isLive)) return;
+          } catch (error: unknown) {
+            log.error('failed to send attachments', { roomId }, error);
             if (isLive()) {
-              queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
+              setSendError('Failed to send attachments. Please try again.');
             }
-          };
+            restoreSubmission(submission);
+            return;
+          } finally {
+            if (isLive()) setUploadSending(false);
+          }
+        }
 
-          if (scheduledTime) {
-            try {
-              const delayMs = computeDelayMs(scheduledTime);
-              await roomScheduleCoordinator.run(mx, roomId, async () => {
-                if (editingScheduledDelayId) {
-                  await cancelDelayedEvent(mx, editingScheduledDelayId);
-                  if (isLive()) setEditingScheduledDelayId(null);
-                }
-                if (isEncrypted) {
-                  await sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
-                } else {
-                  await sendDelayedMessage(mx, roomId, content as RoomMessageEventContent, delayMs);
-                }
-              });
-              invalidate();
-              if (isLive()) {
-                setSendError(undefined);
-                setEditingScheduledDelayId(null);
-                setScheduledTime(null);
-              }
-            } catch (e: unknown) {
-              // A scheduled send leaves no local echo, so hand the message back.
-              restoreSubmission(submission);
-              if (!isLive()) return;
-              if (
-                e instanceof MatrixError &&
-                (e.errcode === ErrorCode.M_MAX_DELAY_EXCEEDED ||
-                  e.data?.['org.matrix.msc4140.errcode'] === 'M_MAX_DELAY_EXCEEDED')
-              ) {
-                const maxDelay =
-                  (e.data as { max_delay?: number })?.max_delay ??
-                  e.data?.['org.matrix.msc4140.max_delay'];
-                if (typeof maxDelay === 'number') setServerMaxDelayMs(maxDelay);
-                const maxDelayDays = maxDelay / daysToMs(1);
-                setSendError(
-                  `Scheduled time exceeds the maximum delay allowed by this server. Please choose an earlier time. The Maximum Delay is of ${maxDelayDays} day${maxDelayDays > 1 ? 's' : ''}.`
-                );
-              } else {
-                setSendError('Failed to schedule message. Please try again.');
-              }
-            }
-          } else if (editingScheduledDelayId) {
-            const scheduledDelayId = editingScheduledDelayId;
-            try {
-              await roomScheduleCoordinator.run(mx, roomId, async () => {
-                await cancelDelayedEvent(mx, scheduledDelayId);
+        const outgoing = await buildOutgoingMessage(submission.children, {
+          mx,
+          room,
+          roomId,
+          nicknames,
+          replyEvent,
+          replyDraft: submittedReplyDraft,
+          silentReply: submittedSilentReply,
+          settingsLinkBaseUrl,
+          canSendReaction,
+          pkCompatEnable,
+          pmpProxyingEnable,
+          pmpLatchingEnable,
+          pmpNoFallback,
+          latchedPersona,
+          isPKCommand: (text) => PKitCommandMessageHandler.isPKCommand(text),
+          imagePacksUsed: imagePacksUsedRef.current,
+        });
+
+        if (outgoing.kind === 'empty') return;
+        if (outgoing.kind === 'quickReact') {
+          handleQuickReact(outgoing.key);
+          return;
+        }
+        if (outgoing.kind === 'pkCommand') {
+          await pluralkitCmdMessageHandler.handleMessage(outgoing.plainText);
+          return;
+        }
+        if (outgoing.kind === 'gifSearch') {
+          restoreReplyClaim(submission.replyClaim);
+          setInitialGifSearch(outgoing.query);
+          setEmojiBoardTab(EmojiBoardTab.Gif);
+          return;
+        }
+        if (outgoing.kind === 'command') {
+          const { command, plainText, customHtml } = outgoing;
+          if (command === Command.Poll) {
+            restoreReplyClaim(submission.replyClaim);
+            setShowPollPicker(true);
+          } else if (command === Command.Location && plainText.trim().length === 0) {
+            restoreReplyClaim(submission.replyClaim);
+            setShowLocationPicker(true);
+          } else commands[command as Command]?.exe(plainText, customHtml);
+          return;
+        }
+
+        const { content } = outgoing;
+        if (outgoing.latchPersona) {
+          await setCurrentlyUsedPerMessageProfileIdForRoom(mx, roomId, outgoing.latchPersona.id);
+          if (isLive()) setLatchedPersona(outgoing.latchPersona);
+        }
+        if (submittedReplyDraft) {
+          content['m.relates_to'] = getReplyContent(submittedReplyDraft, room);
+        }
+        const invalidate = () => {
+          if (isLive()) {
+            queryClient.invalidateQueries({ queryKey: ['delayedEvents', roomId] });
+          }
+        };
+
+        if (scheduledTime) {
+          try {
+            const delayMs = computeDelayMs(scheduledTime);
+            await roomScheduleCoordinator.run(mx, roomId, async () => {
+              if (editingScheduledDelayId) {
+                await cancelDelayedEvent(mx, editingScheduledDelayId);
                 if (isLive()) setEditingScheduledDelayId(null);
-                debugLog.info('message', 'Sending message after cancelling scheduled event', {
-                  roomId,
-                  scheduledDelayId,
-                });
-                const res = await mx.sendMessage(
-                  roomId,
-                  threadRootId ?? null,
-                  content as RoomMessageEventContent
-                );
-                debugLog.info('message', 'Message sent successfully', {
-                  roomId,
-                  eventId: res.event_id,
-                });
-              });
-              invalidate();
-            } catch (error) {
-              debugLog.error('message', 'Failed to send message after cancelling scheduled event', {
-                roomId,
-                error: error instanceof Error ? error.message : String(error),
-              });
-              // The scheduled copy may still exist, so don't drop the user's text.
-              restoreSubmission(submission);
-              if (isLive()) setSendError('Failed to reschedule message. Please try again.');
-            }
-          } else {
-            const msgSendStart = performance.now();
-            debugLog.info('message', 'Sending message', {
-              roomId,
-              msgtype: content.msgtype,
+              }
+              if (isEncrypted) {
+                await sendDelayedMessageE2EE(mx, roomId, room, content, delayMs);
+              } else {
+                await sendDelayedMessage(mx, roomId, content as RoomMessageEventContent, delayMs);
+              }
             });
-            try {
-              const res = await Sentry.startSpan(
-                {
-                  name: 'message.send',
-                  op: 'matrix.message',
-                  attributes: { encrypted: String(isEncrypted) },
-                },
-                () =>
-                  mx.sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
+            invalidate();
+            if (isLive()) {
+              setSendError(undefined);
+              setEditingScheduledDelayId(null);
+              setScheduledTime(null);
+            }
+          } catch (e: unknown) {
+            // A scheduled send leaves no local echo, so hand the message back.
+            restoreSubmission(submission);
+            if (!isLive()) return;
+            if (
+              e instanceof MatrixError &&
+              (e.errcode === ErrorCode.M_MAX_DELAY_EXCEEDED ||
+                e.data?.['org.matrix.msc4140.errcode'] === 'M_MAX_DELAY_EXCEEDED')
+            ) {
+              const maxDelay =
+                (e.data as { max_delay?: number })?.max_delay ??
+                e.data?.['org.matrix.msc4140.max_delay'];
+              if (typeof maxDelay === 'number') setServerMaxDelayMs(maxDelay);
+              const maxDelayDays = maxDelay / daysToMs(1);
+              setSendError(
+                `Scheduled time exceeds the maximum delay allowed by this server. Please choose an earlier time. The Maximum Delay is of ${maxDelayDays} day${maxDelayDays > 1 ? 's' : ''}.`
+              );
+            } else {
+              setSendError('Failed to schedule message. Please try again.');
+            }
+          }
+        } else if (editingScheduledDelayId) {
+          const scheduledDelayId = editingScheduledDelayId;
+          try {
+            await roomScheduleCoordinator.run(mx, roomId, async () => {
+              await cancelDelayedEvent(mx, scheduledDelayId);
+              if (isLive()) setEditingScheduledDelayId(null);
+              debugLog.info('message', 'Sending message after cancelling scheduled event', {
+                roomId,
+                scheduledDelayId,
+              });
+              const res = await mx.sendMessage(
+                roomId,
+                threadRootId ?? null,
+                content as RoomMessageEventContent
               );
               debugLog.info('message', 'Message sent successfully', {
                 roomId,
                 eventId: res.event_id,
               });
-              Sentry.metrics.distribution(
-                'sable.message.send_latency_ms',
-                performance.now() - msgSendStart,
-                { attributes: { encrypted: String(isEncrypted) } }
-              );
-            } catch (error: unknown) {
-              debugLog.error('message', 'Failed to send message', {
-                roomId,
-                error: error instanceof Error ? error.message : String(error),
-              });
-              Sentry.metrics.count('sable.message.send_error', 1, {
-                attributes: { encrypted: String(isEncrypted) },
-              });
-              log.error('failed to send message', { roomId }, error);
-              // The failed send stays in the timeline as a local echo the user can retry,
-              // so the composer is intentionally left empty here.
-            }
+            });
+            invalidate();
+          } catch (error) {
+            debugLog.error('message', 'Failed to send message after cancelling scheduled event', {
+              roomId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            // The scheduled copy may still exist, so don't drop the user's text.
+            restoreSubmission(submission);
+            if (isLive()) setSendError('Failed to reschedule message. Please try again.');
           }
-        } finally {
-          if (isLive()) setIsSending(false);
+        } else {
+          const msgSendStart = performance.now();
+          debugLog.info('message', 'Sending message', {
+            roomId,
+            msgtype: content.msgtype,
+          });
+          try {
+            const res = await Sentry.startSpan(
+              {
+                name: 'message.send',
+                op: 'matrix.message',
+                attributes: { encrypted: String(isEncrypted) },
+              },
+              () => mx.sendMessage(roomId, threadRootId ?? null, content as RoomMessageEventContent)
+            );
+            debugLog.info('message', 'Message sent successfully', {
+              roomId,
+              eventId: res.event_id,
+            });
+            Sentry.metrics.distribution(
+              'sable.message.send_latency_ms',
+              performance.now() - msgSendStart,
+              { attributes: { encrypted: String(isEncrypted) } }
+            );
+          } catch (error: unknown) {
+            debugLog.error('message', 'Failed to send message', {
+              roomId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            Sentry.metrics.count('sable.message.send_error', 1, {
+              attributes: { encrypted: String(isEncrypted) },
+            });
+            log.error('failed to send message', { roomId }, error);
+            // The failed send stays in the timeline as a local echo the user can retry,
+            // so the composer is intentionally left empty here.
+          }
         }
       },
       [
@@ -1715,10 +1708,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const submit = useCallback(() => {
-      if (submissionInFlightRef.current) return Promise.resolve(undefined);
-      submissionInFlightRef.current = true;
       // A mobile edit replaces an existing event, so it owns neither the draft nor the reply.
       const isMobileEdit = Boolean(editingEvent && isMobile);
+      const duplicateTapWouldResend = selectedFilesRef.current.length > 0 || isMobileEdit;
+      if (duplicateTapWouldResend) {
+        if (submissionInFlightRef.current) return Promise.resolve(undefined);
+        submissionInFlightRef.current = true;
+      }
       const submission = takeSubmission({
         clearEditor: !isMobileEdit,
         claimReplyDraft: !isMobileEdit,
@@ -1727,7 +1723,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         composerControllerRef.current?.enqueue((isLive) => executeSubmit(submission, isLive)) ??
         Promise.resolve(undefined);
       return queued.finally(() => {
-        submissionInFlightRef.current = false;
+        if (duplicateTapWouldResend) submissionInFlightRef.current = false;
       });
     }, [editingEvent, executeSubmit, isMobile, takeSubmission]);
 

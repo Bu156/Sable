@@ -49,7 +49,7 @@ for (const sig of readdirSync(dir).filter((f) => f.endsWith('.sig'))) {
     platforms['darwin-aarch64'] = entry;
     platforms['darwin-x86_64'] = entry;
   } else if (name.endsWith('.appimage')) {
-    platforms['linux-x86_64'] = entry;
+    platforms[name.includes('-linux-aarch64') ? 'linux-aarch64' : 'linux-x86_64'] = entry;
   } else if (name.endsWith('-setup.exe') || name.endsWith('.nsis.zip')) {
     platforms['windows-x86_64'] = entry;
     windowsIsNsis = true;

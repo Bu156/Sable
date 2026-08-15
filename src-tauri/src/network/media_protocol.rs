@@ -45,7 +45,6 @@ const READ_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 // Small and multiplexed over one HTTP/2 connection, so a tight cap only serialises the timeline.
 const MAX_CONCURRENT_THUMBNAIL_REQUESTS: usize = 12;
-// Originals stay capped: more parallelism just splits the same mobile bandwidth.
 const MAX_CONCURRENT_DOWNLOAD_REQUESTS: usize = 6;
 // The frontend mounts (and starts requesting media) before it hands us the session, so a request
 // may arrive first. `<img>` never retries, so waiting beats answering 503.
@@ -60,16 +59,6 @@ const TEMP_CACHE_SUBDIR: &str = "sable-media-temp";
 const MAX_TEMP_CACHE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
 
 type FetchResult = Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode>;
-
-/// Uninhabited off Android, so the streaming branches compile out.
-#[cfg(target_os = "android")]
-type FetchProgress = Option<Arc<android_loopback::PendingMedia>>;
-#[cfg(not(target_os = "android"))]
-type FetchProgress = Option<std::convert::Infallible>;
-
-// Published per flushed batch, so a reader never sees bytes still sitting in the write buffer.
-#[cfg(target_os = "android")]
-const PROGRESS_FLUSH_BYTES: u64 = 64 * 1024;
 
 pub struct MediaSessionState {
     session_store: SessionStore,
@@ -276,7 +265,7 @@ pub fn set_media_encryption(
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub async fn prepare_loopback_video<R: Runtime>(
+pub async fn prepare_loopback_media<R: Runtime>(
     app: AppHandle<R>,
     url: String,
 ) -> Result<String, String> {
@@ -401,44 +390,11 @@ async fn handle_request<R: Runtime>(
     let dir = cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let temp_dir = temp_cache_dir(app).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Wry blocks the webview's `shouldInterceptRequest` thread for all of this and drops the
-    // response after 30s, so redirect before fetching. Range requests seek media already cached.
-    #[cfg(target_os = "android")]
-    if !loopback && range.is_none() {
-        if let Some(server) = &state.loopback {
-            let (redirect, pending) = server.redirect_pending(&session, &key);
-            if let Some(pending) = pending {
-                let app = app.clone();
-                let session = session.clone();
-                let key = key.clone();
-                tauri::async_runtime::spawn(async move {
-                    let state = app.state::<MediaSessionState>();
-                    let progress = Some(Arc::clone(&pending));
-                    let stored =
-                        ensure_cached(&state, &session, &key, media_url, dir, temp_dir, &progress)
-                            .await
-                            .ok()
-                            .and_then(|(content_type, in_memory_body, disk_path)| {
-                                // An in-memory body means there is no file for the loopback to open.
-                                in_memory_body
-                                    .is_none()
-                                    .then_some((disk_path, content_type))
-                            });
-                    if let Some(server) = &state.loopback {
-                        server.publish(&session, &key, stored.clone());
-                    }
-                    pending.resolve(stored);
-                });
-            }
-            return Ok(redirect);
-        }
-    }
-
     let (content_type, in_memory_body, disk_path) =
-        ensure_cached(&state, &session, &key, media_url, dir, temp_dir, &None).await?;
+        ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
 
     #[cfg(target_os = "android")]
-    if loopback && in_memory_body.is_none() && content_type.starts_with("video/") {
+    if loopback && in_memory_body.is_none() {
         if let Some(loopback) = &state.loopback {
             return Ok(loopback.redirect_response(&session, &key, disk_path, &content_type));
         }
@@ -465,7 +421,6 @@ async fn ensure_cached(
     media_url: Url,
     dir: PathBuf,
     temp_dir: PathBuf,
-    progress: &FetchProgress,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
     ensure_cached_with_limits(
         state,
@@ -476,7 +431,6 @@ async fn ensure_cached(
         temp_dir,
         MAX_CACHE_BYTES,
         MAX_TEMP_CACHE_BYTES,
-        progress,
     )
     .await
 }
@@ -491,7 +445,6 @@ async fn ensure_cached_with_limits(
     temp_dir: PathBuf,
     max_persistent_cache_bytes: u64,
     max_temp_cache_bytes: u64,
-    progress: &FetchProgress,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
     let body_path = dir.join(key);
     let content_type_path = dir.join(format!("{key}.ct"));
@@ -569,7 +522,6 @@ async fn ensure_cached_with_limits(
         temp_content_type_path,
         max_persistent_cache_bytes,
         max_temp_cache_bytes,
-        progress,
     )
     .await;
 
@@ -625,7 +577,6 @@ async fn fetch_and_cache(
     temp_content_type_path: PathBuf,
     max_persistent_cache_bytes: u64,
     max_temp_cache_bytes: u64,
-    progress: &FetchProgress,
 ) -> Result<(String, Option<Arc<Vec<u8>>>, PathBuf), StatusCode> {
     let permit = acquire_lane(state, &media_url).await;
 
@@ -697,15 +648,7 @@ async fn fetch_and_cache(
 
     // Plaintext media streams to disk, so peak memory is one chunk instead of the whole file.
     let staging_path = temp_body_path.with_extension("part");
-    match stream_to_staging_file(
-        &mut upstream,
-        temp_dir.clone(),
-        staging_path.clone(),
-        progress,
-        &content_type,
-    )
-    .await
-    {
+    match stream_to_staging_file(&mut upstream, temp_dir.clone(), staging_path.clone()).await {
         StreamOutcome::Written(size) => {
             drop(permit);
             let (target_dir, target_body, target_ct, max_bytes) =
@@ -765,8 +708,6 @@ async fn stream_to_staging_file(
     upstream: &mut tauri_plugin_http::reqwest::Response,
     temp_dir: PathBuf,
     staging_path: PathBuf,
-    progress: &FetchProgress,
-    content_type: &str,
 ) -> StreamOutcome {
     if tokio::fs::create_dir_all(&temp_dir).await.is_err() {
         return StreamOutcome::Unstorable;
@@ -777,16 +718,6 @@ async fn stream_to_staging_file(
 
     let mut file = tokio::io::BufWriter::new(file);
     let mut written: u64 = 0;
-    #[cfg(target_os = "android")]
-    let mut published: u64 = 0;
-
-    // Without a length the response cannot be framed, so readers wait for the finished file.
-    #[cfg(target_os = "android")]
-    if let (Some(pending), Some(total)) = (progress, upstream.content_length()) {
-        pending.begin_stream(staging_path.clone(), content_type.to_owned(), total);
-    }
-    #[cfg(not(target_os = "android"))]
-    let _ = (progress, content_type);
 
     loop {
         match upstream.chunk().await {
@@ -798,24 +729,9 @@ async fn stream_to_staging_file(
                     break;
                 }
                 written += chunk.len() as u64;
-
-                #[cfg(target_os = "android")]
-                if let Some(pending) = progress {
-                    if written - published >= PROGRESS_FLUSH_BYTES {
-                        if tokio::io::AsyncWriteExt::flush(&mut file).await.is_err() {
-                            break;
-                        }
-                        published = written;
-                        pending.advance(written);
-                    }
-                }
             }
             Ok(None) => {
                 if tokio::io::AsyncWriteExt::flush(&mut file).await.is_ok() {
-                    #[cfg(target_os = "android")]
-                    if let Some(pending) = progress {
-                        pending.advance(written);
-                    }
                     return StreamOutcome::Written(written);
                 }
                 break;
@@ -1127,7 +1043,6 @@ mod tests {
             temp,
             1024 * 1024,
             1024 * 1024,
-            &None,
         )
         .await;
         fs::remove_dir_all(root).ok();
