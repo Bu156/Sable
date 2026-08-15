@@ -187,6 +187,12 @@ const dividerIds = (processed: ProcessedEvent[]) =>
   processed.filter((e) => e.willRenderNewDivider).map((e) => e.id);
 
 describe('useProcessedTimeline new-messages divider', () => {
+  it('deduplicates events from overlapping timeline windows', () => {
+    const event = createEvent({ id: '$duplicate' });
+
+    expect(renderedIds(processTimeline([event, event], undefined))).toEqual(['$duplicate']);
+  });
+
   it('renders an event that is still encrypted', () => {
     const processed = processTimeline(
       [

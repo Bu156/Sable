@@ -447,6 +447,7 @@ const mergeRelationEdits = (
 type TimelineProcessingState = {
   prevEvent?: MatrixEvent;
   prevIteratedEventId?: string;
+  seenEventIds: Set<string>;
   isPrevRendered: boolean;
   newDivider: boolean;
   dayDivider: boolean;
@@ -459,6 +460,7 @@ type TimelineProcessingOptions = Omit<
   ResolvedHiddenEventSettings;
 
 const emptyProcessingState = (): TimelineProcessingState => ({
+  seenEventIds: new Set(),
   isPrevRendered: false,
   newDivider: false,
   dayDivider: false,
@@ -488,7 +490,7 @@ const processTimelineItems = (
     hideMemberInReadOnly,
     skipThreadFilter,
   } = options;
-  const state = { ...initialState };
+  const state = { ...initialState, seenEventIds: new Set(initialState.seenEventIds) };
   const result: ProcessedEvent[] = [];
 
   for (const item of items) {
@@ -498,6 +500,8 @@ const processTimelineItems = (
     const { threadRootId } = mEvent;
     const mEventId = mEvent.getId();
     if (!mEventId) continue;
+    if (state.seenEventIds.has(mEventId)) continue;
+    state.seenEventIds.add(mEventId);
 
     if (!state.newDivider && readUptoEventId) {
       state.newDivider = state.prevIteratedEventId === readUptoEventId;
