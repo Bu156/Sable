@@ -80,6 +80,21 @@ export function checkIfGif(url: string, mimetype?: string, body?: string) {
   );
 }
 
+// Matches Element Web's timeline thumbnail budget.
+const TIMELINE_THUMBNAIL_WIDTH = 800;
+const TIMELINE_THUMBNAIL_HEIGHT = 600;
+const THUMBNAIL_MIN_SOURCE_BYTES = 1024 * 1024;
+
+// Follows Element Web's `getThumbUrl`, except that unknown dimensions keep the original: stickers
+// and custom emoji render through this component too and routinely omit `info`.
+function wantsThumbnail(info: IImageInfo | undefined, width: number, height: number): boolean {
+  if (!info?.w || !info.h || !info.size) return false;
+  if (info.w <= width && info.h <= height) return false;
+  // At 1x the thumbnail is already full quality for the box; denser screens keep the original
+  // until the file is big enough that the bytes matter more than the sharpness.
+  return window.devicePixelRatio === 1 || info.size > THUMBNAIL_MIN_SOURCE_BYTES;
+}
+
 type RenderViewerProps = {
   src: string;
   alt: string;
@@ -167,10 +182,30 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const isGif = checkIfGif(url, info?.mimetype, body);
 
+    const [thumbnailFailed, setThumbnailFailed] = useState(false);
+    // A caller-supplied edge means it already decided it wants a thumbnail of that size.
+    const explicitEdge = typeof matrixThumbnailMaxEdge === 'number' && matrixThumbnailMaxEdge > 0;
+    // Synapse rejects non-integer dimensions with a 400.
+    const thumbWidth = Math.round(explicitEdge ? matrixThumbnailMaxEdge : TIMELINE_THUMBNAIL_WIDTH);
+    const thumbHeight = Math.round(
+      explicitEdge ? matrixThumbnailMaxEdge : TIMELINE_THUMBNAIL_HEIGHT
+    );
+    const usesThumbnail =
+      !encInfo && // the homeserver cannot scale media it cannot decrypt
+      !isGif && // scaling drops the animation
+      !url.startsWith('http') &&
+      !thumbnailFailed &&
+      (explicitEdge || wantsThumbnail(info, thumbWidth, thumbHeight));
+
     const rawMediaUrl = useMemo(() => {
       if (url.startsWith('http')) return url;
+      if (usesThumbnail) {
+        return (
+          mxcUrlToHttp(mx, url, useAuthentication, thumbWidth, thumbHeight, 'scale') ?? undefined
+        );
+      }
       return mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
-    }, [mx, url, useAuthentication]);
+    }, [mx, url, useAuthentication, usesThumbnail, thumbWidth, thumbHeight]);
 
     const resolvedMediaUrl = useRenderableMediaUrl(encInfo ? undefined : rawMediaUrl);
 
@@ -205,12 +240,8 @@ export const ImageContent = as<'div', ImageContentProps>(
         setViewerFullSrc(null);
         return undefined;
       }
-      if (
-        typeof matrixThumbnailMaxEdge !== 'number' ||
-        matrixThumbnailMaxEdge <= 0 ||
-        encInfo ||
-        url.startsWith('http')
-      ) {
+      // The timeline shows a scaled rendition, so the viewer has to re-fetch the original.
+      if (!usesThumbnail) {
         return undefined;
       }
       let cancelled = false;
@@ -222,13 +253,18 @@ export const ImageContent = as<'div', ImageContentProps>(
       return () => {
         cancelled = true;
       };
-    }, [viewer, matrixThumbnailMaxEdge, encInfo, url, mx, useAuthentication]);
+    }, [viewer, usesThumbnail, url, mx, useAuthentication]);
 
     const handleLoad = () => {
       setLoad(true);
     };
     const handleError = () => {
       setLoad(false);
+      // Homeservers 4xx thumbnail requests for media they cannot scale; the original still works.
+      if (usesThumbnail) {
+        setThumbnailFailed(true);
+        return;
+      }
       setError(true);
     };
 
@@ -254,6 +290,15 @@ export const ImageContent = as<'div', ImageContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
+
+    // Guarded by a ref rather than `loadSrc` identity: `loadSrc` changes on every render when the
+    // caller passes `info`/`encInfo` inline, which would otherwise re-fetch in a loop.
+    const fallbackLoadedRef = useRef(false);
+    useEffect(() => {
+      if (!thumbnailFailed || fallbackLoadedRef.current) return;
+      fallbackLoadedRef.current = true;
+      loadSrc().catch(() => undefined);
+    }, [thumbnailFailed, loadSrc]);
 
     const imageW = info?.w;
     const imageH = info?.h;
