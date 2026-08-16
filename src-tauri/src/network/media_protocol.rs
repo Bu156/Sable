@@ -24,7 +24,7 @@ use lane::{LanePermit, LifoLane};
 use loopback::LoopbackMediaServer;
 use response::{
     apply_cors_headers, error_response, ok_response, read_full, serve_range, serve_range_memory,
-    session_unavailable_response, sniff_image_content_type,
+    session_unavailable_response, sniff_media_content_type,
 };
 use session::{MediaSession, SessionStore};
 use tauri_plugin_http::reqwest::{
@@ -600,12 +600,12 @@ async fn fetch_and_cache(
         );
     }
 
-    let content_type = upstream
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_owned();
+    let content_type = normalize_content_type(
+        upstream
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+    );
 
     // Encrypted media stays buffered: its SHA-256 only verifies over the whole ciphertext.
     if state.encryption.contains(media_url.as_str()) {
@@ -839,14 +839,24 @@ async fn read_content_type(body_path: PathBuf, content_type_path: PathBuf) -> Op
         if !body_path.is_file() {
             return None;
         }
-        fs::read_to_string(&content_type_path).ok()
+        fs::read_to_string(&content_type_path)
+            .ok()
+            .map(|stored| normalize_content_type(Some(&stored)))
     })
     .await
     .unwrap_or(None)
 }
 
-/// On a cache hit where the stored content type is octet-stream, re-sniff the
-/// body file's magic bytes and rewrite the .ct file if a real image type is found.
+// Empty becomes octet-stream so it reaches the sniffer; an empty Content-Type is fatal
+// under `nosniff`.
+fn normalize_content_type(raw: Option<&str>) -> String {
+    let trimmed = raw.unwrap_or_default().trim();
+    if trimmed.is_empty() {
+        return "application/octet-stream".to_owned();
+    }
+    trimmed.to_owned()
+}
+
 // Images are the bulk of the traffic and would drown the log.
 fn log_served_content_type(content_type: &str, ranged: bool) {
     if content_type.starts_with("image/") {
@@ -859,6 +869,8 @@ fn log_served_content_type(content_type: &str, ranged: bool) {
     }
 }
 
+/// On a cache hit where the stored content type is octet-stream, re-sniff the
+/// body file's magic bytes and rewrite the .ct file if a known media type is found.
 async fn sniff_and_fix_content_type(
     body_path: PathBuf,
     content_type_path: PathBuf,
@@ -873,9 +885,9 @@ async fn sniff_and_fix_content_type(
             Ok(f) => f,
             Err(_) => return ct_for_closure,
         };
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; 512];
         let n = file.read(&mut buf).unwrap_or(0);
-        if let Some(sniffed) = sniff_image_content_type(&buf[..n]) {
+        if let Some(sniffed) = sniff_media_content_type(&buf[..n]) {
             let _ = fs::write(&content_type_path, sniffed);
             return sniffed.to_owned();
         }
@@ -957,8 +969,8 @@ mod tests {
     use tauri::http::{StatusCode, Uri};
 
     use super::{
-        cache_key, session_marker_matches, should_retry_with_session, MediaSession,
-        MediaSessionState, Url,
+        cache_key, normalize_content_type, session_marker_matches, should_retry_with_session,
+        MediaSession, MediaSessionState, Url,
     };
 
     static TEST_CACHE_ID: AtomicU64 = AtomicU64::new(0);
@@ -1494,5 +1506,18 @@ mod tests {
             cache_key("@a:example.org", &format!("{base}#retry=1")),
             cache_key("@a:example.org", &format!("{base}#retry=1"))
         );
+    }
+
+    #[test]
+    fn blank_content_types_become_octet_stream() {
+        for raw in [None, Some(""), Some("   "), Some("\n")] {
+            assert_eq!(normalize_content_type(raw), "application/octet-stream");
+        }
+    }
+
+    #[test]
+    fn real_content_types_are_kept_and_trimmed() {
+        assert_eq!(normalize_content_type(Some("video/webm")), "video/webm");
+        assert_eq!(normalize_content_type(Some("  video/mp4 ")), "video/mp4");
     }
 }
