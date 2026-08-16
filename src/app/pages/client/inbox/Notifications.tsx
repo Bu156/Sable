@@ -182,7 +182,7 @@ function NotificationRowItem({
               variant="Primary"
               radii="Pill"
               onClick={() => {
-                void markAsRead(mx, room.roomId, hideReads)
+                void markAsRead(mx, room.roomId, hideReads, true)
                   .then(onMarkRead)
                   .catch(() => showToast('Unable to mark this room as read.'));
               }}
