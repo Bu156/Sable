@@ -13,17 +13,15 @@ use tauri::{
     AppHandle, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder,
 };
 
-#[cfg(target_os = "android")]
-mod android_loopback;
 mod crypto;
 mod lane;
+mod loopback;
 mod response;
 mod session;
 
-#[cfg(target_os = "android")]
-use android_loopback::LoopbackMediaServer;
 use crypto::EncryptionStore;
 use lane::{LanePermit, LifoLane};
+use loopback::LoopbackMediaServer;
 use response::{
     apply_cors_headers, error_response, ok_response, read_full, serve_range, serve_range_memory,
     session_unavailable_response, sniff_image_content_type,
@@ -68,7 +66,6 @@ pub struct MediaSessionState {
     download_lane: LifoLane,
     cache_miss_gates: Mutex<HashMap<String, Weak<AsyncMutex<Option<FetchResult>>>>>,
     negative_cache: Mutex<HashMap<String, (StatusCode, Instant)>>,
-    #[cfg(target_os = "android")]
     loopback: Option<LoopbackMediaServer>,
 }
 
@@ -82,7 +79,6 @@ impl Default for MediaSessionState {
             download_lane: LifoLane::new(MAX_CONCURRENT_DOWNLOAD_REQUESTS),
             cache_miss_gates: Mutex::new(HashMap::new()),
             negative_cache: Mutex::new(HashMap::new()),
-            #[cfg(target_os = "android")]
             loopback: LoopbackMediaServer::start().ok(),
         }
     }
@@ -116,7 +112,6 @@ impl MediaSessionState {
     fn set_session(&self, session: MediaSession) -> Result<(), String> {
         self.session_store.set(session, || {
             self.forget_client_errors();
-            #[cfg(target_os = "android")]
             self.clear_loopback_media();
         })
     }
@@ -124,12 +119,10 @@ impl MediaSessionState {
     fn clear_session(&self) -> Result<(), String> {
         self.session_store.clear(|| {
             self.forget_client_errors();
-            #[cfg(target_os = "android")]
             self.clear_loopback_media();
         })
     }
 
-    #[cfg(target_os = "android")]
     fn clear_loopback_media(&self) {
         if let Some(loopback) = &self.loopback {
             loopback.clear();
@@ -263,7 +256,6 @@ pub fn set_media_encryption(
         .register(&url, &key, &iv, &sha256, &version, mime_type)
 }
 
-#[cfg(target_os = "android")]
 #[tauri::command]
 pub async fn prepare_loopback_media<R: Runtime>(
     app: AppHandle<R>,
@@ -350,9 +342,6 @@ async fn handle_request<R: Runtime>(
     range: Option<String>,
     loopback: bool,
 ) -> Result<Response<Vec<u8>>, StatusCode> {
-    #[cfg(not(target_os = "android"))]
-    let _ = loopback;
-
     let target = percent_encoding::percent_decode_str(uri.path().trim_start_matches('/'))
         .decode_utf8()
         .map_err(|_| StatusCode::BAD_REQUEST)?
@@ -392,8 +381,8 @@ async fn handle_request<R: Runtime>(
 
     let (content_type, in_memory_body, disk_path) =
         ensure_cached(&state, &session, &key, media_url, dir, temp_dir).await?;
+    log_served_content_type(&content_type, range.is_some());
 
-    #[cfg(target_os = "android")]
     if loopback && in_memory_body.is_none() {
         if let Some(loopback) = &state.loopback {
             return Ok(loopback.redirect_response(&session, &key, disk_path, &content_type));
@@ -858,6 +847,18 @@ async fn read_content_type(body_path: PathBuf, content_type_path: PathBuf) -> Op
 
 /// On a cache hit where the stored content type is octet-stream, re-sniff the
 /// body file's magic bytes and rewrite the .ct file if a real image type is found.
+// Images are the bulk of the traffic and would drown the log.
+fn log_served_content_type(content_type: &str, ranged: bool) {
+    if content_type.starts_with("image/") {
+        return;
+    }
+    if content_type == "application/octet-stream" {
+        log::warn!("[sable-media] serving application/octet-stream (ranged={ranged}); nosniff blocks decoding");
+    } else {
+        log::info!("[sable-media] serving {content_type} (ranged={ranged})");
+    }
+}
+
 async fn sniff_and_fix_content_type(
     body_path: PathBuf,
     content_type_path: PathBuf,

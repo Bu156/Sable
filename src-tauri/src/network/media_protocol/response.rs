@@ -219,7 +219,7 @@ pub(super) fn error_response(status: StatusCode) -> Response<Vec<u8>> {
 }
 
 /// The app's own webview origins, which vary by platform and scheme.
-fn is_webview_origin(origin: &str) -> bool {
+pub(super) fn is_webview_origin(origin: &str) -> bool {
     matches!(
         origin,
         "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
