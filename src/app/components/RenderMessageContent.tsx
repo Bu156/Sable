@@ -104,6 +104,7 @@ const isSableChatEmbedCandidate = (url: string): boolean =>
 
 const CAPTION_STYLE: CSSProperties = { marginTop: config.space.S200, maxWidth: '100%' };
 const TEXT_STYLE: CSSProperties = { maxWidth: '100%' };
+const EXTERNAL_GIF_MAX_SIZE = 400;
 
 function RenderMessageContentInternal({
   displayName,
@@ -297,8 +298,23 @@ function RenderMessageContentInternal({
 
   if (externalGif) {
     const markedAsSpoiler = content[MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME] === true;
+    const externalGifWidth =
+      externalGif.h >= externalGif.w
+        ? `${(EXTERNAL_GIF_MAX_SIZE * externalGif.w) / externalGif.h}px`
+        : undefined;
     return (
       <Box direction="Column" style={{ maxWidth: '100%' }}>
+        {msgType === (MsgType.Text as string) && typeof content.body === 'string' && (
+          <Box
+            style={{
+              marginBottom: config.space.S200,
+              maxWidth: '100%',
+              wordBreak: 'break-word',
+            }}
+          >
+            <MText edited={edited} content={content} renderBody={renderBody} style={TEXT_STYLE} />
+          </Box>
+        )}
         <ImageContent
           url={externalGif.media_url}
           body={externalGif.title}
@@ -319,7 +335,13 @@ function RenderMessageContentInternal({
           loadLabel="Load GIF"
           loadDescription={`External GIF from ${externalGif.provider.toUpperCase()}`}
           deferMediaLoad
-          style={{ borderRadius: config.radii.R300, overflow: 'hidden' }}
+          style={{
+            borderRadius: config.radii.R300,
+            overflow: 'hidden',
+            width: externalGifWidth,
+            maxWidth: `min(100%, ${EXTERNAL_GIF_MAX_SIZE}px)`,
+            maxHeight: `${EXTERNAL_GIF_MAX_SIZE}px`,
+          }}
           onOpenViewer={mEvent ? () => onOpenMedia?.(mEvent) ?? false : undefined}
           renderImage={(p) => {
             if (!autoplayGifs && p.src) {

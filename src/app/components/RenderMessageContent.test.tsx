@@ -128,6 +128,7 @@ describe('RenderMessageContent', () => {
       hasEncryptionStateEvent: () => true,
     });
 
+    expect(screen.getByText(externalGifContent.body)).toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Load GIF' })).toBeInTheDocument();
   });
