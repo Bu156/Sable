@@ -4,9 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
 import {
+  getDirectForumPath,
   getDirectRoomPath,
+  getHomeForumPath,
   getHomeRoomPath,
   getSpacePath,
+  getSpaceForumPath,
   getSpaceRoomPath,
   resolveSection,
 } from '$pages/pathUtils';
@@ -18,6 +21,7 @@ import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
 import { useSelectedSpace } from './router/useSelectedSpace';
 import { useMatrixClient } from './useMatrixClient';
+import { CustomRoomType } from '$types/matrix/room';
 
 export const useRoomNavigate = () => {
   const navigate = useNavigate();
@@ -40,6 +44,7 @@ export const useRoomNavigate = () => {
     (roomId: string, eventId?: string, opts?: NavigateOptions) => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, roomId);
       const openSpaceTimeline = developerTools && spaceSelectedId === roomId;
+      const isForum = mx.getRoom(roomId)?.getType() === CustomRoomType.Forum;
 
       const orphanParents = openSpaceTimeline ? [roomId] : getOrphanParents(roomToParents, roomId);
       let destPath: string;
@@ -54,13 +59,19 @@ export const useRoomNavigate = () => {
 
         const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(mx, parentSpace);
         roomPart = openSpaceTimeline ? roomId : roomIdOrAlias;
-        destPath = getSpaceRoomPath(pSpaceIdOrAlias, roomPart, eventId);
+        destPath = isForum
+          ? getSpaceForumPath(pSpaceIdOrAlias, roomPart, eventId)
+          : getSpaceRoomPath(pSpaceIdOrAlias, roomPart, eventId);
       } else if (mDirects.has(roomId)) {
         roomPart = roomIdOrAlias;
-        destPath = getDirectRoomPath(roomPart, eventId);
+        destPath = isForum
+          ? getDirectForumPath(roomPart, eventId)
+          : getDirectRoomPath(roomPart, eventId);
       } else {
         roomPart = roomIdOrAlias;
-        destPath = getHomeRoomPath(roomPart, eventId);
+        destPath = isForum
+          ? getHomeForumPath(roomPart, eventId)
+          : getHomeRoomPath(roomPart, eventId);
       }
 
       const section = resolveSection(destPath);

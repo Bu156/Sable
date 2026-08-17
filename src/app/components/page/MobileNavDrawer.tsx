@@ -15,12 +15,15 @@ import { usePrefersReducedMotion } from '$hooks/usePrefersReducedMotion';
 import {
   DIRECT_PATH,
   DIRECT_ROOM_PATH,
+  DIRECT_ROOM_FORUM_PATH,
   EXPLORE_PATH,
   HOME_PATH,
   HOME_ROOM_PATH,
+  HOME_ROOM_FORUM_PATH,
   INBOX_PATH,
   SPACE_PATH,
   SPACE_ROOM_PATH,
+  SPACE_ROOM_FORUM_PATH,
 } from '$pages/paths';
 import { resolveSection } from '$pages/pathUtils';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
@@ -67,6 +70,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   );
 
   const roomMatch =
+    matchPath({ path: HOME_ROOM_FORUM_PATH, end: false }, location.pathname) ??
+    matchPath({ path: DIRECT_ROOM_FORUM_PATH, end: false }, location.pathname) ??
+    matchPath({ path: SPACE_ROOM_FORUM_PATH, end: false }, location.pathname) ??
     matchPath({ path: HOME_ROOM_PATH, end: false }, location.pathname) ??
     matchPath({ path: DIRECT_ROOM_PATH, end: false }, location.pathname) ??
     matchPath({ path: SPACE_ROOM_PATH, end: false }, location.pathname);

@@ -20,6 +20,7 @@ import {
   getExplorePath,
   getExploreServerPath,
   getCreateRoomPath,
+  getHomeForumPath,
   getHomeRoomPath,
   getHomeSearchPath,
   withSearchParam,
@@ -64,6 +65,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { getMxIdServer } from '$utils/mxIdHelper';
 import { NavMenu } from '$components/nav/NavMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { CustomRoomType } from '$types/matrix/room';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -435,7 +437,11 @@ export function Home() {
                           selected={selected}
                           showAvatar={showIcons()}
                           hideText={hideText}
-                          linkPath={getHomeRoomPath(canonicalName)}
+                          linkPath={
+                            room.getType() === CustomRoomType.Forum
+                              ? getHomeForumPath(canonicalName)
+                              : getHomeRoomPath(canonicalName)
+                          }
                           notificationMode={getRoomNotificationMode(
                             notificationPreferences,
                             room.roomId
