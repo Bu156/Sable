@@ -1,5 +1,5 @@
 ---
-sable: minor
+default: minor
 ---
 
-Add a search bar to the settings sidebar.
+Settings improvements: search the settings sidebar and customize keyboard shortcuts (#1121).
