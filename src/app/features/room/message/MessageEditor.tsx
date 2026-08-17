@@ -462,6 +462,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
               htmlReactParserOptions={htmlReactParserOptions}
               hideCaption
               linkifyOpts={linkifyOpts}
+              room={room}
             />
           )}
           <Box
