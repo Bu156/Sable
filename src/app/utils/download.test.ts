@@ -81,8 +81,6 @@ describe('saveFileToDevice', () => {
     expect(showToast).toHaveBeenCalledWith('Saved to Downloads');
   });
 
-  // MediaStore resolves the final name when the pending flag is cleared, so the
-  // 32-name wall is hit after the bytes are written, not on create.
   const uniqueFileError = new Error(
     'Failed to build unique file: /storage/emulated/0/Download/Screenshot 2026-08-13 at 20.07.50.png' +
       ' _display_name=Screenshot 2026-08-13 at 20.07.50.png mime_type=image/png' +

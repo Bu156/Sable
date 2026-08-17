@@ -61,10 +61,8 @@ const splitExtension = (filename: string): [stem: string, extension: string] => 
   return at > 0 ? [filename.slice(0, at), filename.slice(at)] : [filename, ''];
 };
 
-// MediaStore only probes 32 numbered variants of a name before failing with
-// "Failed to build unique file". A pending file sits under a `.pending-` name,
-// so creation succeeds and the wall is only hit when the flag is cleared and
-// the file takes its final name — so the whole save is retried, not the create.
+// MediaStore gives up after 32 numbered variants, and resolves the final name
+// when the pending flag clears rather than on create, so retry the whole save.
 const saveWithUniqueName = async (
   filename: string,
   save: (filename: string) => Promise<void>
@@ -83,8 +81,7 @@ const reportSaveFailure = (
   filename: string,
   mimeType?: string
 ): void => {
-  // Names contain spaces, so the name goes first: `\S*` would otherwise stop at
-  // the first space and leave the rest of it in the message.
+  // Name first: names contain spaces, so `\S*` would leave the rest behind.
   const scrubbed = getErrorMessage(error)
     .split(splitExtension(filename)[0])
     .join('[FILENAME]')
