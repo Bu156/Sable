@@ -8,7 +8,14 @@ import { DirectRouteRoomProvider } from '$pages/client/direct';
 import { SpaceRouteRoomProvider } from '$pages/client/space';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { resolveSection, type SectionNav } from '$pages/pathUtils';
-import { HOME_ROOM_PATH, DIRECT_ROOM_PATH, SPACE_ROOM_PATH } from '$pages/paths';
+import {
+  DIRECT_ROOM_PATH,
+  DIRECT_ROOM_FORUM_PATH,
+  HOME_ROOM_PATH,
+  HOME_ROOM_FORUM_PATH,
+  SPACE_ROOM_PATH,
+  SPACE_ROOM_FORUM_PATH,
+} from '$pages/paths';
 import { isRoomAlias, isRoomId } from '$utils/matrix';
 
 type DisplayedRoom = {
@@ -23,6 +30,9 @@ function useDisplayedRoom(section: SectionNav | null): DisplayedRoom | undefined
   if (!section || !section.getRoomPath) return undefined;
 
   const roomMatch =
+    matchPath({ path: HOME_ROOM_FORUM_PATH, end: false }, location.pathname) ??
+    matchPath({ path: DIRECT_ROOM_FORUM_PATH, end: false }, location.pathname) ??
+    matchPath({ path: SPACE_ROOM_FORUM_PATH, end: false }, location.pathname) ??
     matchPath({ path: HOME_ROOM_PATH, end: false }, location.pathname) ??
     matchPath({ path: DIRECT_ROOM_PATH, end: false }, location.pathname) ??
     matchPath({ path: SPACE_ROOM_PATH, end: false }, location.pathname);
