@@ -183,8 +183,13 @@ export const getExploreServerPath = (server: string): string => {
 export const getCreatePath = (): string => CREATE_PATH;
 export const getCreateSpacePath = (spaceId?: string): string =>
   spaceId ? withSearchParam(CREATE_PATH, { spaceId }) : CREATE_PATH;
-export const getCreateRoomPath = (spaceId?: string): string =>
-  spaceId ? withSearchParam(CREATE_ROOM_PATH, { spaceId }) : CREATE_ROOM_PATH;
+export const getCreateRoomPath = (spaceId?: string, type?: string): string => {
+  const params: Record<string, string> = {};
+  if (spaceId) params.spaceId = spaceId;
+  if (type) params.type = type;
+
+  return Object.keys(params).length ? withSearchParam(CREATE_ROOM_PATH, params) : CREATE_ROOM_PATH;
+};
 export const getBugReportPath = (): string => BUG_REPORT_PATH;
 export const getNavigatePath = (): string => NAVIGATE_PATH;
 export const getProfilePath = (): string => PROFILE_PATH;
