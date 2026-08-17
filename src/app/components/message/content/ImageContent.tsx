@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactNode, SyntheticEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
@@ -95,6 +95,14 @@ function wantsThumbnail(info: IImageInfo | undefined, width: number, height: num
   return window.devicePixelRatio === 1 || info.size > THUMBNAIL_MIN_SOURCE_BYTES;
 }
 
+// `info.w`/`info.h` have the source EXIF orientation applied; homeservers that scale raw pixels
+// return a transposed thumbnail with no EXIF left for the browser to correct.
+function isTransposedThumbnail(info: IImageInfo | undefined, image: HTMLImageElement): boolean {
+  const { naturalWidth, naturalHeight } = image;
+  if (!info?.w || !info.h || !naturalWidth || !naturalHeight) return false;
+  return info.w > info.h !== naturalWidth > naturalHeight;
+}
+
 type RenderViewerProps = {
   src: string;
   alt: string;
@@ -108,7 +116,7 @@ type RenderImageProps = {
   title: string;
   src: string;
   info?: IImageInfo;
-  onLoad: () => void;
+  onLoad: (event?: SyntheticEvent<HTMLImageElement>) => void;
   onError: () => void;
   onLottieLoad: () => void;
   onLottieError: () => void;
@@ -255,7 +263,11 @@ export const ImageContent = as<'div', ImageContentProps>(
       };
     }, [viewer, usesThumbnail, url, mx, useAuthentication]);
 
-    const handleLoad = () => {
+    const handleLoad = (event?: SyntheticEvent<HTMLImageElement>) => {
+      if (usesThumbnail && event && isTransposedThumbnail(info, event.currentTarget)) {
+        setThumbnailFailed(true);
+        return;
+      }
       setLoad(true);
     };
     const handleError = () => {
