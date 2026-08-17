@@ -124,7 +124,7 @@
                 ;
               pname = "sable";
               fetcherVersion = 3;
-              hash = "sha256-1a05E/FVjTXQ4YR9I49elEbf99DnQ0rgr5AiFhI3dGk=";
+              hash = "sha256-EY8yEjtbGLLsuUDDW0Q+4b2llkEwllrxlwpi1TH4TcI=";
             };
 
           mkPnpmCheck =
