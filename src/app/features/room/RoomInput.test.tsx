@@ -130,7 +130,9 @@ vi.mock('$state/upload', async () => {
   };
 });
 
-vi.mock('$components/editor', () => {
+vi.mock('$components/editor', async () => {
+  const { useAutocompleteQuery } =
+    await import('$components/editor/autocomplete/useAutocompleteQuery');
   const textOf = (nodes: any[]): string =>
     nodes
       .map((node) => (typeof node.text === 'string' ? node.text : textOf(node.children ?? [])))
@@ -204,6 +206,7 @@ vi.mock('$components/editor', () => {
     toPlainText: textOf,
     trimCommand: (_command: unknown, text: string) => text,
     trimCustomHtml: (html: string) => html,
+    useAutocompleteQuery,
   };
 });
 

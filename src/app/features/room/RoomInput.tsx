@@ -50,12 +50,10 @@ import {
 import { Overlay, PopOut } from '$components/overlay-stack';
 
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import type {
-  EditorAutocompleteQuery,
-  ProseMirrorEditorController,
-} from '$components/editor/prosemirrorController';
+import type { ProseMirrorEditorController } from '$components/editor/prosemirrorController';
 import {
   AutocompletePrefix,
+  useAutocompleteQuery,
   createEmoticonElement,
   CustomEditor,
   customHtmlEqualsPlainText,
@@ -458,8 +456,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       },
       []
     );
-    const [autocompleteQuery, setAutocompleteQuery] =
-      useState<EditorAutocompleteQuery<AutocompletePrefix>>();
+    const [autocompleteQuery, setAutocompleteQuery, handleCloseAutocomplete] =
+      useAutocompleteQuery(editor);
     const [isQuickTextReact, setQuickTextReact] = useState(false);
 
     const replyDraftBase = useMemo(
@@ -638,7 +636,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         editor.getAutocompleteQuery(ANYWHERE_AUTOCOMPLETE_PREFIXES);
 
       setAutocompleteQuery(query);
-    }, [editor]);
+    }, [editor, setAutocompleteQuery]);
 
     const handleEditorChange = useCallback(() => {
       setHasText(!editor.isEmpty());
@@ -1370,15 +1368,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       });
     };
 
-    const handleCloseAutocomplete = useCallback(() => {
-      setAutocompleteQuery((prev) => {
-        if (prev !== undefined) {
-          editor.focus();
-        }
-        return undefined;
-      });
-    }, [editor]);
-
     const handleQuickReact = useCallback(
       (key: string, shortcode?: string) => {
         if (key.length > 0) {
@@ -1772,6 +1761,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setReplyDraft,
         enterForNewline,
         autocompleteQuery,
+        setAutocompleteQuery,
         isComposing,
         showAudioRecorder,
         editor,
