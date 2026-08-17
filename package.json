@@ -157,6 +157,7 @@
     "@vitest/ui": "^4.1.10",
     "buffer": "^6.0.3",
     "cloudflared": "^0.7.1",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "knip": "6.32.1",
     "oxfmt": "^0.57.0",
