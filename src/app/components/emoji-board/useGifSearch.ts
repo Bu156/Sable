@@ -18,8 +18,8 @@ type KlipyFormat = { gif?: KlipyFile };
 
 type KlipyResult = {
   id?: string | number;
+  slug?: string;
   title?: string;
-  itemurl?: string;
   file?: Partial<Record<'xs' | 'sm' | 'md' | 'hd', KlipyFormat>>;
 };
 
@@ -39,7 +39,9 @@ const parseKlipyResult = (klipyResult: KlipyResult): GifData => {
   return {
     id: klipyResult.id === undefined ? '' : String(klipyResult.id),
     title: klipyResult.title || 'GIF',
-    shareUrl: klipyResult.itemurl ?? fullRes?.url ?? '',
+    shareUrl: klipyResult.slug
+      ? `https://klipy.com/gifs/${encodeURIComponent(klipyResult.slug)}`
+      : (fullRes?.url ?? ''),
     mediaUrl: fullRes?.url ?? '',
     preview_url: preview?.url ?? fullRes?.url ?? '',
     width: fullRes?.width ?? preview?.width ?? 0,

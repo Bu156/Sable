@@ -35,7 +35,7 @@ const responseFor = (id: string): Response =>
           {
             id,
             title: id,
-            itemurl: `https://klipy.com/gifs/${id}`,
+            slug: `test-${id}`,
             file: { xs: { gif: { url: `https://${id}.preview` } } },
           },
         ],
@@ -83,7 +83,7 @@ describe('useGifSearch', () => {
       await flushPromises();
     });
     expect(result.current.gifs.gifs[0]?.id).toBe('second');
-    expect(result.current.gifs.gifs[0]?.shareUrl).toBe('https://klipy.com/gifs/second');
+    expect(result.current.gifs.gifs[0]?.shareUrl).toBe('https://klipy.com/gifs/test-second');
     expect(result.current.loading).toBe(false);
 
     first.resolve(responseFor('first'));
