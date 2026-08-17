@@ -13,7 +13,56 @@ import {
 } from '$pages/pathUtils';
 import { CustomRoomType } from '$types/matrix/room';
 
-type RoomRouteSection = 'home' | 'direct' | 'space';
+export type RoomRouteSection = 'home' | 'direct' | 'space';
+
+type RoomGateProps = {
+  section: RoomRouteSection;
+  /** Which view the current route shows: forum or timeline. */
+  forum: boolean;
+  roomIdOrAlias?: string;
+  spaceIdOrAlias?: string;
+  eventId?: string;
+};
+
+/** Renders the view matching the room type, redirecting when the route shows the other one. */
+export function RoomGate({
+  section,
+  forum,
+  roomIdOrAlias,
+  spaceIdOrAlias,
+  eventId,
+}: RoomGateProps) {
+  const room = useRoom();
+  const navigate = useNavigate();
+  const isForum = room.getType() === CustomRoomType.Forum;
+
+  useEffect(() => {
+    if (isForum === forum) return;
+
+    if (!roomIdOrAlias) return;
+
+    let path: string;
+    if (section === 'space') {
+      if (!spaceIdOrAlias) return;
+      path = isForum
+        ? getSpaceForumPath(spaceIdOrAlias, roomIdOrAlias, eventId)
+        : getSpaceRoomPath(spaceIdOrAlias, roomIdOrAlias, eventId);
+    } else if (section === 'direct') {
+      path = isForum
+        ? getDirectForumPath(roomIdOrAlias, eventId)
+        : getDirectRoomPath(roomIdOrAlias, eventId);
+    } else {
+      path = isForum
+        ? getHomeForumPath(roomIdOrAlias, eventId)
+        : getHomeRoomPath(roomIdOrAlias, eventId);
+    }
+
+    navigate(path, { replace: true });
+  }, [eventId, forum, isForum, navigate, roomIdOrAlias, section, spaceIdOrAlias]);
+
+  if (isForum !== forum) return null;
+  return forum ? <ForumView /> : <Room />;
+}
 
 type RoomRouteProps = {
   section: RoomRouteSection;
@@ -24,34 +73,14 @@ const decodeParam = (value: string | undefined): string | undefined =>
   value ? decodeURIComponent(value) : undefined;
 
 export function RoomRoute({ section, forum }: RoomRouteProps) {
-  const room = useRoom();
-  const navigate = useNavigate();
   const { roomIdOrAlias, spaceIdOrAlias, eventId } = useParams();
-  const isForum = room.getType() === CustomRoomType.Forum;
-
-  useEffect(() => {
-    if (isForum === forum) return;
-
-    const roomRef = decodeParam(roomIdOrAlias);
-    if (!roomRef) return;
-
-    const eventRef = decodeParam(eventId);
-    let path: string;
-    if (section === 'space') {
-      const spaceRef = decodeParam(spaceIdOrAlias);
-      if (!spaceRef) return;
-      path = isForum
-        ? getSpaceForumPath(spaceRef, roomRef, eventRef)
-        : getSpaceRoomPath(spaceRef, roomRef, eventRef);
-    } else if (section === 'direct') {
-      path = isForum ? getDirectForumPath(roomRef, eventRef) : getDirectRoomPath(roomRef, eventRef);
-    } else {
-      path = isForum ? getHomeForumPath(roomRef, eventRef) : getHomeRoomPath(roomRef, eventRef);
-    }
-
-    navigate(path, { replace: true });
-  }, [eventId, forum, isForum, navigate, roomIdOrAlias, section, spaceIdOrAlias]);
-
-  if (isForum !== forum) return null;
-  return forum ? <ForumView /> : <Room />;
+  return (
+    <RoomGate
+      section={section}
+      forum={forum}
+      roomIdOrAlias={decodeParam(roomIdOrAlias)}
+      spaceIdOrAlias={decodeParam(spaceIdOrAlias)}
+      eventId={decodeParam(eventId)}
+    />
+  );
 }

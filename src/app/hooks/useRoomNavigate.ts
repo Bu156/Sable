@@ -8,11 +8,12 @@ import {
   getDirectRoomPath,
   getHomeForumPath,
   getHomeRoomPath,
-  getSpacePath,
   getSpaceForumPath,
+  getSpacePath,
   getSpaceRoomPath,
   resolveSection,
 } from '$pages/pathUtils';
+import { CustomRoomType } from '$types/matrix/room';
 import { getOrphanParents, guessPerfectParent } from '$utils/room/hierarchy';
 import { roomToParentsAtom } from '$state/room/roomToParents';
 import { mDirectAtom } from '$state/mDirectList';
@@ -21,7 +22,6 @@ import { settingsAtom } from '$state/settings';
 import { useSetting } from '$state/hooks/settings';
 import { useSelectedSpace } from './router/useSelectedSpace';
 import { useMatrixClient } from './useMatrixClient';
-import { CustomRoomType } from '$types/matrix/room';
 
 export const useRoomNavigate = () => {
   const navigate = useNavigate();

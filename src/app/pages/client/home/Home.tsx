@@ -25,6 +25,7 @@ import {
   getHomeSearchPath,
   withSearchParam,
 } from '$pages/pathUtils';
+import { CustomRoomType } from '$types/matrix/room';
 import { useOpenShallowRoute } from '$pages/client/useShallowRoute';
 import { getCanonicalAliasOrRoomId } from '$utils/matrix';
 import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
@@ -65,7 +66,6 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { getMxIdServer } from '$utils/mxIdHelper';
 import { NavMenu } from '$components/nav/NavMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
-import { CustomRoomType } from '$types/matrix/room';
 
 type HomeMenuProps = {
   requestClose: () => void;
