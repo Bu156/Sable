@@ -2,9 +2,4 @@
 default: minor
 ---
 
-Add beta builds for desktop and mobile.
-
-- Greatly improved the mobile experience.
-- Added UnifiedPush support and improved notification reliability.
-- Improved the desktop experience with better shortcuts, updates, and window controls.
-- Improved native media handling, sharing, and diagnostics.
+Add beta desktop and mobile builds with a greatly improved mobile experience, UnifiedPush support and more reliable notifications, better desktop shortcuts, updates and window controls, and improved native media handling and sharing.

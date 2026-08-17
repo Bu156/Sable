@@ -2,4 +2,4 @@
 default: minor
 ---
 
-# Add accessibility tab and accessible color correction
+Add an accessibility settings tab with color correction filters.

@@ -1,5 +1,5 @@
 ---
-sable: minor
+default: minor
 ---
 
-Add a `/gif` composer command that opens the GIF picker.
+New composer commands: `/gif` opens the GIF picker and `/rainbowme` sends rainbow-formatted action messages (#1109).

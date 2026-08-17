@@ -2,4 +2,4 @@
 default: minor
 ---
 
-# Add table styling
+Style tables in formatted messages.
