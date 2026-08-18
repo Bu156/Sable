@@ -3,7 +3,7 @@ import type { ReactEventHandler, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import colorMXID from '$utils/colorMXID';
-import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
+import { useRenderableMediaSource } from '$hooks/useRenderableMediaUrl';
 import * as css from './UserAvatar.css';
 
 type UserAvatarProps = {
@@ -28,8 +28,7 @@ export function UserAvatar({
   renderFallback,
 }: UserAvatarProps) {
   const [error, setError] = useState(false);
-  const resolvedSrc = useRenderableMediaUrl(src);
-  const mediaSrc = resolvedSrc ?? src;
+  const mediaSrc = useRenderableMediaSource(src);
 
   useEffect(() => {
     setError(false);
