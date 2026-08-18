@@ -17,6 +17,7 @@ minimumReleaseAgeExclude:
   - '@sableclient/matrixrtc'
   - '@sableclient/sable-call-embedded'
   - '@sableclient/tauri-plugin-livekit-mobile'
+  - '@sableclient/tauri-plugin-notifications-api'
   - '@sableclient/twemoji-font'
 
 overrides:
