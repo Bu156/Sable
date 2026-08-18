@@ -223,6 +223,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'auto-update-check',
     'close-to-background-on-close',
     'show-system-tray-icon',
+    'spellcheck',
     'use-custom-title-bar',
   ],
   emojis: ['default-pack', 'select-pack'],
