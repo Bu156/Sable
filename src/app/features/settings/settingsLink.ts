@@ -199,6 +199,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'in-app-notifications',
     'mention-room',
     'mention-user-id',
+    'push-delivery-route',
     'reset-all-push-notifications',
     'rooms',
     'rooms-encrypted',
@@ -213,7 +214,9 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'rich-push-payloads',
     'unified-push-app-id',
     'unified-push-distributor',
+    'unified-push-embedded-server-url',
     'unified-push-gateway-url',
+    'web-push-gateway-url',
   ],
   devices: [
     'device-dashboard',
