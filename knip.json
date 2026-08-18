@@ -1,10 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "scripts/**/*.js",
-    "tests/e2e/global.setup.ts",
-    "tests/e2e/global.teardown.ts"
-  ],
+  "entry": ["scripts/**/*.js", "tests/e2e/global.setup.ts", "tests/e2e/global.teardown.ts"],
   "ignore": ["src/test/notifications-api-stub.ts"],
   "ignoreExportsUsedInFile": {
     "interface": true,
