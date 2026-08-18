@@ -235,8 +235,8 @@ describe('clipboard', () => {
   });
 });
 
-describe('ProseMirrorEditorController clearHistory', () => {
-  it('keeps undo working while composing, then wipes it after the send', () => {
+describe('ProseMirrorEditorController clear', () => {
+  it('keeps undo working while composing, then wipes it once cleared', () => {
     const { controller } = mount();
 
     controller.insertText('hello');
@@ -245,7 +245,6 @@ describe('ProseMirrorEditorController clearHistory', () => {
 
     controller.insertText('draft');
     controller.clear();
-    controller.clearHistory();
     controller.undo();
     expect(controller.getDocument()).toEqual(doc(''));
   });
@@ -255,7 +254,6 @@ describe('ProseMirrorEditorController clearHistory', () => {
     editable.focus();
 
     act(() => controller.clear());
-    act(() => controller.clearHistory());
 
     expect(editable).toBe(document.activeElement);
     expect(editable).toHaveAttribute('data-placeholder-visible', 'true');

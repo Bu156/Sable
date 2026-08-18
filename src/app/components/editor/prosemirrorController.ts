@@ -186,11 +186,9 @@ export class ProseMirrorEditorController {
     this.view?.focus();
   }
 
+  /** Drops the undo stack too: cleared content was sent, consumed, or abandoned. */
   clear(): void {
     this.setDocument(emptyEditorDocument());
-  }
-
-  clearHistory(): void {
     if (this.view) this.view.updateState(this.createState());
   }
 

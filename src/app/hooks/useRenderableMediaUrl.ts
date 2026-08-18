@@ -286,3 +286,11 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
 
   return resolvedState.url;
 }
+
+// Undefined while the url is still being prepared: on Tauri, rendering the raw source first
+// only means a second load once the loopback url lands, and an error on either latches.
+export function useRenderableMediaSource(url: string | undefined): string | undefined {
+  const resolvedUrl = useRenderableMediaUrl(url);
+  if (resolvedUrl) return resolvedUrl;
+  return isTauri() ? undefined : url;
+}

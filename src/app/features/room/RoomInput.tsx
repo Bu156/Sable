@@ -763,7 +763,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       });
     }, [threadRootId, setReplyDraft, mx]);
 
+    // Rewritten with equal content on unmount, and appending it again would duplicate it.
+    const appliedDraftRef = useRef<string>();
     useEffect(() => {
+      const draft = JSON.stringify(msgDraft);
+      if (appliedDraftRef.current === draft) return;
+      appliedDraftRef.current = draft;
       editor.appendDocument(msgDraft);
     }, [editor, msgDraft]);
 
@@ -1070,13 +1075,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         };
         if (clearEditor) {
           editor.clear();
-          editor.clearHistory();
+          // The draft outlives this component, and a remount re-applies it.
+          setMsgDraft([]);
           imagePacksUsedRef.current.clear();
           sendTypingStatus(false);
         }
         return submission;
       },
-      [claimReply, editor, sendTypingStatus]
+      [claimReply, editor, sendTypingStatus, setMsgDraft]
     );
     const restoreSubmission = useCallback(
       (submission: Submission) => {
@@ -2356,11 +2362,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       requestClose={closeEmojiBoard}
                     />
                   );
+                  // Mobile has no room for three triggers next to text.
+                  const onlyEmojiTrigger = isMobile && hasText;
                   const triggers = (
                     <>
                       {editorButtonOrder.map((id) => {
                         let button: ReactElement | null = null;
-                        if (id === 'gif' && editorGifButton) {
+                        if (id === 'gif' && editorGifButton && !onlyEmojiTrigger) {
                           button = (
                             <IconButton
                               ref={gifBtnRef}
@@ -2379,7 +2387,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                               })}
                             </IconButton>
                           );
-                        } else if (id === 'sticker' && editorStickerButton) {
+                        } else if (id === 'sticker' && editorStickerButton && !onlyEmojiTrigger) {
                           button = (
                             <IconButton
                               ref={stickerBtnRef}
