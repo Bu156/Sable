@@ -236,6 +236,22 @@ describe('useRenderableMediaUrl', () => {
     expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
   });
 
+  it('drops the previous loopback url when the media source goes away under Tauri', async () => {
+    tauriApi.isTauri.mockReturnValue(true);
+    const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
+
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string | undefined }) => useRenderableMediaUrl(url),
+      { initialProps: { url: 'https://example.org/banner.png' as string | undefined } }
+    );
+
+    await waitFor(() => expect(result.current).toBe(LOOPBACK_URL));
+
+    rerender({ url: undefined });
+
+    expect(result.current).toBeUndefined();
+  });
+
   it('passes through non-authenticated URLs unchanged under Tauri', async () => {
     tauriApi.isTauri.mockReturnValue(true);
     const { useRenderableMediaUrl } = await import('./useRenderableMediaUrl');
