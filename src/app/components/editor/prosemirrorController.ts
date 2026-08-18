@@ -123,10 +123,8 @@ export class ProseMirrorEditorController {
     this.setDocument(this.isEmpty() ? document : [...this.document, ...document]);
   }
 
-  mount(element: HTMLElement, attributes?: Record<string, string>): () => void {
-    this.view?.destroy();
-    this.attributes = attributes ?? {};
-    const state = EditorState.create({
+  private createState(): EditorState {
+    return EditorState.create({
       doc: toProseMirrorDocument(this.document),
       plugins: [
         beginCommandPlugin,
@@ -138,6 +136,12 @@ export class ProseMirrorEditorController {
       ],
       schema: editorSchema,
     });
+  }
+
+  mount(element: HTMLElement, attributes?: Record<string, string>): () => void {
+    this.view?.destroy();
+    this.attributes = attributes ?? {};
+    const state = this.createState();
     this.view = new EditorView(
       { mount: element },
       {
@@ -184,6 +188,10 @@ export class ProseMirrorEditorController {
 
   clear(): void {
     this.setDocument(emptyEditorDocument());
+  }
+
+  clearHistory(): void {
+    if (this.view) this.view.updateState(this.createState());
   }
 
   blur(): void {

@@ -234,3 +234,30 @@ describe('clipboard', () => {
     expect(controller.getDocument()).toEqual(doc('first', '', 'third'));
   });
 });
+
+describe('ProseMirrorEditorController clearHistory', () => {
+  it('keeps undo working while composing, then wipes it after the send', () => {
+    const { controller } = mount();
+
+    controller.insertText('hello');
+    controller.undo();
+    expect(controller.getDocument()).toEqual(doc(''));
+
+    controller.insertText('draft');
+    controller.clear();
+    controller.clearHistory();
+    controller.undo();
+    expect(controller.getDocument()).toEqual(doc(''));
+  });
+
+  it('reuses the focused editable so rebuilding state does not steal focus', () => {
+    const { controller, editable } = mount(doc('draft'));
+    editable.focus();
+
+    act(() => controller.clear());
+    act(() => controller.clearHistory());
+
+    expect(editable).toBe(document.activeElement);
+    expect(editable).toHaveAttribute('data-placeholder-visible', 'true');
+  });
+});
