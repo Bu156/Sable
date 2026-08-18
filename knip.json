@@ -1,12 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "src/sw.ts",
     "scripts/**/*.js",
     "tests/e2e/global.setup.ts",
     "tests/e2e/global.teardown.ts"
   ],
-  "ignore": ["src/test/choochmeque-notifications-stub.ts"],
+  "ignore": ["src/test/notifications-api-stub.ts"],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
