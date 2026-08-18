@@ -147,25 +147,29 @@ vi.mock('$components/editor', async () => {
     top,
     after,
     bottom,
-  }: any) => (
-    <div>
-      {top}
-      {before}
-      <div
-        data-editable-name={editableName}
-        data-testid={editableName === 'RoomInput' ? 'room-input-editor' : undefined}
-        data-editor-text={editableName === 'RoomInput' ? textOf(editor.children) : undefined}
-        contentEditable
-        role="textbox"
-        aria-label="Room message"
-        tabIndex={0}
-        onInput={onChange}
-        onKeyDown={onKeyDown}
-      />
-      {after}
-      {bottom}
-    </div>
-  );
+  }: any) => {
+    const [, setRevision] = useState(0);
+    useEffect(() => editor.subscribe(() => setRevision((value) => value + 1)), [editor]);
+    return (
+      <div>
+        {top}
+        {before}
+        <div
+          data-editable-name={editableName}
+          data-testid={editableName === 'RoomInput' ? 'room-input-editor' : undefined}
+          data-editor-text={editableName === 'RoomInput' ? textOf(editor.children) : undefined}
+          contentEditable
+          role="textbox"
+          aria-label="Room message"
+          tabIndex={0}
+          onInput={onChange}
+          onKeyDown={onKeyDown}
+        />
+        {after}
+        {bottom}
+      </div>
+    );
+  };
   return {
     AutocompletePrefix: {
       RoomMention: 'room-mention',
@@ -919,7 +923,6 @@ describe('RoomInput submit regressions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prepare two attachments' }));
     fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Enter', code: 'Enter' });
 
-    // Clearing the composer remounts the editor subtree, so re-query the button.
     await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledTimes(2));
     expect(sendButton()).toBeDisabled();
     fireEvent.click(sendButton());
@@ -1093,6 +1096,67 @@ describe('RoomInput submit regressions', () => {
     await waitFor(() =>
       expect(screen.getByTestId('room-input-editor')).toHaveAttribute('data-editor-text', '')
     );
+  });
+
+  it('keeps the composer focused after sending a text message', async () => {
+    render(<RoomInputHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+    screen.getByTestId('room-input-editor').focus();
+
+    fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    expect(document.activeElement).toBe(screen.getByTestId('room-input-editor'));
+  });
+
+  it('wipes the composer undo history when a message is sent', async () => {
+    const clearHistorySpy = vi.spyOn(ProseMirrorEditorController.prototype, 'clearHistory');
+    try {
+      render(<RoomInputHarness />);
+      fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+
+      fireEvent.click(sendButton());
+      await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+
+      expect(clearHistorySpy).toHaveBeenCalledOnce();
+    } finally {
+      clearHistorySpy.mockRestore();
+    }
+  });
+
+  it('keeps the composer focused when a reply is claimed by sending', async () => {
+    render(<RoomInputHarness initialReply />);
+    fireEvent.click(screen.getByRole('button', { name: 'Compose text' }));
+    screen.getByTestId('room-input-editor').focus();
+    fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => expect(testState.matrix.sendMessage).toHaveBeenCalledOnce());
+    expect(document.activeElement).toBe(screen.getByTestId('room-input-editor'));
+  });
+
+  it('keeps the composer focused when cancelling a reply on desktop', async () => {
+    render(<RoomInputHarness initialReply />);
+    screen.getByTestId('room-input-editor').focus();
+
+    fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Escape', code: 'Escape' });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    expect(document.activeElement).toBe(screen.getByTestId('room-input-editor'));
+  });
+
+  it('blurs the composer when cancelling a reply on mobile to dismiss the keyboard', async () => {
+    testState.isMobile = true;
+    render(<RoomInputHarness initialReply />);
+    screen.getByTestId('room-input-editor').focus();
+
+    fireEvent.keyDown(screen.getByTestId('room-input-editor'), { key: 'Escape', code: 'Escape' });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    expect(document.activeElement).not.toBe(screen.getByTestId('room-input-editor'));
   });
 
   it('restores composed text when a scheduled send fails', async () => {
