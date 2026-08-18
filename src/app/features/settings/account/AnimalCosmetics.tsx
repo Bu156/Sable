@@ -5,6 +5,7 @@ import type { UserProfile } from '$hooks/useUserProfile';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { profilesCacheAtom } from '$state/userRoomProfile';
+import { invalidateUserProfileCache } from '$hooks/useUserProfile';
 import { Box, IconButton, Input, Text } from 'folds';
 import { useSetAtom } from 'jotai';
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
@@ -88,11 +89,7 @@ export function AnimalCosmetics({ profile, userId }: Readonly<AnimalCosmeticsPro
   const handleSaveField = useCallback(
     async (key: string, value: unknown) => {
       await mx.setExtendedProfileProperty?.(key, value);
-      setGlobalProfiles((prev) => {
-        const newCache = { ...prev };
-        delete newCache[userId];
-        return newCache;
-      });
+      invalidateUserProfileCache(mx, userId, setGlobalProfiles);
     },
     [mx, userId, setGlobalProfiles]
   );

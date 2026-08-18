@@ -9,7 +9,7 @@ import { SettingMenuSelector } from '$components/setting-menu-selector';
 import { SettingTile } from '$components/setting-tile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import type { UserProfile, MSC4440Bio, ColorSet } from '$hooks/useUserProfile';
-import { useUserProfile } from '$hooks/useUserProfile';
+import { invalidateUserProfileCache, useUserProfile } from '$hooks/useUserProfile';
 import { getMxIdLocalPart, mxcUrlToHttp } from '$utils/matrix';
 import { UserAvatar } from '$components/user-avatar';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
@@ -38,6 +38,7 @@ import { NameColorEditor } from './NameColorEditor';
 import { StatusEditor } from './StatusEditor';
 import { AnimalCosmetics } from './AnimalCosmetics';
 import * as prefix from '$unstable/prefixes';
+import { showToast } from '$state/toast';
 import { confirm } from '$components/confirm/confirm';
 import { AvatarUploadTile } from '$components/avatar-upload-tile/AvatarUploadTile';
 import { accessibleColor } from '$plugins/color';
@@ -406,12 +407,15 @@ function ProfileExtended({ profile, userId }: Readonly<ProfileProps>) {
 
   const handleSaveField = useCallback(
     async (key: string, value: unknown) => {
-      await mx.setExtendedProfileProperty?.(key, value);
-      setGlobalProfiles((prev) => {
-        const newCache = { ...prev };
-        delete newCache[userId];
-        return newCache;
-      });
+      try {
+        await mx.setExtendedProfileProperty?.(key, value);
+      } catch (error) {
+        showToast(
+          `Failed to save profile field: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return;
+      }
+      invalidateUserProfileCache(mx, userId, setGlobalProfiles);
     },
     [mx, userId, setGlobalProfiles]
   );
