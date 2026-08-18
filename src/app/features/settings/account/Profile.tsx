@@ -108,8 +108,9 @@ function ProfileAvatar({ profile, userId, propagateTo }: Readonly<ProfileProps>)
   );
 }
 
-function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
+function ProfileBanner({ profile, userId }: Readonly<Pick<ProfileProps, 'profile' | 'userId'>>) {
   const mx = useMatrixClient();
+  const setGlobalProfiles = useSetAtom(profilesCacheAtom);
   const useAuthentication = useMediaAuthentication();
   const [stagedUrl, setStagedUrl] = useState<string>();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -145,15 +146,27 @@ function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
   }, []);
 
   const handleUploaded = useCallback(
-    (upload: UploadSuccess) => {
+    async (upload: UploadSuccess) => {
       const { mxc } = upload;
 
       if (imageFileURL) setStagedUrl(imageFileURL);
-
-      mx.setExtendedProfileProperty?.(prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME, mxc);
       setImageFile(undefined);
+
+      try {
+        await mx.setExtendedProfileProperty?.(
+          prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
+          mxc
+        );
+      } catch (error) {
+        showToast(
+          `Failed to save profile field: ${error instanceof Error ? error.message : String(error)}`
+        );
+        setStagedUrl(undefined);
+        return;
+      }
+      invalidateUserProfileCache(mx, userId, setGlobalProfiles);
     },
-    [mx, imageFileURL]
+    [mx, userId, imageFileURL, setGlobalProfiles]
   );
 
   const handleRemoveBanner = async () => {
@@ -167,10 +180,19 @@ function ProfileBanner({ profile }: Readonly<Pick<ProfileProps, 'profile'>>) {
       setIsRemoving(true);
       setStagedUrl(undefined);
       setImageFile(undefined);
-      await mx.setExtendedProfileProperty?.(
-        prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
-        null
-      );
+      try {
+        await mx.setExtendedProfileProperty?.(
+          prefix.MATRIX_UNSTABLE_PROFILE_BANNER_PROPERTY_NAME,
+          null
+        );
+      } catch (error) {
+        showToast(
+          `Failed to save profile field: ${error instanceof Error ? error.message : String(error)}`
+        );
+        setIsRemoving(false);
+        return;
+      }
+      invalidateUserProfileCache(mx, userId, setGlobalProfiles);
     }
   };
 
@@ -719,7 +741,7 @@ export function Profile() {
           direction="Column"
           gap="400"
         >
-          <ProfileBanner profile={profile} />
+          <ProfileBanner profile={profile} userId={userId} />
         </SequenceCard>
         <SequenceCard
           className={SequenceCardStyle}
