@@ -29,12 +29,13 @@ export function UserAvatar({
 }: UserAvatarProps) {
   const [error, setError] = useState(false);
   const resolvedSrc = useRenderableMediaUrl(src);
+  const mediaSrc = resolvedSrc ?? src;
 
   useEffect(() => {
     setError(false);
-  }, [src]);
+  }, [mediaSrc]);
 
-  if (!src || error) {
+  if (!mediaSrc || error) {
     return (
       <AvatarFallback
         style={{
@@ -51,7 +52,7 @@ export function UserAvatar({
   return (
     <AvatarImage
       className={classNames(css.UserAvatar, className)}
-      src={resolvedSrc ?? src}
+      src={mediaSrc}
       alt={alt}
       loading="lazy"
       decoding="async"
