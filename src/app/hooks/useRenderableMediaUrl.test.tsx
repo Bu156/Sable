@@ -333,4 +333,107 @@ describe('useRenderableMediaUrl', () => {
 
     expect(result.current).toBe('https://example.org/avatar.png');
   });
+
+  describe('useAvatarMediaSource', () => {
+    const RAW_URL =
+      'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
+
+    it('retries with a fresh revision after the image fails to load', async () => {
+      vi.useFakeTimers();
+      tauriApi.isTauri.mockReturnValue(true);
+      tauriApi.invoke
+        .mockResolvedValueOnce('http://127.0.0.1:45678/stale-capability')
+        .mockResolvedValueOnce('http://127.0.0.1:45678/fresh-capability');
+      const { useAvatarMediaSource } = await import('./useRenderableMediaUrl');
+
+      const { result } = renderHook(() => useAvatarMediaSource(RAW_URL));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.mediaSrc).toBe('http://127.0.0.1:45678/stale-capability');
+      expect(result.current.error).toBe(false);
+
+      act(() => {
+        result.current.onError();
+      });
+      expect(result.current.error).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+
+      expect(result.current.error).toBe(false);
+      expect(result.current.mediaSrc).toBe('http://127.0.0.1:45678/fresh-capability');
+      expect(tauriApi.invoke).toHaveBeenCalledTimes(2);
+      const retryUrl = tauriApi.invoke.mock.calls[1]?.[1].url ?? '';
+      expect(retryUrl).toContain('__sable_media_retry=1');
+      vi.useRealTimers();
+    });
+
+    it('stops retrying once the backoff schedule is exhausted', async () => {
+      vi.useFakeTimers();
+      tauriApi.isTauri.mockReturnValue(true);
+      tauriApi.invoke.mockImplementation(async (_cmd: string, args: { url: string }) => {
+        return `http://127.0.0.1:45678/capability-${args.url.length}`;
+      });
+      const { useAvatarMediaSource } = await import('./useRenderableMediaUrl');
+
+      const { result } = renderHook(() => useAvatarMediaSource(RAW_URL));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.mediaSrc).toBeDefined();
+
+      const failAndExhaustRetry = async (delay: number) => {
+        act(() => {
+          result.current.onError();
+        });
+        expect(result.current.error).toBe(true);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+        expect(result.current.error).toBe(false);
+      };
+      await failAndExhaustRetry(500);
+      await failAndExhaustRetry(1500);
+      await failAndExhaustRetry(4500);
+
+      act(() => {
+        result.current.onError();
+      });
+      expect(result.current.error).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(result.current.error).toBe(true);
+      vi.useRealTimers();
+    });
+
+    it('resets the retry budget when the source changes', async () => {
+      vi.useFakeTimers();
+      tauriApi.isTauri.mockReturnValue(true);
+      tauriApi.invoke.mockResolvedValue('http://127.0.0.1:45678/capability');
+      const { useAvatarMediaSource } = await import('./useRenderableMediaUrl');
+
+      const { result, rerender } = renderHook(
+        ({ url }: { url: string | undefined }) => useAvatarMediaSource(url),
+        { initialProps: { url: RAW_URL as string | undefined } }
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        result.current.onError();
+      });
+      expect(result.current.error).toBe(true);
+
+      rerender({ url: undefined });
+      expect(result.current.error).toBe(false);
+      expect(result.current.mediaSrc).toBeUndefined();
+      vi.useRealTimers();
+    });
+  });
 });

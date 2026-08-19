@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useAtomValue } from 'jotai';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { activeSessionIdAtom } from '$state/sessions';
@@ -13,6 +13,7 @@ import {
   subscribeSWMediaAuthSupport,
 } from '$utils/swMediaAuth';
 import { rewriteAuthenticatedMediaUrl } from '$utils/matrix';
+import { addTauriMediaRetryRevision } from '$utils/mediaUrl';
 
 type ObjectUrlEntry = {
   refs: number;
@@ -45,8 +46,9 @@ function pruneUnreferencedCache(): void {
   }
 }
 
-function getObjectUrlCacheKey(sessionScope: string, url: string): string {
-  return `${sessionScope}\x00${getStableMediaCacheKeyFragment(url)}`;
+function getObjectUrlCacheKey(sessionScope: string, url: string, retryRevision = 0): string {
+  const retryFragment = retryRevision > 0 ? `\x00retry=${retryRevision}` : '';
+  return `${sessionScope}\x00${getStableMediaCacheKeyFragment(url)}${retryFragment}`;
 }
 
 function normalizeRenderableMediaUrl(url: string | undefined): string | undefined {
@@ -186,14 +188,17 @@ export function getRenderableMediaUrlStats(): { cacheSize: number; inflightCount
   return { cacheSize: objectUrlCache.size, inflightCount: inflightRequests.size };
 }
 
-export function useRenderableMediaUrl(url: string | undefined): string | undefined {
+export function useRenderableMediaUrl(
+  url: string | undefined,
+  retryRevision = 0
+): string | undefined {
   const tauri = isTauri();
   const activeSessionId = useAtomValue(activeSessionIdAtom);
   const sessionScope = activeSessionId ?? getCurrentMediaSessionScope();
   const renderableUrl = normalizeRenderableMediaUrl(url);
   const objectUrlCacheKey =
     renderableUrl && !renderableUrl.startsWith('blob:')
-      ? getObjectUrlCacheKey(sessionScope, renderableUrl)
+      ? getObjectUrlCacheKey(sessionScope, renderableUrl, retryRevision)
       : undefined;
   // Media elements and bare URLs are only safe once the (current) service
   // worker has proven it intercepts authenticated media; until then media goes
@@ -325,8 +330,51 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
 
 // Undefined while the url is still being prepared: on Tauri, rendering the raw source first
 // only means a second load once the loopback url lands, and an error on either latches.
-export function useRenderableMediaSource(url: string | undefined): string | undefined {
-  const resolvedUrl = useRenderableMediaUrl(url);
+export function useRenderableMediaSource(
+  url: string | undefined,
+  retryRevision = 0
+): string | undefined {
+  const retriedUrl =
+    url && retryRevision > 0 ? addTauriMediaRetryRevision(url, retryRevision) : url;
+  const resolvedUrl = useRenderableMediaUrl(retriedUrl, retryRevision);
   if (resolvedUrl) return resolvedUrl;
-  return isTauri() ? undefined : url;
+  return isTauri() ? undefined : retriedUrl;
+}
+
+const AVATAR_RETRY_DELAYS_MS = [500, 1500, 4500];
+
+type AvatarMediaSource = {
+  mediaSrc: string | undefined;
+  error: boolean;
+  onError: () => void;
+};
+
+export function useAvatarMediaSource(src: string | undefined): AvatarMediaSource {
+  const [error, setError] = useState(false);
+  const [retryRevision, setRetryRevision] = useState(0);
+  const mediaSrc = useRenderableMediaSource(src, retryRevision);
+
+  useEffect(() => {
+    setError(false);
+    setRetryRevision(0);
+  }, [src]);
+
+  useEffect(() => {
+    setError(false);
+  }, [mediaSrc]);
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const delay = AVATAR_RETRY_DELAYS_MS[retryRevision];
+    if (delay === undefined) return undefined;
+    const timer = setTimeout(() => {
+      setError(false);
+      setRetryRevision((revision) => revision + 1);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [error, retryRevision]);
+
+  const onError = useCallback(() => setError(true), []);
+
+  return { mediaSrc, error, onError };
 }
