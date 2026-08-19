@@ -206,6 +206,8 @@ export type SectionNav = {
   listPath: string;
   /** Builds the path to a room within this section, or null when the section has no rooms. */
   getRoomPath: ((roomIdOrAlias: string) => string) | null;
+  /** Decoded space id or alias, present only when the section is a space. */
+  spaceIdOrAlias?: string;
 };
 
 /**
@@ -247,6 +249,7 @@ export const resolveSection = (pathname: string): SectionNav | null => {
       getRoomPath: isForum
         ? (roomIdOrAlias) => getSpaceForumPath(spaceId, roomIdOrAlias)
         : (roomIdOrAlias) => getSpaceRoomPath(spaceId, roomIdOrAlias),
+      spaceIdOrAlias: spaceId,
     };
   }
   return null;
