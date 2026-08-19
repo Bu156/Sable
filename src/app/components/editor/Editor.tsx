@@ -216,6 +216,9 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
           if (!isMobileOrTablet() || suppressBlurRefocusRef?.current) return;
           const next = event.relatedTarget as HTMLElement | null;
           if (!next || next.isContentEditable) return;
+          // Only reclaim focus when it moved within the composer, so taps on
+          // the timeline (e.g. images) dismiss the keyboard.
+          if (!rootRef.current?.contains(next) && !next.closest('[data-autocomplete-menu]')) return;
           editor.focus();
         },
         focus: () => {
