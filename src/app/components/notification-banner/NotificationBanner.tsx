@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, TouchEvent } from 'react';
 import { Box, IconButton, Text } from 'folds';
 import { sizedIcon, X } from '$components/icons/phosphor';
 import { createLogger } from '$utils/debug';
@@ -131,7 +131,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
         setGesture(undefined);
       }
     },
-    [swipeDistance]
+    [dismiss, swipeDistance]
   );
 
   const handleTouchStart = useCallback(
@@ -157,8 +157,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
       const touch = event.touches[0];
       if (!gesture || !touch) return;
 
-      const swipeDistance = touch.clientX - gesture.startX;
-      setSwipeDistance(swipeDistance);
+      setSwipeDistance(touch.clientX - gesture.startX);
     },
     [dismissing, gesture]
   );
