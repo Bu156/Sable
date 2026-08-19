@@ -13,14 +13,39 @@ const slideIn = keyframes({
   },
 });
 
-const slideOut = keyframes({
+const fadeOut = keyframes({
   from: {
     opacity: 1,
-    transform: 'translateY(0)',
   },
   to: {
     opacity: 0,
+  },
+});
+
+const slideOut = keyframes({
+  from: {
+    transform: 'translateY(0)',
+  },
+  to: {
     transform: 'translateY(-100%)',
+  },
+});
+
+const swipeOutLeft = keyframes({
+  from: {
+    transform: 'translateX(0)',
+  },
+  to: {
+    transform: 'translateX(-100%)',
+  },
+});
+
+const swipeOutRight = keyframes({
+  from: {
+    transform: 'translateX(0)',
+  },
+  to: {
+    transform: 'translateX(100%)',
   },
 });
 
@@ -73,17 +98,32 @@ export const Banner = style({
   animationName: slideIn,
   animationDuration: '260ms',
   animationTimingFunction: 'cubic-bezier(0.22, 0.8, 0.6, 1)',
-  animationFillMode: 'both',
+  animationFillMode: 'backwards',
+  transitionProperty: 'transform',
+  transitionDuration: '200ms',
+  transitionTimingFunction: 'ease-out',
 
   selectors: {
     '&:hover': {
       backgroundColor: color.Surface.ContainerHover,
     },
-    '&[data-dismissing=true]': {
-      animationName: slideOut,
+    '&[data-dismissing=up], &[data-dismissing=left], &[data-dismissing=right]': {
       animationDuration: '200ms',
       animationTimingFunction: 'cubic-bezier(0.4, 0, 1, 1)',
-      animationFillMode: 'both',
+      animationFillMode: 'forwards',
+      animationComposition: 'accumulate, replace',
+    },
+    '&[data-dismissing=up]': {
+      animationName: `${slideOut}, ${fadeOut}`,
+    },
+    '&[data-dismissing=left]': {
+      animationName: `${swipeOutLeft}, ${fadeOut}`,
+    },
+    '&[data-dismissing=right]': {
+      animationName: `${swipeOutRight}, ${fadeOut}`,
+    },
+    '&[data-swiping=true]': {
+      transitionProperty: 'none',
     },
   },
 });

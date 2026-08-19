@@ -12,6 +12,7 @@ import * as css from './NotificationBanner.css';
 
 const log = createLogger('NotificationBanner');
 const BANNER_DURATION_MS = 5000;
+const DISMISS_SWIPE_DISTANCE = 150;
 
 // Renders body text capped at a max height with a gradient fade when it overflows.
 function BodyText({ text, hovered }: { text: string; hovered: boolean }) {
@@ -63,31 +64,37 @@ function BannerMessage({ notification }: { notification: InAppBannerNotification
   );
 }
 
+type DismissDirection = 'up' | 'left' | 'right';
+
 function BannerItem({ notification, onDismiss }: BannerItemProps) {
-  const [dismissing, setDismissing] = useState(false);
+  const [dismissing, setDismissing] = useState<DismissDirection | undefined>();
   const [paused, setPaused] = useState(false);
-  const dismissedRef = useRef(false);
   const dismissAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedRef = useRef(0);
 
+  const [gesture, setGesture] = useState<{ startX: number; startY: number } | undefined>();
+  const [swipeDistance, setSwipeDistance] = useState(0);
+
   // Use a ref to guard against double-dismiss without creating a new callback identity.
-  const dismiss = useCallback(() => {
-    if (dismissedRef.current) return;
-    dismissedRef.current = true;
-    setDismissing(true);
-    dismissAnimTimerRef.current = setTimeout(() => onDismiss(notification.id), 200);
-  }, [notification.id, onDismiss]);
+  const dismiss = useCallback(
+    (direction: DismissDirection) => {
+      if (dismissing) return;
+      setDismissing(direction);
+      dismissAnimTimerRef.current = setTimeout(() => onDismiss(notification.id), 200);
+    },
+    [notification.id, onDismiss, dismissing]
+  );
 
   // Auto-dismiss timer  Eonly runs when not paused.
   useEffect(() => {
     if (paused) return undefined;
     const remaining = BANNER_DURATION_MS - elapsedRef.current;
     if (remaining <= 0) {
-      dismiss();
+      dismiss('up');
       return undefined;
     }
     const startedAt = Date.now();
-    const t = setTimeout(dismiss, remaining);
+    const t = setTimeout(() => dismiss('up'), remaining);
     return () => {
       clearTimeout(t);
       // Accumulate time spent un-paused so we can resume from the right point.
@@ -104,26 +111,88 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
 
   const handleClick = () => {
     notification.onClick();
-    dismiss();
+    dismiss('up');
   };
 
   // When hovering, pause the auto-dismiss timer.
-  const handleMouseEnter = () => setPaused(true);
-  const handleMouseLeave = () => setPaused(false);
+  const handleMouseEnter = useCallback(() => setPaused(true), []);
+  const handleMouseLeave = useCallback(() => setPaused(false), []);
+
+  const release = useCallback(
+    (commit: boolean) => {
+      setPaused(false);
+
+      if (commit && Math.abs(swipeDistance) > DISMISS_SWIPE_DISTANCE) {
+        // Continue off the side of the screen
+        dismiss(swipeDistance > 0 ? 'right' : 'left');
+      } else {
+        // Spring back to center
+        setSwipeDistance(0);
+        setGesture(undefined);
+      }
+    },
+    [swipeDistance]
+  );
+
+  const handleTouchStart = useCallback(
+    (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch || event.touches.length !== 1) {
+        release(false);
+        return;
+      }
+
+      setPaused(true);
+
+      setGesture({
+        startX: touch.clientX,
+        startY: touch.clientY,
+      });
+    },
+    [release]
+  );
+  const handleTouchMove = useCallback(
+    (event: TouchEvent) => {
+      if (dismissing) return;
+      const touch = event.touches[0];
+      if (!gesture || !touch) return;
+
+      const swipeDistance = touch.clientX - gesture.startX;
+      setSwipeDistance(swipeDistance);
+    },
+    [dismissing, gesture]
+  );
+  const handleTouchEnd = useCallback(() => {
+    if (dismissing) return;
+    release(true);
+  }, [dismissing, release]);
+  const handleTouchCancel = useCallback(() => {
+    if (dismissing) return;
+    release(false);
+  }, [dismissing, release]);
 
   return (
     <div
       className={css.Banner}
       data-dismissing={dismissing}
+      data-swiping={gesture !== undefined}
       onClick={handleClick}
-      role="button"
+      // role="button" // TODO: This breaking everything >:(
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') handleClick();
-        if (e.key === 'Escape') dismiss();
+        if (e.key === 'Escape') dismiss('up');
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchCancel={handleTouchCancel}
+      onTouchEnd={handleTouchEnd}
+      style={{
+        transform: `translateX(${swipeDistance}px)`,
+        willChange: 'transform',
+      }}
     >
       {!notification.event && notification.icon && (
         <img
@@ -163,7 +232,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
           radii="300"
           onClick={(e) => {
             e.stopPropagation();
-            dismiss();
+            dismiss('up');
           }}
           aria-label="Dismiss notification"
         >
@@ -173,7 +242,7 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
       <div
         className={css.ProgressBar}
         data-paused={paused}
-        style={{ animationDuration: `${BANNER_DURATION_MS - elapsedRef.current}ms` }}
+        style={{ animationDuration: `${BANNER_DURATION_MS}ms` }}
       />
     </div>
   );
