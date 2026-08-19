@@ -94,13 +94,18 @@ describe('CustomEditor layout', () => {
     expect(row(container)).not.toHaveClass(css.EditorRowMultiline);
   });
 
-  it('keeps buttons inline however long the text is', async () => {
+  it('moves buttons below text when a single line wraps', async () => {
     const { container, editor } = renderEditor({ after: <button type="button">Send</button> });
+    Object.defineProperty(row(container), 'clientWidth', { configurable: true, value: 100 });
+    const measurer = container.querySelector('[data-editor-measurer]')!;
+    Object.defineProperty(measurer, 'scrollHeight', {
+      configurable: true,
+      get: () => (measurer.textContent === 'M' ? 20 : 40),
+    });
 
     act(() => editor.insertText('text long enough to wrap several times over in the composer'));
 
-    await waitFor(() => expect(editor.isEmpty()).toBe(false));
-    expect(row(container)).not.toHaveClass(css.EditorRowMultiline);
+    await waitFor(() => expect(row(container)).toHaveClass(css.EditorRowMultiline));
   });
 
   it('keeps buttons inline across many paragraphs', async () => {
@@ -111,15 +116,15 @@ describe('CustomEditor layout', () => {
     act(() => editor.insertText('two'));
 
     await waitFor(() => expect(editor.getText()).toBe('one\ntwo'));
-    expect(row(container)).not.toHaveClass(css.EditorRowMultiline);
+    expect(row(container)).toHaveClass(css.EditorRowMultiline);
   });
 
-  it('never installs a hidden measurer', () => {
+  it('installs a hidden measurer for text layout', () => {
     const { container, editor } = renderEditor({ after: <button type="button">Send</button> });
 
     act(() => editor.insertText('some text'));
 
-    expect(container.querySelector('[data-editor-measurer]')).toBeNull();
+    expect(container.querySelector('[data-editor-measurer]')).toBeInTheDocument();
   });
 
   it('stacks the layout and moves responsive content into the footer when forced', () => {
