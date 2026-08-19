@@ -4,12 +4,13 @@ import { CustomEditor } from './Editor';
 import { ProseMirrorEditorController } from './prosemirrorController';
 import * as css from './Editor.css';
 
-let isIosApp = false;
+const platformState = vi.hoisted(() => ({ isIosApp: false, isMobile: false }));
 let nativeClipboardText = '';
 
 vi.mock(import('$utils/platform'), async (importOriginal) => ({
   ...(await importOriginal()),
-  iosApp: () => isIosApp,
+  iosApp: () => platformState.isIosApp,
+  isMobileOrTablet: () => platformState.isMobile,
 }));
 
 vi.mock(import('$utils/dom'), async (importOriginal) => ({
@@ -24,7 +25,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  isIosApp = false;
+  platformState.isIosApp = false;
+  platformState.isMobile = false;
   nativeClipboardText = '';
 });
 
@@ -159,7 +161,7 @@ const pasteWith = (container: HTMLElement, clipboardData: Record<string, string>
 
 describe('CustomEditor paste', () => {
   it('reads the native clipboard when the ios webview delivers an empty paste event', async () => {
-    isIosApp = true;
+    platformState.isIosApp = true;
     nativeClipboardText = 'from the native clipboard';
     const { container, editor } = renderEditor();
 
@@ -169,7 +171,7 @@ describe('CustomEditor paste', () => {
   });
 
   it('leaves an empty paste event alone outside the ios webview', async () => {
-    isIosApp = false;
+    platformState.isIosApp = false;
     nativeClipboardText = 'from the native clipboard';
     const { container, editor } = renderEditor();
 
@@ -180,7 +182,7 @@ describe('CustomEditor paste', () => {
   });
 
   it('does not read the native clipboard when the event already carries text', async () => {
-    isIosApp = true;
+    platformState.isIosApp = true;
     nativeClipboardText = 'from the native clipboard';
     const { container, editor } = renderEditor();
 
@@ -191,7 +193,7 @@ describe('CustomEditor paste', () => {
   });
 
   it('lets a consumer handler pre-empt the native clipboard fallback', async () => {
-    isIosApp = true;
+    platformState.isIosApp = true;
     nativeClipboardText = 'from the native clipboard';
     const { container, editor } = renderEditor({
       onPaste: (event) => event.preventDefault(),
@@ -201,5 +203,64 @@ describe('CustomEditor paste', () => {
 
     await Promise.resolve();
     expect(editor.getText()).toBe('');
+  });
+});
+
+const focusableRival = () => document.body.appendChild(document.createElement('button'));
+
+describe('CustomEditor mobile keyboard', () => {
+  it('refocuses the editor when focus moves to a non-editable element on mobile', () => {
+    platformState.isMobile = true;
+    const { container, editor } = renderEditor();
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    const rival = focusableRival();
+    try {
+      editable.focus();
+      rival.focus();
+      expect(focusSpy).toHaveBeenCalledOnce();
+    } finally {
+      rival.remove();
+    }
+  });
+
+  it('does not refocus on desktop', () => {
+    const { container, editor } = renderEditor();
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    const rival = focusableRival();
+    try {
+      editable.focus();
+      rival.focus();
+      expect(focusSpy).not.toHaveBeenCalled();
+    } finally {
+      rival.remove();
+    }
+  });
+
+  it('keeps a programmatic blur so sheets can dismiss the keyboard', () => {
+    platformState.isMobile = true;
+    const { container, editor } = renderEditor();
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    editable.focus();
+    editable.blur();
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(editable);
+  });
+
+  it('does not refocus while the composer suppresses it', () => {
+    platformState.isMobile = true;
+    const { container, editor } = renderEditor({ suppressBlurRefocusRef: { current: true } });
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    const rival = focusableRival();
+    try {
+      editable.focus();
+      rival.focus();
+      expect(focusSpy).not.toHaveBeenCalled();
+    } finally {
+      rival.remove();
+    }
   });
 });

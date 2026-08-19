@@ -453,6 +453,10 @@ export function PersonaPicker({
       <IconButton
         aria-pressed={!!AddPersonaMenuAnchor}
         onClick={(evt) => {
+          if (isMobileOrTablet()) {
+            const activeElement = document.activeElement;
+            if (activeElement instanceof HTMLElement) activeElement.blur();
+          }
           setAddPersonaMenuAnchor(evt.currentTarget.getBoundingClientRect());
         }}
         onPointerDown={suppressEditorRefocus}

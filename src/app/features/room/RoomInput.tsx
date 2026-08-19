@@ -678,6 +678,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [AddMenuAnchor, setAddMenuAnchor] = useState<RectCords>();
     const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
     const attachmentSkipReturnFocusRef = useRef(false);
+    const emojiBoardSkipReturnFocusRef = useRef(true);
     const [showPollPicker, setShowPollPicker] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [scheduleMenuAnchor, setScheduleMenuAnchor] = useState<RectCords>();
@@ -722,7 +723,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     }, []);
     const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
       setEmojiBoardTab((prev) => {
-        if (prev !== tab) return tab;
+        if (prev !== tab) {
+          if (prev === undefined && isMobileOrTablet()) {
+            const activeElement = document.activeElement;
+            if (activeElement instanceof HTMLElement) activeElement.blur();
+          }
+          return tab;
+        }
         if (isMobileOrTablet()) {
           const activeElement = document.activeElement;
           if (activeElement instanceof HTMLElement) activeElement.blur();
@@ -1498,6 +1505,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         if (outgoing.kind === 'gifSearch') {
           restoreReplyClaim(submission.replyClaim);
+          if (isMobileOrTablet()) {
+            const activeElement = document.activeElement;
+            if (activeElement instanceof HTMLElement) activeElement.blur();
+          }
           setInitialGifSearch(outgoing.query);
           setEmojiBoardTab(EmojiBoardTab.Gif);
           return;
@@ -2215,7 +2226,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 <>
                   <IconButton
                     onClick={() => {
-                      attachmentSkipReturnFocusRef.current = false;
+                      attachmentSkipReturnFocusRef.current = true;
+                      const activeElement = document.activeElement;
+                      if (activeElement instanceof HTMLElement) activeElement.blur();
                       setShowAttachmentSheet(true);
                     }}
                     onPointerDown={suppressEditorRefocus}
@@ -2442,6 +2455,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             dialogLabel="Emoji picker"
                             sheetClassName={messageCss.MessageMobileOptionsContainerPicker}
                             keyboardAware
+                            skipReturnFocusRef={emojiBoardSkipReturnFocusRef}
                           >
                             {() => emojiBoard}
                           </MobileSwipeDownModal>
