@@ -118,10 +118,10 @@ test.describe('timeline recovery', () => {
 
     await retryButton.click();
 
-    await expect(page.getByText(body, { exact: true })).toHaveCount(1, {
+    await expect(page.locator('[data-message-id]').filter({ hasText: body })).toHaveCount(1, {
       timeout: 180_000,
     });
-    await expect(page.getByText(body, { exact: true })).toBeVisible();
+    await expect(page.locator('[data-message-id]').filter({ hasText: body })).toBeVisible();
     await expect(failedStatus).toHaveCount(0, { timeout: 180_000 });
 
     await expect
