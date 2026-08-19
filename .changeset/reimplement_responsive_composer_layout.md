@@ -2,4 +2,4 @@
 default: patch
 ---
 
-# Reimplement responsive composer layout
+Reimplement responsive composer layout
