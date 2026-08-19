@@ -22,6 +22,41 @@ import {
 const isProseMirrorDocumentEmpty = (doc: ProseMirrorNode): boolean =>
   doc.childCount === 1 && doc.firstChild?.content.size === 0;
 
+// Mirrors prosemirror-view's own Android gate for its backspace fallback.
+const isAndroid = (): boolean => /Android \d/.test(navigator.userAgent);
+
+const androidBackspaceKeyEvent = (): KeyboardEvent =>
+  new KeyboardEvent('keydown', {
+    key: 'Backspace',
+    code: 'Backspace',
+    bubbles: true,
+    cancelable: true,
+  });
+
+/**
+ * prosemirror-view resyncs an Android backspace that left the DOM untouched by
+ * blurring and refocusing the editable, which flashes the soft keyboard shut.
+ * Delete through the state instead.
+ */
+const handleAndroidDeleteBackward = (view: EditorView): void => {
+  const cursor =
+    view.state.selection instanceof TextSelection ? view.state.selection.$cursor : null;
+  if (!cursor || cursor.pos <= 0) return;
+  const pos = cursor.pos;
+  const contentSize = view.state.doc.content.size;
+  window.setTimeout(() => {
+    // The IME deleted in the DOM; leave it to the DOM observer.
+    const cursorAfter =
+      view.state.selection instanceof TextSelection ? view.state.selection.$cursor : null;
+    if (!cursorAfter || cursorAfter.pos !== pos) return;
+    if (view.state.doc.content.size !== contentSize) return;
+    // Prefer the keymap so atom nodes follow desktop Backspace behavior.
+    if (view.someProp('handleKeyDown', (handler) => handler(view, androidBackspaceKeyEvent())))
+      return;
+    view.dispatch(view.state.tr.delete(pos - 1, pos));
+  }, 50);
+};
+
 export type EditorAutocompleteQuery<TPrefix extends string> = {
   from: number;
   prefix: TPrefix;
@@ -164,6 +199,12 @@ export class ProseMirrorEditorController {
           blur: (_view, event) => {
             this.domEventHandlers.blur?.(event as FocusEvent);
             return false;
+          },
+          beforeinput: (view, event) => {
+            if (!isAndroid() || (event as InputEvent).inputType !== 'deleteContentBackward')
+              return false;
+            handleAndroidDeleteBackward(view);
+            return true;
           },
         },
         handlePaste: (view, event) => {

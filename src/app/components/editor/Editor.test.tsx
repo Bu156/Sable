@@ -225,7 +225,18 @@ describe('CustomEditor paste', () => {
 const focusableRival = () => document.body.appendChild(document.createElement('button'));
 
 describe('CustomEditor mobile keyboard', () => {
-  it('refocuses the editor when focus moves to a non-editable element on mobile', () => {
+  it('refocuses the editor when focus moves within the composer on mobile', () => {
+    platformState.isMobile = true;
+    const { container, editor } = renderEditor({ after: <button type="button">Send</button> });
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    const composerButton = screen.getByRole('button', { name: 'Send' });
+    editable.focus();
+    composerButton.focus();
+    expect(focusSpy).toHaveBeenCalledOnce();
+  });
+
+  it('yields focus when it moves outside the composer on mobile', () => {
     platformState.isMobile = true;
     const { container, editor } = renderEditor();
     const focusSpy = vi.spyOn(editor, 'focus');
@@ -234,7 +245,7 @@ describe('CustomEditor mobile keyboard', () => {
     try {
       editable.focus();
       rival.focus();
-      expect(focusSpy).toHaveBeenCalledOnce();
+      expect(focusSpy).not.toHaveBeenCalled();
     } finally {
       rival.remove();
     }
@@ -277,6 +288,23 @@ describe('CustomEditor mobile keyboard', () => {
       expect(focusSpy).not.toHaveBeenCalled();
     } finally {
       rival.remove();
+    }
+  });
+
+  it('refocuses when an autocomplete menu holds focus so picking a suggestion keeps the keyboard', () => {
+    platformState.isMobile = true;
+    const { container, editor } = renderEditor();
+    const focusSpy = vi.spyOn(editor, 'focus');
+    const editable = container.querySelector('.ProseMirror') as HTMLElement;
+    const menuItem = document.createElement('button');
+    menuItem.dataset.autocompleteMenu = 'true';
+    document.body.appendChild(menuItem);
+    try {
+      editable.focus();
+      menuItem.focus();
+      expect(focusSpy).toHaveBeenCalledOnce();
+    } finally {
+      menuItem.remove();
     }
   });
 });
