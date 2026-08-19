@@ -159,6 +159,13 @@ const pasteWith = (container: HTMLElement, clipboardData: Record<string, string>
   });
 };
 
+// prosemirror's capturePaste schedules a 50ms `view.focus()`; run it out before
+// teardown so it cannot fire against a destroyed document.
+const flushPasteTimer = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
 describe('CustomEditor paste', () => {
   it('reads the native clipboard when the ios webview delivers an empty paste event', async () => {
     platformState.isIosApp = true;
@@ -168,6 +175,7 @@ describe('CustomEditor paste', () => {
     pasteWith(container, { 'text/plain': '' });
 
     await waitFor(() => expect(editor.getText()).toBe('from the native clipboard'));
+    await flushPasteTimer();
   });
 
   it('leaves an empty paste event alone outside the ios webview', async () => {
@@ -179,6 +187,7 @@ describe('CustomEditor paste', () => {
 
     await Promise.resolve();
     expect(editor.getText()).toBe('');
+    await flushPasteTimer();
   });
 
   it('does not read the native clipboard when the event already carries text', async () => {
@@ -190,6 +199,7 @@ describe('CustomEditor paste', () => {
 
     await Promise.resolve();
     expect(editor.getText()).not.toBe('from the native clipboard');
+    await flushPasteTimer();
   });
 
   it('lets a consumer handler pre-empt the native clipboard fallback', async () => {
@@ -203,6 +213,7 @@ describe('CustomEditor paste', () => {
 
     await Promise.resolve();
     expect(editor.getText()).toBe('');
+    await flushPasteTimer();
   });
 });
 
