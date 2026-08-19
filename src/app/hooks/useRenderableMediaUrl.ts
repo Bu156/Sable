@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useAtomValue } from 'jotai';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { activeSessionIdAtom } from '$state/sessions';
@@ -124,6 +124,22 @@ type LoopbackEntry = { promise: Promise<string>; url?: string };
 // Keyed by the `sable-media` URL so one avatar repeated down a timeline resolves once.
 const loopbackCache = new Map<string, LoopbackEntry>();
 
+// Bumped when the loopback cache is cleared (session or token change). Capability URLs
+// embed the token, so a rotation orphans every resolved URL until consumers re-resolve.
+let loopbackGeneration = 0;
+const loopbackGenerationListeners = new Set<() => void>();
+
+function subscribeLoopbackGeneration(listener: () => void): () => void {
+  loopbackGenerationListeners.add(listener);
+  return () => {
+    loopbackGenerationListeners.delete(listener);
+  };
+}
+
+function getLoopbackGeneration(): number {
+  return loopbackGeneration;
+}
+
 // Resolved up front because wry rejects a 3xx from a protocol handler, so the loopback cannot
 // be reached by redirect. Used on every Tauri platform: it also keeps the immutable caching
 // the runtimes strip from custom-protocol responses.
@@ -150,6 +166,10 @@ function resolveLoopbackUrl(protocolUrl: string): LoopbackEntry {
 // Capabilities are keyed by access token, so they do not survive a session change.
 export function clearLoopbackMediaUrlCache(): void {
   loopbackCache.clear();
+  loopbackGeneration += 1;
+  for (const listener of loopbackGenerationListeners) {
+    listener();
+  }
 }
 
 export function clearRenderableMediaUrlCache(): void {
@@ -182,27 +202,39 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
     () => getCachedSWMediaAuthSupport() ?? false
   );
   const protocolUrl = tauri ? (rewriteAuthenticatedMediaUrl(url ?? null) ?? undefined) : undefined;
+  const generation = useSyncExternalStore(
+    subscribeLoopbackGeneration,
+    getLoopbackGeneration,
+    getLoopbackGeneration
+  );
   // A settled entry resolves synchronously, so a repeated avatar never flashes a fallback.
-  const [loopbackState, setLoopbackState] = useState<{ source?: string; url?: string }>(() => ({
+  const [loopbackState, setLoopbackState] = useState<{
+    source?: string;
+    url?: string;
+    generation: number;
+  }>(() => ({
     source: protocolUrl,
     url: tauri && protocolUrl ? loopbackCache.get(protocolUrl)?.url : undefined,
+    generation,
   }));
 
   useEffect(() => {
     if (!tauri || !protocolUrl) return undefined;
     const entry = resolveLoopbackUrl(protocolUrl);
     if (entry.url) {
-      setLoopbackState({ source: protocolUrl, url: entry.url });
+      setLoopbackState({ source: protocolUrl, url: entry.url, generation });
       return undefined;
     }
     let cancelled = false;
     void entry.promise.then((resolved) => {
-      if (!cancelled) setLoopbackState({ source: protocolUrl, url: resolved });
+      if (!cancelled) {
+        setLoopbackState({ source: protocolUrl, url: resolved, generation });
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [tauri, protocolUrl]);
+  }, [tauri, protocolUrl, generation]);
   const needsBlob = !swMediaAuthSupported;
   const usesExistingObjectUrl = renderableUrl?.startsWith('blob:') ?? false;
   const [resolvedState, setResolvedState] = useState<ResolvedMediaUrlState>(() => {
@@ -272,7 +304,11 @@ export function useRenderableMediaUrl(url: string | undefined): string | undefin
     // No protocolUrl fallback while resolving: resolveLoopbackUrl already degrades to it,
     // and handing out the custom-scheme URL first would fail a media element.
     if (!protocolUrl) return undefined;
-    if (loopbackState.source === protocolUrl) return loopbackState.url;
+    // A URL resolved under an older generation is dead after a cache clear; the effect
+    // re-resolves against the current session.
+    if (loopbackState.source === protocolUrl && loopbackState.generation === generation) {
+      return loopbackState.url;
+    }
     return loopbackCache.get(protocolUrl)?.url;
   }
 

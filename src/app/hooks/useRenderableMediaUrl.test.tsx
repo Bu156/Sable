@@ -265,6 +265,43 @@ describe('useRenderableMediaUrl', () => {
     expect(tauriApi.convertFileSrc).not.toHaveBeenCalled();
   });
 
+  it('re-resolves the loopback url after the cache is cleared by a token rotation', async () => {
+    tauriApi.isTauri.mockReturnValue(true);
+    const freshLoopback = 'http://127.0.0.1:45678/capability-new-token';
+    let resolveFresh: (url: string) => void = () => {};
+    tauriApi.invoke
+      .mockResolvedValueOnce('http://127.0.0.1:45678/capability-old-token')
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveFresh = resolve;
+          })
+      );
+    const { useRenderableMediaUrl, clearLoopbackMediaUrlCache } =
+      await import('./useRenderableMediaUrl');
+
+    const rawUrl =
+      'sable-media://https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123';
+    const { result } = renderHook(() => useRenderableMediaUrl(rawUrl));
+
+    await waitFor(() => expect(result.current).toBe('http://127.0.0.1:45678/capability-old-token'));
+
+    // A rotated access token clears the loopback routes in Rust and the JS cache, so the
+    // resolved URL is orphaned until it is re-resolved.
+    act(() => {
+      clearLoopbackMediaUrlCache();
+    });
+
+    await waitFor(() => expect(result.current).toBeUndefined());
+
+    act(() => {
+      resolveFresh(freshLoopback);
+    });
+
+    await waitFor(() => expect(result.current).toBe(freshLoopback));
+    expect(tauriApi.invoke).toHaveBeenCalledTimes(2);
+  });
+
   it('withholds the raw source under Tauri until the loopback url resolves', async () => {
     tauriApi.isTauri.mockReturnValue(true);
     let resolveLoopback: (url: string) => void = () => {};
