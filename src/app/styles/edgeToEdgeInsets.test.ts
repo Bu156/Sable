@@ -57,6 +57,17 @@ describe('android edge-to-edge inset contract', () => {
     expect(sheet.match(/zIndex,/g)).toHaveLength(2);
   });
 
+  it('falls back to the injected edge-to-edge inset before env() for the mobile sheet', () => {
+    const messageStyles = readWorkspaceFile('src/app/features/room/message/styles.css.ts');
+
+    expect(messageStyles).toContain(
+      "'var(--mobile-sheet-safe-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))'"
+    );
+    expect(messageStyles).not.toContain(
+      "'var(--mobile-sheet-safe-bottom, env(safe-area-inset-bottom, 0px))'"
+    );
+  });
+
   it('uses the App shell as the only safe-area owner', () => {
     const appShell = readWorkspaceFile('src/app/components/app-shell/AppShell.tsx');
     const systemBarShell = readWorkspaceFile('src/app/components/app-shell/SystemBarShell.tsx');
