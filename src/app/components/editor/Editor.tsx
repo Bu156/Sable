@@ -116,6 +116,30 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       [editor, onPaste]
     );
 
+    useEffect(() => {
+      editor.setDomEventHandlers({
+        blur: (event) => {
+          if (!isMobileOrTablet() || suppressBlurRefocusRef?.current) return;
+          const next = event.relatedTarget as HTMLElement | null;
+          if (!next || next.isContentEditable) return;
+          editor.focus();
+        },
+        focus: () => {
+          if (!isMobileOrTablet()) return;
+          const editable = document.activeElement;
+          window.clearTimeout(focusScrollTimerRef.current);
+          const scrollIntoView = () => {
+            if (editable && editable === document.activeElement) {
+              rootRef.current?.scrollIntoView({ block: 'nearest' });
+            }
+          };
+          window.visualViewport?.addEventListener('resize', scrollIntoView, { once: true });
+          focusScrollTimerRef.current = window.setTimeout(scrollIntoView, 500);
+        },
+      });
+      return () => editor.setDomEventHandlers({});
+    }, [editor, suppressBlurRefocusRef]);
+
     const setRootRef = useCallback(
       (element: HTMLDivElement | null) => {
         rootRef.current = element;
@@ -167,24 +191,6 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
               onKeyDown={handleKeyDown}
               onKeyUp={onKeyUp}
               onPaste={handlePaste}
-              onBlur={(event) => {
-                if (!isMobileOrTablet() || suppressBlurRefocusRef?.current) return;
-                const next = event.relatedTarget as HTMLElement | null;
-                if (!next || (next !== event.currentTarget && next.isContentEditable)) return;
-                editor.focus();
-              }}
-              onFocus={() => {
-                if (!isMobileOrTablet()) return;
-                const editable = document.activeElement;
-                window.clearTimeout(focusScrollTimerRef.current);
-                const scrollIntoView = () => {
-                  if (editable && editable === document.activeElement) {
-                    rootRef.current?.scrollIntoView({ block: 'nearest' });
-                  }
-                };
-                window.visualViewport?.addEventListener('resize', scrollIntoView, { once: true });
-                focusScrollTimerRef.current = window.setTimeout(scrollIntoView, 500);
-              }}
             />
           </Scroll>
           {(after || (responsiveAfter && !showResponsiveAfterInFooter)) && (

@@ -29,6 +29,11 @@ export type EditorAutocompleteQuery<TPrefix extends string> = {
   to: number;
 };
 
+export type EditorDomEventHandlers = {
+  blur?: (event: FocusEvent) => void;
+  focus?: (event: FocusEvent) => void;
+};
+
 /**
  * The sole editor-engine seam. Consumers exchange Sable documents and never
  * retain an EditorState or EditorView.
@@ -36,6 +41,7 @@ export type EditorAutocompleteQuery<TPrefix extends string> = {
 export class ProseMirrorEditorController {
   private attributes: Record<string, string> = {};
   private document: EditorDocument;
+  private domEventHandlers: EditorDomEventHandlers = {};
   private listeners = new Set<(document: EditorDocument) => void>();
   private renderContext: EditorRenderContext = defaultEditorRenderContext;
   private view: EditorView | undefined;
@@ -63,6 +69,10 @@ export class ProseMirrorEditorController {
     if (context === this.renderContext) return;
     this.renderContext = context;
     this.view?.setProps({ nodeViews: buildEditorNodeViews(() => this.renderContext) });
+  }
+
+  setDomEventHandlers(handlers: EditorDomEventHandlers): void {
+    this.domEventHandlers = handlers;
   }
 
   get children(): EditorDocument {
@@ -146,6 +156,16 @@ export class ProseMirrorEditorController {
       { mount: element },
       {
         attributes: this.viewAttributes,
+        handleDOMEvents: {
+          focus: (_view, event) => {
+            this.domEventHandlers.focus?.(event as FocusEvent);
+            return false;
+          },
+          blur: (_view, event) => {
+            this.domEventHandlers.blur?.(event as FocusEvent);
+            return false;
+          },
+        },
         handlePaste: (view, event) => {
           const text = event.clipboardData?.getData('text/plain');
           if (text === undefined || text === '') return false;
