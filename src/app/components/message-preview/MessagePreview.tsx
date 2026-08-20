@@ -147,7 +147,7 @@ function renderEncryptedDecrypted(
   event: MatrixEvent,
   displayName: string,
   decryptedEvent: MatrixEvent,
-  eventTimeline: NonNullable<ReturnType<Room['getTimelineForEvent']>>
+  eventTimeline: ReturnType<Room['getTimelineForEvent']>
 ) {
   const eventId = event.getId()!;
   if (decryptedEvent.isRedacted()) return <RedactedContent />;
@@ -165,7 +165,9 @@ function renderEncryptedDecrypted(
     );
   }
   if (decryptedType === messageType) {
-    const editedEvent = getEditedEvent(eventId, decryptedEvent, eventTimeline.getTimelineSet());
+    const editedEvent = eventTimeline
+      ? getEditedEvent(eventId, decryptedEvent, eventTimeline.getTimelineSet())
+      : undefined;
     const getContent = (() =>
       editedEvent?.getContent()?.['m.new_content'] ??
       decryptedEvent.getContent()) as GetContentCallback;
@@ -193,9 +195,10 @@ function renderEncrypted(
 ) {
   const eventId = event.getId()!;
   const eventTimeline = ctx.room.getTimelineForEvent(eventId);
-  const decryptedEvent = eventTimeline?.getEvents().find((item) => item.getId() === eventId);
-
-  if (!decryptedEvent || !eventTimeline) return <MessageNotDecryptedContent />;
+  // Previews are also rendered for events outside any loaded timeline (the
+  // notification inbox), so fall back to the event we were handed.
+  const decryptedEvent =
+    eventTimeline?.getEvents().find((item) => item.getId() === eventId) ?? event;
 
   return (
     <EncryptedContent mEvent={decryptedEvent}>
@@ -415,11 +418,13 @@ export function MessagePreview({
   const [showPronouns] = useSetting(settingsAtom, 'showPronouns');
   const [parsePronouns] = useSetting(settingsAtom, 'parsePronouns');
   const { cleanedDisplayName: displayName, inlinePronoun } = useMemo(
-    () => getParsedPronouns(perMessageProfile?.name || fallbackDisplayName, parsePronouns),
-    [perMessageProfile?.name, fallbackDisplayName, parsePronouns]
+    () => getParsedPronouns(perMessageProfile?.displayname || fallbackDisplayName, parsePronouns),
+    [perMessageProfile?.displayname, fallbackDisplayName, parsePronouns]
   );
   const pronouns = useMemo(() => {
-    const resolved = [...(perMessageProfile?.pronouns ?? userProfile.pronouns ?? [])];
+    const resolved = [
+      ...(perMessageProfile?.['io.fsky.nyx.pronouns'] ?? userProfile.pronouns ?? []),
+    ];
     if (
       inlinePronoun &&
       !resolved.some((item) => item.summary?.toLowerCase() === inlinePronoun.toLowerCase())
@@ -427,9 +432,9 @@ export function MessagePreview({
       resolved.push({ summary: inlinePronoun, language: 'en' });
     }
     return resolved;
-  }, [perMessageProfile?.pronouns, userProfile.pronouns, inlinePronoun]);
+  }, [perMessageProfile, userProfile.pronouns, inlinePronoun]);
   const avatarMxc =
-    perMessageProfile?.avatarUrl ??
+    perMessageProfile?.avatar_url ??
     getMemberAvatarMxc(room, sender) ??
     userProfile.avatarUrl ??
     profile?.avatarUrl;
@@ -449,10 +454,11 @@ export function MessagePreview({
         room.roomId,
         undefined,
         sender,
+        perMessageProfile,
         evt.currentTarget.getBoundingClientRect()
       );
     },
-    [openUserRoomProfile, room.roomId, sender]
+    [openUserRoomProfile, room.roomId, perMessageProfile, sender]
   );
 
   return (

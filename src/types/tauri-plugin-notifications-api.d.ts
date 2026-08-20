@@ -1,4 +1,4 @@
-declare module '@choochmeque/tauri-plugin-notifications-api' {
+declare module '@sableclient/tauri-plugin-notifications-api' {
   export type { PermissionState } from '@tauri-apps/api/core';
 
   export const Importance: {
@@ -7,6 +7,13 @@ declare module '@choochmeque/tauri-plugin-notifications-api' {
     readonly Low: 2;
     readonly Default: 3;
     readonly High: 4;
+  };
+
+  export type NotificationMessage = {
+    body: string;
+    timestamp: number;
+    senderName?: string;
+    senderKey?: string;
   };
 
   export type NotificationOptions = {
@@ -22,6 +29,8 @@ declare module '@choochmeque/tauri-plugin-notifications-api' {
     groupSummary?: boolean;
     sound?: string;
     inboxLines?: string[];
+    messages?: NotificationMessage[];
+    groupConversation?: boolean;
     icon?: string;
     largeIcon?: string;
     iconColor?: string;

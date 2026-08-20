@@ -39,10 +39,10 @@ export const messageList = style({
   overflowAnchor: 'none',
 
   '@supports': {
-    'not selector(::-webkit-scrollbar)': {
+    '(-moz-appearance: none)': {
       scrollbarWidth: 'auto',
       selectors: {
-        '&:hover, &:has(*:hover)': {
+        '&:hover': {
           scrollbarColor: `${color.SurfaceVariant.ContainerLine} ${color.SurfaceVariant.ContainerActive}`,
         },
       },
@@ -88,7 +88,6 @@ globalStyle(`body ${messageList} > *`, {
 });
 
 globalStyle(`body ${messageList} [data-message-id]`, {
-  overflowAnchor: 'auto',
   transition: 'background-color 0.1s ease-in-out !important',
   position: 'relative',
   zIndex: 1,

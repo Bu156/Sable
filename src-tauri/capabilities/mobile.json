@@ -5,8 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "core:window:allow-set-badge-count",
+    "app-icon:default",
     "deep-link:default",
     "edge-to-edge:default",
+    "livekit-mobile:default",
     "notifications:default",
     "sharekit:default"
   ]

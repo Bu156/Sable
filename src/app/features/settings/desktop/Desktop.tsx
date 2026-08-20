@@ -26,6 +26,7 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
   );
   const [showSystemTrayIcon, setShowSystemTrayIcon] = useDesktopSetting('showSystemTrayIcon');
   const [useCustomTitleBar, setUseCustomTitleBar] = useDesktopSetting('useCustomTitleBar');
+  const [spellcheck, setSpellcheck] = useDesktopSetting('spellcheck');
   const [autoUpdateCheck, setAutoUpdateCheck] = useAtom(autoUpdateCheckAtom);
 
   if (!isTauri() || !ready) return null;
@@ -54,7 +55,11 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                 <SettingToggle
                   title="Close button keeps Sable running"
                   focusId="close-to-background-on-close"
-                  description="When enabled, closing the window keeps Sable running instead of exiting. If the tray icon is enabled and available, Sable stays in the system tray. Otherwise it continues running in the background."
+                  description={
+                    type === 'macos'
+                      ? 'When enabled, closing the window keeps Sable running instead of exiting. Reopen it from the Dock.'
+                      : 'When enabled, closing the window keeps Sable running in the system tray instead of exiting. This needs the tray icon below: without a tray to restore from, closing exits Sable.'
+                  }
                   value={closeToBackgroundOnClose}
                   onChange={setCloseToBackgroundOnClose}
                   ariaLabel="close-to-background-on-close"
@@ -66,8 +71,8 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                     description={
                       trayFallback ? (
                         <Text as="span" style={{ color: color.Warning.Main }} size="T200">
-                          System tray is unavailable on this system. Sable can still keep running in
-                          the background without it.
+                          System tray is unavailable on this system. Without it, closing the window
+                          exits Sable.
                         </Text>
                       ) : (
                         'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
@@ -79,6 +84,17 @@ export function Desktop({ requestBack, requestClose }: DesktopProps) {
                     ariaLabel="show-system-tray-icon"
                   />
                 )}
+              </Box>
+              <Box direction="Column" gap="100">
+                <Text size="L400">Text input</Text>
+                <SettingToggle
+                  title="Spellcheck"
+                  focusId="spellcheck"
+                  description="Underline misspelled words and offer corrections in text fields."
+                  value={spellcheck}
+                  onChange={setSpellcheck}
+                  ariaLabel="spellcheck"
+                />
               </Box>
               <Box direction="Column" gap="100">
                 <Text size="L400">Updates</Text>

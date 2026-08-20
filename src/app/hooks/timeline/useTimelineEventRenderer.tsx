@@ -87,12 +87,14 @@ import * as customHtmlCss from '$styles/CustomHtml.css';
 import { UnreadBadge, UnreadBadgeCenter } from '$components/unread-badge';
 import type { ForwardedMessageProps } from '$features/room/message';
 import { EncryptedContent, Message, Reactions } from '$features/room/message';
+import type { TimelineFocusItem } from '$hooks/timeline/useTimelineSync';
 
 import { useSableCosmetics } from '$hooks/useSableCosmetics';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
 import { M_POLL_START } from 'matrix-js-sdk';
+import type { Persona } from '$app/persona';
 
-function DecoratedUser({ room, userId, userName }: DecoratedUserProps) {
+function DecoratedUser({ room, userId, userName, pmp }: DecoratedUserProps) {
   const { color, font } = useSableCosmetics(userId, room ?? ({} as Room));
 
   const openUserRoomProfile = useOpenUserRoomProfile();
@@ -104,10 +106,11 @@ function DecoratedUser({ room, userId, userName }: DecoratedUserProps) {
         room.roomId,
         undefined,
         userId,
+        pmp,
         evt.currentTarget.getBoundingClientRect()
       );
     },
-    [room, userId, openUserRoomProfile]
+    [room, userId, openUserRoomProfile, pmp]
   );
 
   return (
@@ -121,6 +124,7 @@ type DecoratedUserProps = {
   room: Room;
   userId: string;
   userName?: string;
+  pmp?: Persona;
 };
 
 type ThreadReplyChipProps = {
@@ -291,6 +295,9 @@ function ThreadReplyChip({
     </Chip>
   );
 }
+const isFocusHighlighted = (focusItem: TimelineFocusItem | undefined, mEventId: string) =>
+  focusItem?.eventId === mEventId && focusItem.highlight;
+
 export interface TimelineEventRendererOptions {
   room: Room;
   mx: MatrixClient;
@@ -319,7 +326,7 @@ export interface TimelineEventRendererOptions {
     hideThreadChip?: boolean;
   };
   state: {
-    focusItem?: { index: number; highlight: boolean; scrollTo: boolean };
+    focusItem?: TimelineFocusItem;
     editId?: string;
     activeReplyId?: string;
     openThreadId?: string;
@@ -341,6 +348,7 @@ export interface TimelineEventRendererOptions {
     onDeleteFailedSend: (mEvent: MatrixEvent) => void;
     setOpenThread: (threadId: string | undefined) => void;
     handleOpenReply: MouseEventHandler<HTMLButtonElement>;
+    onOpenMedia?: (mEvent: MatrixEvent) => boolean;
   };
   utils: {
     htmlReactParserOptions: HTMLReactParserOptions;
@@ -389,6 +397,7 @@ export function useTimelineEventRenderer({
     onDeleteFailedSend,
     setOpenThread,
     handleOpenReply,
+    onOpenMedia,
   },
   utils: { htmlReactParserOptions, linkifyOpts, getMemberPowerTag, parseMemberEvent },
 }: TimelineEventRendererOptions) {
@@ -413,7 +422,7 @@ export function useTimelineEventRenderer({
     timelineSet: EventTimelineSet,
     markedVariant: 'suppress' | 'plain' = 'suppress'
   ) {
-    const highlighted = focusItem?.index === item && focusItem.highlight;
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked =
       markedVariant === 'plain'
         ? activeReplyId === mEventId
@@ -442,7 +451,7 @@ export function useTimelineEventRenderer({
     item: number,
     timelineSet: EventTimelineSet
   ) {
-    const highlighted = focusItem?.index === item && focusItem.highlight;
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked = activeReplyId === mEventId && !suppressMark;
     const senderId = mEvent.getSender() ?? '';
     const senderName = getSenderDisplayName(senderId);
@@ -510,7 +519,7 @@ export function useTimelineEventRenderer({
   ) => {
     if (!hiddenEventEdits) return null;
 
-    const highlighted = focusItem?.index === item && focusItem.highlight;
+    const highlighted = isFocusHighlighted(focusItem, mEventId);
     const marked = activeReplyId === mEventId && suppressMark !== true;
     const senderId = mEvent.getSender() ?? '';
     const senderName = getSenderDisplayName(senderId);
@@ -751,6 +760,7 @@ export function useTimelineEventRenderer({
                 outlineAttachment={messageLayout === MessageLayout.Bubble}
                 mx={mx}
                 room={room}
+                onOpenMedia={onOpenMedia}
               />
             )}
           </Message>
@@ -854,6 +864,7 @@ export function useTimelineEventRenderer({
                       renderImageContent={(props) => (
                         <ImageContent
                           {...props}
+                          onOpenViewer={() => onOpenMedia?.(mEvent) ?? false}
                           autoPlay={mediaAutoLoad}
                           renderImage={(p) => {
                             if (!autoplayStickers && p.src) {
@@ -906,6 +917,7 @@ export function useTimelineEventRenderer({
                       mEvent={mEvent}
                       mx={mx}
                       room={room}
+                      onOpenMedia={onOpenMedia}
                     />
                   );
                 }
@@ -1002,6 +1014,7 @@ export function useTimelineEventRenderer({
                 renderImageContent={(props) => (
                   <ImageContent
                     {...props}
+                    onOpenViewer={() => onOpenMedia?.(mEvent) ?? false}
                     autoPlay={mediaAutoLoad}
                     renderImage={(p) => {
                       if (!autoplayStickers && p.src) {
@@ -1162,6 +1175,7 @@ export function useTimelineEventRenderer({
                 mEvent={mEvent}
                 mx={mx}
                 room={room}
+                onOpenMedia={onOpenMedia}
               />
             )}
           </Message>

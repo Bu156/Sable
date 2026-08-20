@@ -1,4 +1,9 @@
-import type { RoomPinnedEventsEventContent, StateEvents } from '$types/matrix-sdk';
+import type {
+  MatrixClient,
+  RoomMessageEventContent,
+  RoomPinnedEventsEventContent,
+  StateEvents,
+} from '$types/matrix-sdk';
 import { type Room, type MatrixEvent, type Relations, EventType } from '$types/matrix-sdk';
 import {
   canEditEvent,
@@ -8,7 +13,8 @@ import {
 } from '$utils/room/relations';
 import { MessageReportItem } from './MessageReport';
 import type { RectCords } from 'folds';
-import { as, Box, config, IconButton, Line, Menu, MenuItem, PopOut, Text } from 'folds';
+import { as, Box, config, IconButton, Line, Menu, MenuItem, Text } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import {
   ArrowBendUpLeftIcon,
@@ -36,7 +42,7 @@ import { MobileSwipeDownModal, useMobileSheetClose } from '$components/MobileSwi
 import * as css from '$features/room/message/styles.css';
 import { useAtom, useSetAtom, useStore } from 'jotai';
 import type { Dispatch, MouseEventHandler, ReactNode, SetStateAction } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { MessageDeleteItem } from './MessageDelete';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '$utils/keyboard';
@@ -48,7 +54,7 @@ import { useRoomPinnedEvents } from '$hooks/useRoomPinnedEvents';
 import { EmojiBoard } from '$components/emoji-board';
 import { MemoizedBody, type ReactionHandler } from '$features/room/message';
 import { useRecentEmoji } from '$hooks/useRecentEmoji';
-import { BookmarkIcon } from '@phosphor-icons/react';
+import { BookmarkIcon, UserIcon } from '@phosphor-icons/react';
 import {
   computeBookmarkId,
   createBookmarkItem,
@@ -57,10 +63,17 @@ import {
 } from '$features/bookmarks';
 import { CopyIcon } from '@phosphor-icons/react';
 import * as OptionsCss from './Options.css';
-import { MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS } from '$unstable/prefixes';
+import {
+  MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS,
+  MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME,
+} from '$unstable/prefixes';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
-import type { IImageInfo } from '$types/matrix/common';
-import { getIncomingMediaMxcUrl } from '../MsgTypeRenderers';
+import { getFavoriteGifFromMessageContent } from '$utils/favoriteGif';
+import { TemporaryPersonaPicker } from '$features/room/persona-picker/PersonaPicker';
+import { type PerMessageProfileMsc4461 } from '$hooks/usePerMessageProfile';
+import { buildReplacementPmpContent } from '$features/room/buildReplacementContent';
+import { settingsAtom } from '$state/settings';
+import { useSetting } from '$state/hooks/settings';
 
 function WrappedMessage({
   isModal,
@@ -162,7 +175,8 @@ const MessageCopyTextItem = as<
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const handleCopy = () => {
     const content = mEvent.getContent();
-    const body = content?.body;
+    const pmp = content[MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME];
+    const body = pmp ? content?.body?.replace(`${pmp.displayname}: `, '') : content?.body;
 
     if (body) copyToClipboard(body);
     onClose();
@@ -274,36 +288,29 @@ const MessageFavoriteGifItem = as<
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const mx = useMatrixClient();
   const content = mEvent.getContent();
-  const url = getIncomingMediaMxcUrl(content.file?.url ?? content.url) ?? '';
+  const favoriteGif = getFavoriteGifFromMessageContent(content);
+  const url = favoriteGif?.mediaUrl ?? '';
   const favoritedContent = useFavoriteGifs();
   const [favorited, setFavorited] = useState(
-    favoritedContent.gifs.find((v) => v.url == url) != undefined
+    favoritedContent.gifs.find((v) => v.mediaUrl == url) != undefined
   );
   const handleClick = async () => {
+    if (!favoriteGif) {
+      onClose?.();
+      return;
+    }
     if (!favorited) {
-      const info: IImageInfo | undefined = content?.info;
-      const body = content?.body;
       setFavorited(true);
       await mx
         .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
-          gifs: [
-            ...favoritedContent.gifs,
-            {
-              title: body ?? '',
-              url: url,
-              width: info?.w,
-              height: info?.h,
-              size: info?.size,
-              mimetype: info?.mimetype,
-            },
-          ],
+          gifs: [...favoritedContent.gifs, favoriteGif],
         })
         .catch(() => setFavorited(false));
     } else {
       setFavorited(false);
       await mx
         .setAccountData(MATRIX_SABLE_UNSTABLE_FAVORITE_GIFS, {
-          gifs: favoritedContent.gifs.filter((v) => v.url != url),
+          gifs: favoritedContent.gifs.filter((v) => v.mediaUrl != url),
         })
         .catch(() => setFavorited(true));
     }
@@ -390,6 +397,39 @@ function OptionsEmojiBoard({
   );
 }
 
+type OptionsReproxyPersonaPickerProps = {
+  mx: MatrixClient;
+  mEvent: MatrixEvent;
+  roomId: string;
+  closeMenu: () => void;
+  anchor: RectCords;
+};
+function OptionsReproxyPersonaPicker({
+  mx,
+  mEvent,
+  roomId,
+  closeMenu,
+  anchor,
+}: OptionsReproxyPersonaPickerProps) {
+  const reproxyMessage = async (profile: PerMessageProfileMsc4461 | undefined) => {
+    const content = buildReplacementPmpContent(mEvent.getContent(), mEvent.getId()!, profile);
+    await mx.sendMessage(roomId, content as RoomMessageEventContent);
+
+    closeMenu();
+  };
+
+  return (
+    <>
+      <TemporaryPersonaPicker
+        mx={mx}
+        onPersonaSelect={reproxyMessage}
+        requestClose={closeMenu}
+        anchor={anchor}
+      />
+    </>
+  );
+}
+
 export function OptionQuickMenu({
   mEvent,
   room,
@@ -399,6 +439,7 @@ export function OptionQuickMenu({
   relations,
   onReplyClick,
   onEditId,
+  onReproxyId,
   hideReadReceipts,
   showDeveloperTools,
   canPinEvent,
@@ -505,6 +546,7 @@ export function OptionQuickMenu({
               relations={relations}
               onReplyClick={onReplyClick}
               onEditId={onEditId}
+              onReproxyId={onReproxyId}
               hideReadReceipts={hideReadReceipts}
               showDeveloperTools={showDeveloperTools}
               canPinEvent={canPinEvent}
@@ -546,7 +588,9 @@ export type OptionMenuProps = {
     startThread?: boolean
   ) => void;
   onEditId?: (eventId?: string) => void;
+  onReproxyId?: (profileId?: string) => void;
   hideReadReceipts?: boolean;
+  hideReplyButton?: boolean;
   showDeveloperTools?: boolean;
   canPinEvent?: boolean;
   canDelete?: boolean;
@@ -571,6 +615,7 @@ function OptionMenu({
   onReplyClick,
   onEditId,
   hideReadReceipts,
+  hideReplyButton,
   showDeveloperTools,
   canPinEvent,
   canDelete,
@@ -586,13 +631,14 @@ function OptionMenu({
   const store = useStore();
   const mx = useMatrixClient();
   const isThreadedMessage = isThreadRelationEvent(mEvent, mEvent.threadRootId);
-  const isStickerMessage = mEvent.getType() === 'm.stidoecker';
+  const isStickerMessage = mEvent.getType() === (EventType.Sticker as string);
   const evtId = mEvent.getId()!;
   const evtTimeline = room.getTimelineForEvent(evtId);
   const edits =
     evtTimeline &&
     getEventEdits(evtTimeline.getTimelineSet(), evtId, mEvent.getType())?.getRelations();
   const isEdited = !!edits?.length;
+  const [showPersonaSetting] = useSetting(settingsAtom, 'showPersonaSetting');
 
   const onTotalClose = () => {
     setModal(null);
@@ -605,6 +651,20 @@ function OptionMenu({
   }, [store, setModal]);
 
   const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+
+  const [reproxyPickerAnchor, setReproxyPickerAnchor] = useState<RectCords>();
+
+  const handleOpenReproxyPicker: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    const target = isModal
+      ? { x: 0, y: innerHeight, width: 0, height: 0 }
+      : (evt.currentTarget.parentElement?.parentElement?.getBoundingClientRect() ?? {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        });
+    setReproxyPickerAnchor(target);
+  };
 
   const handleOpenEmojiBoard: MouseEventHandler<HTMLButtonElement> = (evt) => {
     // THIS MAGIC NUMBER SHOULD BE FIXED WHEN SOMEONE FIGURES OUT WHY THE LACK OF IT CREATES A GAP IN THE EMOJIBOARD
@@ -632,6 +692,15 @@ function OptionMenu({
           imagePackRooms={imagePackRooms}
           isModal={isModal}
           ActualMessage={<WrappedMessage isModal={isModal} ActualMessage={ActualMessage} />}
+        />
+      )}
+      {reproxyPickerAnchor !== undefined && (
+        <OptionsReproxyPersonaPicker
+          mx={mx}
+          roomId={room.roomId}
+          mEvent={mEvent}
+          closeMenu={onTotalClose}
+          anchor={reproxyPickerAnchor}
         />
       )}
       <FocusTrap
@@ -733,20 +802,22 @@ function OptionMenu({
               {isGif && isModal && (
                 <MessageFavoriteGifItem room={room} mEvent={mEvent} onClose={closeMenu} />
               )}
-              <MenuItem
-                size="300"
-                after={menuIcon(ArrowBendUpLeftIcon)}
-                radii="300"
-                data-event-id={mEvent.getId()}
-                onClick={(evt) => {
-                  onReplyClick(evt);
-                  onTotalClose();
-                }}
-              >
-                <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-                  Reply
-                </Text>
-              </MenuItem>
+              {!hideReplyButton && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(ArrowBendUpLeftIcon)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={(evt) => {
+                    onReplyClick(evt);
+                    onTotalClose();
+                  }}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Reply
+                  </Text>
+                </MenuItem>
+              )}
               {!isThreadedMessage && (
                 <MenuItem
                   size="300"
@@ -776,6 +847,19 @@ function OptionMenu({
                 >
                   <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
                     Edit Message
+                  </Text>
+                </MenuItem>
+              )}
+              {canEditEvent(mx, mEvent) && showPersonaSetting && (
+                <MenuItem
+                  size="300"
+                  after={menuIcon(UserIcon)}
+                  radii="300"
+                  data-event-id={mEvent.getId()}
+                  onClick={handleOpenReproxyPicker}
+                >
+                  <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+                    Change Persona
                   </Text>
                 </MenuItem>
               )}
@@ -824,6 +908,12 @@ function OptionMenu({
 export function MobileOptionsInternal({ options }: { options: OptionMenuProps }) {
   const [isActive, setIsActive] = useState(true);
   const [modal, setModal] = useAtom(modalAtom);
+
+  // The composer keeps the mobile keyboard open until its focused element is blurred.
+  useLayoutEffect(() => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
+  }, []);
 
   useEffect(() => {
     if (modal?.type === ModalType.MobileOptions) setIsActive(true);

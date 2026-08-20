@@ -12,18 +12,9 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { matchPath, useLocation, useNavigate } from 'react-router';
 import { lastVisitedRoomAtom } from '$state/room/lastRoom';
 import { usePrefersReducedMotion } from '$hooks/usePrefersReducedMotion';
-import {
-  DIRECT_PATH,
-  DIRECT_ROOM_PATH,
-  EXPLORE_PATH,
-  HOME_PATH,
-  HOME_ROOM_PATH,
-  INBOX_PATH,
-  SPACE_PATH,
-  SPACE_ROOM_PATH,
-} from '$pages/paths';
+import { DIRECT_PATH, EXPLORE_PATH, HOME_PATH, INBOX_PATH, SPACE_PATH } from '$pages/paths';
 import { resolveSection } from '$pages/pathUtils';
-import { isRoomAlias, isRoomId } from '$utils/matrix';
+import { matchRoomRoute } from '$pages/roomRouteMatch';
 import { PersistentRoomHost } from './PersistentRoomHost';
 import { MobileNavDrawerContext, type MobileSwipeTarget } from './MobileNavDrawerContext';
 import {
@@ -66,16 +57,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     openableSection && openableSection.getRoomPath && lastRoom?.[openableSection.key]
   );
 
-  const roomMatch =
-    matchPath({ path: HOME_ROOM_PATH, end: false }, location.pathname) ??
-    matchPath({ path: DIRECT_ROOM_PATH, end: false }, location.pathname) ??
-    matchPath({ path: SPACE_ROOM_PATH, end: false }, location.pathname);
-  const matchedRoomId = roomMatch?.params.roomIdOrAlias
-    ? decodeURIComponent(roomMatch.params.roomIdOrAlias)
-    : undefined;
-  // `:roomIdOrAlias` also matches non-room segments like `create`, `search`, and `lobby`.
-  // Only treat it as a room when it is a real Matrix ID or alias.
-  const isRoomRoute = !!matchedRoomId && (isRoomId(matchedRoomId) || isRoomAlias(matchedRoomId));
+  const roomRoute = matchRoomRoute(location.pathname);
+  const matchedRoomId = roomRoute?.roomIdOrAlias;
+  const isRoomRoute = roomRoute !== undefined;
 
   const listView =
     matchPath({ path: HOME_PATH, end: true }, location.pathname) !== null ||
@@ -181,7 +165,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
     (path: string) => {
       const viewport = viewportRef.current;
       if (!viewport || width === 0) {
-        startTransition(() => navigate(path));
+        startTransition(() => {
+          void navigate(path);
+        });
         return;
       }
 
@@ -196,7 +182,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         }
         setPanelIntent(1);
       });
-      startTransition(() => navigate(path));
+      startTransition(() => {
+        void navigate(path);
+      });
     },
     [navigate, settleToPanel, width]
   );
@@ -226,6 +214,12 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
   useLayoutEffect(() => {
     navPanelRef.current?.toggleAttribute('inert', panelIntent === 1);
     contentPanelRef.current?.toggleAttribute('inert', panelIntent === 0);
+    // `inert` alone does not drop a mobile keyboard.
+    const hiddenPanel = panelIntent === 0 ? contentPanelRef.current : navPanelRef.current;
+    const focused = document.activeElement;
+    if (hiddenPanel && focused instanceof HTMLElement && hiddenPanel.contains(focused)) {
+      focused.blur();
+    }
   }, [panelIntent]);
 
   useLayoutEffect(() => {
@@ -256,7 +250,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         if (section?.getRoomPath) {
           const lastRoomId = lastRoom?.[section.key];
           if (lastRoomId) {
-            startTransition(() => navigate(section.getRoomPath!(lastRoomId)));
+            startTransition(() => {
+              void navigate(section.getRoomPath!(lastRoomId));
+            });
             return;
           }
         }
@@ -270,7 +266,9 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
       if (section.getRoomPath && matchedRoomId && isRoomRoute) {
         setLastRoom((prev) => ({ ...prev, [section.key]: matchedRoomId }));
       }
-      startTransition(() => navigate(section.listPath));
+      startTransition(() => {
+        void navigate(section.listPath);
+      });
     },
     [
       contentOpen,
@@ -351,9 +349,21 @@ export function MobileNavDrawer({ nav, rail, bottomNav, children }: MobileNavDra
         const messageElement = target.closest<HTMLElement>('[data-message-swipe]');
         const chatElement = target.closest<HTMLElement>('[data-chat-swipe]');
         const ignoredElement = target.closest<HTMLElement>('[data-gestures="ignore"]');
+        const scrollingElement = target.closest<HTMLElement>('[data-gestures="scroll"]');
         const message = messageElement ? messageTargetsRef.current.get(messageElement) : undefined;
         const chat = chatElement ? chatTargetsRef.current.get(chatElement) : undefined;
-        const blocked = ignoredElement !== null && ignoredElement !== messageElement;
+        // Nested ignore markers (e.g. inline media) don't block swipe if they're part of
+        // this message/chat's own surface, only if they sit outside it.
+        const blockedIgnored =
+          ignoredElement !== null &&
+          !(messageElement && messageElement.contains(ignoredElement)) &&
+          !(chatElement && chatElement.contains(ignoredElement));
+
+        // If the element is horizontally scrollable (scrollWidth > clientWidth), block gestures
+        const blockedScroll =
+          scrollingElement !== null && scrollingElement.scrollWidth > scrollingElement.clientWidth;
+
+        const blocked = blockedScroll || blockedIgnored;
 
         gestureRef.current = {
           startX: touch.clientX,

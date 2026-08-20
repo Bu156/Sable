@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './fixtures/test';
 import {
   createRoom,
   getRoomMessages,
@@ -8,46 +7,8 @@ import {
   registerUser,
   sendText,
 } from './fixtures/continuwuity';
+import { homeserverBaseUrl, loginAsFreshUser, PASSWORD } from './fixtures/session';
 import { AppShell } from './pages/AppShell';
-
-const PASSWORD = 'test-passw0rd';
-
-type InjectedSession = {
-  baseUrl: string;
-  userId: string;
-  deviceId: string;
-  accessToken: string;
-  slidingSyncOptIn?: boolean;
-};
-
-async function homeserverBaseUrl(storageStatePath: string): Promise<string> {
-  const state = JSON.parse(await readFile(storageStatePath, 'utf8')) as {
-    origins: { localStorage: { name: string; value: string }[] }[];
-  };
-  const entry = state.origins[0]!.localStorage.find((item) => item.name === 'matrixSessions')!;
-  return (JSON.parse(entry.value) as InjectedSession[])[0]!.baseUrl;
-}
-
-async function loginAsFreshUser(
-  page: Page,
-  baseUrl: string,
-  name: string
-): Promise<{ accessToken: string; userId: string; deviceId: string }> {
-  const user = await registerUser(baseUrl, name, PASSWORD);
-  const session: InjectedSession = {
-    baseUrl,
-    userId: user.userId,
-    deviceId: user.deviceId,
-    accessToken: user.accessToken,
-    slidingSyncOptIn: true,
-  };
-  await page.addInitScript((injected: InjectedSession) => {
-    localStorage.setItem('matrixSessions', JSON.stringify([injected]));
-    localStorage.setItem('matrixActiveSession', JSON.stringify(injected.userId));
-    localStorage.setItem('dismissNotice', 'true');
-  }, session);
-  return user;
-}
 
 let txnCounter = 1;
 
@@ -118,7 +79,6 @@ test.describe('timeline recovery', () => {
     context,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'desktop-focused');
-    test.fixme(true, 'failed-send Retry UI does not render for offline sends under sliding sync');
     test.setTimeout(300_000);
     const storageStatePath = testInfo.project.use.storageState as string;
     const hsBaseUrl = await homeserverBaseUrl(storageStatePath);
@@ -147,9 +107,11 @@ test.describe('timeline recovery', () => {
     const body = `${tag}-retry-body`;
     await app.sendTextMessage(body);
 
-    const failedStatus = page.getByText('Failed to send.', { exact: true });
-    await expect(failedStatus).toHaveCount(1, { timeout: 180_000 });
-    const retryButton = page.getByRole('button', {
+    const failedMessage = page.locator('[data-message-id]').filter({ hasText: body });
+    await expect(failedMessage).toHaveCount(1, { timeout: 180_000 });
+    const failedStatus = failedMessage.getByText('Failed to send.', { exact: true });
+    await expect(failedStatus).toBeVisible();
+    const retryButton = failedMessage.getByRole('button', {
       name: 'Retry',
       exact: true,
     });
@@ -160,15 +122,19 @@ test.describe('timeline recovery', () => {
 
     await retryButton.click();
 
-    await expect(page.getByText(body, { exact: true })).toHaveCount(1, {
+    await expect(page.locator('[data-message-id]').filter({ hasText: body })).toHaveCount(1, {
       timeout: 180_000,
     });
-    await expect(page.getByText(body, { exact: true })).toBeVisible();
+    await expect(page.locator('[data-message-id]').filter({ hasText: body })).toBeVisible();
     await expect(failedStatus).toHaveCount(0, { timeout: 180_000 });
 
-    const canonical = (await getRoomMessages(hsBaseUrl, user.accessToken, room))
-      .map((m) => m.body)
-      .filter((b) => b === body);
-    expect(canonical).toEqual([body]);
+    await expect
+      .poll(
+        async () =>
+          (await getRoomMessages(hsBaseUrl, user.accessToken, room)).filter((m) => m.body === body)
+            .length,
+        { timeout: 60_000 }
+      )
+      .toBe(1);
   });
 });

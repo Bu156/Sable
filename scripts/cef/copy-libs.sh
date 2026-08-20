@@ -12,12 +12,19 @@ PROFILE="${1:-debug}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEST="${2:-$ROOT/src-tauri/target/$PROFILE}"
 
+case "$(uname -m)" in
+  x86_64) CEF_ARCH=x86_64 ;;
+  aarch64 | arm64) CEF_ARCH=aarch64 ;;
+  *) echo "❌ unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+# --target moves build-script output under target/<triple>/.
 CEF_DIR="$(
-  find "$ROOT/src-tauri/target/$PROFILE/build" \
-    -type d -name cef_linux_x86_64 -print -quit 2>/dev/null || true
+  find "$ROOT/src-tauri/target" -type d -name "cef_linux_$CEF_ARCH" \
+    -path "*/$PROFILE/build/*" -print -quit 2>/dev/null || true
 )"
 if [ -z "$CEF_DIR" ]; then
-  echo "❌ CEF dist not found under target/$PROFILE/build — build with --features cef first." >&2
+  echo "❌ cef_linux_$CEF_ARCH not found under target/**/$PROFILE/build — build with --features cef first." >&2
   exit 1
 fi
 
@@ -62,6 +69,10 @@ cp -f "$CEF_DIR"/*.so* "$DEST/" 2>/dev/null || true
 cp -f "$CEF_DIR"/chrome_crashpad_handler "$DEST/" 2>/dev/null || true
 cp -f "$CEF_DIR"/*.pak "$CEF_DIR"/*.dat "$CEF_DIR"/*.bin "$CEF_DIR"/*.json "$DEST/" 2>/dev/null || true
 
+# CEF's BSD license must accompany binary redistributions. The Rust crate's
+# extracted runtime omits it, so package the upstream notice vendored here.
+cp -f "$ROOT/packaging/licenses/CEF-LICENSE.txt" "$DEST/CEF-LICENSE.txt"
+
 # Strip debug symbols: CEF ships libcef.so unstripped (~1.3 GB → 241 MB).
 # Same approach as OutSystems cef.redist.linux and Spotify's desktop client.
 for lib in "$DEST"/libcef.so "$DEST"/libEGL.so "$DEST"/libGLESv2.so; do
@@ -72,10 +83,5 @@ done
 mkdir -p "$DEST/locales"
 cp -f "$CEF_DIR"/locales/en-US.pak "$DEST/locales/" 2>/dev/null || true
 
-# The setuid sandbox helper only works when installed as root (deb/rpm). In a
-# nosuid context such as an AppImage, drop chrome-sandbox and let Chromium use
-# the user-namespace sandbox instead.
-if cp -f "$CEF_DIR"/chrome-sandbox "$DEST/" 2>/dev/null; then
-  chmod 4755 "$DEST/chrome-sandbox" 2>/dev/null || true
-fi
+# chrome-sandbox is not shipped: AppImages and snaps mount nosuid.
 echo "✅ done."

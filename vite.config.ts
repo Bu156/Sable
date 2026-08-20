@@ -55,6 +55,7 @@ const tauriDevHost = process.env.TAURI_DEV_HOST;
 const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);
 const isTauriDebug = process.env.TAURI_ENV_DEBUG === 'true';
 const tauriBuildMinify = !isTauriDebug ? 'esbuild' : false;
+const desktopUpdaterEnabled = process.env.VITE_DESKTOP_UPDATER_ENABLED !== 'false';
 const sentryUploadEnabled = Boolean(
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
 );
@@ -154,6 +155,7 @@ export default defineConfig(({ command }) => {
       IS_RELEASE_TAG: JSON.stringify(isReleaseTag),
       SABLE_PRODUCT_NAME: JSON.stringify(baseProductName),
       SABLE_BUILD_FLAVOR: JSON.stringify(buildFlavor),
+      DESKTOP_UPDATER_ENABLED: JSON.stringify(desktopUpdaterEnabled),
     },
     resolve: {
       alias: {
@@ -170,6 +172,7 @@ export default defineConfig(({ command }) => {
         $public: path.resolve(__dirname, 'public'),
         $client: path.resolve(__dirname, 'src/client'),
         $unstable: path.resolve(__dirname, 'src/unstable'),
+        $app: path.resolve(__dirname, 'src/app'),
       },
     },
     server: {

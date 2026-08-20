@@ -13,6 +13,8 @@ import { markAsRead } from '$utils/notifications';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useRoomMembers } from '$hooks/useRoomMembers';
 import { Page } from '$components/page';
+import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
+import { ContainerColor } from '$styles/ContainerColor.css';
 import { CallView } from '$features/call/CallView';
 import { WidgetsDrawer } from '$features/widgets/WidgetsDrawer';
 import { callChatAtom } from '$state/callEmbed';
@@ -45,7 +47,7 @@ export function Room() {
   }, [room.roomId, eventId]);
 
   const [isDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
-  const [isWidgetDrawerOpen] = useSetting(settingsAtom, 'isWidgetDrawer');
+  const [isWidgetDrawerOpen, setWidgetDrawerOpen] = useSetting(settingsAtom, 'isWidgetDrawer');
   const [hideReads] = useSetting(settingsAtom, 'hideReads');
   const screenSize = useScreenSizeContext();
 
@@ -151,6 +153,21 @@ export function Room() {
               <Line variant="Background" direction="Vertical" size="300" />
               <WidgetsDrawer key={`widgets-${room.roomId}`} room={room} />
             </>
+          )}
+          {screenSize !== ScreenSize.Desktop && isWidgetDrawerOpen && (
+            <ModalOverlay
+              requestClose={() => setWidgetDrawerOpen(false)}
+              dismissOnClickOutside={false}
+              mobile="fullscreen"
+            >
+              <Box
+                className={ContainerColor({ variant: 'Background' })}
+                direction="Column"
+                style={{ position: 'fixed', inset: 0 }}
+              >
+                <WidgetsDrawer key={`widgets-${room.roomId}`} room={room} />
+              </Box>
+            </ModalOverlay>
           )}
           {screenSize === ScreenSize.Desktop && openThreadId && (
             <>

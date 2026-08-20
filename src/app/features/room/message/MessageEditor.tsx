@@ -1,22 +1,10 @@
 import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import type { RectCords } from 'folds';
-import {
-  Box,
-  Chip,
-  IconButton,
-  Overlay,
-  OverlayBackdrop,
-  PopOut,
-  Spinner,
-  Text,
-  as,
-  config,
-} from 'folds';
+import { Box, Chip, IconButton, OverlayBackdrop, Spinner, Text, as, config } from 'folds';
+import { Overlay, PopOut } from '$components/overlay-stack';
 import { composerIcon, Smiley } from '$components/icons/phosphor';
-import { Editor, Transforms } from 'slate';
-import { ReactEditor } from 'slate-react';
 import type {
   IContent,
   IMentions,
@@ -27,9 +15,10 @@ import type {
 } from '$types/matrix-sdk';
 import { MsgType } from '$types/matrix-sdk';
 import { isKeyHotkey } from 'is-hotkey';
-import type { AutocompleteQuery } from '$components/editor';
+import type { EditorDocument } from '$components/editor/model';
 import {
   AutocompletePrefix,
+  useAutocompleteQuery,
   CustomEditor,
   EmoticonAutocomplete,
   MarkdownFormattingToolbarBottom,
@@ -37,11 +26,7 @@ import {
   RoomMentionAutocomplete,
   UserMentionAutocomplete,
   createEmoticonElement,
-  focusEditor,
   customHtmlEqualsPlainText,
-  getAutocompleteQuery,
-  getPrevWorldRange,
-  moveCursor,
   plainToEditorInput,
   toMatrixCustomHTML,
   toPlainText,
@@ -49,7 +34,7 @@ import {
   useEditor,
   getMentions,
   ANYWHERE_AUTOCOMPLETE_PREFIXES,
-  getLinks,
+  getDocumentLinks,
   LINKINPUTREGEX,
 } from '$components/editor';
 import { htmlToMarkdown } from '$plugins/markdown';
@@ -81,6 +66,7 @@ import {
   readdAngleBracketsForHiddenPreviews,
   stripMarkdownEscapesForHiddenPreviews,
 } from './hiddenLinkPreviews';
+import { stripPerMessageProfileFormattedBody } from '$hooks/usePerMessageProfile';
 
 // Wraps the mobile emoji-board overlay so the Android back action closes it
 // instead of navigating away. Hooks can't run inside the UseStateProvider
@@ -126,10 +112,11 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const nicknames = useAtomValue(nicknamesAtom);
     const editor = useEditor();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
+    const [pmpNoFallback] = useSetting(settingsAtom, 'pmpNoFallback');
     const isComposing = useComposingCheck();
 
-    const [autocompleteQuery, setAutocompleteQuery] =
-      useState<AutocompleteQuery<AutocompletePrefix>>();
+    const [autocompleteQuery, setAutocompleteQuery, handleCloseAutocomplete] =
+      useAutocompleteQuery(editor);
 
     const getPrevBodyAndFormattedBody = useCallback((): [
       string | undefined,
@@ -164,10 +151,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       }
 
       if (pmpDisplayname && typeof customHtml === 'string') {
-        customHtml = customHtml.replace(
-          /^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/,
-          ''
-        );
+        customHtml = stripPerMessageProfileFormattedBody(customHtml);
       }
 
       const bundleContent =
@@ -234,9 +218,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       useCallback(async () => {
         const oldContent = mEvent.getContent();
         const msgtype = mEvent.getContent().msgtype as RoomMessageTextEventContent['msgtype'];
-        let plainText = toPlainText(editor.children).trim();
+        let plainText = toPlainText(editor.children as EditorDocument).trim();
         let customHtml = trimCustomHtml(
-          toMatrixCustomHTML(editor.children, {
+          toMatrixCustomHTML(editor.children as EditorDocument, {
             forEmote: msgtype === MsgType.Emote,
             room,
           })
@@ -272,7 +256,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           editedEvent?.getContent()?.['m.new_content']?.['com.beeper.per_message_profile'] ??
           mEvent.getContent()?.['com.beeper.per_message_profile'];
 
-        const mentionData = getMentions(mx, roomId, editor);
+        const mentionData = getMentions(mx, roomId, {
+          children: editor.children as EditorDocument,
+        });
 
         prevMentions?.user_ids?.forEach((prevMentionId) => {
           mentionData.users.add(prevMentionId);
@@ -281,7 +267,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
 
         const linkPreviews =
-          getLinks(editor.children)?.map((matchedUrl) => ({
+          getDocumentLinks(editor.children as EditorDocument)?.map((matchedUrl) => ({
             matched_url: matchedUrl,
           })) ?? [];
 
@@ -292,11 +278,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           eventId,
           mMentions,
           linkPreviews,
-          rawPmp
+          rawPmp,
+          pmpNoFallback
         );
 
         return mx.sendMessage(roomId, content as RoomMessageEventContent);
-      }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room])
+      }, [mx, editor, roomId, mEvent, getPrevBodyAndFormattedBody, room, pmpNoFallback])
     );
 
     const handleSave = useCallback(() => {
@@ -319,12 +306,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           (isKeyHotkey('mod+enter', evt) || (!enterForNewline && isKeyHotkey('enter', evt))) &&
           !isComposing(evt)
         ) {
-          const prevWordRange = getPrevWorldRange(editor);
-          if (
-            prevWordRange &&
-            getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES)
-          )
-            return;
+          if (editor.getAutocompleteQuery(ANYWHERE_AUTOCOMPLETE_PREFIXES)) return;
 
           evt.preventDefault();
           handleSave();
@@ -337,6 +319,10 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       [enterForNewline, isComposing, editor, handleSave, onCancel]
     );
 
+    const detectAutocomplete = useCallback(() => {
+      setAutocompleteQuery(editor.getAutocompleteQuery(ANYWHERE_AUTOCOMPLETE_PREFIXES));
+    }, [editor, setAutocompleteQuery]);
+
     const handleKeyUp: KeyboardEventHandler = useCallback(
       (evt) => {
         if (isKeyHotkey('escape', evt)) {
@@ -344,27 +330,14 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           return;
         }
 
-        const prevWordRange = getPrevWorldRange(editor);
-        const query = prevWordRange
-          ? getAutocompleteQuery(editor, prevWordRange, ANYWHERE_AUTOCOMPLETE_PREFIXES)
-          : undefined;
-        setAutocompleteQuery(query);
+        detectAutocomplete();
       },
-      [editor]
+      [detectAutocomplete]
     );
 
-    const handleCloseAutocomplete = useCallback(() => {
-      setAutocompleteQuery((prev) => {
-        if (prev !== undefined) {
-          focusEditor(editor);
-        }
-        return undefined;
-      });
-    }, [editor]);
-
     const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode));
-      moveCursor(editor);
+      editor.insertInline(createEmoticonElement(key, shortcode));
+      editor.insertText(' ');
     };
 
     useEffect(() => {
@@ -384,13 +357,8 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         mentionOptions
       );
 
-      Transforms.select(editor, {
-        anchor: Editor.start(editor, []),
-        focus: Editor.end(editor, []),
-      });
-
-      editor.insertFragment(initialValue);
-      if (!isMobileOrTablet()) ReactEditor.focus(editor);
+      editor.setDocument(initialValue);
+      if (!isMobileOrTablet()) editor.focus();
     }, [editor, getPrevBodyAndFormattedBody, room, nicknames, mx]);
 
     useEffect(() => {
@@ -446,24 +414,24 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         {autocompleteQuery?.prefix === AutocompletePrefix.RoomMention && (
           <RoomMentionAutocomplete
             roomId={roomId}
-            editor={editor}
-            query={autocompleteQuery}
+            controller={editor}
+            query={autocompleteQuery!}
             requestClose={handleCloseAutocomplete}
           />
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.UserMention && (
           <UserMentionAutocomplete
             room={room}
-            editor={editor}
-            query={autocompleteQuery}
+            controller={editor}
+            query={autocompleteQuery!}
             requestClose={handleCloseAutocomplete}
           />
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.Emoticon && (
           <EmoticonAutocomplete
             imagePackRooms={imagePackRooms || []}
-            editor={editor}
-            query={autocompleteQuery}
+            controller={editor}
+            query={autocompleteQuery!}
             requestClose={handleCloseAutocomplete}
           />
         )}
@@ -485,6 +453,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
               htmlReactParserOptions={htmlReactParserOptions}
               hideCaption
               linkifyOpts={linkifyOpts}
+              room={room}
             />
           )}
           <Box
@@ -520,7 +489,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
               onKeyUp={handleKeyUp}
               bottom={
                 <>
-                  <MarkdownFormattingToolbarBottom />
+                  <MarkdownFormattingToolbarBottom controller={editor} />
                   <Box
                     style={{ padding: config.space.S200, paddingTop: 0 }}
                     alignItems="End"
@@ -566,7 +535,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                               requestClose={() => {
                                 setAnchor((v) => {
                                   if (v) {
-                                    if (!isMobileOrTablet()) ReactEditor.focus(editor);
+                                    if (!isMobileOrTablet()) editor.focus();
                                     return undefined;
                                   }
                                   return v;

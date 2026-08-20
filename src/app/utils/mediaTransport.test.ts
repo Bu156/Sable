@@ -235,6 +235,22 @@ describe('fetchMediaBlob', () => {
     expect(mediaCache.putInMediaCache).toHaveBeenCalledWith(scopedUrl, freshBlob);
   });
 
+  it('does not return a cached thumbnail for an original-media download', async () => {
+    const { fetchMediaBlob } = await import('./mediaTransport');
+    const downloadUrl =
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/media-id';
+    const thumbnailBlob = new Blob(['thumbnail'], { type: 'image/jpeg' });
+    const originalBlob = new Blob(['original'], { type: 'image/jpeg' });
+    mediaCache.cache.set(
+      'anonymous:mxc://example.org/media-id:thumbnail?width=96&height=96',
+      thumbnailBlob
+    );
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(originalBlob, { status: 200 }));
+
+    await expect(fetchMediaBlob(downloadUrl)).resolves.toEqual(originalBlob);
+    expect(fetch).toHaveBeenCalledWith(downloadUrl, expect.any(Object));
+  });
+
   it('does not wait for persistent cache writes before returning media', async () => {
     const { fetchMediaBlob } = await import('./mediaTransport');
     const url = 'https://example.org/media.png';

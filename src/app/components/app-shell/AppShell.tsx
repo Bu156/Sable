@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
 
+import { DesktopSpellcheck } from '$components/tauri/DesktopSpellcheck';
 import { TauriFrontendReady } from '$components/tauri/TauriFrontendReady';
 import { TauriWindowFocus } from '$components/tauri/TauriWindowFocus';
 import { DesktopTitleBar } from '$components/tauri/DesktopTitleBar';
@@ -15,11 +16,13 @@ import { WebUpdater } from '$pages/client/WebUpdater';
 import { GlobalBannerRenderer } from '$components/global-banner/GlobalBannerRenderer';
 import { Toast } from '$components/toast/Toast';
 import { ConfirmHost } from '$components/confirm/ConfirmHost';
+import { OverlayStackProvider } from '$components/overlay-stack';
 import type { ScreenSize } from '$hooks/useScreenSize';
 import { ScreenSizeProvider } from '$hooks/useScreenSize';
 import { isReactQueryDevtoolsEnabled } from '$pages/reactQueryDevtoolsGate';
 import { useDesktopSetting } from '$state/hooks/desktopSettings';
 import { getCustomTitlebarKind } from '$utils/tauriTitlebar';
+import { getCspNonce } from '$utils/cspNonce';
 import { SystemBarShell } from './SystemBarShell';
 
 const ReactQueryDevtools = lazy(async () => {
@@ -43,23 +46,28 @@ export function AppShell({ children, queryClient, screenSize, jotaiStore }: AppS
     <TooltipContainerProvider value={portalContainer ?? undefined}>
       <PopOutContainerProvider value={portalContainer ?? undefined}>
         <OverlayContainerProvider value={portalContainer ?? undefined}>
-          <ScreenSizeProvider value={screenSize}>
-            <QueryClientProvider client={queryClient}>
-              <JotaiProvider store={jotaiStore}>
-                <AppShellFrame
-                  portalContainer={portalContainer}
-                  onPortalContainerChange={setPortalContainer}
-                >
-                  {children}
-                </AppShellFrame>
-              </JotaiProvider>
-              {reactQueryDevtoolsEnabled && (
-                <Suspense fallback={null}>
-                  <ReactQueryDevtools initialIsOpen={false} />
-                </Suspense>
-              )}
-            </QueryClientProvider>
-          </ScreenSizeProvider>
+          <OverlayStackProvider>
+            <ScreenSizeProvider value={screenSize}>
+              <QueryClientProvider client={queryClient}>
+                <JotaiProvider store={jotaiStore}>
+                  <AppShellFrame
+                    portalContainer={portalContainer}
+                    onPortalContainerChange={setPortalContainer}
+                  >
+                    {children}
+                  </AppShellFrame>
+                </JotaiProvider>
+                {reactQueryDevtoolsEnabled && (
+                  <Suspense fallback={null}>
+                    <ReactQueryDevtools
+                      initialIsOpen={false}
+                      styleNonce={getCspNonce() || undefined}
+                    />
+                  </Suspense>
+                )}
+              </QueryClientProvider>
+            </ScreenSizeProvider>
+          </OverlayStackProvider>
         </OverlayContainerProvider>
       </PopOutContainerProvider>
     </TooltipContainerProvider>
@@ -82,6 +90,7 @@ function AppShellFrame({ children, portalContainer, onPortalContainerChange }: A
     <>
       <TauriFrontendReady />
       <TauriWindowFocus />
+      <DesktopSpellcheck />
       <div
         style={{
           display: 'flex',

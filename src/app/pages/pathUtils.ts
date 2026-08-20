@@ -21,6 +21,7 @@ import {
   INBOX_PATH,
   REGISTER_PATH,
   RESET_PASSWORD_PATH,
+  SERVER_SEARCH_PARAM,
   SETTINGS_PATH,
   SPACE_LOBBY_PATH,
   SPACE_PATH,
@@ -32,14 +33,30 @@ import {
   NAVIGATE_PATH,
   PROFILE_PATH,
   INBOX_BOOKMARKS_PATH,
+  HOME_ROOM_FORUM_PATH,
+  DIRECT_ROOM_FORUM_PATH,
+  SPACE_ROOM_FORUM_PATH,
 } from './paths';
 
 export const joinPathComponent = (path: Path): string => path.pathname + path.search + path.hash;
 
-export const withSearchParam = (path: string, searchParam: Record<string, string>): string => {
-  const params = new URLSearchParams(searchParam);
+const generateEncodedPath = (path: string, params: Record<string, string | null>): string =>
+  generatePath(
+    path,
+    Object.fromEntries(
+      Object.entries(params).map(([key, value]) => [
+        key,
+        value === null ? null : encodeURIComponent(value),
+      ])
+    )
+  ).replaceAll('%25', '%');
 
-  return `${path}?${params}`;
+export const withSearchParam = (path: string, searchParam: Record<string, string>): string => {
+  const [pathname, existingSearch] = path.split('?');
+  const params = new URLSearchParams(existingSearch);
+  Object.entries(searchParam).forEach(([name, value]) => params.set(name, value));
+
+  return `${pathname}?${params}`;
 };
 export const encodeSearchParamValueArray = (ids: string[]): string => ids.join(',');
 export const decodeSearchParamValueArray = (idsParam: string): string[] => idsParam.split(',');
@@ -81,62 +98,65 @@ export const getAppPathFromHref = (baseUrl: string, href: string): string => {
   return pathname + search;
 };
 
-export const getLoginPath = (server?: string): string => {
-  const params = server ? { server: encodeURIComponent(server) } : undefined;
-  return generatePath(LOGIN_PATH, params);
-};
+// The homeserver rides in the query string: as a path segment a server given as a full URL
+// ("http://localhost:8008") needs an escaped slash, which hosting layers normalise away.
+const withServerParam = (path: string, server?: string): string =>
+  server ? withSearchParam(path, { [SERVER_SEARCH_PARAM]: server }) : path;
 
-export const getRegisterPath = (server?: string): string => {
-  const params = server ? { server: encodeURIComponent(server) } : undefined;
-  return generatePath(REGISTER_PATH, params);
-};
+export const getLoginPath = (server?: string): string => withServerParam(LOGIN_PATH, server);
 
-export const getResetPasswordPath = (server?: string): string => {
-  const params = server ? { server: encodeURIComponent(server) } : undefined;
-  return generatePath(RESET_PASSWORD_PATH, params);
-};
+export const getRegisterPath = (server?: string): string => withServerParam(REGISTER_PATH, server);
+
+export const getResetPasswordPath = (server?: string): string =>
+  withServerParam(RESET_PASSWORD_PATH, server);
 
 export const getHomePath = (): string => HOME_PATH;
 export const getHomeJoinPath = (): string => HOME_JOIN_PATH;
 export const getHomeSearchPath = (): string => HOME_SEARCH_PATH;
 export const getHomeRoomPath = (roomIdOrAlias: string, eventId?: string): string => {
   const params = {
-    roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
-    eventId: eventId ? encodeURIComponent(eventId) : null,
+    roomIdOrAlias,
+    eventId: eventId ?? null,
   };
 
-  return generatePath(HOME_ROOM_PATH, params);
+  return generateEncodedPath(HOME_ROOM_PATH, params);
 };
+
+export const getHomeForumPath = (roomIdOrAlias: string, eventId?: string): string =>
+  generateEncodedPath(HOME_ROOM_FORUM_PATH, { roomIdOrAlias, eventId: eventId ?? null });
 
 export const getDirectPath = (): string => DIRECT_PATH;
 export const getDirectCreatePath = (): string => DIRECT_CREATE_PATH;
 export const getDirectRoomPath = (roomIdOrAlias: string, eventId?: string): string => {
   const params = {
-    roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
-    eventId: eventId ? encodeURIComponent(eventId) : null,
+    roomIdOrAlias,
+    eventId: eventId ?? null,
   };
 
-  return generatePath(DIRECT_ROOM_PATH, params);
+  return generateEncodedPath(DIRECT_ROOM_PATH, params);
 };
+
+export const getDirectForumPath = (roomIdOrAlias: string, eventId?: string): string =>
+  generateEncodedPath(DIRECT_ROOM_FORUM_PATH, { roomIdOrAlias, eventId: eventId ?? null });
 
 export const getSpacePath = (spaceIdOrAlias: string): string => {
   const params = {
-    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
+    spaceIdOrAlias,
   };
 
-  return generatePath(SPACE_PATH, params);
+  return generateEncodedPath(SPACE_PATH, params);
 };
 export const getSpaceLobbyPath = (spaceIdOrAlias: string): string => {
   const params = {
-    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
+    spaceIdOrAlias,
   };
-  return generatePath(SPACE_LOBBY_PATH, params);
+  return generateEncodedPath(SPACE_LOBBY_PATH, params);
 };
 export const getSpaceSearchPath = (spaceIdOrAlias: string): string => {
   const params = {
-    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
+    spaceIdOrAlias,
   };
-  return generatePath(SPACE_SEARCH_PATH, params);
+  return generateEncodedPath(SPACE_SEARCH_PATH, params);
 };
 export const getSpaceRoomPath = (
   spaceIdOrAlias: string,
@@ -144,28 +164,43 @@ export const getSpaceRoomPath = (
   eventId?: string
 ): string => {
   const params = {
-    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
-    roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
-    eventId: eventId ? encodeURIComponent(eventId) : null,
+    spaceIdOrAlias,
+    roomIdOrAlias,
+    eventId: eventId ?? null,
   };
 
-  return generatePath(SPACE_ROOM_PATH, params);
+  return generateEncodedPath(SPACE_ROOM_PATH, params);
 };
+export const getSpaceForumPath = (
+  spaceIdOrAlias: string,
+  roomIdOrAlias: string,
+  eventId?: string
+): string =>
+  generateEncodedPath(SPACE_ROOM_FORUM_PATH, {
+    spaceIdOrAlias,
+    roomIdOrAlias,
+    eventId: eventId ?? null,
+  });
 
 export const getExplorePath = (): string => EXPLORE_PATH;
 export const getExploreFeaturedPath = (): string => EXPLORE_FEATURED_PATH;
 export const getExploreServerPath = (server: string): string => {
   const params = {
-    server: encodeURIComponent(server),
+    server,
   };
-  return generatePath(EXPLORE_SERVER_PATH, params);
+  return generateEncodedPath(EXPLORE_SERVER_PATH, params);
 };
 
 export const getCreatePath = (): string => CREATE_PATH;
 export const getCreateSpacePath = (spaceId?: string): string =>
   spaceId ? withSearchParam(CREATE_PATH, { spaceId }) : CREATE_PATH;
-export const getCreateRoomPath = (spaceId?: string): string =>
-  spaceId ? withSearchParam(CREATE_ROOM_PATH, { spaceId }) : CREATE_ROOM_PATH;
+export const getCreateRoomPath = (spaceId?: string, type?: string): string => {
+  const params: Record<string, string> = {};
+  if (spaceId) params.spaceId = spaceId;
+  if (type) params.type = type;
+
+  return Object.keys(params).length ? withSearchParam(CREATE_ROOM_PATH, params) : CREATE_ROOM_PATH;
+};
 export const getBugReportPath = (): string => BUG_REPORT_PATH;
 export const getNavigatePath = (): string => NAVIGATE_PATH;
 export const getProfilePath = (): string => PROFILE_PATH;
@@ -182,6 +217,8 @@ export type SectionNav = {
   listPath: string;
   /** Builds the path to a room within this section, or null when the section has no rooms. */
   getRoomPath: ((roomIdOrAlias: string) => string) | null;
+  /** Decoded space id or alias, present only when the section is a space. */
+  spaceIdOrAlias?: string;
 };
 
 /**
@@ -191,17 +228,19 @@ export type SectionNav = {
  */
 export const resolveSection = (pathname: string): SectionNav | null => {
   if (matchPath({ path: HOME_PATH, end: false }, pathname)) {
+    const isForum = matchPath({ path: HOME_ROOM_FORUM_PATH, end: false }, pathname) !== null;
     return {
       key: 'home',
       listPath: getHomePath(),
-      getRoomPath: getHomeRoomPath,
+      getRoomPath: isForum ? getHomeForumPath : getHomeRoomPath,
     };
   }
   if (matchPath({ path: DIRECT_PATH, end: false }, pathname)) {
+    const isForum = matchPath({ path: DIRECT_ROOM_FORUM_PATH, end: false }, pathname) !== null;
     return {
       key: 'direct',
       listPath: getDirectPath(),
-      getRoomPath: getDirectRoomPath,
+      getRoomPath: isForum ? getDirectForumPath : getDirectRoomPath,
     };
   }
   if (matchPath({ path: EXPLORE_PATH, end: false }, pathname)) {
@@ -214,10 +253,14 @@ export const resolveSection = (pathname: string): SectionNav | null => {
   const encodedSpaceId = spaceMatch?.params.spaceIdOrAlias;
   if (encodedSpaceId) {
     const spaceId = decodeURIComponent(encodedSpaceId);
+    const isForum = matchPath({ path: SPACE_ROOM_FORUM_PATH, end: false }, pathname) !== null;
     return {
       key: `space:${spaceId}`,
       listPath: getSpacePath(spaceId),
-      getRoomPath: (roomIdOrAlias) => getSpaceRoomPath(spaceId, roomIdOrAlias),
+      getRoomPath: isForum
+        ? (roomIdOrAlias) => getSpaceForumPath(spaceId, roomIdOrAlias)
+        : (roomIdOrAlias) => getSpaceRoomPath(spaceId, roomIdOrAlias),
+      spaceIdOrAlias: spaceId,
     };
   }
   return null;

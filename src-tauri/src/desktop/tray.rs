@@ -4,13 +4,14 @@ use crate::desktop::runtime_state::DesktopRuntimeState;
 use crate::desktop::settings::{
     desktop_settings_from_values, tray_available_for_session, use_custom_title_bar_default,
     DesktopSettings, CLOSE_TO_BACKGROUND_ON_CLOSE_KEY, DESKTOP_SETTINGS_PATH,
-    LEGACY_KEEP_BACKGROUND_RUNNING_KEY, SHOW_SYSTEM_TRAY_ICON_KEY, USE_CUSTOM_TITLE_BAR_KEY,
+    LEGACY_KEEP_BACKGROUND_RUNNING_KEY, SHOW_SYSTEM_TRAY_ICON_KEY, SPELLCHECK_KEY,
+    USE_CUSTOM_TITLE_BAR_KEY,
 };
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, RunEvent, WebviewWindow,
+    AppHandle, Emitter, Manager, RunEvent, WebviewWindow,
 };
 use tauri_plugin_store::StoreExt;
 
@@ -18,6 +19,7 @@ use tauri_plugin_store::StoreExt;
 use tauri::tray::{MouseButton, TrayIconEvent};
 
 pub(crate) const MAIN_TRAY_ID: &str = "main";
+pub(crate) const WINDOW_HIDDEN_TO_TRAY_EVENT: &str = "window-hidden-to-tray";
 const TRAY_MENU_SHOW_ID: &str = "tray_show";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 
@@ -25,6 +27,7 @@ pub struct DesktopSettingsState {
     close_to_background_on_close: AtomicBool,
     show_system_tray_icon: AtomicBool,
     use_custom_title_bar: AtomicBool,
+    spellcheck: AtomicBool,
     tray_available: AtomicBool,
 }
 
@@ -34,6 +37,7 @@ impl Default for DesktopSettingsState {
             close_to_background_on_close: AtomicBool::new(true),
             show_system_tray_icon: AtomicBool::new(true),
             use_custom_title_bar: AtomicBool::new(use_custom_title_bar_default()),
+            spellcheck: AtomicBool::new(true),
             tray_available: AtomicBool::new(false),
         }
     }
@@ -46,8 +50,15 @@ pub fn setup_close_to_background(webview_window: &WebviewWindow<crate::BrowserEn
             return;
         };
         let state = window.state::<DesktopSettingsState>();
-        if state.close_to_background_on_close.load(Ordering::Relaxed) {
+        if state.close_to_background_on_close.load(Ordering::Relaxed)
+            && can_restore_from_background(DesktopRuntimeState {
+                tray_available: state.tray_available.load(Ordering::Relaxed),
+            })
+        {
             api.prevent_close();
+            // Hiding does not reliably emit a native blur event, so notify the
+            // webview before it can process new timeline events as read.
+            let _ = window.emit(WINDOW_HIDDEN_TO_TRAY_EVENT, ());
             let _ = window.hide();
         }
     });
@@ -59,8 +70,19 @@ enum ExitRequestAction {
     CloseWindowsToBackground,
 }
 
-fn exit_request_action(settings: DesktopSettings, code: Option<i32>) -> ExitRequestAction {
-    if code.is_some() || !settings.close_to_background_on_close {
+fn can_restore_from_background(runtime: DesktopRuntimeState) -> bool {
+    cfg!(target_os = "macos") || runtime.tray_available
+}
+
+fn exit_request_action(
+    settings: DesktopSettings,
+    runtime: DesktopRuntimeState,
+    code: Option<i32>,
+) -> ExitRequestAction {
+    if code.is_some()
+        || !settings.close_to_background_on_close
+        || !can_restore_from_background(runtime)
+    {
         ExitRequestAction::AllowExit
     } else {
         ExitRequestAction::CloseWindowsToBackground
@@ -79,6 +101,7 @@ pub(crate) fn load_desktop_settings(
                 USE_CUSTOM_TITLE_BAR_KEY.into(),
                 json!(use_custom_title_bar_default()),
             ),
+            (SPELLCHECK_KEY.into(), json!(true)),
         ]))
         .build()
         .map_err(|error| tauri::Error::PluginInitialization("store".into(), error.to_string()))?;
@@ -93,6 +116,7 @@ pub(crate) fn load_desktop_settings(
         store
             .get(USE_CUSTOM_TITLE_BAR_KEY)
             .and_then(|value| value.as_bool()),
+        store.get(SPELLCHECK_KEY).and_then(|value| value.as_bool()),
         store
             .get(LEGACY_KEEP_BACKGROUND_RUNNING_KEY)
             .and_then(|value| value.as_bool()),
@@ -105,6 +129,7 @@ fn current_desktop_settings(app: &AppHandle<crate::BrowserEngine>) -> DesktopSet
         close_to_background_on_close: state.close_to_background_on_close.load(Ordering::Relaxed),
         show_system_tray_icon: state.show_system_tray_icon.load(Ordering::Relaxed),
         use_custom_title_bar: state.use_custom_title_bar.load(Ordering::Relaxed),
+        spellcheck: state.spellcheck.load(Ordering::Relaxed),
     }
 }
 
@@ -152,6 +177,9 @@ fn apply_desktop_settings(
     state
         .use_custom_title_bar
         .store(settings.use_custom_title_bar, Ordering::Relaxed);
+    state
+        .spellcheck
+        .store(settings.spellcheck, Ordering::Relaxed);
 
     apply_main_window_title_bar_settings(app, settings)?;
 
@@ -216,7 +244,8 @@ fn handle_exit_request(
     api: &tauri::ExitRequestApi,
 ) {
     let settings = current_desktop_settings(app);
-    if exit_request_action(settings, code) == ExitRequestAction::CloseWindowsToBackground {
+    let runtime = desktop_runtime_state(app);
+    if exit_request_action(settings, runtime, code) == ExitRequestAction::CloseWindowsToBackground {
         api.prevent_exit();
         close_all_windows(app);
     }
@@ -280,7 +309,25 @@ fn appindicator_available() -> bool {
     ];
     CANDIDATES
         .iter()
-        .any(|name| unsafe { libloading::Library::new(name) }.is_ok())
+        .any(|name| unsafe { libloading::Library::new(*name) }.is_ok())
+}
+
+// The AppImage bundles libayatana-appindicator, so the library probe passes on
+// every desktop. Without a StatusNotifierItem host the icon is created and never
+// rendered, which strands the window with no way to restore it.
+#[cfg(target_os = "linux")]
+fn status_notifier_host_available() -> bool {
+    const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+    let Ok(name) = zbus::names::BusName::try_from(WATCHER) else {
+        return false;
+    };
+    let Ok(connection) = zbus::blocking::Connection::session() else {
+        return false;
+    };
+    let Ok(dbus) = zbus::blocking::fdo::DBusProxy::new(&connection) else {
+        return false;
+    };
+    dbus.name_has_owner(name).unwrap_or(false)
 }
 
 pub fn create_system_tray(app: &AppHandle<crate::BrowserEngine>) -> tauri::Result<()> {
@@ -289,6 +336,15 @@ pub fn create_system_tray(app: &AppHandle<crate::BrowserEngine>) -> tauri::Resul
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "appindicator library not found; skipping system tray",
+        )
+        .into());
+    }
+
+    #[cfg(target_os = "linux")]
+    if !status_notifier_host_available() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no StatusNotifierWatcher on the session bus; skipping system tray",
         )
         .into());
     }
@@ -335,16 +391,24 @@ mod tests {
         desktop_settings_from_values, tray_available_for_session, DesktopSettings,
     };
 
+    const TRAY_UP: DesktopRuntimeState = DesktopRuntimeState {
+        tray_available: true,
+    };
+    const NO_TRAY: DesktopRuntimeState = DesktopRuntimeState {
+        tray_available: false,
+    };
+
     #[test]
     fn close_behavior_keeps_sable_running() {
         let settings = DesktopSettings {
             close_to_background_on_close: true,
-            show_system_tray_icon: false,
+            show_system_tray_icon: true,
             use_custom_title_bar: false,
+            spellcheck: true,
         };
 
         assert_eq!(
-            exit_request_action(settings, None),
+            exit_request_action(settings, TRAY_UP, None),
             ExitRequestAction::CloseWindowsToBackground
         );
     }
@@ -355,27 +419,42 @@ mod tests {
             show_system_tray_icon: true,
             close_to_background_on_close: false,
             use_custom_title_bar: false,
+            spellcheck: true,
         };
 
         assert_eq!(
-            exit_request_action(settings, None),
+            exit_request_action(settings, TRAY_UP, None),
             ExitRequestAction::AllowExit
         );
     }
 
     #[test]
-    fn tray_failure_still_closes_to_background_when_requested() {
+    fn tray_failure_allows_exit_instead_of_stranding_the_process() {
         let settings = DesktopSettings {
             close_to_background_on_close: true,
             show_system_tray_icon: true,
             use_custom_title_bar: false,
+            spellcheck: true,
         };
 
-        assert_eq!(
-            exit_request_action(settings, None),
-            ExitRequestAction::CloseWindowsToBackground
-        );
         assert!(!tray_available_for_session(settings, false));
+        assert_eq!(
+            exit_request_action(settings, NO_TRAY, None),
+            if cfg!(target_os = "macos") {
+                ExitRequestAction::CloseWindowsToBackground
+            } else {
+                ExitRequestAction::AllowExit
+            }
+        );
+    }
+
+    #[test]
+    fn macos_closes_to_background_without_a_tray() {
+        assert_eq!(
+            can_restore_from_background(NO_TRAY),
+            cfg!(target_os = "macos")
+        );
+        assert!(can_restore_from_background(TRAY_UP));
     }
 
     #[test]
@@ -384,10 +463,11 @@ mod tests {
             close_to_background_on_close: true,
             show_system_tray_icon: true,
             use_custom_title_bar: false,
+            spellcheck: true,
         };
 
         assert_eq!(
-            exit_request_action(settings, Some(0)),
+            exit_request_action(settings, TRAY_UP, Some(0)),
             ExitRequestAction::AllowExit
         );
     }
@@ -395,11 +475,12 @@ mod tests {
     #[test]
     fn missing_store_values_default_to_enabled() {
         assert_eq!(
-            desktop_settings_from_values(None, None, None, None),
+            desktop_settings_from_values(None, None, None, None, None),
             DesktopSettings {
                 close_to_background_on_close: true,
                 show_system_tray_icon: true,
                 use_custom_title_bar: use_custom_title_bar_default(),
+                spellcheck: true,
             }
         );
     }
@@ -407,11 +488,12 @@ mod tests {
     #[test]
     fn legacy_background_store_value_migrates_to_close_behavior() {
         assert_eq!(
-            desktop_settings_from_values(Some(false), Some(false), Some(false), Some(true)),
+            desktop_settings_from_values(Some(false), Some(false), Some(false), None, Some(true)),
             DesktopSettings {
                 close_to_background_on_close: true,
                 show_system_tray_icon: false,
                 use_custom_title_bar: false,
+                spellcheck: true,
             }
         );
     }
@@ -419,11 +501,12 @@ mod tests {
     #[test]
     fn explicit_store_values_are_preserved_when_legacy_background_is_off() {
         assert_eq!(
-            desktop_settings_from_values(Some(false), Some(false), Some(true), Some(false)),
+            desktop_settings_from_values(Some(false), Some(false), Some(true), None, Some(false)),
             DesktopSettings {
                 show_system_tray_icon: false,
                 close_to_background_on_close: false,
                 use_custom_title_bar: true,
+                spellcheck: true,
             }
         );
     }

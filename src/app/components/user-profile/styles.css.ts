@@ -32,6 +32,7 @@ export const UserHeroAvatarStatusContainer = style({
   height: toRem(29),
   width: '100%',
   minWidth: 0,
+  borderBottom: 'none !important',
 });
 export const UserHeroAvatarContainer = style({
   position: 'relative',
@@ -129,5 +130,13 @@ export const UserHeroMenuItem = style({
       transform: 'translateY(-1px)',
       backgroundColor: 'var(--user-hero-menu-item-bg) !important',
     },
+  },
+});
+
+export const LinkUnderline = style({
+  cursor: 'pointer',
+  textDecoration: 'underline',
+  ':hover': {
+    textDecoration: 'none',
   },
 });

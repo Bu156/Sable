@@ -1,6 +1,7 @@
 import { Box, Button, color, config, Menu, MenuItem, Scroll, Text, toRem } from 'folds';
-import type { CSSProperties, SyntheticEvent } from 'react';
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import type { Position, RectCords } from 'folds';
+import type { CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import type { Opts as LinkifyOpts } from 'linkifyjs';
@@ -26,6 +27,7 @@ import { useUserPresence } from '$hooks/useUserPresence';
 import { useCloseUserRoomProfile } from '$state/hooks/userRoomProfile';
 import { useIgnoredUsers } from '$hooks/useIgnoredUsers';
 import { useMembership } from '$hooks/useMembership';
+import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
@@ -60,8 +62,11 @@ import { IgnoredUserAlert, MutualRoomsChip, OptionsChip, ServerChip, ShareChip }
 import { UserHero, UserHeroName } from './UserHero';
 import { KnownMembership } from '$types/matrix-sdk';
 import { useRoomMemberHydration } from '$hooks/useRoomMemberHydration';
+import { useMentionClickHandler } from '$hooks/useMentionClickHandler';
 import * as css from './styles.css';
 import * as prefix from '$unstable/prefixes';
+import type { Persona } from '$app/persona';
+import { usePersonaCosmetics } from '$hooks/usePerMessageProfile';
 
 const KNOWN_KEYS = new Set([
   prefix.MATRIX_SABLE_UNSTABLE_PROFILE_BIOGRAPHY_PROPERTY_NAME,
@@ -71,6 +76,7 @@ const KNOWN_KEYS = new Set([
   prefix.MATRIX_UNSTABLE_PROFILE_PRONOUNS_PROPERTY_NAME,
   prefix.MATRIX_UNSTABLE_PROFILE_TIMEZONE_PROPERTY_NAME,
   prefix.MATRIX_STABLE_PROFILE_TIMEZONE_PROPERTY_NAME,
+  prefix.MATRIX_UNSTABLE_COLORS,
   prefix.MATRIX_SABLE_UNSTABLE_NAME_COLOR_PROPERTY_NAME,
   'avatar_url',
   'displayname',
@@ -80,6 +86,7 @@ const KNOWN_KEYS = new Set([
 
 type UserExtendedSectionProps = {
   profile: UserProfile;
+  pmp?: Persona;
   htmlReactParserOptions: HTMLReactParserOptions;
   linkifyOpts: LinkifyOpts;
   innerColor?: string;
@@ -96,6 +103,7 @@ const renderValue = (val: unknown) => {
 
 function UserExtendedSection({
   profile,
+  pmp,
   htmlReactParserOptions,
   linkifyOpts,
   innerColor,
@@ -104,8 +112,11 @@ function UserExtendedSection({
 }: Readonly<UserExtendedSectionProps>) {
   const [showMisc, setShowMisc] = useState(false);
   const [miscDataIndex, setMiscDataIndex] = useState(-1);
+  const screenSize = useScreenSizeContext();
 
   const [renderAnimals] = useSetting(settingsAtom, 'renderAnimals');
+  const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
+
   const isCat = profile.isCat === true;
   const hasCats = profile.hasCats === true;
   const isAnimal = profile.isAnimal ?? (isCat && 'cat');
@@ -125,7 +136,7 @@ function UserExtendedSection({
   const languagesToFilterFor = getSettings().filterPronounsLanguages ?? ['en'];
 
   const pronouns = filterPronounsByLanguage(
-    profile.pronouns,
+    pmp?.['io.fsky.nyx.pronouns'] ?? profile.pronouns,
     languageFilterEnabled,
     languagesToFilterFor
   )
@@ -139,11 +150,12 @@ function UserExtendedSection({
         hour: 'numeric',
         minute: '2-digit',
         timeZone: profile.timezone.replaceAll(/^["']|["']$/g, ''),
+        hour12: !hour24Clock,
       }).format(new Date());
     } catch {
       return null;
     }
-  }, [profile.timezone]);
+  }, [profile.timezone, hour24Clock]);
 
   const bioContent = useMemo(() => {
     let rawBio =
@@ -194,7 +206,10 @@ function UserExtendedSection({
         style={{
           position: 'absolute',
           zIndex: '100',
-          transform: `translateY(${toRem(32)})`,
+          transform:
+            screenSize === ScreenSize.Mobile && unknownFields.length > 1
+              ? `translateY(calc(-100% - ${toRem(32)}))`
+              : `translateY(${toRem(32)})`,
           backgroundColor: innerColor,
         }}
       >
@@ -227,7 +242,7 @@ function UserExtendedSection({
         ))}
       </Menu>
     );
-  }, [cardColor, innerColor, miscDataIndex, showMisc, textColor, unknownFields]);
+  }, [cardColor, innerColor, miscDataIndex, screenSize, showMisc, textColor, unknownFields]);
   const miscHeader = useMemo(
     () => (
       <Box justifyContent="Center" grow="Yes">
@@ -400,13 +415,19 @@ function UserExtendedSection({
 
 type UserRoomProfileProps = {
   userId: string;
+  pmp?: Persona;
   initialProfile?: Partial<UserProfile>;
   onSurfaceColorChange?: (color: string) => void;
+  anchor: RectCords;
+  position?: Position;
 };
 export function UserRoomProfile({
   userId,
+  pmp: initialPmp,
   initialProfile,
   onSurfaceColorChange,
+  anchor,
+  position,
 }: Readonly<UserRoomProfileProps>) {
   const theme = useTheme();
   const mx = useMatrixClient();
@@ -453,8 +474,17 @@ export function UserRoomProfile({
 
   useRoomMemberHydration(room, userId);
 
+  const [pmp, setPmp] = useState(initialPmp);
+  const { avatarUrl: getPmpAvatarUrl } = usePersonaCosmetics(mx, false);
+  const pmpAvatarUrl = pmp?.avatar_url ? getPmpAvatarUrl?.(pmp) : null;
+
+  const handleClearPmp = () => {
+    setPmp(undefined);
+  };
+
   const avatarMxc = getMemberAvatarMxc(room, userId) ?? extendedProfile.avatarUrl;
-  const avatarUrl = (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
+  const avatarUrl =
+    pmpAvatarUrl ?? (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
 
   const parsedBanner =
     typeof extendedProfile.bannerUrl === 'string'
@@ -473,10 +503,7 @@ export function UserRoomProfile({
     navigate(withSearchParam(getDirectCreatePath(), directSearchParam));
   };
 
-  // Todo eventually maybe
-  const mentionClickHandler = useCallback((e: SyntheticEvent<HTMLElement>) => {
-    e.preventDefault();
-  }, []);
+  const mentionClickHandler = useMentionClickHandler(room.roomId, anchor, position);
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
 
   const linkifyOpts = useMemo<LinkifyOpts>(
@@ -507,8 +534,17 @@ export function UserRoomProfile({
         linkifyOpts,
         useAuthentication,
         handleSpoilerClick: spoilerClickHandler,
+        handleMentionClick: mentionClickHandler,
       }),
-    [mx, room, linkifyOpts, settingsLinkBaseUrl, useAuthentication, spoilerClickHandler]
+    [
+      mx,
+      room,
+      linkifyOpts,
+      settingsLinkBaseUrl,
+      useAuthentication,
+      spoilerClickHandler,
+      mentionClickHandler,
+    ]
   );
 
   const backgroundColor = fetchedProfile.heroColor ?? color.Surface.Container;
@@ -567,7 +603,16 @@ export function UserRoomProfile({
       };
 
   return (
-    <Box direction="Column" style={{ color: textColor }}>
+    <Box
+      direction="Column"
+      style={{
+        color: textColor,
+        maxHeight: 'calc(85vh - 2rem)',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
+        touchAction: 'pan-y',
+      }}
+    >
       <UserHero
         userId={userId}
         avatarUrl={avatarUrl}
@@ -595,10 +640,12 @@ export function UserRoomProfile({
         >
           <Box gap="200" alignItems="Center" wrap="Wrap" style={{ color: textColor }}>
             <UserHeroName
-              displayName={displayName}
+              displayName={pmp?.displayname ?? displayName}
               userId={userId}
               customHeroCards={showCustomHeroCard}
               server={server}
+              pmp={pmp}
+              clearPmp={handleClearPmp}
             />
             {userId !== myUserId && (
               <Button
@@ -621,6 +668,7 @@ export function UserRoomProfile({
           </Box>
           <UserExtendedSection
             profile={extendedProfile}
+            pmp={pmp}
             htmlReactParserOptions={htmlReactParserOptions}
             linkifyOpts={linkifyOpts}
             innerColor={innerColor}

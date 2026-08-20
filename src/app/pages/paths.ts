@@ -1,23 +1,31 @@
 export const ROOT_PATH = '/';
 
+export const SERVER_SEARCH_PARAM = 'server';
+
 export type LoginPathSearchParams = {
   username?: string;
   email?: string;
   loginToken?: string;
 };
-export const LOGIN_PATH = '/login/:server?/';
+export const LOGIN_PATH = '/login';
 
 export type RegisterPathSearchParams = {
   username?: string;
   email?: string;
   token?: string;
 };
-export const REGISTER_PATH = '/register/:server?/';
+export const REGISTER_PATH = '/register';
 
 export type ResetPasswordPathSearchParams = {
   email?: string;
 };
-export const RESET_PASSWORD_PATH = '/reset-password/:server?/';
+export const RESET_PASSWORD_PATH = '/reset-password';
+
+// The homeserver used to be a path segment ("/login/matrix.org"); these catch links, SSO and
+// OIDC callbacks minted by older builds.
+export const LEGACY_LOGIN_PATH = `${LOGIN_PATH}/*`;
+export const LEGACY_REGISTER_PATH = `${REGISTER_PATH}/*`;
+export const LEGACY_RESET_PASSWORD_PATH = `${RESET_PASSWORD_PATH}/*`;
 
 export type SettingsPathSearchParams = {
   focus?: string;
@@ -44,13 +52,18 @@ export const SEARCH_PATH_SEGMENT = 'search/';
 export type RoomSearchParams = {
   /* comma separated string of servers */
   viaServers?: string;
+  /* "true" keeps a forum room on the timeline route instead of the forum view */
+  timeline?: string;
 };
+export const ROOM_TIMELINE_SEARCH_PARAM = 'timeline';
 export const ROOM_PATH_SEGMENT = ':roomIdOrAlias/:eventId?/';
+export const ROOM_FORUM_PATH_SEGMENT = ':roomIdOrAlias/forum/:eventId?/';
 
 export const HOME_PATH = '/home/';
 export const HOME_JOIN_PATH = `/home/${JOIN_PATH_SEGMENT}`;
 export const HOME_SEARCH_PATH = `/home/${SEARCH_PATH_SEGMENT}`;
 export const HOME_ROOM_PATH = `/home/${ROOM_PATH_SEGMENT}`;
+export const HOME_ROOM_FORUM_PATH = `/home/${ROOM_FORUM_PATH_SEGMENT}`;
 
 export const DIRECT_PATH = '/direct/';
 export type DirectCreateSearchParams = {
@@ -58,11 +71,13 @@ export type DirectCreateSearchParams = {
 };
 export const DIRECT_CREATE_PATH = `/direct/${CREATE_PATH_SEGMENT}`;
 export const DIRECT_ROOM_PATH = `/direct/${ROOM_PATH_SEGMENT}`;
+export const DIRECT_ROOM_FORUM_PATH = `/direct/${ROOM_FORUM_PATH_SEGMENT}`;
 
 export const SPACE_PATH = '/:spaceIdOrAlias/';
 export const SPACE_LOBBY_PATH = `/:spaceIdOrAlias/${LOBBY_PATH_SEGMENT}`;
 export const SPACE_SEARCH_PATH = `/:spaceIdOrAlias/${SEARCH_PATH_SEGMENT}`;
 export const SPACE_ROOM_PATH = `/:spaceIdOrAlias/${ROOM_PATH_SEGMENT}`;
+export const SPACE_ROOM_FORUM_PATH = `/:spaceIdOrAlias/${ROOM_FORUM_PATH_SEGMENT}`;
 
 export const FEATURED_PATH_SEGMENT = 'featured/';
 export const SERVER_PATH_SEGMENT = ':server/';

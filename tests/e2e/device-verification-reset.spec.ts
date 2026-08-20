@@ -1,50 +1,12 @@
-import { readFile } from 'node:fs/promises';
-import { test, expect, type Page } from '@playwright/test';
-import { registerUser } from './fixtures/continuwuity';
+import type { Page } from '@playwright/test';
+import { test, expect } from './fixtures/test';
+import { homeserverBaseUrl, loginAsFreshUser, PASSWORD } from './fixtures/session';
 
-const PASSWORD = 'test-passw0rd';
 const UPLOAD_ROUTE = '**/_matrix/client/*/keys/device_signing/upload';
 const TICKET_PATH = '/e2e-oauth-ticket';
 const SESSION = 'e2e-reset-oauth-session';
 
 type AuthDict = { type?: string; session?: string };
-
-type InjectedSession = {
-  baseUrl: string;
-  userId: string;
-  deviceId: string;
-  accessToken: string;
-  slidingSyncOptIn?: boolean;
-};
-
-async function homeserverBaseUrl(storageStatePath: string): Promise<string> {
-  const state = JSON.parse(await readFile(storageStatePath, 'utf8')) as {
-    origins: { localStorage: { name: string; value: string }[] }[];
-  };
-  const entry = state.origins[0]!.localStorage.find((item) => item.name === 'matrixSessions')!;
-  return (JSON.parse(entry.value) as InjectedSession[])[0]!.baseUrl;
-}
-
-async function loginAsFreshUser(
-  page: Page,
-  baseUrl: string,
-  name: string,
-  slidingSync = false
-): Promise<void> {
-  const user = await registerUser(baseUrl, name, PASSWORD);
-  const session: InjectedSession = {
-    baseUrl,
-    userId: user.userId,
-    deviceId: user.deviceId,
-    accessToken: user.accessToken,
-    ...(slidingSync ? { slidingSyncOptIn: true } : {}),
-  };
-  await page.addInitScript((injected: InjectedSession) => {
-    localStorage.setItem('matrixSessions', JSON.stringify([injected]));
-    localStorage.setItem('matrixActiveSession', JSON.stringify(injected.userId));
-    localStorage.setItem('dismissNotice', 'true');
-  }, session);
-}
 
 const recoveryKeyShown = (page: Page) => page.getByRole('button', { name: 'Copy', exact: true });
 
@@ -53,7 +15,12 @@ test.describe('device verification reset', () => {
     test.setTimeout(180_000);
     const storageStatePath = testInfo.project.use.storageState as string;
     const hsBaseUrl = await homeserverBaseUrl(storageStatePath);
-    await loginAsFreshUser(page, hsBaseUrl, `reset-uia-${testInfo.project.name}-${process.pid}`);
+    await loginAsFreshUser(
+      page,
+      hsBaseUrl,
+      `reset-uia-${testInfo.project.name}-${process.pid}`,
+      false
+    );
 
     await page.goto('/settings/devices');
 
@@ -92,7 +59,12 @@ test.describe('device verification reset', () => {
     test.setTimeout(180_000);
     const storageStatePath = testInfo.project.use.storageState as string;
     const hsBaseUrl = await homeserverBaseUrl(storageStatePath);
-    await loginAsFreshUser(page, hsBaseUrl, `reset-oauth-${testInfo.project.name}-${process.pid}`);
+    await loginAsFreshUser(
+      page,
+      hsBaseUrl,
+      `reset-oauth-${testInfo.project.name}-${process.pid}`,
+      false
+    );
 
     await page.goto('/settings/devices');
 
@@ -149,19 +121,18 @@ test.describe('device verification reset', () => {
     expect(authDicts[authDicts.length - 1]).toEqual({ type: 'm.oauth', session: SESSION });
   });
 
-  test('sets up verification when the session syncs over sliding sync', async ({
+  test('resumes the m.oauth stage after a retry that ran before approval', async ({
     page,
+    baseURL,
   }, testInfo) => {
-    // Sliding sync serialises the crypto bootstrap across long-poll round-trips,
-    // so this test needs more headroom than the 180s its siblings use.
-    test.setTimeout(240_000);
+    test.setTimeout(180_000);
     const storageStatePath = testInfo.project.use.storageState as string;
     const hsBaseUrl = await homeserverBaseUrl(storageStatePath);
     await loginAsFreshUser(
       page,
       hsBaseUrl,
-      `setup-sliding-${testInfo.project.name}-${process.pid}`,
-      true
+      `reset-oauth-race-${testInfo.project.name}-${process.pid}`,
+      false
     );
 
     await page.goto('/settings/devices');
@@ -169,7 +140,65 @@ test.describe('device verification reset', () => {
     await page.getByRole('button', { name: 'Enable' }).click({ timeout: 180_000 });
     await expect(page.getByText('Setup Device Verification')).toBeVisible();
     await page.locator('form').getByRole('button', { name: 'Continue' }).click();
+    await expect(recoveryKeyShown(page)).toBeVisible({ timeout: 120_000 });
 
-    await expect(recoveryKeyShown(page)).toBeVisible({ timeout: 180_000 });
+    const ticketUrl = `${baseURL}${TICKET_PATH}`;
+    const submittedDicts: (AuthDict | undefined)[] = [];
+    let approved = false;
+    await page.route(`**${TICKET_PATH}`, (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>ticket</title>' })
+    );
+    await page.route(UPLOAD_ROUTE, async (route) => {
+      const { auth } = route.request().postDataJSON() as { auth?: AuthDict };
+      const submitted = auth?.session === SESSION;
+      if (submitted) submittedDicts.push(auth);
+
+      if (submitted && approved) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+        return;
+      }
+
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          flows: [{ stages: ['m.oauth'] }],
+          params: { 'm.oauth': { url: ticketUrl } },
+          session: SESSION,
+          ...(submitted ? { errcode: 'M_FORBIDDEN', error: 'No OAuth ticket available' } : {}),
+        }),
+      });
+    });
+
+    await page.reload();
+    await page
+      .locator('#device-verification')
+      .locator('button[aria-pressed]')
+      .click({ timeout: 180_000 });
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+
+    await expect(page.getByText('Reset Device Verification')).toBeVisible();
+    await page.getByRole('button', { name: 'Reset', exact: true }).last().click();
+    await page.locator('form').getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.getByText('Account Authorization')).toBeVisible({ timeout: 120_000 });
+
+    const popup = page.waitForEvent('popup');
+    await page.getByRole('button', { name: 'Continue in Browser' }).click();
+    await (await popup).close();
+    await page.getByRole('button', { name: 'Continue', exact: true, disabled: false }).click();
+
+    await expect(page.getByText('No OAuth ticket available')).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByRole('button', { name: 'Continue in Browser' })).toBeHidden();
+
+    await expect.poll(() => submittedDicts.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+    expect(submittedDicts[0]).toEqual({ session: SESSION });
+    expect(submittedDicts[1]).toEqual({ type: 'm.oauth', session: SESSION });
+
+    approved = true;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+    await expect(recoveryKeyShown(page)).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText('Account Authorization')).toBeHidden();
   });
 });

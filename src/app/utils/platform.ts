@@ -27,6 +27,7 @@ const DESKTOP_TAURI_OS = ['linux', 'macos', 'windows'] as const;
 export function isMobileOrTablet(): boolean {
   const tauriOS = getTauriOS();
   if (tauriOS && (MOBILE_TAURI_OS as readonly string[]).includes(tauriOS)) return true;
+  if (tauriOS && (DESKTOP_TAURI_OS as readonly string[]).includes(tauriOS)) return false;
 
   const { os, device } = ua;
   if (device.type === 'mobile' || device.type === 'tablet') return true;
@@ -69,6 +70,10 @@ export function isDesktopTauri(): boolean {
   return getDesktopTauriPlatform() !== undefined;
 }
 
+export function isDesktopUpdaterEnabled(): boolean {
+  return DESKTOP_UPDATER_ENABLED;
+}
+
 export function isMobileTauri(): boolean {
   const tauriOS = getTauriOS();
   return tauriOS === 'ios' || tauriOS === 'android';
@@ -76,6 +81,10 @@ export function isMobileTauri(): boolean {
 
 export function isAndroidTauri(): boolean {
   return getTauriOS() === 'android';
+}
+
+export function isWebKitGtk(): boolean {
+  return getTauriOS() === 'linux' && !/Chrome\//.test(window.navigator.userAgent);
 }
 
 export function hasControllingServiceWorker(): boolean {

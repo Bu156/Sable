@@ -8,7 +8,7 @@ import type { IImageInfo } from '$types/matrix/common';
 
 const downloadMedia = vi.fn<(src: string) => Promise<Blob>>();
 const saveMediaToGallery =
-  vi.fn<(input: string, filename: string, mimeType: string) => Promise<void>>();
+  vi.fn<(input: Blob | string, filename: string, mimeType: string) => Promise<void>>();
 const toastMocks = vi.hoisted(() => ({
   showToast: vi.fn<(text: string, durationMs?: number) => void>(),
 }));
@@ -50,7 +50,7 @@ vi.mock('$utils/matrix', () => ({
 }));
 vi.mock('$utils/download', async (importOriginal) => ({
   ...(await importOriginal()),
-  saveMediaToGallery: (...args: [string, string, string]) => saveMediaToGallery(...args),
+  saveMediaToGallery: (...args: [Blob | string, string, string]) => saveMediaToGallery(...args),
 }));
 
 vi.mock('file-saver', () => ({
@@ -63,9 +63,17 @@ vi.mock('$hooks/useScreenSize', () => ({
   ScreenSize: { Desktop: 'Desktop', Tablet: 'Tablet', Mobile: 'Mobile' },
   useScreenSizeContext: () => (screenMocks.isMobile ? 'Mobile' : 'Desktop'),
   useScreenSizeOptionally: () => (screenMocks.isMobile ? 'Mobile' : 'Desktop'),
+  useCompactLayout: () => screenMocks.isMobile,
 }));
 
-const renderViewer = (props: { alt?: string; src?: string; info?: IImageInfo } = {}) =>
+const renderViewer = (
+  props: {
+    alt?: string;
+    src?: string;
+    info?: IImageInfo;
+    getDownloadBlob?: () => Promise<Blob>;
+  } = {}
+) =>
   render(
     <ImageViewer
       alt="kitten.png"
@@ -94,6 +102,35 @@ describe('ImageViewer', () => {
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'kitten.png');
   });
 
+  it("downloads the Matrix source behind Android's sable-media URL", async () => {
+    const source = 'https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten';
+    const src = `https://sable-media.localhost/${encodeURIComponent(source)}?__sable_media_cache=3`;
+    downloadMedia.mockResolvedValue(new Blob(['image']));
+
+    renderViewer({ src });
+    fireEvent.click(screen.getByText('Download'));
+
+    await waitFor(() => {
+      expect(downloadMedia).toHaveBeenCalledWith(source);
+    });
+  });
+
+  it('uses the supplied decrypted blob when downloading encrypted media', async () => {
+    const decryptedBlob = new Blob(['decrypted image'], { type: 'image/jpeg' });
+    const getDownloadBlob = vi.fn<() => Promise<Blob>>().mockResolvedValue(decryptedBlob);
+    downloadMedia.mockClear();
+
+    renderViewer({
+      src: 'sable-media://https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten',
+      getDownloadBlob,
+    });
+    fireEvent.click(screen.getByText('Download'));
+
+    await waitFor(() => expect(getDownloadBlob).toHaveBeenCalledOnce());
+    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(FileSaver.saveAs).toHaveBeenCalledWith(decryptedBlob, 'kitten.png');
+  });
+
   it('activates the download control on the first touch sequence', async () => {
     screenMocks.isMobile = true;
     downloadMedia.mockClear();
@@ -101,13 +138,92 @@ describe('ImageViewer', () => {
 
     renderViewer();
 
-    const download = screen.getByText('Download');
+    const download = screen.getByRole('button', { name: 'Download' });
     fireEvent.pointerDown(download, { pointerId: 1, pointerType: 'touch' });
     fireEvent.pointerUp(download, { pointerId: 1, pointerType: 'touch' });
     fireEvent.click(download);
 
     await waitFor(() => expect(downloadMedia).toHaveBeenCalledOnce());
     screenMocks.isMobile = false;
+  });
+
+  it('uses compact controls on mobile', () => {
+    screenMocks.isMobile = true;
+    try {
+      renderViewer();
+
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Zoom In' })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+
+      expect(screen.getByText('Turn pixelation on')).toBeInTheDocument();
+      expect(screen.queryByText('Zoom out')).not.toBeInTheDocument();
+      expect(screen.queryByText('Zoom in')).not.toBeInTheDocument();
+      expect(screen.queryByText('Save image')).not.toBeInTheDocument();
+    } finally {
+      screenMocks.isMobile = false;
+    }
+  });
+
+  it('closes the mobile overflow menu once an item is picked', () => {
+    screenMocks.isMobile = true;
+    try {
+      renderViewer();
+
+      fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+      fireEvent.click(screen.getByText('Turn pixelation on'));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    } finally {
+      screenMocks.isMobile = false;
+    }
+  });
+
+  it('keeps mobile overflow menu touches out of an enclosing message long-press handler', () => {
+    screenMocks.isMobile = true;
+    vi.useFakeTimers();
+    const messageLongPress = vi.fn<() => void>();
+    try {
+      render(
+        <div
+          onTouchStart={(evt) => {
+            const target = evt.target as Element;
+            if (target.closest('[data-gestures="ignore"]')) return;
+            setTimeout(messageLongPress, 500);
+          }}
+        >
+          <ImageViewer
+            alt="kitten.png"
+            src="https://example.org/kitten.png"
+            requestClose={() => {}}
+          />
+        </div>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+      fireEvent.touchStart(screen.getByText('Turn pixelation on'), {
+        touches: [{ identifier: 1, clientX: 10, clientY: 10 }],
+      });
+      vi.advanceTimersByTime(600);
+
+      expect(messageLongPress).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      screenMocks.isMobile = false;
+    }
+  });
+
+  it('hides the share control when the platform cannot share', () => {
+    screenMocks.isMobile = true;
+    try {
+      renderViewer();
+
+      expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+    } finally {
+      screenMocks.isMobile = false;
+    }
   });
 
   it('shows an error toast when downloading media fails', async () => {
@@ -134,6 +250,25 @@ describe('ImageViewer', () => {
     expect(screen.getByText('Save to Gallery')).toBeInTheDocument();
   });
 
+  it("saves the Matrix source behind Android's sable-media URL to the gallery", async () => {
+    mockPlatform('android');
+    const source = 'https://matrix.example.org/_matrix/client/v1/media/download/example.org/kitten';
+    const src = `https://sable-media.localhost/${encodeURIComponent(source)}?__sable_media_cache=3`;
+    const blob = new Blob(['image'], { type: 'image/png' });
+    saveMediaToGallery.mockClear();
+    downloadMedia.mockClear();
+    downloadMedia.mockResolvedValue(blob);
+
+    renderViewer({ src, info: { mimetype: 'image/png' } });
+    fireEvent.contextMenu(screen.getByAltText('kitten.png'));
+    fireEvent.click(screen.getByText('Save to Gallery'));
+
+    await waitFor(() =>
+      expect(saveMediaToGallery).toHaveBeenCalledWith(blob, 'kitten.png', 'image/png')
+    );
+    expect(downloadMedia).toHaveBeenCalledWith(source);
+  });
+
   it('labels the primary action Save to Photos on iOS without duplicating it in the overflow menu', () => {
     mockPlatform('ios');
 
@@ -146,8 +281,10 @@ describe('ImageViewer', () => {
 
   it('routes the primary iOS action for trusted images straight to Photos', async () => {
     mockPlatform('ios');
+    const blob = new Blob(['image'], { type: 'image/png' });
     saveMediaToGallery.mockClear();
     downloadMedia.mockClear();
+    downloadMedia.mockResolvedValue(blob);
     vi.mocked(FileSaver.saveAs).mockClear();
 
     renderViewer({ info: { mimetype: 'image/png' } });
@@ -155,13 +292,9 @@ describe('ImageViewer', () => {
     fireEvent.click(screen.getByText('Save to Photos'));
 
     await waitFor(() =>
-      expect(saveMediaToGallery).toHaveBeenCalledWith(
-        'https://example.org/kitten.png',
-        'kitten.png',
-        'image/png'
-      )
+      expect(saveMediaToGallery).toHaveBeenCalledWith(blob, 'kitten.png', 'image/png')
     );
-    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(downloadMedia).toHaveBeenCalledWith('https://example.org/kitten.png');
     expect(FileSaver.saveAs).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 # Tauri-specific dev tools and system dependencies.
-# Loaded via `MISE_ENV=tauri` (set by `mise run setup:tauri` or CI).
+# Loaded via `MISE_ENV=tauri` (set by the `tauri:setup` task's env, or CI).
 
 [env]
 ANDROID_NDK_VERSION = "29.0.14206865"
@@ -12,13 +12,14 @@ experimental = true
 # Android
 java = "temurin-21"
 android-sdk = "22.0"
+actionlint = "1.7.10"
+"aqua:goreleaser/nfpm" = "2.47.0"
 
 [bootstrap.packages]
 # Debian/Ubuntu
 "apt:build-essential" = "latest"
 "apt:file" = "latest"
 "apt:libayatana-appindicator3-dev" = "latest"
-"apt:libpulse0" = "latest"
 "apt:libgtk-3-dev" = "latest"
 "apt:librsvg2-dev" = "latest"
 "apt:libsoup-3.0-dev" = "latest"

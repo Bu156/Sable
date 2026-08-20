@@ -20,6 +20,7 @@ export type TauriNotificationsApi = {
     importance?: number;
     vibration?: boolean;
   }) => Promise<void>;
+  removeChannel: (id: string) => Promise<void>;
   isPermissionGranted: () => Promise<boolean>;
   requestPermission: () => Promise<NotificationPermission>;
   sendNotification: (payload: Record<string, unknown>) => Promise<void>;
@@ -98,7 +99,7 @@ let notificationsApiPromise: Promise<TauriNotificationsApi> | null = null;
 
 export async function getTauriNotificationsApi(): Promise<TauriNotificationsApi> {
   if (!notificationsApiPromise) {
-    notificationsApiPromise = import('@choochmeque/tauri-plugin-notifications-api').then(
+    notificationsApiPromise = import('@sableclient/tauri-plugin-notifications-api').then(
       (api) =>
         ({
           ...api,

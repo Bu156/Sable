@@ -115,6 +115,7 @@ export interface Settings {
   arboriumDarkTheme?: string;
   saturationLevel?: number;
   uniformIcons: boolean;
+  appIconId?: string;
   twitterEmoji: boolean;
   pageZoom: number;
   hideActivity: boolean;
@@ -129,6 +130,7 @@ export interface Settings {
   editorEmojiButton: boolean;
   editorGifButton: boolean;
   editorStickerButton: boolean;
+  editorTriggerButtonsMigrated: boolean;
   editorButtonOrder: EditorButtonId[];
   composerToolbarOpen: boolean;
   alwaysInlineEditor: boolean;
@@ -153,6 +155,7 @@ export interface Settings {
   encUrlPreview: boolean;
   clientUrlPreview: boolean;
   encClientUrlPreview: boolean;
+  externalGifAutoLoadEncrypted: boolean;
   clientPreviewYoutube: boolean;
   enableGifPicker: boolean;
   showInteractiveMap: boolean;
@@ -180,6 +183,7 @@ export interface Settings {
   developerTools: boolean;
   enableMSC4268CMD: boolean;
   enableMediaGalleries: boolean;
+  newCallsEnabled: boolean;
   settingsSyncEnabled: boolean;
 
   // Cosmetics!
@@ -216,11 +220,6 @@ export interface Settings {
   showEasterEggs: boolean;
   hideReads: boolean;
   emojiSuggestThreshold: number;
-  underlineLinks: boolean;
-  reducedMotion: boolean;
-  autoplayGifs: boolean;
-  autoplayStickers: boolean;
-  autoplayEmojis: boolean;
   oldSidebar: boolean;
   pixelatedImageRendering: PixelatedImageRenderingMode;
   incomingInlineImagesDefaultHeight: number;
@@ -243,6 +242,7 @@ export interface Settings {
   pmpProxying: boolean;
   pmpLatching: boolean;
   pmpPicker: boolean;
+  pmpNoFallback: boolean;
   mentionInReplies: boolean;
   profileChangePropagation: ProfileChangePropagation;
   showPersonaSetting: boolean;
@@ -260,6 +260,15 @@ export interface Settings {
   widgetSidebarWidth: number;
   isShowingAllRoomsInHome: boolean;
   sendIndividualAttachmentAsCaption: boolean;
+
+  // accessibility stuff
+  underlineLinks: boolean;
+  reducedMotion: boolean;
+  autoplayGifs: boolean;
+  autoplayStickers: boolean;
+  autoplayEmojis: boolean;
+  nameColorLightnessCorrection: 'off' | 'weak' | 'strong';
+  nameColorLightnessCorrectionMigrated: boolean;
 
   // furry stuff
   renderAnimals: boolean;
@@ -295,6 +304,7 @@ export const defaultSettings: Settings = {
   arboriumDarkTheme: 'dracula',
   saturationLevel: 100,
   uniformIcons: false,
+  appIconId: undefined,
   twitterEmoji: true,
   pageZoom: 100,
   hideActivity: false,
@@ -307,8 +317,9 @@ export const defaultSettings: Settings = {
   editorOldAddFile: false,
   editorMicButton: true,
   editorEmojiButton: true,
-  editorGifButton: false,
-  editorStickerButton: false,
+  editorGifButton: true,
+  editorStickerButton: true,
+  editorTriggerButtonsMigrated: true,
   editorButtonOrder: [...EDITOR_BUTTON_ORDER_DEFAULT],
   composerToolbarOpen: false,
   alwaysInlineEditor: false,
@@ -323,6 +334,7 @@ export const defaultSettings: Settings = {
   encUrlPreview: false,
   clientUrlPreview: false,
   encClientUrlPreview: false,
+  externalGifAutoLoadEncrypted: false,
   clientPreviewYoutube: false,
   enableGifPicker: true,
   showInteractiveMap: true,
@@ -339,6 +351,7 @@ export const defaultSettings: Settings = {
 
   enableMSC4268CMD: false,
   enableMediaGalleries: false,
+  newCallsEnabled: false,
 
   // Push notifications (SW/Sygnal): default on for mobile, opt-in on desktop.
   // In-app pill banner: default on for mobile (primary foreground alert), opt-in on desktop.
@@ -424,6 +437,7 @@ export const defaultSettings: Settings = {
   pmpProxying: false,
   pmpLatching: false,
   pmpPicker: false,
+  pmpNoFallback: false,
   mentionInReplies: true,
   profileChangePropagation: 'unchanged',
   showPersonaSetting: false,
@@ -441,6 +455,9 @@ export const defaultSettings: Settings = {
   widgetSidebarWidth: 420,
   isShowingAllRoomsInHome: false,
   sendIndividualAttachmentAsCaption: true,
+  nameColorLightnessCorrection: 'strong',
+  nameColorLightnessCorrectionMigrated: true,
+
   // furry stuff
   renderAnimals: true,
   animalKind: undefined,
@@ -483,6 +500,19 @@ const isCallToneId = (value: unknown): value is CallRingtoneId => CALL_TONE_ID_S
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 
 function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
+  if (typeof parsed.backgroundPushEnabled !== 'boolean') {
+    const legacyProvider = parsed.useUnifiedPush === true ? 'unifiedpush' : null;
+    if (
+      legacyProvider !== null ||
+      typeof parsed.usePushNotifications === 'boolean' ||
+      typeof parsed.useUnifiedPush === 'boolean'
+    ) {
+      parsed.backgroundPushEnabled =
+        legacyProvider !== null || parsed.usePushNotifications === true;
+      parsed.backgroundPushProvider = legacyProvider;
+    }
+  }
+
   const shortcutOverrides = sanitizeShortcutOverrides(parsed.shortcutOverrides);
   if (shortcutOverrides) parsed.shortcutOverrides = shortcutOverrides;
   else delete parsed.shortcutOverrides;
@@ -493,6 +523,23 @@ function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
     parsed.saturationLevel = 100;
   }
   delete parsed.monochromeMode;
+
+  if (parsed.editorTriggerButtonsMigrated !== true) {
+    delete parsed.editorGifButton;
+    delete parsed.editorStickerButton;
+    parsed.editorTriggerButtonsMigrated = true;
+  }
+
+  if (parsed.nameColorLightnessCorrectionMigrated !== true) {
+    delete parsed.nameColorLightnessCorrection;
+    parsed.nameColorLightnessCorrectionMigrated = true;
+  } else if (
+    parsed.nameColorLightnessCorrection !== 'off' &&
+    parsed.nameColorLightnessCorrection !== 'weak' &&
+    parsed.nameColorLightnessCorrection !== 'strong'
+  ) {
+    delete parsed.nameColorLightnessCorrection;
+  }
 
   if (typeof parsed.renderUserCards === 'boolean') {
     parsed.renderUserCards = parsed.renderUserCards ? 'both' : 'none';
@@ -523,6 +570,16 @@ function migrateParsedLocalStorage(parsed: Record<string, unknown>): void {
   }
   delete parsed.themeChatPreviewAnyUrl;
   delete parsed.themeChatPreviewApprovedCatalogOnly;
+
+  // Consolidate the legacy LiveKit JS experiments into the single new-call gate.
+  if (
+    typeof parsed.newCallsEnabled !== 'boolean' &&
+    (parsed.livekitJsCallsEnabled === true || parsed.livekitJsMediaTestEnabled === true)
+  ) {
+    parsed.newCallsEnabled = true;
+  }
+  delete parsed.livekitJsCallsEnabled;
+  delete parsed.livekitJsMediaTestEnabled;
 
   if (typeof parsed.callRingtoneVolume === 'number' && Number.isFinite(parsed.callRingtoneVolume)) {
     parsed.callRingtoneVolume = clampPercent(parsed.callRingtoneVolume);

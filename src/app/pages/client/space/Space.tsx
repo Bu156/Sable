@@ -21,7 +21,12 @@ import { JoinRule, EventType, KnownMembership } from '$types/matrix-sdk';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { mDirectAtom } from '$state/mDirectList';
 import { NavCategory, NavCategoryHeader, NavItem, NavItemContent, NavLink } from '$components/nav';
-import { getSpaceLobbyPath, getSpaceRoomPath, getSpaceSearchPath } from '$pages/pathUtils';
+import {
+  getSpaceLobbyPath,
+  getSpaceRoomPath,
+  getSpaceForumPath,
+  getSpaceSearchPath,
+} from '$pages/pathUtils';
 import { getCanonicalAliasOrRoomId, isRoomAlias, mxcUrlToHttp } from '$utils/matrix';
 import { useSelectedOrLastRoom } from '$hooks/router/useSelectedRoom';
 import { useSpaceLobbySelected, useSpaceSearchSelected } from '$hooks/router/useSelectedSpace';
@@ -36,7 +41,7 @@ import { useCategoryHandler } from '$hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '$hooks/useNavToActivePathMapper';
 import { useRoomName } from '$hooks/useRoomMeta';
 import type { HierarchyItem } from '$hooks/useSpaceHierarchy';
-import { useSpaceJoinedHierarchy } from '$hooks/useSpaceHierarchy';
+import { getSpaceHierarchyItemKey, useSpaceJoinedHierarchy } from '$hooks/useSpaceHierarchy';
 import { allRoomsAtom } from '$state/room-list/roomList';
 import { PageNavContent, PageNavHeader } from '$components/page';
 import { PageNavShell } from '$components/page/PageNavShell';
@@ -92,7 +97,7 @@ import { RoomAvatar } from '$components/room-avatar';
 import { getRoomAvatarUrl } from '$utils/room/display';
 import { nameInitials } from '$utils/common';
 import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
-import { CustomStateEvent } from '$types/matrix/room';
+import { CustomStateEvent, CustomRoomType } from '$types/matrix/room';
 import type { RoomBannerContent } from '$types/matrix-sdk-events';
 import { ModalWide } from '$styles/Modal.css';
 import { ImageViewer } from '$components/image-viewer';
@@ -136,7 +141,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
   const unread = useRoomsUnread(allChild, roomToUnreadAtom);
 
   const handleMarkAsRead = () => {
-    allChild.forEach((childRoomId) => markAsRead(mx, childRoomId, hideReads));
+    allChild.forEach((childRoomId) => markAsRead(mx, childRoomId, hideReads, true));
     requestClose();
   };
 
@@ -779,7 +784,7 @@ export function Space() {
     (index: number) => {
       const item = hierarchy[index];
       if (!item) return index;
-      return `${space.roomId}:${item.roomId}:${item.depth}`;
+      return getSpaceHierarchyItemKey(space.roomId, item);
     },
     [hierarchy, space.roomId]
   );
@@ -798,8 +803,13 @@ export function Space() {
     closedCategories.has(categoryId)
   );
 
-  const getToLink = (roomId: string) =>
-    getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
+  const getToLink = (roomId: string) => {
+    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, roomId);
+    if (mx.getRoom(roomId)?.getType() === CustomRoomType.Forum) {
+      return getSpaceForumPath(spaceIdOrAlias, roomIdOrAlias);
+    }
+    return getSpaceRoomPath(spaceIdOrAlias, roomIdOrAlias);
+  };
 
   return (
     <PageNavShell

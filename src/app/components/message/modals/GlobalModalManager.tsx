@@ -1,5 +1,7 @@
+import { useCallback } from 'react';
 import { useAtom } from 'jotai';
-import { Overlay, OverlayBackdrop, OverlayCenter, Box, Modal } from 'folds';
+import { OverlayBackdrop, OverlayCenter, Box, Modal } from 'folds';
+import { Overlay } from '$components/overlay-stack';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '$utils/keyboard';
 import { useDismissOnBack } from '$utils/androidBack';
@@ -16,9 +18,10 @@ import { MobileOptionsInternal } from './Options';
 export function GlobalModalManager() {
   const [modal, setModal] = useAtom(modalAtom);
 
-  const close = () => {
+  // stable so modals memoizing on it don't rebuild on every room view render
+  const close = useCallback(() => {
     setModal(null);
-  };
+  }, [setModal]);
 
   // Forward and MobileOptions render their own back handlers via their children.
   useDismissOnBack(

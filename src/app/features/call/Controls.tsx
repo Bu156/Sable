@@ -1,4 +1,5 @@
-import { IconButton, Line, Text, Tooltip, TooltipProvider } from 'folds';
+import { IconButton, Line, Text, Tooltip } from 'folds';
+import { TooltipProvider } from '$components/overlay-stack';
 import {
   ChatCircle,
   Headphones,
@@ -22,8 +23,9 @@ export function ControlDivider() {
 type MicrophoneButtonProps = {
   enabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
 };
-export function MicrophoneButton({ enabled, onToggle }: MicrophoneButtonProps) {
+export function MicrophoneButton({ enabled, onToggle, disabled }: MicrophoneButtonProps) {
   return (
     <TooltipProvider
       position="Top"
@@ -42,6 +44,7 @@ export function MicrophoneButton({ enabled, onToggle }: MicrophoneButtonProps) {
           radii="400"
           size="400"
           onClick={() => onToggle()}
+          disabled={disabled}
           outlined
         >
           {sizedIcon(enabled ? Microphone : MicrophoneSlash, '300', { filled: !enabled })}
@@ -86,8 +89,9 @@ export function SoundButton({ enabled, onToggle }: SoundButtonProps) {
 type VideoButtonProps = {
   enabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
 };
-export function VideoButton({ enabled, onToggle }: VideoButtonProps) {
+export function VideoButton({ enabled, onToggle, disabled }: VideoButtonProps) {
   return (
     <TooltipProvider
       position="Top"
@@ -106,6 +110,7 @@ export function VideoButton({ enabled, onToggle }: VideoButtonProps) {
           radii="400"
           size="400"
           onClick={() => onToggle()}
+          disabled={disabled}
           outlined
         >
           {sizedIcon(enabled ? VideoCamera : VideoCameraSlash, '300', { filled: enabled })}

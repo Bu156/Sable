@@ -1,5 +1,11 @@
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { ClientEvent, KnownMembership, MatrixEventEvent, RoomStateEvent } from '$types/matrix-sdk';
+import {
+  ClientEvent,
+  EventType,
+  KnownMembership,
+  MatrixEventEvent,
+  RoomStateEvent,
+} from '$types/matrix-sdk';
 import { invoke } from '@tauri-apps/api/core';
 import type { IRoomEvent, IWidget, WidgetDriver } from 'matrix-widget-api';
 import {
@@ -18,6 +24,7 @@ import { ElementCallIntent, ElementWidgetActions } from './types';
 import { CallControl } from './CallControl';
 import { CallControlState } from './CallControlState';
 import { createDebugLogger } from '../../utils/debugLogger';
+import { getSlidingSyncManager } from '$client/initMatrix';
 
 const debugLog = createDebugLogger('CallEmbed');
 
@@ -230,6 +237,13 @@ export class CallEmbed {
     const controlState = initialControlState ?? new CallControlState(true, false, true);
     this.control = new CallControl(controlState, call, iframe);
 
+    // MatrixRTC ignores a call membership when the member's m.room.member
+    // event is absent from the local roster (sliding sync only ships $ME/$LAZY
+    // here). Subscribe the room with a full member wildcard so the host SDK
+    // accepts the other participants' memberships for the embed's lifetime.
+    const callRoomSubscription = getSlidingSyncManager(mx)?.subscribeToCallRoom(room.roomId);
+    if (callRoomSubscription) this.disposables.push(callRoomSubscription);
+
     this.disposables.push(
       this.listenAction(WidgetApiFromWidgetAction.UpdateAlwaysOnScreen, (evt) => {
         evt.preventDefault();
@@ -333,11 +347,11 @@ export class CallEmbed {
       });
 
       // Sliding sync may not have delivered m.room.member yet.
-      if (!this.room.currentState.getStateEvents('m.room.member', myUserId)) {
+      if (!this.room.currentState.getStateEvents(EventType.RoomMember, myUserId)) {
         const membership = this.room.getMyMembership();
         if (membership) {
           const memberRaw = {
-            type: 'm.room.member',
+            type: EventType.RoomMember,
             state_key: myUserId,
             room_id: this.roomId,
             sender: myUserId,

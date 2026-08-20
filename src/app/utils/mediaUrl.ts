@@ -1,4 +1,4 @@
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { getCurrentMediaSessionScope } from './mediaTransport';
 
@@ -46,7 +46,7 @@ const TAURI_MEDIA_PROTOCOL = 'sable-media://';
 const TAURI_MEDIA_LOCALHOST = 'localhost';
 const TAURI_MEDIA_LOCALHOST_HOST = 'sable-media.localhost';
 
-const getTauriMediaInnerTarget = (mediaUrl: string): string | undefined => {
+export const getTauriMediaSourceUrl = (mediaUrl: string): string | undefined => {
   if (mediaUrl.startsWith(TAURI_MEDIA_PROTOCOL)) {
     const wrappedUrl = mediaUrl.slice(TAURI_MEDIA_PROTOCOL.length);
 
@@ -88,7 +88,7 @@ export const getTauriMediaRetryTarget = (
   revision: number
 ): string | undefined => {
   if (revision <= 0 || !isTauri()) return undefined;
-  const innerTarget = getTauriMediaInnerTarget(mediaUrl);
+  const innerTarget = getTauriMediaSourceUrl(mediaUrl);
   if (!innerTarget) return undefined;
   let parsedUrl: URL;
   try {
@@ -106,6 +106,24 @@ export const addTauriMediaRetryRevision = (mediaUrl: string, revision: number): 
   const target = getTauriMediaRetryTarget(mediaUrl, revision);
   if (!target) return mediaUrl;
   return rewriteAuthenticatedMediaUrl(target) ?? mediaUrl;
+};
+
+// A media element cannot play from the `sable-media` scheme (MEDIA_ERR_SRC_NOT_SUPPORTED),
+// so video/audio sources go through the loopback HTTP origin.
+export const prepareLoopbackMedia = async (source: string): Promise<string> => {
+  if (!isTauri()) return source;
+  return invoke<string>('prepare_loopback_media', { url: source });
+};
+
+// Awaited by the caller's own load so an element's src never changes mid-flight. An image
+// renders from the custom protocol too, so a loopback failure costs caching, not the image.
+export const prepareLoopbackImageSource = async (source: string): Promise<string> => {
+  if (!isTauri()) return source;
+  try {
+    return await prepareLoopbackMedia(source);
+  } catch {
+    return source;
+  }
 };
 
 export const mxcUrlToHttp = (

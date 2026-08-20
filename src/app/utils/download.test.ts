@@ -3,7 +3,7 @@ import FileSaver from 'file-saver';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
 import { showToast } from '$state/toast';
-import { saveFileToDevice, saveMediaToGallery } from './download';
+import { downloadJsonFile, saveFileToDevice, saveMediaToGallery } from './download';
 
 const mocks = vi.hoisted(() => ({
   androidFs: {
@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => ({
   isTauri: vi.fn<() => boolean>(),
   osType: vi.fn<() => string>(),
   showToast: vi.fn<(text: string, durationMs?: number) => void>(),
-  fetch: vi.fn<(input: string) => Promise<Response>>(),
+  fetchMediaBlob: vi.fn<(input: string) => Promise<Blob>>(),
+  captureException: vi.fn<(error: unknown, context?: unknown) => void>(),
 }));
 const { androidFs, save, writeFile } = mocks;
 
@@ -33,8 +34,9 @@ vi.mock('@tauri-apps/api/core', () => ({
   isTauri: mocks.isTauri,
 }));
 vi.mock('@tauri-apps/plugin-os', () => ({ type: mocks.osType }));
+vi.mock('@sentry/react', () => ({ captureException: mocks.captureException }));
 vi.mock('$state/toast', () => ({ showToast: mocks.showToast }));
-vi.mock('$utils/fetch', () => ({ fetch: mocks.fetch }));
+vi.mock('$utils/mediaTransport', () => ({ fetchMediaBlob: mocks.fetchMediaBlob }));
 vi.mock('tauri-plugin-android-fs-api', () => ({
   AndroidFs: mocks.androidFs,
   AndroidPublicGeneralPurposeDir: { Download: 'Download' },
@@ -79,6 +81,55 @@ describe('saveFileToDevice', () => {
     expect(showToast).toHaveBeenCalledWith('Saved to Downloads');
   });
 
+  const uniqueFileError = new Error(
+    'Failed to build unique file: /storage/emulated/0/Download/Screenshot 2026-08-13 at 20.07.50.png' +
+      ' _display_name=Screenshot 2026-08-13 at 20.07.50.png mime_type=image/png' +
+      ' _data=/storage/emulated/0/Download/Screenshot 2026-08-13 at 20.07.50.png relative_path=Download/'
+  );
+
+  it('retries the whole save under a unique name when clearing the pending flag fails', async () => {
+    androidFs.setPublicFilePending.mockRejectedValueOnce(uniqueFileError);
+
+    const result = await saveFileToDevice(
+      new Blob(['data'], { type: 'image/png' }),
+      'Screenshot 2026-08-13 at 20.07.50.png'
+    );
+
+    expect(result).toBe('saved');
+    expect(androidFs.createNewPublicFile).toHaveBeenCalledTimes(2);
+    expect(androidFs.createNewPublicFile).toHaveBeenLastCalledWith(
+      'Download',
+      expect.stringMatching(/^Screenshot 2026-08-13 at 20\.07\.50-\d+\.png$/),
+      'image/png',
+      { isPending: true, requestPermission: true }
+    );
+    expect(androidFs.removeFile).toHaveBeenCalledWith('content://download/file');
+    expect(showToast).toHaveBeenCalledWith('Saved to Downloads');
+  });
+
+  it('reports a scrubbed error to Sentry when the unique-name retry also fails', async () => {
+    androidFs.setPublicFilePending.mockRejectedValue(uniqueFileError);
+
+    const result = await saveFileToDevice(
+      new Blob(['data'], { type: 'image/png' }),
+      'Screenshot 2026-08-13 at 20.07.50.png'
+    );
+
+    expect(result).toBe('failed');
+    expect(androidFs.createNewPublicFile).toHaveBeenCalledTimes(2);
+
+    const [reported, context] = mocks.captureException.mock.calls[0] as [
+      Error,
+      { tags: Record<string, string>; extra: Record<string, unknown> },
+    ];
+    expect(reported.message).toContain('Failed to build unique file');
+    expect(reported.message).not.toContain('Screenshot');
+    expect(reported.message).not.toContain('20.07.50');
+    expect(reported.message).not.toContain('/storage/emulated');
+    expect(context.tags).toMatchObject({ feature: 'media-save', target: 'downloads' });
+    expect(context.extra).toMatchObject({ mimeType: 'image/png' });
+  });
+
   it('cleans up an Android file and shows an error toast when writing fails', async () => {
     const error = new Error('write failed');
     androidFs.writeFile.mockRejectedValue(error);
@@ -121,6 +172,87 @@ describe('saveFileToDevice', () => {
     expect(result).toBe('saved');
     expect(FileSaver.saveAs).toHaveBeenCalledWith(expect.any(Blob), 'file.txt');
   });
+
+  it('uses authenticated media transport before saving a URL in the browser', async () => {
+    vi.mocked(isTauri).mockReturnValue(false);
+    const blob = new Blob(['data'], { type: 'image/png' });
+    mocks.fetchMediaBlob.mockResolvedValue(blob);
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(FileSaver.saveAs).toHaveBeenCalledWith(blob, 'photo.png');
+  });
+
+  it('uses authenticated media transport when saving a URL on Android', async () => {
+    const blob = new Blob(['data'], { type: 'image/png' });
+    mocks.fetchMediaBlob.mockResolvedValue(blob);
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+  });
+
+  it('uses authenticated media transport when saving a URL on desktop', async () => {
+    vi.mocked(osType).mockReturnValue('linux');
+    mocks.fetchMediaBlob.mockResolvedValue(new Blob(['data'], { type: 'image/png' }));
+
+    await expect(
+      saveFileToDevice(
+        'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+        'photo.png'
+      )
+    ).resolves.toBe('saved');
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(invoke).toHaveBeenCalledWith('save_download', {
+      filename: 'photo.png',
+      bytes: [100, 97, 116, 97],
+    });
+  });
+});
+
+describe('downloadJsonFile', () => {
+  it('saves through the native desktop command instead of an anchor click', async () => {
+    vi.mocked(osType).mockReturnValue('linux');
+
+    const result = await downloadJsonFile('{"a":1}', 'persona');
+
+    expect(result).toBe('saved');
+    expect(invoke).toHaveBeenCalledWith('save_download', {
+      filename: expect.stringMatching(/^persona-\d+\.json$/),
+      bytes: expect.any(Array),
+    });
+    expect(FileSaver.saveAs).not.toHaveBeenCalled();
+  });
+
+  it('routes Android exports to the public Downloads directory', async () => {
+    const result = await downloadJsonFile('{"a":1}', 'persona');
+
+    expect(result).toBe('saved');
+    expect(androidFs.createNewPublicFile).toHaveBeenCalledWith(
+      'Download',
+      expect.stringMatching(/^persona-\d+\.json$/),
+      'application/json',
+      { isPending: true, requestPermission: true }
+    );
+  });
 });
 
 describe('saveMediaToGallery', () => {
@@ -140,6 +272,43 @@ describe('saveMediaToGallery', () => {
     expect(androidFs.setPublicFilePending).toHaveBeenCalledWith('content://media/image', false);
     expect(androidFs.scanPublicFile).toHaveBeenCalledWith('content://media/image');
     expect(showToast).toHaveBeenCalledWith('Saved to Gallery');
+  });
+
+  it('writes all fetched Android image bytes before publishing the gallery file', async () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    mocks.fetchMediaBlob.mockResolvedValueOnce(new Blob([bytes]));
+
+    await saveMediaToGallery('https://matrix.example.org/photo', 'photo.png', 'image/png');
+
+    expect(androidFs.writeFile).toHaveBeenCalledWith('content://media/image', bytes);
+    expect(androidFs.writeFile.mock.invocationCallOrder[0]).toBeLessThan(
+      androidFs.setPublicFilePending.mock.invocationCallOrder[0]!
+    );
+    expect(androidFs.setPublicFilePending).toHaveBeenCalledWith('content://media/image', false);
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith('https://matrix.example.org/photo');
+  });
+
+  it('does not create a gallery file when Android storage permission is denied', async () => {
+    androidFs.checkPublicFilesPermission.mockResolvedValue(false);
+    androidFs.requestPublicFilesPermission.mockResolvedValue(false);
+
+    await saveMediaToGallery(new Blob(['data']), 'photo.png', 'image/png');
+
+    expect(androidFs.createNewPublicImageFile).not.toHaveBeenCalled();
+    expect(androidFs.writeFile).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      'Failed to save to gallery: Storage permission was denied'
+    );
+  });
+
+  it('does not clean up when Android fails before creating a gallery file', async () => {
+    androidFs.createNewPublicImageFile.mockRejectedValue(new Error('create failed'));
+
+    await saveMediaToGallery(new Blob(['data']), 'photo.png', 'image/png');
+
+    expect(androidFs.writeFile).not.toHaveBeenCalled();
+    expect(androidFs.removeFile).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('Failed to save to gallery: create failed');
   });
 
   it('rejects video media explicitly without touching any backend or falling back', async () => {
@@ -164,6 +333,18 @@ describe('saveMediaToGallery', () => {
     expect(FileSaver.saveAs).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['publishing', 'setPublicFilePending', new Error('publish failed')],
+    ['scanning', 'scanPublicFile', new Error('scan failed')],
+  ] as const)('cleans up the Android gallery file when %s fails', async (_, method, error) => {
+    androidFs[method].mockRejectedValue(error);
+
+    await saveMediaToGallery(new Blob(['data']), 'photo.png', 'image/png');
+
+    expect(androidFs.removeFile).toHaveBeenCalledWith('content://media/image');
+    expect(showToast).toHaveBeenCalledWith(`Failed to save to gallery: ${error.message}`);
+  });
+
   it('sends media bytes to the native Photos command on iOS', async () => {
     vi.mocked(osType).mockReturnValue('ios');
 
@@ -176,6 +357,26 @@ describe('saveMediaToGallery', () => {
     });
     expect(showToast).toHaveBeenCalledWith('Saved to Photos');
     expect(androidFs.createNewPublicImageFile).not.toHaveBeenCalled();
+  });
+
+  it('uses authenticated media transport before saving a URL to iOS Photos', async () => {
+    vi.mocked(osType).mockReturnValue('ios');
+    mocks.fetchMediaBlob.mockResolvedValue(new Blob(['data'], { type: 'image/png' }));
+
+    await saveMediaToGallery(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo',
+      'photo.png',
+      'image/png'
+    );
+
+    expect(mocks.fetchMediaBlob).toHaveBeenCalledWith(
+      'https://matrix.example.org/_matrix/client/v1/media/download/example.org/photo'
+    );
+    expect(invoke).toHaveBeenCalledWith('save_media_to_photos', {
+      filename: 'photo.png',
+      mimeType: 'image/png',
+      bytes: [100, 97, 116, 97],
+    });
   });
 
   it('shows a failure toast when the iOS Photos command rejects', async () => {
@@ -213,7 +414,7 @@ describe('saveMediaToGallery', () => {
   });
 
   it('shows exactly one gallery failure toast when fetching the media fails on Android', async () => {
-    mocks.fetch.mockRejectedValueOnce(new Error('network down'));
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('network down'));
 
     await saveMediaToGallery('mxc://example/photo.png', 'photo.png', 'image/png');
 
@@ -226,9 +427,7 @@ describe('saveMediaToGallery', () => {
   });
 
   it('does not save an HTTP error response as an Android gallery image', async () => {
-    mocks.fetch.mockResolvedValueOnce(
-      new Response('not found', { status: 404, statusText: 'Not Found' })
-    );
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('Failed to fetch media: 404 Not Found'));
 
     await saveMediaToGallery('mxc://example/missing.png', 'missing.png', 'image/png');
 
@@ -242,10 +441,7 @@ describe('saveMediaToGallery', () => {
 
   it('shows exactly one photos failure toast when blob conversion fails on iOS', async () => {
     vi.mocked(osType).mockReturnValue('ios');
-    mocks.fetch.mockResolvedValueOnce({
-      ok: true,
-      blob: () => Promise.reject(new Error('decode failed')),
-    } as unknown as Response);
+    mocks.fetchMediaBlob.mockRejectedValueOnce(new Error('decode failed'));
 
     await saveMediaToGallery('mxc://example/photo.png', 'photo.png', 'image/png');
 

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { SequenceCardStyle } from '$components/sequence-card';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+// oxlint-disable-next-line no-restricted-imports
 import type * as Folds from 'folds';
 import { ScreenSize, ScreenSizeProvider } from '$hooks/useScreenSize';
 import { Desktop } from './Desktop';
@@ -12,20 +13,24 @@ const {
   mockUseDesktopRuntimeState,
   mockUseDesktopSettingsSyncing,
   mockSetUseCustomTitleBar,
+  mockSetSpellcheck,
 } = vi.hoisted(() => {
   const setUseCustomTitleBarMock = vi.fn<(value: boolean) => void>();
+  const setSpellcheckMock = vi.fn<(value: boolean) => void>();
 
   return {
     mockUseDesktopSetting: vi.fn<
       (
-        key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon' | 'useCustomTitleBar'
+        key: 'closeToBackgroundOnClose' | 'showSystemTrayIcon' | 'useCustomTitleBar' | 'spellcheck'
       ) => readonly [boolean, (value: boolean) => void]
     >((key) => {
       if (key === 'useCustomTitleBar') return [true, setUseCustomTitleBarMock] as const;
+      if (key === 'spellcheck') return [true, setSpellcheckMock] as const;
       if (key === 'closeToBackgroundOnClose') return [true, vi.fn<() => void>()] as const;
       return [true, vi.fn<() => void>()] as const;
     }),
     mockSetUseCustomTitleBar: setUseCustomTitleBarMock,
+    mockSetSpellcheck: setSpellcheckMock,
     mockUseDesktopSettingsReady: vi.fn<() => boolean>(() => true),
     mockUseDesktopSettingsSyncing: vi.fn<() => boolean>(() => false),
     mockUseDesktopRuntimeState: vi.fn<() => { trayAvailable: boolean }>(() => ({
@@ -105,7 +110,7 @@ describe('Desktop', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'When enabled, closing the window keeps Sable running instead of exiting. If the tray icon is enabled and available, Sable stays in the system tray. Otherwise it continues running in the background.'
+        'When enabled, closing the window keeps Sable running in the system tray instead of exiting. This needs the tray icon below: without a tray to restore from, closing exits Sable.'
       )
     ).toBeInTheDocument();
     expect(screen.getByText('Show system tray icon')).toBeInTheDocument();
@@ -114,7 +119,19 @@ describe('Desktop', () => {
         'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
       )
     ).toBeInTheDocument();
-    expect(container.getElementsByClassName(SequenceCardStyle)).toHaveLength(4);
+    expect(screen.getByText('Spellcheck')).toBeInTheDocument();
+    expect(
+      screen.getByText('Underline misspelled words and offer corrections in text fields.')
+    ).toBeInTheDocument();
+    expect(container.getElementsByClassName(SequenceCardStyle)).toHaveLength(5);
+  });
+
+  it('updates the spellcheck setting from the Text input switch', () => {
+    renderDesktop();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'spellcheck' }));
+
+    expect(mockSetSpellcheck).toHaveBeenCalledWith(false);
   });
 
   it('updates the custom title bar setting from the Window switch', () => {
@@ -130,7 +147,7 @@ describe('Desktop', () => {
 
     expect(
       screen.getByText(
-        'System tray is unavailable on this system. Sable can still keep running in the background without it.'
+        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
       )
     ).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'show-system-tray-icon' })).toBeDisabled();
@@ -143,7 +160,7 @@ describe('Desktop', () => {
 
     expect(
       screen.queryByText(
-        'System tray is unavailable on this system. Sable can still keep running in the background without it.'
+        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
       )
     ).not.toBeInTheDocument();
   });
@@ -157,7 +174,7 @@ describe('Desktop', () => {
 
     expect(
       screen.queryByText(
-        'System tray is unavailable on this system. Sable can still keep running in the background without it.'
+        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
       )
     ).not.toBeInTheDocument();
   });

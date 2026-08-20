@@ -10,5 +10,33 @@
     <string>Sable needs camera access for video calls.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Sable needs microphone access for voice and video calls.</string>
+    <!-- APP-ICON ALTERNATES START -->
+    <key>TauriAppIconAliases</key>
+    <dict>
+      <key>propeller</key>
+      <string>AppIconPropeller</string>
+      <key>agender</key>
+      <string>AppIconAgender</string>
+      <key>bisexual</key>
+      <string>AppIconBisexual</string>
+      <key>trans</key>
+      <string>AppIconTrans</string>
+      <key>transgradient</key>
+      <string>AppIconTransgradient</string>
+      <key>intersex</key>
+      <string>AppIconIntersex</string>
+      <key>lesbian</key>
+      <string>AppIconLesbian</string>
+      <key>mlm</key>
+      <string>AppIconMlm</string>
+      <key>pride</key>
+      <string>AppIconPride</string>
+    </dict>
+    <!-- APP-ICON ALTERNATES END -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>voip</string>
+    </array>
 </dict>
 </plist>

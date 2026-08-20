@@ -48,6 +48,26 @@ describe('android edge-to-edge inset contract', () => {
     expect(systemBarShell).toContain('ref={onPortalContainerChange}');
   });
 
+  it('layers mobile sheets from the overlay stack rather than a fixed z-index', () => {
+    const messageStyles = readWorkspaceFile('src/app/features/room/message/styles.css.ts');
+    const sheet = readWorkspaceFile('src/app/components/MobileSwipeDownModal.tsx');
+
+    expect(messageStyles).not.toContain('mobileSheetZIndex');
+    expect(sheet).toContain('const zIndex = useOverlayLayer();');
+    expect(sheet.match(/zIndex,/g)).toHaveLength(2);
+  });
+
+  it('falls back to the injected edge-to-edge inset before env() for the mobile sheet', () => {
+    const messageStyles = readWorkspaceFile('src/app/features/room/message/styles.css.ts');
+
+    expect(messageStyles).toContain(
+      "'var(--mobile-sheet-safe-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))'"
+    );
+    expect(messageStyles).not.toContain(
+      "'var(--mobile-sheet-safe-bottom, env(safe-area-inset-bottom, 0px))'"
+    );
+  });
+
   it('uses the App shell as the only safe-area owner', () => {
     const appShell = readWorkspaceFile('src/app/components/app-shell/AppShell.tsx');
     const systemBarShell = readWorkspaceFile('src/app/components/app-shell/SystemBarShell.tsx');
@@ -70,7 +90,7 @@ describe('android edge-to-edge inset contract', () => {
     expect(mobileCapability).toContain('"edge-to-edge:default"');
   });
 
-  it('extends only standalone iOS PWAs to the dynamic viewport bottom', () => {
+  it('fills the full screen in standalone iOS PWAs unless the keyboard is open', () => {
     const indexCss = readWorkspaceFile('src/index.css');
     const indexTsx = readWorkspaceFile('src/index.tsx');
     const iosPwaViewport = readWorkspaceFile('src/app/utils/iosPwaViewport.ts');
@@ -80,12 +100,14 @@ describe('android edge-to-edge inset contract', () => {
     expect(indexCss).toContain('var(--sable-ios-pwa-viewport-height, 100dvh)');
     expect(indexTsx).toContain('installIosPwaViewportHeight();');
     expect(iosPwaViewport).toContain("window.matchMedia('(display-mode: standalone)').matches");
-    expect(iosPwaViewport).toContain('const MIN_KEYBOARD_HEIGHT = 100');
-    expect(iosPwaViewport).toContain('isEditableFocused()');
-    expect(iosPwaViewport).toContain('screenHeight - visibleHeight > MIN_KEYBOARD_HEIGHT');
+    expect(iosPwaViewport).toContain('viewport.height + viewport.offsetTop');
     expect(iosPwaViewport).toContain('window.setTimeout(updateHeight, 350)');
-    expect(iosPwaViewport).not.toContain('fullHeight');
-    expect(iosPwaViewport).not.toContain('viewportWidth');
+    expect(iosPwaViewport).toContain('100vh');
+    expect(iosPwaViewport).toContain('fullHeight');
+    // Physical screen geometry reports device pixels and is wrong on iPad.
+    expect(iosPwaViewport).not.toContain('window.screen');
+    expect(iosPwaViewport).toContain('MIN_KEYBOARD_HEIGHT');
+    expect(iosPwaViewport).toContain('isEditableFocused');
   });
 
   it('removes the scattered safe-area css consumers', () => {

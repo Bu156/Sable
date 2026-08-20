@@ -5,7 +5,7 @@
 fn prompt_cef_permission(message: String, tx: std::sync::mpsc::Sender<bool>) {
     use gtk::glib;
     use gtk::prelude::*;
-    use gtk::{ButtonsType, DialogFlags, MessageDialog, MessageType, ResponseType};
+    use gtk::{ButtonsType, DialogFlags, MessageDialog, MessageType, ResponseType, WindowPosition};
 
     // Non-blocking: show() + response signal instead of run().
     // dialog.run() blocks the GLib main loop, which CEF's message pump
@@ -19,9 +19,9 @@ fn prompt_cef_permission(message: String, tx: std::sync::mpsc::Sender<bool>) {
             &message,
         );
         dialog.set_title("Permission request");
+        dialog.set_position(WindowPosition::CenterAlways);
 
         let tx = std::cell::RefCell::new(Some(tx));
-        let dialog_ptr = dialog.clone();
         dialog.connect_response(move |dlg, response| {
             if let Some(tx) = tx.take() {
                 let _ = tx.send(matches!(response, ResponseType::Yes));
@@ -81,6 +81,19 @@ fn main() {
                 if std::env::var_os("SABLE_DISABLE_GPU").is_some() {
                     args.push(("--disable-gpu".into(), None));
                 }
+
+                // Extra Chromium switches, comma-separated `key=value` or bare `key`:
+                //   SABLE_CEF_ARGS="disable-gpu-compositing,use-angle=vulkan"
+                if let Ok(extra) = std::env::var("SABLE_CEF_ARGS") {
+                    for arg in extra.split(',').map(str::trim).filter(|a| !a.is_empty()) {
+                        match arg.split_once('=') {
+                            Some((key, value)) => {
+                                args.push((key.to_owned(), Some(value.to_owned())))
+                            }
+                            None => args.push((arg.to_owned(), None)),
+                        }
+                    }
+                }
                 args
             },
             ..Default::default()
@@ -100,7 +113,7 @@ fn main() {
             return;
         }
 
-        // Allow call media capture (mic, camera, screen-share) for our webview.
+        // Allow call media capture (mic, camera, screen-share) and geolocation for our webview.
         // Cache granted permissions so we only prompt once per kind.
         use std::collections::HashSet;
         use std::sync::{Mutex, OnceLock};
@@ -110,11 +123,16 @@ fn main() {
         tauri_runtime_cef::set_permission_policy(move |request, responder| {
             use tauri_runtime_cef::{DenyReason, PermissionKind};
 
-            if request.webview_label != "main" {
+            if request.webview_label != "main"
+                || !request
+                    .origin
+                    .as_ref()
+                    .is_some_and(|origin| origin.is_app_local())
+            {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
-            let media_kinds: Vec<PermissionKind> = request
+            let permission_kinds: Vec<PermissionKind> = request
                 .kinds
                 .iter()
                 .filter(|kind| {
@@ -125,17 +143,18 @@ fn main() {
                             | PermissionKind::CameraPanTiltZoom
                             | PermissionKind::ScreenCapture
                             | PermissionKind::CapturedSurfaceControl
+                            | PermissionKind::Geolocation
                     )
                 })
                 .cloned()
                 .collect();
 
-            if media_kinds.is_empty() {
+            if permission_kinds.is_empty() || permission_kinds.len() != request.kinds.len() {
                 return responder.deny(DenyReason::NoPolicy);
             }
 
             // Check cache: if all requested kinds were already granted, allow immediately.
-            let kind_names: Vec<&'static str> = media_kinds
+            let kind_names: Vec<&'static str> = permission_kinds
                 .iter()
                 .map(|k| match k {
                     PermissionKind::Microphone => "mic",
@@ -143,6 +162,7 @@ fn main() {
                     PermissionKind::ScreenCapture | PermissionKind::CapturedSurfaceControl => {
                         "screen"
                     }
+                    PermissionKind::Geolocation => "geolocation",
                     _ => "other",
                 })
                 .collect();
@@ -154,14 +174,15 @@ fn main() {
                 }
             }
 
-            let msg = match media_kinds.as_slice() {
+            let msg = match permission_kinds.as_slice() {
                 [PermissionKind::Microphone] => "Sable wants to access your microphone.",
                 [PermissionKind::Camera] => "Sable wants to access your camera.",
                 [PermissionKind::ScreenCapture] | [PermissionKind::CapturedSurfaceControl] => {
                     "Sable wants to share your screen."
                 }
-                _ if media_kinds.contains(&PermissionKind::Microphone)
-                    && media_kinds.contains(&PermissionKind::Camera) =>
+                [PermissionKind::Geolocation] => "Sable wants to access your location.",
+                _ if permission_kinds.contains(&PermissionKind::Microphone)
+                    && permission_kinds.contains(&PermissionKind::Camera) =>
                 {
                     "Sable wants to access your microphone and camera."
                 }
@@ -196,7 +217,6 @@ fn main() {
     // window path is unstable (crate verified on X11 only).
     #[cfg(target_os = "linux")]
     unsafe {
-        // Tao/Tauri Wayland decorations are don't respect server side decorations, forcing GTK onto X11/XWayland for now.
         // https://github.com/tauri-apps/tao/issues/1046
         // https://github.com/tauri-apps/tauri/issues/11856
         // https://github.com/tauri-apps/tauri/issues/14251

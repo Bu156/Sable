@@ -1,17 +1,6 @@
 import { forwardRef, useState } from 'react';
-import {
-  Avatar,
-  Box,
-  IconButton,
-  Line,
-  Menu,
-  MenuItem,
-  Text,
-  Tooltip,
-  TooltipProvider,
-  config,
-  toRem,
-} from 'folds';
+import { Avatar, Box, IconButton, Line, Menu, MenuItem, Text, Tooltip, config, toRem } from 'folds';
+import { TooltipProvider } from '$components/overlay-stack';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { PageHeader } from '$components/page';
@@ -44,6 +33,7 @@ import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import * as css from './LobbyHeader.css';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
+import { RoomSettingsPage } from '$state/roomSettings';
 
 type LobbyMenuProps = {
   powerLevels: IPowerLevels;
@@ -58,6 +48,7 @@ const LobbyMenu = forwardRef<HTMLDivElement, LobbyMenuProps>(
     const permissions = useRoomPermissions(creators, powerLevels);
     const canInvite = permissions.action('invite', mx.getSafeUserId());
     const openRoomSettings = useOpenRoomSettings();
+    const screenSize = useScreenSizeContext();
 
     const [invitePrompt, setInvitePrompt] = useState(false);
 
@@ -96,6 +87,21 @@ const LobbyMenu = forwardRef<HTMLDivElement, LobbyMenuProps>(
               Invite
             </Text>
           </MenuItem>
+          {screenSize !== ScreenSize.Desktop && (
+            <MenuItem
+              onClick={() => {
+                openRoomSettings(space.roomId, undefined, RoomSettingsPage.MembersPage);
+                requestClose();
+              }}
+              size="300"
+              after={menuIcon(UserCircle)}
+              radii="300"
+            >
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                Members
+              </Text>
+            </MenuItem>
+          )}
           <MenuItem onClick={handleRoomSettings} size="300" after={menuIcon(GearSix)} radii="300">
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
               Space Settings
@@ -200,7 +206,7 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
           </>
         )}
         <Box shrink="No" className={css.ActionsBox} justifyContent="End">
-          {screenSize !== ScreenSize.Mobile && (
+          {screenSize === ScreenSize.Desktop && (
             <TooltipProvider
               position="Bottom"
               offset={4}

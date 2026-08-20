@@ -33,6 +33,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'enable-swiping',
     'encrypted-room-embeds',
     'encrypted-room-url-preview',
+    'external-gif-auto-load-encrypted',
     'enter-for-newline',
     'error-reporting',
     'export-diagnostics',
@@ -108,14 +109,15 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'enable-pk-commands',
     'enable-pk-shorthands',
     'enable-pk-latching',
+    'prevent-sending-pmp-fallback',
     'create-pmp',
     'enable-pmp-picker',
+    'pmp-pk-import',
+    'pmp-list-export',
   ],
   appearance: [
-    'autoplay-emojis',
+    'app-icon',
     'old-sidebar',
-    'autoplay-gifs',
-    'autoplay-stickers',
     'blur-avatars',
     'blur-emotes',
     'blur-media',
@@ -152,12 +154,6 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'pronoun-pill-max-count',
     'pronoun-pill-max-length',
     'pronoun-pills-for-all',
-    'reduced-motion',
-    'render-global-username-colors',
-    'render-space-room-fonts',
-    'render-space-room-username-colors',
-    'render-persona-username-colors',
-    'saturation',
     'selected-language-for-pronouns',
     'show-easter-eggs',
     'show-pronoun-pills',
@@ -165,7 +161,6 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'subspace-hierarchy-limit',
     'system-theme',
     'twitter-emoji',
-    'underline-links',
     'show-room-icons',
     'room-icon-overlay',
     'show-room-home-icons',
@@ -173,6 +168,19 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'incoming-inline-images-default-height',
     'incoming-inline-images-max-height',
     'link-preview-image-max-height',
+  ],
+  accessibility: [
+    'autoplay-emojis',
+    'autoplay-gifs',
+    'autoplay-stickers',
+    'saturation',
+    'underline-links',
+    'reduced-motion',
+    'render-global-username-colors',
+    'render-space-room-fonts',
+    'render-space-room-username-colors',
+    'render-persona-username-colors',
+    'name-color-lightness-correction',
   ],
   notifications: [
     'background-push-notifications',
@@ -215,6 +223,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'auto-update-check',
     'close-to-background-on-close',
     'show-system-tray-icon',
+    'spellcheck',
     'use-custom-title-bar',
   ],
   emojis: ['default-pack', 'select-pack'],
@@ -241,6 +250,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'bandwidth-saving-emojis',
     'sharehistory-command',
     'show-personas-tab',
+    'new-calls',
     'media-galleries',
   ],
   about: [
@@ -275,6 +285,15 @@ export const normalizeSettingsFocusId = (focus?: string): string | undefined => 
 
 const isShareableSettingsFocusId = (section: SettingsSectionId, focus: string): boolean =>
   settingsLinkFocusIdsBySectionSet[section].has(focus);
+
+// Focus ids may live under a different section than the link claims when
+// settings get reorganized; redirect to the owning section.
+const settingsSectionByFocusId = settingsSections.reduce((acc, section) => {
+  for (const focusId of settingsLinkFocusIdsBySection[section.id]) {
+    acc.set(focusId, section.id);
+  }
+  return acc;
+}, new Map<string, SettingsSectionId>());
 
 const parseSettingsLinkQuery = (
   search: string
@@ -339,7 +358,9 @@ const parseSettingsAppPath = (appPath: string): SettingsLink | undefined => {
   if (!query) return undefined;
 
   if (query.focus && !isShareableSettingsFocusId(section, query.focus)) {
-    return undefined;
+    const owningSection = settingsSectionByFocusId.get(query.focus);
+    if (!owningSection) return undefined;
+    return { section: owningSection, focus: query.focus };
   }
 
   return { section, focus: query.focus };
@@ -401,7 +422,7 @@ export const buildSettingsLink = (
   focus?: string
 ): string => withOriginBaseUrl(baseUrl, withSettingsLinkAction(getSettingsPath(section, focus)));
 
-const humanizeSettingsLinkPart = (value: string): string =>
+export const humanizeSettingsLinkPart = (value: string): string =>
   value
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)

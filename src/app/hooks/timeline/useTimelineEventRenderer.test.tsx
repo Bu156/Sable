@@ -51,7 +51,15 @@ vi.mock('$hooks/useSableCosmetics', () => ({
 }));
 
 vi.mock('$hooks/useRoomMemberHydration', () => ({
-  useRoomMemberHydration: vi.fn<(room: unknown, userId: string) => void>(),
+  useRoomMemberHydration:
+    vi.fn<
+      (
+        room: unknown,
+        userId: string,
+        hasTimelineMember?: boolean,
+        profileDisplayName?: string
+      ) => void
+    >(),
 }));
 
 vi.mock('$state/hooks/userRoomProfile', () => ({
@@ -718,6 +726,9 @@ const branches: BranchEntry[] = [
   },
 ];
 
+const highlightOf = (container: HTMLElement) =>
+  container.querySelector('[data-testid="message"]')?.getAttribute('data-highlight');
+
 describe('useTimelineEventRenderer', () => {
   describe.each(branches)('$name', ({ isStateEvent, createEvent: makeEvent }) => {
     it('renders correctly', () => {
@@ -899,6 +910,80 @@ describe('useTimelineEventRenderer', () => {
       const { container } = renderEventWithOverrides(editEvent, false, {});
       expect(container).not.toBeNull();
       expect(container.innerHTML).toMatchSnapshot();
+    });
+  });
+
+  describe('focusItem highlight', () => {
+    function renderMessageAtItem(
+      mEvent: MatrixEvent,
+      item: number,
+      focusItem?: { eventId: string; highlight: boolean; scrollTo: boolean }
+    ) {
+      const opts = { ...rendererOpts, state: { ...rendererOpts.state, focusItem } };
+      const { result } = renderHook(() => useTimelineEventRenderer(opts));
+      const node = result.current(
+        mEvent.getType() ?? 'UNKNOWN',
+        false,
+        mEvent.getId() ?? 'null',
+        mEvent,
+        item,
+        timelineSet,
+        false
+      );
+      return render(node as any);
+    }
+
+    const msgEvent = (id: string) =>
+      createEvent({
+        id,
+        type: EventType.RoomMessage,
+        content: { msgtype: 'm.text', body: 'hello' },
+        replyEventId: undefined,
+      });
+
+    it('highlights the row whose event id matches', () => {
+      const { container } = renderMessageAtItem(msgEvent('$a:example.com'), 3, {
+        eventId: '$a:example.com',
+        highlight: true,
+        scrollTo: false,
+      });
+      expect(highlightOf(container)).toBe('true');
+    });
+
+    it('does not highlight a different event', () => {
+      const { container } = renderMessageAtItem(msgEvent('$b:example.com'), 3, {
+        eventId: '$a:example.com',
+        highlight: true,
+        scrollTo: false,
+      });
+      expect(highlightOf(container)).toBe('false');
+    });
+
+    it('highlights the same event regardless of the raw index it renders at', () => {
+      for (const item of [0, 3, 40]) {
+        const { container } = renderMessageAtItem(msgEvent('$a:example.com'), item, {
+          eventId: '$a:example.com',
+          highlight: true,
+          scrollTo: false,
+        });
+        expect(highlightOf(container)).toBe('true');
+      }
+    });
+
+    it('does not highlight merged relation rows that share the itemIndex -1 sentinel', () => {
+      const jumpTarget = renderMessageAtItem(msgEvent('$edit-1:example.com'), -1, {
+        eventId: '$reaction-2:example.com',
+        highlight: true,
+        scrollTo: false,
+      });
+      expect(highlightOf(jumpTarget.container)).toBe('false');
+
+      const otherExtra = renderMessageAtItem(msgEvent('$reaction-2:example.com'), -1, {
+        eventId: '$reaction-2:example.com',
+        highlight: true,
+        scrollTo: false,
+      });
+      expect(highlightOf(otherExtra.container)).toBe('true');
     });
   });
 });

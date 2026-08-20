@@ -1,4 +1,5 @@
-import { Box, Chip, IconButton, Spinner, Text, Tooltip, TooltipProvider } from 'folds';
+import { Box, Chip, IconButton, Spinner, Text, Tooltip } from 'folds';
+import { TooltipProvider } from '$components/overlay-stack';
 import {
   Headphones,
   sizedIcon,
@@ -23,7 +24,7 @@ type MicrophoneButtonProps = {
   onToggle: () => Promise<unknown>;
   disabled?: boolean;
 };
-function MicrophoneButton({ enabled, onToggle, disabled }: MicrophoneButtonProps) {
+export function MicrophoneButton({ enabled, onToggle, disabled }: MicrophoneButtonProps) {
   return (
     <TooltipProvider
       position="Top"
@@ -56,7 +57,7 @@ type SoundButtonProps = {
   onToggle: () => void;
   disabled?: boolean;
 };
-function SoundButton({ enabled, onToggle, disabled }: SoundButtonProps) {
+export function SoundButton({ enabled, onToggle, disabled }: SoundButtonProps) {
   return (
     <TooltipProvider
       position="Top"
@@ -89,7 +90,7 @@ type VideoButtonProps = {
   onToggle: () => Promise<unknown>;
   disabled?: boolean;
 };
-function VideoButton({ enabled, onToggle, disabled }: VideoButtonProps) {
+export function VideoButton({ enabled, onToggle, disabled }: VideoButtonProps) {
   return (
     <TooltipProvider
       position="Top"
@@ -122,7 +123,7 @@ type ScreenShareButtonProps = {
   onToggle: () => void;
   disabled?: boolean;
 };
-function ScreenShareButton({ enabled, onToggle, disabled }: ScreenShareButtonProps) {
+export function ScreenShareButton({ enabled, onToggle, disabled }: ScreenShareButtonProps) {
   return (
     <TooltipProvider
       position="Top"

@@ -1,7 +1,7 @@
 /* oxlint-disable no-console */
 // Keep the service worker import graph narrow, the app barrel pulls in runtime Matrix SDK modules that break SW script evaluation
 import { EventType } from 'matrix-js-sdk/lib/@types/event';
-import { normalizeCallIntent } from '../app/features/call/callIntent';
+import { normalizeCallIntent } from '@sableclient/matrixrtc/callIntent';
 import {
   buildRoomMessageNotification,
   DEFAULT_NOTIFICATION_ICON,
@@ -129,6 +129,7 @@ export const createPushNotifications = (
     const { senderTs, expiresAt } = getCallTiming(pushData.content, originTs);
 
     const data = {
+      ...pushData.data,
       type: pushData?.type,
       room_id: pushData?.room_id,
       event_id: pushData?.event_id,
@@ -143,7 +144,6 @@ export const createPushNotifications = (
       callRefEventId: pushData?.content?.['m.relates_to']?.event_id,
       callSenderTs: senderTs,
       callExpiresAt: expiresAt,
-      ...pushData.data,
     };
 
     const callTag = pushData?.room_id ? `call-${pushData.room_id}` : undefined;
@@ -160,12 +160,12 @@ export const createPushNotifications = (
 
   const handleRoomMessageNotification = async (pushData: MatrixPushData) => {
     const data: Record<string, unknown> = {
+      ...pushData.data,
       type: pushData?.type,
       room_id: pushData?.room_id,
       event_id: pushData?.event_id,
       user_id: pushData?.user_id,
       timestamp: Date.now(),
-      ...pushData.data,
     };
     const notificationPayload = buildRoomMessageNotification({
       roomName: pushData?.room_name,
@@ -195,12 +195,12 @@ export const createPushNotifications = (
 
   const handleEncryptedMessageNotification = async (pushData: MatrixPushData) => {
     const data: Record<string, unknown> = {
+      ...pushData.data,
       type: pushData?.type,
       room_id: pushData?.room_id,
       event_id: pushData?.event_id,
       user_id: pushData?.user_id,
       timestamp: Date.now(),
-      ...pushData.data,
     };
     const notificationPayload = buildRoomMessageNotification({
       roomName: pushData?.room_name,
@@ -239,11 +239,11 @@ export const createPushNotifications = (
     if (!senderDisplayName && !roomName) body = '';
 
     const data = {
+      ...pushData.data,
       type: pushData?.type,
       content: pushData?.content,
       user_id: pushData?.user_id,
       timestamp: Date.now(),
-      ...pushData.data,
     };
 
     await showNotificationWithData('New Invitation', body, data, resolveSilent());

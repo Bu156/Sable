@@ -2,17 +2,21 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAtomValue, useSetAtom, Provider } from 'jotai';
 import { globalBannersAtom } from '$state/globalBanners';
-import { triggerUpdateCheckAtom } from '$state/desktopUpdate';
+import { triggerUpdateCheckAtom, updatePhaseAtom } from '$state/desktopUpdate';
 import { DesktopUpdatePill } from '$components/tauri/DesktopUpdatePill';
+import { getDebugLogger } from '$utils/debugLogger';
 import { DesktopUpdater } from './DesktopUpdater';
 
-const { checkFn } = vi.hoisted(() => ({ checkFn: vi.fn<() => Promise<unknown>>() }));
+const { checkFn, updaterEnabled } = vi.hoisted(() => ({
+  checkFn: vi.fn<() => Promise<unknown>>(),
+  updaterEnabled: vi.fn<() => boolean>(),
+}));
 
 vi.mock('@tauri-apps/plugin-updater', () => ({ check: checkFn }));
 
 vi.mock('$utils/platform', async (importOriginal) => {
   const mod = (await importOriginal()) as Record<string, unknown>;
-  return { ...mod, isDesktopTauri: () => true };
+  return { ...mod, isDesktopTauri: () => true, isDesktopUpdaterEnabled: updaterEnabled };
 });
 
 vi.mock('$state/hooks/desktopSettings', async (importOriginal) => ({
@@ -32,6 +36,7 @@ function BannersProbe() {
       {banners.map((b) => (
         <section key={b.id} data-testid={`banner-${b.id}`}>
           <span>{b.title}</span>
+          <span>{b.description}</span>
           <button type="button" onClick={b.primaryAction.onClick}>
             {b.primaryAction.label}
           </button>
@@ -55,6 +60,11 @@ function CheckNowButton() {
   );
 }
 
+function UpdatePhaseProbe() {
+  const phase = useAtomValue(updatePhaseAtom);
+  return <output data-testid="update-phase">{phase.type}</output>;
+}
+
 function makeUpdate(version: string) {
   return {
     version,
@@ -66,6 +76,7 @@ function makeUpdate(version: string) {
 
 beforeEach(() => {
   localStorage.clear();
+  updaterEnabled.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -73,6 +84,23 @@ afterEach(() => {
 });
 
 describe('DesktopUpdater', () => {
+  it('does not check for or display updates when the updater is disabled at build time', async () => {
+    updaterEnabled.mockReturnValue(false);
+    localStorage.setItem('sable_fake_desktop_update', '1');
+
+    render(
+      <Provider>
+        <DesktopUpdatePill />
+        <DesktopUpdater />
+        <BannersProbe />
+      </Provider>
+    );
+
+    await waitFor(() => expect(checkFn).not.toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Update Available' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('banner-desktop-update-ready')).not.toBeInTheDocument();
+  });
+
   it('reopens the update banner from the pill after dismissing it', async () => {
     localStorage.setItem('sable_fake_desktop_update', '1');
 
@@ -156,8 +184,9 @@ describe('DesktopUpdater', () => {
 
   it('retries when downloadAndInstall fails', async () => {
     const update = makeUpdate('4.0.0');
+    const debugLog = vi.spyOn(getDebugLogger(), 'log');
     update.downloadAndInstall
-      .mockRejectedValueOnce(new Error('eacces'))
+      .mockRejectedValueOnce({ message: 'permission denied' })
       .mockResolvedValueOnce(undefined);
     checkFn.mockResolvedValue(update);
 
@@ -166,6 +195,7 @@ describe('DesktopUpdater', () => {
         <DesktopUpdatePill />
         <DesktopUpdater />
         <BannersProbe />
+        <UpdatePhaseProbe />
       </Provider>
     );
 
@@ -176,10 +206,18 @@ describe('DesktopUpdater', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }));
     await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledTimes(1));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Download & Install' })).toBeInTheDocument();
+      expect(screen.getByText('Update Failed')).toBeInTheDocument();
     });
+    expect(debugLog).toHaveBeenCalledWith(
+      'error',
+      'network',
+      'DesktopUpdater',
+      'Failed to install update: permission denied'
+    );
+    expect(screen.getByText('permission denied')).toBeInTheDocument();
+    expect(screen.getByTestId('update-phase')).toHaveTextContent('ready');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledTimes(2));
     await screen.findByTestId('banner-desktop-update-restart');
   });

@@ -24,9 +24,10 @@ export default defineConfig({
       $public: path.resolve(__dirname, 'public'),
       $client: path.resolve(__dirname, 'src/client'),
       $unstable: path.resolve(__dirname, 'src/unstable'),
-      '@choochmeque/tauri-plugin-notifications-api': path.resolve(
+      $app: path.resolve(__dirname, 'src/app'),
+      '@sableclient/tauri-plugin-notifications-api': path.resolve(
         __dirname,
-        'src/test/choochmeque-notifications-stub.ts'
+        'src/test/notifications-api-stub.ts'
       ),
     },
   },
@@ -43,7 +44,9 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     server: {
       deps: {
-        inline: [/matrix-js-sdk\/lib\//],
+        // The package is ESM that imports matrix-js-sdk deep paths, so Vite has
+        // to process it for the SDK alias above to apply.
+        inline: [/matrix-js-sdk\/lib\//, /@sableclient\/matrixrtc/],
       },
     },
     coverage: {

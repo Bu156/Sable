@@ -1,13 +1,16 @@
 import type { MouseEventHandler, ReactNode } from 'react';
 import { useCallback, useState } from 'react';
 import type { RectCords } from 'folds';
-import { Box, Text, Chip, PopOut, Menu, config, MenuItem, color } from 'folds';
+import { Box, Text, Chip, Menu, config, MenuItem, color } from 'folds';
+import { PopOut } from '$components/overlay-stack';
 import { CaretDown, sizedIcon } from '$components/icons/phosphor';
 import FocusTrap from 'focus-trap-react';
 import type { SecretStorageKeyContent } from '$types/matrix/accountData';
+import type { CryptoBackend } from '$types/matrix-sdk';
 import { storePrivateKey } from '$client/secretStorageKeys';
 import { stopPropagation } from '$utils/keyboard';
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useRefreshDeviceVerificationStatus } from '$hooks/useDeviceVerificationStatus';
 import { AsyncStatus, useAsyncCallback } from '$hooks/useAsyncCallback';
 import { AsyncError } from '$components/AsyncError';
 import { SettingTile } from './setting-tile';
@@ -115,21 +118,26 @@ export function ManualVerificationTile({
     hasPassphrase ? SecretStorageKeyMethod.RecoveryPassphrase : SecretStorageKeyMethod.RecoveryKey
   );
 
+  const refreshVerificationStatus = useRefreshDeviceVerificationStatus();
+
   const verifyAndRestoreBackup = useCallback(
     async (recoveryKey: Uint8Array) => {
-      const crypto = mx.getCrypto();
+      const crypto = mx.getCrypto() as CryptoBackend | undefined;
       if (!crypto) {
         throw new Error('Unexpected Error! Crypto object not found.');
       }
 
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
+      await crypto.processDeviceLists({ changed: [mx.getSafeUserId()] });
       await crypto.bootstrapCrossSigning({});
       await crypto.bootstrapSecretStorage({});
 
       await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+
+      refreshVerificationStatus();
     },
-    [mx, secretStorageKeyId]
+    [mx, secretStorageKeyId, refreshVerificationStatus]
   );
 
   const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<void, Error, [Uint8Array]>(

@@ -1,5 +1,5 @@
 import type {
-  ChangeEventHandler,
+  ChangeEvent,
   FocusEventHandler,
   MouseEventHandler,
   ReactNode,
@@ -64,6 +64,7 @@ import { useGifSearch } from './useGifSearch';
 import { useFavoriteGifs } from '$hooks/useFavoriteGifs';
 import * as css from './components/styles.css';
 import { useMobileSheetClose } from '$components/MobileSwipeDownModal';
+import { isAllowedKlipyMediaUrl } from '$utils/externalGif';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
@@ -173,10 +174,14 @@ const useItemRenderer = (tab: EmojiBoardTab, saveStickerEmojiBandwidth: boolean)
     if (tab === EmojiBoardTab.Gif) {
       const gif = item as GifData;
 
-      let initialGifUrl = gif.preview_url ?? gif.url;
-      let gifUrl = initialGifUrl.startsWith('mxc://')
-        ? (mxcUrlToHttp(mx, initialGifUrl, useAuthentication) ?? '')
-        : initialGifUrl;
+      const previewUrl = gif.preview_url;
+      const gifUrl =
+        (previewUrl && isAllowedKlipyMediaUrl(previewUrl) ? previewUrl : undefined) ??
+        (isAllowedKlipyMediaUrl(gif.mediaUrl)
+          ? gif.mediaUrl
+          : gif.mediaUrl.startsWith('mxc://')
+            ? (mxcUrlToHttp(mx, gif.mediaUrl, useAuthentication) ?? '')
+            : '');
       const aspectRatio =
         gif.width && gif.height && gif.width > 0 && gif.height > 0
           ? `${gif.width} / ${gif.height}`
@@ -187,18 +192,20 @@ const useItemRenderer = (tab: EmojiBoardTab, saveStickerEmojiBandwidth: boolean)
           key={gif.id + index}
           label={gif.title}
           type={EmojiType.Gif}
-          data={gif.url}
+          data={gif.mediaUrl}
           shortcode={gif.title}
           gif={gif}
           style={{ aspectRatio }}
         >
-          <MediaImage
-            loading="lazy"
-            alt=""
-            aria-hidden
-            src={gifUrl}
-            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          {gifUrl && (
+            <MediaImage
+              loading="lazy"
+              alt=""
+              aria-hidden
+              src={gifUrl}
+              style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )}
         </GifItem>
       );
     }
@@ -443,7 +450,7 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   },
 };
 
-const VIRTUAL_OVER_SCAN = 2;
+const VIRTUAL_OVER_SCAN = 10;
 
 type EmojiBoardProps = {
   tab?: EmojiBoardTab;
@@ -455,6 +462,7 @@ type EmojiBoardProps = {
   onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
   onStickerSelect?: (mxc: string, shortcode: string, label: string) => void;
   onGifSelect?: (gif: GifData, spoiler?: boolean) => void;
+  initialGifSearch?: string;
   allowTextCustomEmoji?: boolean;
   addToRecentEmoji?: boolean;
   isFullWidth?: boolean;
@@ -474,6 +482,7 @@ export function EmojiBoard({
   onCustomEmojiSelect,
   onStickerSelect,
   onGifSelect,
+  initialGifSearch,
   allowTextCustomEmoji,
   addToRecentEmoji = true,
   isFullWidth,
@@ -525,7 +534,8 @@ export function EmojiBoard({
     loading: gifsLoading,
     error: gifsError,
     searchGifs,
-  } = useGifSearch(favoriteGifs, showGifPicker, gifSearch);
+    cancelSearch: cancelGifSearch,
+  } = useGifSearch(favoriteGifs, showGifPicker && gifTab, gifSearch);
   const [emojiGroupItems, stickerGroupItems, gifGroupItems] = useGroups(tab, imagePacks, gifs);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(true);
   const groupsByTab = {
@@ -553,9 +563,9 @@ export function EmojiBoard({
   const groups = groupsByTab[tab];
   const renderItem = useItemRenderer(tab, saveStickerEmojiBandwidth);
 
-  const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
+  const handleOnChange = useDebounce(
     useCallback(
-      (evt) => {
+      (evt: ChangeEvent<HTMLInputElement>) => {
         const term = evt.target.value;
         if (tab === EmojiBoardTab.Gif) {
           if (term) {
@@ -563,6 +573,7 @@ export function EmojiBoard({
             searchGifs(term);
           } else {
             setShowFavoritesOnly(true);
+            cancelGifSearch();
             resetGifSearch();
           }
         } else if (term) {
@@ -571,10 +582,24 @@ export function EmojiBoard({
           resetEmojiSearch();
         }
       },
-      [emojiSearch, resetEmojiSearch, searchGifs, resetGifSearch, tab]
+      [cancelGifSearch, emojiSearch, resetEmojiSearch, searchGifs, resetGifSearch, tab]
     ),
     { wait: 200 }
   );
+
+  useEffect(() => {
+    if (!gifTab || initialGifSearch === undefined) return;
+    setShowFavoritesOnly(initialGifSearch.length === 0);
+    if (initialGifSearch) searchGifs(initialGifSearch);
+    else resetGifSearch();
+  }, [gifTab, initialGifSearch, searchGifs, resetGifSearch]);
+
+  useEffect(() => {
+    if (!showGifPicker || !gifTab) {
+      handleOnChange.cancel();
+      cancelGifSearch();
+    }
+  }, [cancelGifSearch, gifTab, handleOnChange, showGifPicker]);
 
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const virtualBaseRef = useRef<HTMLDivElement>(null);
@@ -677,10 +702,11 @@ export function EmojiBoard({
         <Box direction="Column" gap="200">
           {onTabChange && <EmojiBoardTabs tab={tab} onTabChange={onTabChange} />}
           <SearchInput
-            key={tab}
+            key={gifTab ? `${tab}-${initialGifSearch ?? ''}` : tab}
             query={emojiResult?.query}
             onChange={handleOnChange}
             tab={tab}
+            defaultValue={gifTab ? initialGifSearch : undefined}
             allowTextCustomEmoji={allowTextCustomEmoji}
             onTextCustomEmojiSelect={handleTextCustomEmojiSelect}
           />

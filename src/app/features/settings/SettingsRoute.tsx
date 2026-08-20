@@ -102,6 +102,11 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
     if (section === undefined) return;
 
     if (screenSize === ScreenSize.Mobile) {
+      if (routeState?.pushedFromSettingsMenu) {
+        navigate(-1);
+        return;
+      }
+
       navigate(getSettingsPath(), { replace: true, state: routeState });
       return;
     }
@@ -124,12 +129,24 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
     navigate(closeTarget.to, { replace: true, state: closeTarget.state });
   };
 
+  const menuPushState = (): SettingsRouteState | null =>
+    screenSize === ScreenSize.Mobile && activeSection === null
+      ? { ...routeState, pushedFromSettingsMenu: true }
+      : routeState;
+
   const handleSelectSection = (nextSection: SettingsSectionId) => {
     if (nextSection === activeSection) return;
 
     navigate(getSettingsPath(nextSection), {
       replace: shallowBackgroundState,
-      state: location.state,
+      state: menuPushState(),
+    });
+  };
+
+  const handleSelectSetting = (nextSection: SettingsSectionId, focus: string) => {
+    navigate(getSettingsPath(nextSection, focus), {
+      replace: shallowBackgroundState,
+      state: menuPushState(),
     });
   };
 
@@ -138,6 +155,7 @@ export function SettingsRoute({ routeSection }: SettingsRouteProps) {
       activeSection={activeSection}
       onBack={requestBack}
       onSelectSection={handleSelectSection}
+      onSelectSetting={handleSelectSetting}
       requestClose={requestClose}
     />
   );

@@ -93,6 +93,7 @@ describe('useDesktopSetting', () => {
         closeToBackgroundOnClose: true,
         showSystemTrayIcon: false,
         useCustomTitleBar: true,
+        spellcheck: true,
       },
     });
 
@@ -127,6 +128,7 @@ describe('useDesktopSetting', () => {
         closeToBackgroundOnClose: false,
         showSystemTrayIcon: true,
         useCustomTitleBar: true,
+        spellcheck: true,
       },
     });
 

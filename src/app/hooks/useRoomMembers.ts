@@ -1,6 +1,7 @@
 import type { MatrixClient, MatrixEvent, RoomMember } from '$types/matrix-sdk';
-import { EventType, RoomMemberEvent, RoomStateEvent } from '$types/matrix-sdk';
+import { ClientEvent, RoomMemberEvent } from '$types/matrix-sdk';
 import { useEffect, useState } from 'react';
+import { hydrateAllRoomMembers } from '$client/roomMemberHydration';
 
 export const useRoomMembers = (mx: MatrixClient, roomId: string, enabled = true): RoomMember[] => {
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -12,38 +13,44 @@ export const useRoomMembers = (mx: MatrixClient, roomId: string, enabled = true)
     }
 
     const room = mx.getRoom(roomId);
-    let loadingMembers = true;
     let disposed = false;
 
     const updateMemberList = (event?: MatrixEvent) => {
       if (!room || disposed || (event && event.getRoomId() !== roomId)) return;
-      if (loadingMembers) return;
       setMembers(room.getMembers());
+    };
+
+    // A failed SDK member load must not trigger the direct roster fallback:
+    // classic sync already owns retries.
+    let refillAllowed = false;
+    const refillRoster = () => {
+      if (!room || disposed || !refillAllowed) return;
+      void hydrateAllRoomMembers(mx, roomId).then(() => updateMemberList());
     };
 
     if (room) {
       setMembers(room.getMembers());
-      room.loadMembersIfNeeded().then(() => {
-        loadingMembers = false;
-        if (disposed) return;
-        updateMemberList();
-      });
+      // Sliding sync may retain an incomplete member set. Do not let its SDK
+      // request block incoming membership updates.
+      void room.loadMembersIfNeeded().then(
+        () => {
+          refillAllowed = true;
+          updateMemberList();
+          refillRoster();
+        },
+        () => updateMemberList()
+      );
     }
-
-    const handleStateEvent = (event: MatrixEvent) => {
-      if (event.getRoomId() !== roomId) return;
-      if (event.getType() !== (EventType.RoomMember as string)) return;
-      updateMemberList(event);
-    };
 
     mx.on(RoomMemberEvent.Membership, updateMemberList);
     mx.on(RoomMemberEvent.PowerLevel, updateMemberList);
-    mx.on(RoomStateEvent.Events, handleStateEvent);
+    // joined_count can rise after mount and emits no event of its own.
+    mx.on(ClientEvent.Sync, refillRoster);
     return () => {
       disposed = true;
       mx.removeListener(RoomMemberEvent.Membership, updateMemberList);
       mx.removeListener(RoomMemberEvent.PowerLevel, updateMemberList);
-      mx.removeListener(RoomStateEvent.Events, handleStateEvent);
+      mx.removeListener(ClientEvent.Sync, refillRoster);
     };
   }, [enabled, mx, roomId]);
 

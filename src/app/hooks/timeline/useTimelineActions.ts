@@ -2,15 +2,16 @@ import type { MouseEventHandler } from 'react';
 import { useCallback } from 'react';
 import type { MatrixClient, Room, MatrixEvent } from '$types/matrix-sdk';
 import type { UserProfile } from '$hooks/useUserProfile';
-import { EventStatus } from '$types/matrix-sdk';
-import type { Editor } from 'slate';
-import { ReactEditor } from 'slate-react';
+import { EventStatus, RelationType } from '$types/matrix-sdk';
 
 import { getMxIdLocalPart, toggleReaction } from '$utils/matrix';
 import { getMemberDisplayName } from '$utils/room/display';
 import { extractReplyDraftBody, resolveReplyDraftTarget } from '$utils/room/relations';
-import { createMentionElement, moveCursor } from '$components/editor';
+import { createMentionElement } from '$components/editor';
+import type { ProseMirrorEditorController } from '$components/editor/prosemirrorController';
 import * as prefix from '$unstable/prefixes';
+import type { Persona } from '$hooks/usePerMessageProfile';
+import { convertBeeperFormatToOurPerMessageProfile } from '$hooks/usePerMessageProfile';
 
 /**
  * The profile popup reads name, avatar and the identity fields off the room
@@ -47,7 +48,7 @@ export const buildCachedProfilePayload = (cachedData: UserProfile | undefined) =
 export interface UseTimelineActionsOptions {
   room: Room;
   mx: MatrixClient;
-  editor: Editor;
+  editor: ProseMirrorEditorController;
   nicknames: Record<string, string>;
   getGlobalProfile: (userId: string) => UserProfile | undefined;
   spaceId?: string;
@@ -55,6 +56,7 @@ export interface UseTimelineActionsOptions {
     roomId: string,
     spaceId: string | undefined,
     userId: string,
+    pmp: Persona | undefined,
     rect: DOMRect,
     undefinedArg?: undefined,
     options?: unknown
@@ -104,16 +106,28 @@ export function useTimelineActions({
       const userId = evt.currentTarget.getAttribute('data-user-id');
       if (!userId) return;
 
+      const messageId = evt.currentTarget.getAttribute('data-parent-message-id');
+      let perMessageProfile;
+      if (messageId) {
+        const pmp = room.findEventById(messageId)?.getContent()[
+          prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME
+        ];
+        if (pmp) {
+          perMessageProfile = convertBeeperFormatToOurPerMessageProfile(pmp);
+        }
+      }
+
       openUserRoomProfile(
         room.roomId,
         spaceId,
         userId,
+        perMessageProfile,
         evt.currentTarget.getBoundingClientRect(),
         undefined,
         buildCachedProfilePayload(getGlobalProfile(userId))
       );
     },
-    [room.roomId, spaceId, openUserRoomProfile, getGlobalProfile]
+    [room, spaceId, openUserRoomProfile, getGlobalProfile]
   );
 
   const handleUsernameClick: MouseEventHandler<HTMLButtonElement> = useCallback(
@@ -125,15 +139,15 @@ export function useTimelineActions({
       const name =
         getMemberDisplayName(room, userId, nicknames) ?? getMxIdLocalPart(userId) ?? userId;
 
-      editor.insertNode(
+      editor.insertInline(
         createMentionElement(
           userId,
           name.startsWith('@') ? name : `@${name}`,
           userId === mx.getUserId()
         )
       );
-      ReactEditor.focus(editor);
-      moveCursor(editor);
+      editor.insertText(' ');
+      editor.focus();
     },
     [mx, room, editor, nicknames]
   );
@@ -154,7 +168,7 @@ export function useTimelineActions({
                 userId: mx.getUserId() ?? '',
                 eventId: threadRootId,
                 body: '',
-                relation: { rel_type: 'm.thread', event_id: threadRootId },
+                relation: { rel_type: RelationType.Thread, event_id: threadRootId },
               }
             : undefined
         );
@@ -165,7 +179,7 @@ export function useTimelineActions({
       const { body, formattedBody } = extractReplyDraftBody(replyEvt, timelineSet);
 
       const { 'm.relates_to': relation } = startThread
-        ? { 'm.relates_to': { rel_type: 'm.thread', event_id: draftEventId } }
+        ? { 'm.relates_to': { rel_type: RelationType.Thread, event_id: draftEventId } }
         : replyEvt.getWireContent();
 
       const senderId = replyEvt.getSender();

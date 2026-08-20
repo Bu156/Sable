@@ -23,6 +23,11 @@ export const CustomStateEvent = {
 } as const;
 export type CustomStateEvent = (typeof CustomStateEvent)[keyof typeof CustomStateEvent];
 
+export const CustomRoomType = {
+  Forum: 'pl.chrome.forum',
+} as const;
+export type CustomRoomType = (typeof CustomRoomType)[keyof typeof CustomRoomType];
+
 export type MSpaceChildContent = {
   via: string[];
   suggested?: boolean;
@@ -61,6 +66,8 @@ export type UnreadInfo = {
   roomId: string;
   total: number;
   highlight: number;
+  /** Count is a placeholder; read evidence is not loaded yet. */
+  estimated?: boolean;
 };
 
 export type MemberPowerTagIcon = {
