@@ -307,6 +307,8 @@ jobs:
           cp -a "$APP_DIR/src/main/java/moe/sable/client" "$NIGHTLY_SOURCE_DIR"
           find "$NIGHTLY_SOURCE_DIR" -type f -exec sed -i \
             's/moe\.sable\.client/moe.sable.client.nightly/g' {} +
+          find "$APP_DIR/src/main/java/moe/sable/client" -mindepth 1 -maxdepth 1 \
+            ! -name nightly -exec rm -rf {} +
           mv "$NIGHTLY_SOURCE_DIR" "$NIGHTLY_PACKAGE_DIR"
           sed -i 's/moe\.sable\.client/moe.sable.client.nightly/g' \
             "$APP_DIR/build.gradle.kts" "$APP_DIR/src/main/AndroidManifest.xml"
