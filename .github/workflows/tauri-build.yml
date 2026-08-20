@@ -299,8 +299,11 @@ jobs:
         if: ${{ needs.setup-release.outputs.nightly == 'true' }}
         shell: bash
         run: |
+          # Tauri regenerates this file without the JitPack repository required by LiveKit.
+          cp src-tauri/gen/android/build.gradle.kts "$RUNNER_TEMP/android-build.gradle.kts"
           rm -rf src-tauri/gen/android
           pnpm tauri android init --ci --config src-tauri/tauri.nightly.conf.json
+          cp "$RUNNER_TEMP/android-build.gradle.kts" src-tauri/gen/android/build.gradle.kts
 
       - name: Setup Android signing
         if: ${{ env.ANDROID_KEY_BASE64 != '' }}
@@ -433,7 +436,16 @@ jobs:
 
       - name: Set up iOS
         shell: bash
-        run: mise -y run tauri:setup:ios
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+        run: |
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            rm -rf src-tauri/gen/apple
+            command -v pod >/dev/null 2>&1 || brew install cocoapods
+            pnpm tauri ios init --ci --config src-tauri/tauri.nightly.conf.json
+          else
+            mise -y run tauri:setup:ios
+          fi
 
       - name: Download iOS frameworks
         shell: bash
