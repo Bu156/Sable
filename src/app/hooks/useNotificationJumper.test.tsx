@@ -145,7 +145,9 @@ describe('NotificationJumper', () => {
 
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledOnce());
     expect(unsubscribeFromRoom).not.toHaveBeenCalled();
-    expect(releaseRoomSubscriptionUnlessRouted).toHaveBeenCalledWith('!room:example.org');
+    await waitFor(() =>
+      expect(releaseRoomSubscriptionUnlessRouted).toHaveBeenCalledWith('!room:example.org')
+    );
   });
 
   it('jumps anyway when the subscription is never confirmed', async () => {

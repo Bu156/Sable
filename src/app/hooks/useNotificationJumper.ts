@@ -140,6 +140,7 @@ export function NotificationJumper() {
   // Reset the guard only when pending is replaced (new notification or cleared).
   useEffect(() => {
     jumpingRef.current = false;
+    if (pending) routedRef.current = false;
     waitingForTimelineRef.current = false;
     timelineReadyRef.current = false;
   }, [pending]);
@@ -156,8 +157,6 @@ export function NotificationJumper() {
     if (!pending) return undefined;
     if (pending.targetSessionId && pending.targetSessionId !== activeSessionId) return undefined;
     if (pending.targetSessionId && mx.getUserId() !== pending.targetSessionId) return undefined;
-    routedRef.current = false;
-
     const manager = getSlidingSyncManager(mx);
     const targetInLiveTimeline = isEventInLiveTimelineChain(
       mx.getRoom(pending.roomId),
