@@ -440,9 +440,12 @@ jobs:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
+            # Tauri does not regenerate this tracked privacy manifest.
+            cp src-tauri/gen/apple/PrivacyInfo.xcprivacy "$RUNNER_TEMP/PrivacyInfo.xcprivacy"
             rm -rf src-tauri/gen/apple
             command -v pod >/dev/null 2>&1 || brew install cocoapods
             pnpm tauri ios init --ci --config src-tauri/tauri.nightly.conf.json
+            cp "$RUNNER_TEMP/PrivacyInfo.xcprivacy" src-tauri/gen/apple/PrivacyInfo.xcprivacy
           else
             mise -y run tauri:setup:ios
           fi
