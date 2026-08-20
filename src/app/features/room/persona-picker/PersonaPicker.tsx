@@ -118,13 +118,13 @@ export function useProfiles(
 }
 
 function useFilteredProfiles(
-  profiles: Persona[],
+  profiles: Persona[] | undefined,
   mountedRef: MutableRefObject<boolean>,
   searchInputRef: RefObject<HTMLInputElement | null>,
   profileFetchGenerationRef: MutableRefObject<number>
 ) {
   const [filteredProfiles, setFilteredProfiles] = useState<PerMessageProfileMsc4461[] | undefined>(
-    profiles ?? undefined
+    profiles
   );
   //
   useEffect(() => {
@@ -285,7 +285,7 @@ export function PersonaPicker({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { filteredProfiles, filter, clearFilter } = useFilteredProfiles(
-    profiles ?? [],
+    profiles,
     mountedRef,
     searchInputRef,
     profileFetchGenerationRef
@@ -516,7 +516,7 @@ export function TemporaryPersonaPicker({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { filteredProfiles, filter, clearFilter } = useFilteredProfiles(
-    profiles ?? [],
+    profiles,
     mountedRef,
     searchInputRef,
     profileFetchGenerationRef
