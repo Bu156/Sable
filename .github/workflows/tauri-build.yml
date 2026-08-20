@@ -433,7 +433,16 @@ jobs:
 
       - name: Set up iOS
         shell: bash
-        run: mise -y run tauri:setup:ios
+        env:
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+        run: |
+          if [ "$IS_NIGHTLY" = "true" ]; then
+            rm -rf src-tauri/gen/apple
+            command -v pod >/dev/null 2>&1 || brew install cocoapods
+            pnpm tauri ios init --ci --config src-tauri/tauri.nightly.conf.json
+          else
+            mise -y run tauri:setup:ios
+          fi
 
       - name: Download iOS frameworks
         shell: bash
