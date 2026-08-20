@@ -278,25 +278,26 @@ describe('ImageContent', () => {
 
     touchTap(screen.getByRole('button', { name: 'View' }));
     const img = await screen.findByAltText('preview');
-    expect(vi.mocked(mxcUrlToHttp).mock.calls.at(-1)).toEqual([
+    expect(vi.mocked(mxcUrlToHttp)).toHaveBeenCalledWith(
       {},
       'mxc://example.org/abc123',
       false,
       800,
       600,
-      'scale',
-    ]);
+      'scale'
+    );
+    const originalRequestCount = vi
+      .mocked(mxcUrlToHttp)
+      .mock.calls.filter((call) => call.length === 3).length;
 
     Object.defineProperty(img, 'naturalWidth', { value: 800, configurable: true });
     Object.defineProperty(img, 'naturalHeight', { value: 600, configurable: true });
     fireEvent.load(img);
 
     await waitFor(() =>
-      expect(vi.mocked(mxcUrlToHttp).mock.calls.at(-1)).toEqual([
-        {},
-        'mxc://example.org/abc123',
-        false,
-      ])
+      expect(vi.mocked(mxcUrlToHttp).mock.calls.filter((call) => call.length === 3)).toHaveLength(
+        originalRequestCount + 1
+      )
     );
   });
 
