@@ -299,11 +299,17 @@ jobs:
         if: ${{ needs.setup-release.outputs.nightly == 'true' }}
         shell: bash
         run: |
-          # Tauri regenerates this file without the JitPack repository required by LiveKit.
-          cp src-tauri/gen/android/build.gradle.kts "$RUNNER_TEMP/android-build.gradle.kts"
-          rm -rf src-tauri/gen/android
-          pnpm tauri android init --ci --config src-tauri/tauri.nightly.conf.json
-          cp "$RUNNER_TEMP/android-build.gradle.kts" src-tauri/gen/android/build.gradle.kts
+          # Tauri requires source files at the configured package path. Overlay the
+          # nightly package rather than regenerating and losing tracked customizations.
+          APP_DIR=src-tauri/gen/android/app
+          NIGHTLY_PACKAGE_DIR="$APP_DIR/src/main/java/moe/sable/client/nightly"
+          NIGHTLY_SOURCE_DIR="$RUNNER_TEMP/android-nightly-package"
+          cp -a "$APP_DIR/src/main/java/moe/sable/client" "$NIGHTLY_SOURCE_DIR"
+          find "$NIGHTLY_SOURCE_DIR" -type f -exec sed -i \
+            's/moe\.sable\.client/moe.sable.client.nightly/g' {} +
+          mv "$NIGHTLY_SOURCE_DIR" "$NIGHTLY_PACKAGE_DIR"
+          sed -i 's/moe\.sable\.client/moe.sable.client.nightly/g' \
+            "$APP_DIR/build.gradle.kts" "$APP_DIR/src/main/AndroidManifest.xml"
 
       - name: Setup Android signing
         if: ${{ env.ANDROID_KEY_BASE64 != '' }}

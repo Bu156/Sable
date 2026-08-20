@@ -10,6 +10,7 @@ on:
     types: [created]
 
 permissions:
+  actions: write
   metadata: read
 
 jobs:
@@ -57,14 +58,10 @@ jobs:
       - name: Dispatch PR build
         if: ${{ steps.cmd.outputs.command == 'true' && steps.perm.outputs.allowed == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.PR_BUILD_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
           PLATFORM: ${{ steps.cmd.outputs.platform }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::PR_BUILD_DISPATCH_TOKEN is not set. Add it as a repository secret to enable /build dispatches."
-            exit 1
-          fi
           gh workflow run pr-build.yml --ref dev \
             --field pr_number="$PR_NUMBER" \
             --field platform="$PLATFORM"
