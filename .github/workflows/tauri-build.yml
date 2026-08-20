@@ -295,6 +295,13 @@ jobs:
         shell: bash
         run: node .github/scripts/set-tauri-version.mjs "$VERSION"
 
+      - name: Generate nightly Android project
+        if: ${{ needs.setup-release.outputs.nightly == 'true' }}
+        shell: bash
+        run: |
+          rm -rf src-tauri/gen/android
+          pnpm tauri android init --ci --config src-tauri/tauri.nightly.conf.json
+
       - name: Setup Android signing
         if: ${{ env.ANDROID_KEY_BASE64 != '' }}
         shell: bash
@@ -531,7 +538,8 @@ jobs:
 
   updater-manifest:
     name: Publish updater manifest
-    needs: [setup-release, build, linux]
+    needs: [setup-release, build, linux, android]
+    if: ${{ always() && needs.setup-release.result == 'success' && needs.build.result == 'success' && needs.linux.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -597,7 +605,7 @@ jobs:
         run: gh release upload "$TAG" latest.json --clobber
 
       - name: Remove superseded nightly assets
-        if: ${{ needs.setup-release.outputs.nightly == 'true' && steps.manifest.outputs.produced == 'true' }}
+        if: ${{ needs.setup-release.outputs.nightly == 'true' && needs.android.result == 'success' && steps.manifest.outputs.produced == 'true' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
