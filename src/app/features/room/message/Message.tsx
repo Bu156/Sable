@@ -580,6 +580,8 @@ function MessageInternal(
           <Box
             alignItems="Center"
             gap="100"
+            grow="Yes"
+            style={{ minWidth: 0 }}
             direction={
               messageLayout === MessageLayout.Bubble &&
               useRightBubbles &&
