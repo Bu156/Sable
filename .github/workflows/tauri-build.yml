@@ -299,13 +299,17 @@ jobs:
         if: ${{ needs.setup-release.outputs.nightly == 'true' }}
         shell: bash
         run: |
-          # Tauri regenerates these files without the LiveKit dependency overrides.
-          cp src-tauri/gen/android/build.gradle.kts "$RUNNER_TEMP/android-build.gradle.kts"
-          cp src-tauri/gen/android/app/build.gradle.kts "$RUNNER_TEMP/android-app-build.gradle.kts"
-          rm -rf src-tauri/gen/android
-          pnpm tauri android init --ci --config src-tauri/tauri.nightly.conf.json
-          cp "$RUNNER_TEMP/android-build.gradle.kts" src-tauri/gen/android/build.gradle.kts
-          cp "$RUNNER_TEMP/android-app-build.gradle.kts" src-tauri/gen/android/app/build.gradle.kts
+          # Tauri requires source files at the configured package path. Overlay the
+          # nightly package rather than regenerating and losing tracked customizations.
+          APP_DIR=src-tauri/gen/android/app
+          NIGHTLY_PACKAGE_DIR="$APP_DIR/src/main/java/moe/sable/client/nightly"
+          NIGHTLY_SOURCE_DIR="$RUNNER_TEMP/android-nightly-package"
+          cp -a "$APP_DIR/src/main/java/moe/sable/client" "$NIGHTLY_SOURCE_DIR"
+          find "$NIGHTLY_SOURCE_DIR" -type f -exec sed -i \
+            's/moe\.sable\.client/moe.sable.client.nightly/g' {} +
+          mv "$NIGHTLY_SOURCE_DIR" "$NIGHTLY_PACKAGE_DIR"
+          sed -i 's/moe\.sable\.client/moe.sable.client.nightly/g' \
+            "$APP_DIR/build.gradle.kts" "$APP_DIR/src/main/AndroidManifest.xml"
 
       - name: Setup Android signing
         if: ${{ env.ANDROID_KEY_BASE64 != '' }}
@@ -442,12 +446,9 @@ jobs:
           IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
-            # Tauri does not regenerate this tracked privacy manifest.
-            cp src-tauri/gen/apple/PrivacyInfo.xcprivacy "$RUNNER_TEMP/PrivacyInfo.xcprivacy"
             rm -rf src-tauri/gen/apple
             command -v pod >/dev/null 2>&1 || brew install cocoapods
             pnpm tauri ios init --ci --config src-tauri/tauri.nightly.conf.json
-            cp "$RUNNER_TEMP/PrivacyInfo.xcprivacy" src-tauri/gen/apple/PrivacyInfo.xcprivacy
           else
             mise -y run tauri:setup:ios
           fi
