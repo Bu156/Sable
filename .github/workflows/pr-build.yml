@@ -114,11 +114,11 @@ jobs:
         shell: bash
         run: |
           if [ -n "${ANDROID_KEY_BASE64:-}" ]; then
-            pnpm tauri android build --apk --target aarch64 armv7
+            pnpm tauri android build --config src-tauri/tauri.pr.conf.json --apk --target aarch64 armv7
           else
             # No keystore secret available: build a debug APK (signed with the
             # debug keystore) so members can still sideload the build.
-            pnpm tauri android build --debug --apk --target aarch64 armv7
+            pnpm tauri android build --config src-tauri/tauri.pr.conf.json --debug --apk --target aarch64 armv7
           fi
           OUT='src-tauri/gen/android/app/build/outputs'
           APK=$(find "$OUT/apk" -name '*.apk' -type f | head -1)
@@ -177,7 +177,7 @@ jobs:
       - name: Build unsigned IPA
         shell: bash
         run: |
-          pnpm tauri ios build --no-sign --ci
+          pnpm tauri ios build --config src-tauri/tauri.pr.conf.json --no-sign --ci
           IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
           [ -n "$IPA" ] || { echo "IPA not found"; exit 1; }
           mv "$IPA" "$(dirname "$IPA")/Sable-pr${{ inputs.pr_number }}-ios.ipa"
