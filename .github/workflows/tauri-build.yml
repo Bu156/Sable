@@ -299,11 +299,13 @@ jobs:
         if: ${{ needs.setup-release.outputs.nightly == 'true' }}
         shell: bash
         run: |
-          # Tauri regenerates this file without the JitPack repository required by LiveKit.
+          # Tauri regenerates these files without the LiveKit dependency overrides.
           cp src-tauri/gen/android/build.gradle.kts "$RUNNER_TEMP/android-build.gradle.kts"
+          cp src-tauri/gen/android/app/build.gradle.kts "$RUNNER_TEMP/android-app-build.gradle.kts"
           rm -rf src-tauri/gen/android
           pnpm tauri android init --ci --config src-tauri/tauri.nightly.conf.json
           cp "$RUNNER_TEMP/android-build.gradle.kts" src-tauri/gen/android/build.gradle.kts
+          cp "$RUNNER_TEMP/android-app-build.gradle.kts" src-tauri/gen/android/app/build.gradle.kts
 
       - name: Setup Android signing
         if: ${{ env.ANDROID_KEY_BASE64 != '' }}
