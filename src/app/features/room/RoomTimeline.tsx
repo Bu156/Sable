@@ -999,6 +999,7 @@ export function RoomTimeline({
 
       if (processedIndex !== undefined) {
         timelineSync.cancelEventTimelineLoad();
+        setAtBottom(false);
         if (vListRef.current) {
           vListRef.current.scrollToIndex(processedIndex, { align: 'center' });
         }

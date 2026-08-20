@@ -712,8 +712,9 @@ describe('RoomTimeline content ResizeObserver', () => {
     );
   });
 
-  it('cancels a pending context load when opening an already-rendered event', () => {
-    renderTimeline();
+  it('cancels a pending context load when opening an already-rendered event', async () => {
+    const { getByText } = renderTimeline();
+    await settleInitialScroll();
 
     const handleOpenEvent = timelineActionsOptions.current?.handleOpenEvent as
       | ((eventId: string) => void)
@@ -721,6 +722,7 @@ describe('RoomTimeline content ResizeObserver', () => {
     act(() => handleOpenEvent?.('$evt1'));
 
     expect(timelineSync.cancelEventTimelineLoad).toHaveBeenCalled();
+    expect(getByText('Jump to Latest')).toBeTruthy();
   });
 
   it('keeps a fresh highlight visible for two seconds when refocusing the same event', () => {
