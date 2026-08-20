@@ -130,18 +130,16 @@ test.describe('live timeline', () => {
     await app.openRoom(`${tag} Room`);
     await expect(app.messageByEventId(readyEventId)).toBeVisible({ timeout: 120_000 });
 
-    await Promise.all(
-      Array.from({ length: BURST_SIZE }, (_, i) =>
-        sendText(hsBaseUrl, remote.accessToken, room, `${tag}-b${i + 1}`, i + 1)
-      )
-    );
+    /* eslint-disable no-await-in-loop */
+    for (let i = 1; i <= BURST_SIZE; i += 1) {
+      await sendText(hsBaseUrl, remote.accessToken, room, `${tag}-b${i}`, i);
+    }
 
     const expected = (await getRoomMessages(hsBaseUrl, user.accessToken, room))
       .filter((m) => m.body.startsWith(`${tag}-b`))
       .map((m) => m.body);
     expect(expected).toEqual(Array.from({ length: BURST_SIZE }, (_, i) => `${tag}-b${i + 1}`));
 
-    /* eslint-disable no-await-in-loop */
     for (const body of expected) {
       await expect(page.getByText(body, { exact: true })).toHaveCount(1, {
         timeout: 120_000,
