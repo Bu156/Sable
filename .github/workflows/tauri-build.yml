@@ -558,18 +558,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          NEEDS_SETUP_RELEASE_OUTPUTS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
+          IS_NIGHTLY: ${{ needs.setup-release.outputs.nightly }}
         run: |
-          if [ "${NEEDS_SETUP_RELEASE_OUTPUTS_NIGHTLY}" = "true" ]; then
-            gh release view "$TAG" --json assets \
-              | jq -r --arg cutoff "$STARTED_AT" \
-                  '.assets[] | select(.updatedAt <= $cutoff and (.name | endswith(".sig"))) | .name' \
-              | while read -r name; do
-                  [ -n "$name" ] || continue
-                  echo "Removing superseded nightly signature: $name"
-                  gh release delete-asset "$TAG" "$name" --yes
-                done
-          fi
           node .github/scripts/build-updater-manifest.mjs
           if [ -f latest.json ]; then
             echo "produced=true" >> "$GITHUB_OUTPUT"
@@ -583,13 +573,6 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: latest.json
-
-      - name: Upload updater manifest
-        if: steps.manifest.outputs.produced == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" latest.json --clobber
 
       - name: Finalize nightly release
         if: ${{ needs.setup-release.outputs.nightly == 'true' && steps.manifest.outputs.produced == 'true' }}
@@ -606,6 +589,19 @@ jobs:
             --title "Nightly (dev)" \
             --notes "Rolling nightly build $VERSION from dev — $GIT_SHA"
 
+      - name: Upload updater manifest
+        if: steps.manifest.outputs.produced == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" latest.json --clobber
+
+      - name: Remove superseded nightly assets
+        if: ${{ needs.setup-release.outputs.nightly == 'true' && steps.manifest.outputs.produced == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           # .json manifests are overwritten in place, not accumulated.
           gh release view nightly --json assets \
             | jq -r --arg cutoff "$STARTED_AT" \
