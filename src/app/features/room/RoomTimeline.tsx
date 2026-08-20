@@ -476,8 +476,8 @@ export function RoomTimeline({
   const initialScrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const initialScrollCancelledRef = useRef(false);
   const hasUserScrollIntentRef = useRef(false);
-  const focusedPaginationIntentRef = useRef<'backward' | 'forward'>();
-  const touchStartYRef = useRef<number>();
+  const focusedPaginationIntentRef = useRef<'backward' | 'forward' | undefined>(undefined);
+  const touchStartYRef = useRef<number | undefined>(undefined);
   const pendingReadyRef = useRef(false);
   const currentRoomIdRef = useRef(room.roomId);
 
@@ -1345,7 +1345,7 @@ export function RoomTimeline({
   });
 
   processedEventsRef.current = processedEvents;
-  const previousProcessedEventIdsRef = useRef<string[]>();
+  const previousProcessedEventIdsRef = useRef<string[] | undefined>(undefined);
   const processedEventIds = processedEvents.map((event) => event.id);
   const previousProcessedEventIds = previousProcessedEventIdsRef.current;
   const shouldShift =
@@ -1431,7 +1431,7 @@ export function RoomTimeline({
   }, [room.roomId, scrollOwner, timelineSync.eventsLength, timelineSync.backwardStatus]);
 
   return (
-    <Box grow="Yes" style={{ position: 'relative' }}>
+    <Box grow="Yes" style={{ position: 'relative', minWidth: 0, minHeight: 0, width: '100%' }}>
       {(hideTimelineForRoomState || (roomSyncLoading && timelineSync.eventsLength === 0)) && (
         <Box
           justifyContent="Center"
@@ -1470,6 +1470,7 @@ export function RoomTimeline({
         style={{
           flex: 1,
           minHeight: 0,
+          width: '100%',
           overflow: 'hidden',
           position: 'relative',
           opacity:
@@ -1490,6 +1491,7 @@ export function RoomTimeline({
             style={{
               flex: 1,
               minHeight: 0,
+              width: '100%',
               display: 'flex',
               flexDirection: 'column',
               paddingTop: topSpacerHeight > 0 ? topSpacerHeight : config.space.S600,

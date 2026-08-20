@@ -14,7 +14,7 @@ import {
   useNavigationType,
   createRoutesFromChildren,
   matchRoutes,
-} from 'react-router-dom';
+} from 'react-router';
 import { scrubMatrixIds, sanitizeSentryPayload, scrubMatrixUrl } from './app/utils/sentryScrubbers';
 import { isTauri } from '@tauri-apps/api/core';
 import { setNativeSentryEnabled } from './app/generated/tauri/commands';

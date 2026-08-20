@@ -278,15 +278,14 @@ describe('ImageContent', () => {
 
     touchTap(screen.getByRole('button', { name: 'View' }));
     const img = await screen.findByAltText('preview');
-    expect(vi.mocked(mxcUrlToHttp).mock.calls.at(-1)).toEqual([
+    expect(vi.mocked(mxcUrlToHttp)).toHaveBeenCalledWith(
       {},
       'mxc://example.org/abc123',
       false,
       800,
       600,
-      'scale',
-    ]);
-
+      'scale'
+    );
     Object.defineProperty(img, 'naturalWidth', { value: 800, configurable: true });
     Object.defineProperty(img, 'naturalHeight', { value: 600, configurable: true });
     fireEvent.load(img);

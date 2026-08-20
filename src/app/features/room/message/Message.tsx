@@ -3,7 +3,7 @@ import type { RectCords } from 'folds';
 import { Avatar, Box, Chip, Text, Tooltip, as, config, toRem } from 'folds';
 import { TooltipProvider } from '$components/overlay-stack';
 import { PopOut } from '$components/overlay-stack';
-import type { KeyboardEventHandler, MouseEventHandler, MouseEvent, ReactNode } from 'react';
+import type { JSX, KeyboardEventHandler, MouseEventHandler, MouseEvent, ReactNode } from 'react';
 import {
   memo,
   useCallback,
@@ -358,7 +358,7 @@ function MessageInternal(
   }: MessageProps & { className?: string; children?: ReactNode },
   ref:
     | ((instance: HTMLDivElement | null) => void)
-    | React.RefObject<HTMLDivElement>
+    | React.RefObject<HTMLDivElement | null>
     | null
     | undefined
 ) {

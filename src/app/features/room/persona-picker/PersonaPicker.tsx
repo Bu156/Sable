@@ -120,7 +120,7 @@ export function useProfiles(
 function useFilteredProfiles(
   profiles: Persona[],
   mountedRef: MutableRefObject<boolean>,
-  searchInputRef: RefObject<HTMLInputElement>,
+  searchInputRef: RefObject<HTMLInputElement | null>,
   profileFetchGenerationRef: MutableRefObject<number>
 ) {
   const [filteredProfiles, setFilteredProfiles] = useState<PerMessageProfileMsc4461[] | undefined>(

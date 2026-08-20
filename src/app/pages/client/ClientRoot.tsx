@@ -7,7 +7,7 @@ import FocusTrap from 'focus-trap-react';
 import type { MouseEventHandler, ReactNode } from 'react';
 import { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
-import { matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   clearCacheAndReload,
