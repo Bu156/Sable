@@ -79,19 +79,8 @@ export const BannerContainer = style({
   },
 });
 
-export const Banner = style({
-  position: 'relative',
-  overflow: 'hidden',
+export const BannerWrapper = style({
   pointerEvents: 'all',
-  display: 'flex',
-  alignItems: 'center',
-  gap: config.space.S300,
-  backgroundColor: color.Surface.Container,
-  color: color.Surface.OnContainer,
-  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  borderRadius: toRem(16),
-  padding: `${config.space.S300} ${config.space.S400}`,
-  boxShadow: `0 ${toRem(8)} ${toRem(32)} rgba(0, 0, 0, 0.45), 0 ${toRem(2)} ${toRem(8)} rgba(0, 0, 0, 0.3)`,
   cursor: 'pointer',
   width: '100%',
   maxWidth: toRem(420),
@@ -104,9 +93,6 @@ export const Banner = style({
   transitionTimingFunction: 'ease-out',
 
   selectors: {
-    '&:hover': {
-      backgroundColor: color.Surface.ContainerHover,
-    },
     '&[data-dismissing=up], &[data-dismissing=left], &[data-dismissing=right]': {
       animationDuration: '200ms',
       animationTimingFunction: 'cubic-bezier(0.4, 0, 1, 1)',
@@ -124,6 +110,26 @@ export const Banner = style({
     },
     '&[data-swiping=true]': {
       transitionProperty: 'none',
+    },
+  },
+});
+
+export const Banner = style({
+  position: 'relative',
+  overflow: 'hidden',
+  display: 'flex',
+  alignItems: 'center',
+  gap: config.space.S300,
+  backgroundColor: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+  borderRadius: toRem(16),
+  padding: `${config.space.S300} ${config.space.S400}`,
+  boxShadow: `0 ${toRem(8)} ${toRem(32)} rgba(0, 0, 0, 0.45), 0 ${toRem(2)} ${toRem(8)} rgba(0, 0, 0, 0.3)`,
+
+  selectors: {
+    ':hover > &': {
+      backgroundColor: color.Surface.ContainerHover,
     },
   },
 });

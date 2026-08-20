@@ -173,16 +173,9 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
 
   return (
     <div
-      className={css.Banner}
+      className={css.BannerWrapper}
       data-dismissing={dismissing}
       data-swiping={gesture !== undefined}
-      onClick={handleClick}
-      // role="button" // TODO: This breaking everything >:(
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleClick();
-        if (e.key === 'Escape') dismiss('up');
-      }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
@@ -194,56 +187,67 @@ function BannerItem({ notification, onDismiss }: BannerItemProps) {
         willChange: 'transform',
       }}
     >
-      {!notification.event && notification.icon && (
-        <img
-          src={notification.icon}
-          alt=""
-          className={css.BannerIcon}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = 'none';
-          }}
-        />
-      )}
-      <div className={css.BannerContent}>
-        {notification.room && notification.event ? (
-          <BannerMessage notification={notification} />
-        ) : (
-          <>
-            <Text size="T300" truncate className={css.BannerTitle}>
-              {notification.senderName ?? notification.title}
-              {(notification.roomName || notification.serverName) && (
-                <span className={css.BannerSubtitle}>
-                  {' ('}
-                  {notification.roomName && `#${notification.roomName}`}
-                  {notification.roomName && notification.serverName && ', '}
-                  {notification.serverName})
-                </span>
-              )}
-            </Text>
-            {notification.body && <BodyText text={notification.body} hovered={paused} />}
-          </>
-        )}
-      </div>
-      <Box shrink="No">
-        <IconButton
-          size="300"
-          variant="Surface"
-          fill="None"
-          radii="300"
-          onClick={(e) => {
-            e.stopPropagation();
-            dismiss('up');
-          }}
-          aria-label="Dismiss notification"
-        >
-          {sizedIcon(X, '100')}
-        </IconButton>
-      </Box>
       <div
-        className={css.ProgressBar}
-        data-paused={paused}
-        style={{ animationDuration: `${BANNER_DURATION_MS}ms` }}
-      />
+        className={css.Banner}
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') handleClick();
+          if (e.key === 'Escape') dismiss('up');
+        }}
+      >
+        {!notification.event && notification.icon && (
+          <img
+            src={notification.icon}
+            alt=""
+            className={css.BannerIcon}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        )}
+        <div className={css.BannerContent}>
+          {notification.room && notification.event ? (
+            <BannerMessage notification={notification} />
+          ) : (
+            <>
+              <Text size="T300" truncate className={css.BannerTitle}>
+                {notification.senderName ?? notification.title}
+                {(notification.roomName || notification.serverName) && (
+                  <span className={css.BannerSubtitle}>
+                    {' ('}
+                    {notification.roomName && `#${notification.roomName}`}
+                    {notification.roomName && notification.serverName && ', '}
+                    {notification.serverName})
+                  </span>
+                )}
+              </Text>
+              {notification.body && <BodyText text={notification.body} hovered={paused} />}
+            </>
+          )}
+        </div>
+        <Box shrink="No">
+          <IconButton
+            size="300"
+            variant="Surface"
+            fill="None"
+            radii="300"
+            onClick={(e) => {
+              e.stopPropagation();
+              dismiss('up');
+            }}
+            aria-label="Dismiss notification"
+          >
+            {sizedIcon(X, '100')}
+          </IconButton>
+        </Box>
+        <div
+          className={css.ProgressBar}
+          data-paused={paused}
+          style={{ animationDuration: `${BANNER_DURATION_MS}ms` }}
+        />
+      </div>
     </div>
   );
 }
