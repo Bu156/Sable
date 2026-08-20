@@ -2,4 +2,4 @@
 default: patch
 ---
 
-Reload instead of retrying in place after a crypto store mismatch, which corrupted the crypto engine.
+Fix devices randomly becoming unverified: clear the account's crypto stores on forced logout, and reload instead of retrying in place after a store mismatch.

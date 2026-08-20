@@ -32,6 +32,7 @@ import { AuthMetadataProvider, getSessionAuthMetadata } from '$hooks/useAuthMeta
 import {
   sessionsAtom,
   activeSessionIdAtom,
+  getSessionStoreName,
   type Session,
   type SessionsAction,
 } from '$state/sessions';
@@ -216,7 +217,7 @@ function ClientRootOptions({ mx, onLogout }: ClientRootOptionsProps) {
   );
 }
 
-const useLogoutListener = (mx?: MatrixClient) => {
+const useLogoutListener = (mx?: MatrixClient, session?: Session) => {
   const handleLogout = useCallback(async () => {
     Sentry.addBreadcrumb({
       category: 'auth',
@@ -224,10 +225,12 @@ const useLogoutListener = (mx?: MatrixClient) => {
       level: 'warning',
     });
     if (mx) stopClient(mx);
-    await mx?.clearStores();
+    await mx?.clearStores(
+      session ? { cryptoDatabasePrefix: getSessionStoreName(session).rustCryptoPrefix } : undefined
+    );
     window.localStorage.clear();
     window.location.reload();
-  }, [mx]);
+  }, [mx, session]);
 
   useMatrixEvent(mx, HttpApiEvent.SessionLoggedOut, handleLogout);
 };
@@ -340,7 +343,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [mx, activeSession, sessions, setSessions, setActiveSessionId]);
 
   useSyncNicknames(mx);
-  useLogoutListener(mx);
+  useLogoutListener(mx, activeSession);
   useAppVisibility(mx);
   useNetworkRecovery(mx);
   useBackgroundSyncPause(mx);
