@@ -1,5 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Avatar, MenuItem, Text } from 'folds';
 import { userFallbackIcon } from '$components/icons/phosphor';
 import type { MatrixClient, Room, RoomMember } from '$types/matrix-sdk';
@@ -8,6 +8,7 @@ import { useRoomMembers } from '$hooks/useRoomMembers';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import type { SearchItemStrGetter, UseAsyncSearchOptions } from '$hooks/useAsyncSearch';
 import { useAsyncSearch } from '$hooks/useAsyncSearch';
+import { normalize } from '$utils/AsyncSearch';
 import { onTabPress } from '$utils/keyboard';
 import { useKeyDown } from '$hooks/useKeyDown';
 import { getMxIdLocalPart, isUserId } from '$utils/matrix';
@@ -77,7 +78,8 @@ const withAllowedMembership = (member: RoomMember): boolean =>
   member.membership === KnownMembership.Knock;
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
-  limit: 1000,
+  // The menu only displays 20 members; continuing to search reorders its visible results.
+  limit: 20,
   matchOptions: {
     contain: true,
   },
@@ -97,16 +99,20 @@ export function UserMentionAutocomplete({
   const roomId: string = room.roomId;
   const roomAliasOrId = room.getCanonicalAlias() || roomId;
   const members = useRoomMembers(mx, roomId);
+  const mentionableMembers = useMemo(() => members.filter(withAllowedMembership), [members]);
 
   const getRoomMemberStr = useCallback<SearchItemStrGetter<RoomMember>>(
     (m, searchQuery) => getMemberSearchStr(m, searchQuery, mxIdToName, nicknames),
     [nicknames]
   );
 
-  const [result, search, resetSearch] = useAsyncSearch(members, getRoomMemberStr, SEARCH_OPTIONS);
-  const autoCompleteMembers = (result ? result.items.slice(0, 20) : members.slice(0, 20)).filter(
-    withAllowedMembership
+  const [result, search, resetSearch] = useAsyncSearch(
+    mentionableMembers,
+    getRoomMemberStr,
+    SEARCH_OPTIONS
   );
+  const matchingResult = result?.query === normalize(query.text) ? result.items : undefined;
+  const autoCompleteMembers = matchingResult ?? mentionableMembers.slice(0, 20);
 
   useEffect(() => {
     if (query.text) search(query.text);
