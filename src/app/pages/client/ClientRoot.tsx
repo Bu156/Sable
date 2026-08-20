@@ -224,6 +224,7 @@ const useLogoutListener = (mx?: MatrixClient, session?: Session) => {
       message: 'Session forcibly logged out by server',
       level: 'warning',
     });
+    Sentry.metrics.count('sable.auth.forced_logout', 1);
     if (mx) stopClient(mx);
     await mx?.clearStores(
       session ? { cryptoDatabasePrefix: getSessionStoreName(session).rustCryptoPrefix } : undefined
