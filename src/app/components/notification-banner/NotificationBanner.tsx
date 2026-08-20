@@ -1,5 +1,6 @@
 import { useAtom } from 'jotai';
-import { useCallback, useEffect, useRef, useState, TouchEvent } from 'react';
+import type { TouchEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, IconButton, Text } from 'folds';
 import { sizedIcon, X } from '$components/icons/phosphor';
 import { createLogger } from '$utils/debug';
