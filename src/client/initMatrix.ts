@@ -377,8 +377,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
         error: result.error,
       });
       await wipeAllStores();
-      // Reload instead of re-initing in place: the failed init leaks its WASM
-      // store handle, which blocks the wipe and corrupts the shared crypto heap.
       window.location.reload();
       throw result.error;
     }
