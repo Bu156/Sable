@@ -1,6 +1,7 @@
 import { getCachedSWMediaAuthSupport } from './swMediaAuth';
 import { fetch } from '$utils/fetch';
 import { getFromMediaCache, putInMediaCache } from './mediaCache';
+import { getTauriMediaSourceUrl } from './mediaSourceUrl';
 
 type StoredSession = {
   baseUrl?: string;
@@ -395,9 +396,11 @@ async function fetchMediaBlobInternal(url: string, options?: MediaTransportOptio
 }
 
 export async function fetchMediaBlob(url: string, options?: MediaTransportOptions): Promise<Blob> {
+  // Keeps the webview-only `sable-media` form out of `fetch()`.
+  const target = getTauriMediaSourceUrl(url) ?? url;
   const cacheMode = options?.cache ?? 'default';
   const requestKey = getRequestKey(
-    getScopedMediaCacheKey(url, resolveSessionScope(options)),
+    getScopedMediaCacheKey(target, resolveSessionScope(options)),
     cacheMode,
     options?.forceDirectAuth === true
   );
@@ -405,7 +408,7 @@ export async function fetchMediaBlob(url: string, options?: MediaTransportOption
   const inflight = inflightRequests.get(requestKey);
   if (inflight) return inflight;
 
-  const request = fetchMediaBlobInternal(url, options).finally(() => {
+  const request = fetchMediaBlobInternal(target, options).finally(() => {
     inflightRequests.delete(requestKey);
   });
 

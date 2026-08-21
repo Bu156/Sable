@@ -26,7 +26,6 @@ vi.mock('./mediaTransport', () => ({
 import {
   addMediaRetryRevision,
   addTauriMediaRetryRevision,
-  getTauriMediaSourceUrl,
   getTauriMediaRetryTarget,
   prepareLoopbackImageSource,
   prepareLoopbackMedia,
@@ -272,20 +271,6 @@ describe('getTauriMediaRetryTarget', () => {
       expect(getTauriMediaRetryTarget(url, 1)).toBe(`${INNER}#__sable_media_retry=1`);
     }
   );
-});
-
-describe('getTauriMediaSourceUrl', () => {
-  it('unwraps the Android protocol URL to its Matrix media source', () => {
-    const source = 'https://matrix.example.com/_matrix/client/v1/media/download/example.com/abc123';
-    const url = `https://sable-media.localhost/${encodeURIComponent(source)}?__sable_media_cache=3`;
-
-    expect(getTauriMediaSourceUrl(url)).toBe(source);
-  });
-
-  it('passes ordinary URLs through unchanged', () => {
-    const url = 'https://example.org/image.png';
-    expect(getTauriMediaSourceUrl(url)).toBe(url);
-  });
 });
 
 describe('prepareLoopbackMedia', () => {

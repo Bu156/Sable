@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import type { MatrixClient } from '$types/matrix-sdk';
 import { getCurrentMediaSessionScope } from './mediaTransport';
+import { getTauriMediaSourceUrl } from './mediaSourceUrl';
 
 const TAURI_MEDIA_CACHE_VERSION = '__sable_media_cache=3';
 const TAURI_MEDIA_PATH_PREFIXES = [
@@ -43,41 +44,6 @@ export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | n
 // Kept in step with MEDIA_RETRY_MARKER in mediaTransport.ts, which strips it from cache keys.
 const MEDIA_RETRY_MARKER = '__sable_media_retry';
 const TAURI_MEDIA_OUTER_QUERY_PARAMS = ['__sable_media_cache', '__sable_media_session'];
-const TAURI_MEDIA_PROTOCOL = 'sable-media://';
-const TAURI_MEDIA_LOCALHOST = 'localhost';
-const TAURI_MEDIA_LOCALHOST_HOST = 'sable-media.localhost';
-
-export const getTauriMediaSourceUrl = (mediaUrl: string): string | undefined => {
-  if (mediaUrl.startsWith(TAURI_MEDIA_PROTOCOL)) {
-    const wrappedUrl = mediaUrl.slice(TAURI_MEDIA_PROTOCOL.length);
-
-    if (wrappedUrl.startsWith(`${TAURI_MEDIA_LOCALHOST}/`)) {
-      try {
-        const parsedUrl = new URL(mediaUrl);
-        if (parsedUrl.hostname !== TAURI_MEDIA_LOCALHOST) return undefined;
-        return decodeURIComponent(parsedUrl.pathname.slice(1));
-      } catch {
-        return undefined;
-      }
-    }
-
-    return wrappedUrl;
-  }
-
-  try {
-    const parsedUrl = new URL(mediaUrl);
-    if (
-      (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') &&
-      parsedUrl.hostname === TAURI_MEDIA_LOCALHOST_HOST
-    ) {
-      return decodeURIComponent(parsedUrl.pathname.slice(1));
-    }
-  } catch {
-    return undefined;
-  }
-
-  return mediaUrl;
-};
 
 // Embeds a retry revision as a fragment on the inner http(s) target (stripping the
 // outer cache/session markers, which the rewrite re-adds). The fragment makes Rust's
