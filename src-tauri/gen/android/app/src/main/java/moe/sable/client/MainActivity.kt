@@ -33,9 +33,11 @@ class MainActivity : TauriActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
+    // Load app_lib before calling our JNI bridge, but before Tauri creates the WebView.
+    Rust.javaClass
+    runCatching { nativeInitStatusBar() }
     super.onCreate(savedInstanceState)
     instance = this
-    runCatching { nativeInitStatusBar() }
     stageShareIntent(intent)
   }
 
