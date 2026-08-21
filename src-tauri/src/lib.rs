@@ -519,12 +519,12 @@ pub fn run() {
         return;
     };
 
-    app.run(|app, event| {
+    app.run(|_app, _event| {
         #[cfg(desktop)]
-        desktop::tray::handle_run_event(app, event);
+        desktop::tray::handle_run_event(_app, _event);
 
         #[cfg(not(any(desktop, mobile)))]
-        let _ = (app, event);
+        let _ = (_app, _event);
     });
 }
 
