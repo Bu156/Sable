@@ -40,7 +40,8 @@ export const rewriteAuthenticatedMediaUrl = (httpUrl: string | null): string | n
   return `${mediaUrl}${separator}${TAURI_MEDIA_CACHE_VERSION}&__sable_media_session=${sessionScope}`;
 };
 
-const TAURI_MEDIA_RETRY_FRAGMENT = '__sable_media_retry';
+// Kept in step with MEDIA_RETRY_MARKER in mediaTransport.ts, which strips it from cache keys.
+const MEDIA_RETRY_MARKER = '__sable_media_retry';
 const TAURI_MEDIA_OUTER_QUERY_PARAMS = ['__sable_media_cache', '__sable_media_session'];
 const TAURI_MEDIA_PROTOCOL = 'sable-media://';
 const TAURI_MEDIA_LOCALHOST = 'localhost';
@@ -98,7 +99,7 @@ export const getTauriMediaRetryTarget = (
   }
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return undefined;
   TAURI_MEDIA_OUTER_QUERY_PARAMS.forEach((param) => parsedUrl.searchParams.delete(param));
-  parsedUrl.hash = `${TAURI_MEDIA_RETRY_FRAGMENT}=${revision}`;
+  parsedUrl.hash = `${MEDIA_RETRY_MARKER}=${revision}`;
   return parsedUrl.toString();
 };
 
@@ -106,6 +107,29 @@ export const addTauriMediaRetryRevision = (mediaUrl: string, revision: number): 
   const target = getTauriMediaRetryTarget(mediaUrl, revision);
   if (!target) return mediaUrl;
   return rewriteAuthenticatedMediaUrl(target) ?? mediaUrl;
+};
+
+// Outside Tauri the revision rides as a query parameter. The media endpoints ignore it, but
+// it makes the URL the browser requests distinct, which is the whole point of a retry: an
+// identical `src` is never re-requested, so no second error event ever fires and a broken
+// image sticks around instead of falling back.
+const addWebMediaRetryRevision = (mediaUrl: string, revision: number): string => {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(mediaUrl);
+  } catch {
+    return mediaUrl;
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return mediaUrl;
+  parsedUrl.searchParams.set(MEDIA_RETRY_MARKER, String(revision));
+  return parsedUrl.toString();
+};
+
+export const addMediaRetryRevision = (mediaUrl: string, revision: number): string => {
+  if (revision <= 0) return mediaUrl;
+  return isTauri()
+    ? addTauriMediaRetryRevision(mediaUrl, revision)
+    : addWebMediaRetryRevision(mediaUrl, revision);
 };
 
 // A media element cannot play from the `sable-media` scheme (MEDIA_ERR_SRC_NOT_SUPPORTED),

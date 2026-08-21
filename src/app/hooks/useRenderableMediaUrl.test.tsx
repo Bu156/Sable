@@ -29,6 +29,35 @@ vi.mock('$utils/swMediaAuth', () => swMediaAuth);
 vi.mock('$utils/mediaTransport', () => mediaTransport);
 vi.mock('@tauri-apps/api/core', () => tauriApi);
 
+// The out-of-band retry preload never fires in jsdom, so tests drive it explicitly.
+class StubImage {
+  src = '';
+
+  crossOrigin: string | null = null;
+
+  private readonly handlers = new Map<string, Set<() => void>>();
+
+  constructor() {
+    imageProbes.push(this);
+  }
+
+  addEventListener(type: string, handler: () => void): void {
+    const existing = this.handlers.get(type) ?? new Set<() => void>();
+    existing.add(handler);
+    this.handlers.set(type, existing);
+  }
+
+  removeEventListener(type: string, handler: () => void): void {
+    this.handlers.get(type)?.delete(handler);
+  }
+
+  emit(type: string): void {
+    this.handlers.get(type)?.forEach((handler) => handler());
+  }
+}
+
+const imageProbes: StubImage[] = [];
+
 describe('useRenderableMediaUrl', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -48,6 +77,8 @@ describe('useRenderableMediaUrl', () => {
     tauriApi.convertFileSrc.mockImplementation(
       (url: string, protocol: string) => `${protocol}://${url}`
     );
+    imageProbes.length = 0;
+    vi.stubGlobal('Image', StubImage);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:rendered-media');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     Object.defineProperty(navigator, 'serviceWorker', {
@@ -62,6 +93,7 @@ describe('useRenderableMediaUrl', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -363,11 +395,60 @@ describe('useRenderableMediaUrl', () => {
         await vi.advanceTimersByTimeAsync(500);
       });
 
-      expect(result.current.error).toBe(false);
+      // The revision advances, but the latch stays shut so the caller keeps rendering its
+      // fallback rather than blinking through an empty <img> for the duration of the load.
+      expect(result.current.error).toBe(true);
       expect(result.current.mediaSrc).toBe('http://127.0.0.1:45678/fresh-capability');
       expect(tauriApi.invoke).toHaveBeenCalledTimes(2);
       const retryUrl = tauriApi.invoke.mock.calls[1]?.[1].url ?? '';
       expect(retryUrl).toContain('__sable_media_retry=1');
+
+      const probe = imageProbes.at(-1);
+      expect(probe?.src).toBe('http://127.0.0.1:45678/fresh-capability');
+
+      act(() => {
+        probe?.emit('load');
+      });
+      expect(result.current.error).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('only reveals the image once the out-of-band retry decodes', async () => {
+      vi.useFakeTimers();
+      tauriApi.isTauri.mockReturnValue(true);
+      tauriApi.invoke.mockImplementation(
+        async (_cmd: string, args: { url: string }) =>
+          `http://127.0.0.1:45678/capability-${args.url.length}`
+      );
+      const { useAvatarMediaSource } = await import('./useRenderableMediaUrl');
+
+      const { result } = renderHook(() =>
+        useAvatarMediaSource(RAW_URL, { crossOrigin: 'anonymous' })
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        result.current.onError();
+      });
+
+      // Two attempts elapse without the preload ever settling: the latch never opens, so
+      // the fallback is continuous instead of flashing once per attempt.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(result.current.error).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(result.current.error).toBe(true);
+
+      // The preload must request exactly what the rendered element would, or it warms a
+      // different cache entry and the real <img> refetches.
+      const probe = imageProbes.at(-1);
+      expect(probe?.src).toBe(result.current.mediaSrc);
+      expect(probe?.crossOrigin).toBe('anonymous');
       vi.useRealTimers();
     });
 
@@ -386,28 +467,27 @@ describe('useRenderableMediaUrl', () => {
       });
       expect(result.current.mediaSrc).toBeDefined();
 
-      const failAndExhaustRetry = async (delay: number) => {
-        act(() => {
-          result.current.onError();
-        });
-        expect(result.current.error).toBe(true);
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(delay);
-        });
-        expect(result.current.error).toBe(false);
-      };
-      await failAndExhaustRetry(500);
-      await failAndExhaustRetry(1500);
-      await failAndExhaustRetry(4500);
-
       act(() => {
         result.current.onError();
       });
       expect(result.current.error).toBe(true);
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(60_000);
-      });
-      expect(result.current.error).toBe(true);
+
+      // Nothing ever loads, so the latch holds and the ladder walks its whole schedule.
+      const advance = async (delay: number) => {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+        expect(result.current.error).toBe(true);
+      };
+      await advance(500);
+      await advance(1500);
+      await advance(4500);
+
+      // One resolve for the initial source plus one per scheduled retry.
+      expect(tauriApi.invoke).toHaveBeenCalledTimes(4);
+
+      await advance(60_000);
+      expect(tauriApi.invoke).toHaveBeenCalledTimes(4);
       vi.useRealTimers();
     });
 
