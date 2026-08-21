@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
@@ -182,6 +183,14 @@ class MainActivity : TauriActivity() {
         val window = activity.window
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
           isLight(color)
+      }
+    }
+
+    @JvmStatic
+    fun setWindowBackgroundColorNative(color: Int) {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        activity.window.setBackgroundDrawable(ColorDrawable(color))
       }
     }
 
