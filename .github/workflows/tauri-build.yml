@@ -330,6 +330,7 @@ jobs:
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
             export SABLE_BUILD_FLAVOR=dev
+            export SABLE_LAUNCHER_ICON=nightly
           fi
           CONFIG_ARGS=""
           [ "$IS_NIGHTLY" = "true" ] && CONFIG_ARGS="--config src-tauri/tauri.nightly.conf.json"
@@ -471,6 +472,7 @@ jobs:
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
             export SABLE_BUILD_FLAVOR=dev
+            export SABLE_LAUNCHER_ICON=nightly
           fi
           CONFIG_ARGS=""
           [ "$IS_NIGHTLY" = "true" ] && CONFIG_ARGS="--config src-tauri/tauri.nightly.conf.json"
