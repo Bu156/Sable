@@ -1,6 +1,7 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { type as osType } from '@tauri-apps/plugin-os';
+import { setWindowBackgroundColor } from '$generated/tauri/commands';
 import { updateThemeColorMeta } from '../../theme/themeColorMeta';
 
 const safeAreaTop = 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
@@ -41,6 +42,7 @@ function useBarColor(
 ): string | undefined {
   const [color, setColor] = useState<string>();
   const lastRef = useRef<string | undefined>(undefined);
+  const lastWindowBackgroundRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -63,7 +65,20 @@ function useBarColor(
         if (android) {
           const argb = rgbToArgb(next);
           const command = edge === 'top' ? 'set_status_bar_color' : 'set_navigation_bar_color';
-          if (argb !== undefined) invoke(command, { color: argb }).catch(() => {});
+          if (argb !== undefined) {
+            invoke(command, { color: argb }).catch(() => {});
+          }
+        }
+      }
+
+      // The Activity background is exposed while Android resizes the WebView for the IME.
+      // Keep that fallback in sync with the app background, not a route-specific surface.
+      if (android && edge === 'bottom') {
+        const background = getComputedStyle(document.body).backgroundColor;
+        if (background !== lastWindowBackgroundRef.current) {
+          lastWindowBackgroundRef.current = background;
+          const argb = rgbToArgb(background);
+          if (argb !== undefined) setWindowBackgroundColor({ color: argb }).catch(() => {});
         }
       }
     };
