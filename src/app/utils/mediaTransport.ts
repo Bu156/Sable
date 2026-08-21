@@ -229,10 +229,34 @@ function getMatrixMediaInfo(url: string): MatrixMediaInfo | undefined {
   };
 }
 
+// Kept in step with MEDIA_RETRY_MARKER in mediaUrl.ts, which imports from this module and
+// so cannot be imported back.
+const MEDIA_RETRY_MARKER = '__sable_media_retry';
+
+// A retry marker exists only to make the browser (or the native layer) re-request, so it must
+// never reach a cache key: a retry that finally succeeds would land under a key nothing looks
+// up again, and the media would re-download on every mount. Attempts stay distinct in memory
+// through getObjectUrlCacheKey, which appends the revision itself.
+function stripMediaRetryMarker(url: string): string {
+  if (!url.includes(MEDIA_RETRY_MARKER)) return url;
+
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete(MEDIA_RETRY_MARKER);
+    if (parsed.hash.startsWith(`#${MEDIA_RETRY_MARKER}=`)) {
+      parsed.hash = '';
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function getStableMediaCacheKeyFragment(url: string): string {
-  const info = getMatrixMediaInfo(url);
+  const stableUrl = stripMediaRetryMarker(url);
+  const info = getMatrixMediaInfo(stableUrl);
   if (info) return `${info.mxcUrl}:${info.operation}${info.query}`;
-  return url;
+  return stableUrl;
 }
 
 export { getStableMediaCacheKeyFragment };

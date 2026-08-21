@@ -546,4 +546,71 @@ describe('fetchMediaBlob', () => {
     expect(await blob.text()).toBe('ok');
     expect(headersSeen).toEqual(['Bearer token-1']);
   });
+
+  it(
+    'ignores the retry marker when keying the cache so a retried success is reused',
+    async () => {
+      const { fetchMediaBlob } = await import('./mediaTransport');
+      const canonical =
+        'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96';
+      const retried = `${canonical}&__sable_media_retry=2`;
+
+      localStorage.setItem(
+        'matrixSessions',
+        JSON.stringify([
+          {
+            baseUrl: 'https://matrix.example.org',
+            userId: '@alice:example.org',
+            deviceId: 'DEVICE',
+            accessToken: 'token-1',
+          },
+        ])
+      );
+      localStorage.setItem('matrixActiveSession', '@alice:example.org');
+
+      const media = new Blob(['avatar'], { type: 'image/png' });
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(media, { status: 200 }));
+
+      await expect(fetchMediaBlob(retried)).resolves.toEqual(media);
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(mediaCache.putInMediaCache).toHaveBeenCalledWith(
+        '@alice:example.org:mxc://example.org/abc123:thumbnail?width=96',
+        expect.any(Blob)
+      );
+
+      // The next mount is back at revision 0, so it must hit the entry the retry wrote
+      // instead of downloading the same avatar again.
+      await expect(fetchMediaBlob(canonical)).resolves.toEqual(media);
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+    TEST_TIMEOUT
+  );
+});
+
+describe('getStableMediaCacheKeyFragment', () => {
+  const CANONICAL =
+    'https://matrix.example.org/_matrix/client/v1/media/thumbnail/example.org/abc123?width=96';
+
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('drops the retry marker in both its query and fragment forms', async () => {
+    const { getStableMediaCacheKeyFragment } = await import('./mediaTransport');
+
+    const expected = getStableMediaCacheKeyFragment(CANONICAL);
+    expect(getStableMediaCacheKeyFragment(`${CANONICAL}&__sable_media_retry=2`)).toBe(expected);
+    expect(getStableMediaCacheKeyFragment(`${CANONICAL}#__sable_media_retry=2`)).toBe(expected);
+  });
+
+  it('still separates different media and different thumbnail sizes', async () => {
+    const { getStableMediaCacheKeyFragment } = await import('./mediaTransport');
+
+    expect(getStableMediaCacheKeyFragment(CANONICAL)).not.toBe(
+      getStableMediaCacheKeyFragment(CANONICAL.replace('abc123', 'def456'))
+    );
+    expect(getStableMediaCacheKeyFragment(CANONICAL)).not.toBe(
+      getStableMediaCacheKeyFragment(CANONICAL.replace('width=96', 'width=32'))
+    );
+  });
 });
