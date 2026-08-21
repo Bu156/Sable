@@ -934,12 +934,13 @@ export function RoomTimeline({
             : getProcessedRowIndexForRawTimelineIndex(rows, absoluteIndex)?.rowIndex;
         if (processedIndex !== undefined && vListRef.current) {
           vListRef.current.scrollToIndex(processedIndex, { align: 'start' });
+          setAtBottom(false);
         }
         unreadScrollToRef.current = false;
         setUnreadInfo((prev) => (prev ? { ...prev, scrollTo: false } : prev));
       }
     }
-  }, [room, unreadInfo, timelineSync.timeline.linkedTimelines, eventId, isReady]);
+  }, [room, unreadInfo, timelineSync.timeline.linkedTimelines, eventId, isReady, setAtBottom]);
 
   useEffect(() => {
     const el = messageListRef.current;
@@ -1063,6 +1064,7 @@ export function RoomTimeline({
 
   const tryAutoMarkAsRead = useCallback(() => {
     if (isInactivePanel) return; // Don't clear unread while room is behind the list
+    if (!atBottomRef.current) return;
     if (!readUptoEventIdRef.current) {
       requestAnimationFrame(() => markAsRead(mx, room.roomId, hideReads));
       return;
