@@ -11,7 +11,7 @@ import {
   VerificationStatus,
 } from './useDeviceVerificationStatus';
 
-const { mockMx, getListenerCount } = vi.hoisted(() => {
+const { mockMx, getListenerCount, sentry } = vi.hoisted(() => {
   const listeners = new Map<string, Set<(...args: never[]) => void>>();
   const mx = {
     on(event: string, cb: (...args: never[]) => void) {
@@ -30,13 +30,22 @@ const { mockMx, getListenerCount } = vi.hoisted(() => {
     getListenerCount(event: string) {
       return listeners.get(event)?.size ?? 0;
     },
+    getSafeUserId() {
+      return '@me:example.org';
+    },
   };
-  return { mockMx: mx, getListenerCount: (event: string) => mx.getListenerCount(event) };
+  return {
+    mockMx: mx,
+    getListenerCount: (event: string) => mx.getListenerCount(event),
+    sentry: { addBreadcrumb: vi.fn<() => void>(), metrics: { count: vi.fn<() => void>() } },
+  };
 });
 
 vi.mock('$hooks/useMatrixClient', () => ({
   useMatrixClient: () => mockMx,
 }));
+
+vi.mock('@sentry/react', () => sentry);
 
 const USER_ID = '@me:example.org';
 const DEVICE_ID = 'DEVICEONE';
@@ -58,6 +67,8 @@ describe('useDeviceVerificationStatus', () => {
   beforeEach(() => {
     getDeviceVerificationStatus.mockReset();
     getDeviceVerificationStatus.mockResolvedValue({ crossSigningVerified: true });
+    sentry.addBreadcrumb.mockClear();
+    sentry.metrics.count.mockClear();
   });
 
   it('reports the cross-signing verification status', async () => {
@@ -169,6 +180,24 @@ describe('useDeviceVerificationStatus', () => {
 
     await waitFor(() => expect(result.current).toBe(VerificationStatus.Unverified));
     expect(getDeviceVerificationStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('records a current-device trust loss after a crypto refresh', async () => {
+    const { result } = renderHook(() => useDeviceVerificationStatus(crypto, USER_ID, DEVICE_ID), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current).toBe(VerificationStatus.Verified));
+    getDeviceVerificationStatus.mockResolvedValue({ crossSigningVerified: false });
+
+    await act(async () => {
+      mockMx.emit(CryptoEvent.KeysChanged, ...([{}] as never[]));
+    });
+
+    await waitFor(() => expect(result.current).toBe(VerificationStatus.Unverified));
+    expect(sentry.metrics.count).toHaveBeenCalledWith('sable.crypto.device_verification_lost', 1, {
+      attributes: { own_device: true },
+    });
   });
 
   it('ignores device updates for a different user', async () => {
