@@ -236,7 +236,7 @@ describe('ImageContent', () => {
     }
   });
 
-  it('unwraps the Tauri media URL before downloading an encrypted image', async () => {
+  it('passes the Tauri media URL straight to the encrypted download', async () => {
     screenMocks.tauri = true;
     const renderViewer = vi.fn<(props: { getDownloadBlob?: () => Promise<Blob> }) => ReactNode>(
       () => <div>viewer</div>
@@ -257,7 +257,7 @@ describe('ImageContent', () => {
       await renderViewer.mock.calls[0]?.[0].getDownloadBlob?.();
 
       expect(downloadEncryptedMedia).toHaveBeenCalledWith(
-        'https://hs.example/_matrix/client/v1/media/download/example.org/abc123?__sable_media_cache=3',
+        'sable-media://https://hs.example/_matrix/client/v1/media/download/example.org/abc123?__sable_media_cache=3',
         expect.any(Function)
       );
     } finally {

@@ -487,6 +487,8 @@ pub fn run() {
             #[cfg(desktop)]
             desktop::download::save_download,
             #[cfg(desktop)]
+            desktop::download::save_media_download,
+            #[cfg(desktop)]
             desktop::diagnostics::export_diagnostics,
             #[cfg(any(target_os = "android", target_os = "ios"))]
             mobile_diagnostics::build_diagnostics_archive,
