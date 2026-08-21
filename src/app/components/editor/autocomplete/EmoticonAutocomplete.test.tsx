@@ -66,4 +66,17 @@ describe('EmoticonAutocomplete', () => {
     expect(menu).toBeInTheDocument();
     expect(screen.getByText(':zxy-face:')).toBeInTheDocument();
   });
+
+  it('does not show the menu before the emoji threshold is reached', () => {
+    render(
+      <EmoticonAutocomplete
+        controller={{} as ProseMirrorEditorController}
+        imagePackRooms={[]}
+        query={{ ...query, text: '' }}
+        requestClose={vi.fn<() => void>()}
+      />
+    );
+
+    expect(document.querySelector('[data-autocomplete-menu]')).not.toBeInTheDocument();
+  });
 });

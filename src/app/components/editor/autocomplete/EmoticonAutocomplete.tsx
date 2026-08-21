@@ -105,6 +105,8 @@ export function EmoticonAutocomplete({
     });
   });
 
+  if (query.text.length < emojiThreshold) return null;
+
   return (
     <AutocompleteMenu
       headerContent={<Text size="L400">{title ?? 'Emojis'}</Text>}
