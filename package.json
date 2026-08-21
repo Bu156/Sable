@@ -37,8 +37,8 @@
     "postinstall": "node scripts/install-knope.js",
     "setup:knope": "node scripts/install-knope.js",
     "setup:tauri-icons": "node scripts/icons/symlink.js",
-    "generate:app-icons:android": "node node_modules/tauri-plugin-app-icon-api/scripts/generate-android.mjs --config src-tauri/app-icons.json && pnpm setup:tauri-icons --write --force",
-    "generate:app-icons:ios": "node node_modules/tauri-plugin-app-icon-api/scripts/generate-ios.mjs --config src-tauri/app-icons.json",
+    "generate:app-icons:android": "node scripts/icons/prepare-launcher-icon.js && node node_modules/tauri-plugin-app-icon-api/scripts/generate-android.mjs --config src-tauri/app-icons.json && pnpm setup:tauri-icons --write --force",
+    "generate:app-icons:ios": "node scripts/icons/prepare-launcher-icon.js && node node_modules/tauri-plugin-app-icon-api/scripts/generate-ios.mjs --config src-tauri/app-icons.json && pnpm setup:tauri-icons --write --force",
     "lint:normalize-imports": "node scripts/normalize-imports.js"
   },
   "dependencies": {

@@ -69,3 +69,4 @@ result
 .direnv
 ## auto-generated pre-commit config
 .pre-commit-config.yaml
+src-tauri/icons/generated/

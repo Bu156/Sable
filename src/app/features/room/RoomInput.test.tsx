@@ -1035,7 +1035,7 @@ describe('RoomInput submit regressions', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Cancel poll' })).toBeInTheDocument()
     );
-    expect(screen.getByTestId('reply-observer')).toHaveTextContent('$reply');
+    await waitFor(() => expect(screen.getByTestId('reply-observer')).toHaveTextContent('$reply'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel poll' }));
     expect(testState.matrix.sendEvent).not.toHaveBeenCalled();

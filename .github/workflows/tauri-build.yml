@@ -330,6 +330,7 @@ jobs:
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
             export SABLE_BUILD_FLAVOR=dev
+            export SABLE_LAUNCHER_ICON=nightly
           fi
           CONFIG_ARGS=""
           [ "$IS_NIGHTLY" = "true" ] && CONFIG_ARGS="--config src-tauri/tauri.nightly.conf.json"
@@ -471,6 +472,7 @@ jobs:
         run: |
           if [ "$IS_NIGHTLY" = "true" ]; then
             export SABLE_BUILD_FLAVOR=dev
+            export SABLE_LAUNCHER_ICON=nightly
           fi
           CONFIG_ARGS=""
           [ "$IS_NIGHTLY" = "true" ] && CONFIG_ARGS="--config src-tauri/tauri.nightly.conf.json"
@@ -558,8 +560,8 @@ jobs:
 
   updater-manifest:
     name: Publish updater manifest
-    needs: [setup-release, build, linux, android]
-    if: ${{ always() && needs.setup-release.result == 'success' && needs.build.result == 'success' && needs.linux.result == 'success' }}
+    needs: [setup-release, build, linux, android, ios, obtainium]
+    if: ${{ always() && needs.setup-release.result == 'success' && needs.build.result == 'success' && needs.linux.result == 'success' && needs.android.result == 'success' && needs.ios.result == 'success' && needs.obtainium.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -625,7 +627,7 @@ jobs:
         run: gh release upload "$TAG" latest.json --clobber
 
       - name: Remove superseded nightly assets
-        if: ${{ needs.setup-release.outputs.nightly == 'true' && needs.android.result == 'success' && steps.manifest.outputs.produced == 'true' }}
+        if: ${{ needs.setup-release.outputs.nightly == 'true' && steps.manifest.outputs.produced == 'true' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
