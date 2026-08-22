@@ -18,13 +18,14 @@ import {
   getVideoInfo,
   uploadContentToServer,
 } from '$utils/matrix';
-import { isImageMimeType } from '$utils/mimeTypes';
+import { isImageMimeType, mimeTypeToExt } from '$utils/mimeTypes';
 import type { TUploadItem } from '$state/room/roomInputDrafts';
 import type { GifData } from '$components/emoji-board/types';
 import { encodeBlurHashAsync } from '$utils/blurHash';
 import { scaleYDimension } from '$utils/common';
 import { createLogger } from '$utils/debug';
-import { getKlipyGifMetadata } from '$utils/klipy';
+import { isAllowedGifMediaUrl } from '$utils/gifProviders';
+import { fetch } from '$utils/fetch';
 import {
   MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME,
   MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME,
@@ -269,30 +270,78 @@ export const getFileMsgContent = (item: TUploadItem, mxc: string): IContent => {
   return content;
 };
 
-export const getGifMsgContent = (gif: GifData, spoiler?: boolean): IContent | undefined => {
-  const metadata = getKlipyGifMetadata(gif);
-  if (!metadata) {
-    if (!gif.mediaUrl.startsWith('mxc://')) return undefined;
+export const getGifMsgContent = async (
+  mx: MatrixClient,
+  gif: GifData,
+  options: { encrypt: boolean; spoiler?: boolean }
+): Promise<IContent | undefined> => {
+  const mimetype = gif.mimetype ?? 'image/gif';
+  const ext = mimeTypeToExt(mimetype);
+  const body = gif.title.endsWith(`.${ext}`) ? gif.title : `${gif.title}.${ext}`;
+  const spoiler = options.spoiler ? { [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true } : undefined;
+
+  // Favorites saved from a sent message already live on a homeserver.
+  if (gif.mediaUrl.startsWith('mxc://')) {
     return {
       msgtype: MsgType.Image,
-      body: gif.title,
+      body,
       url: gif.mediaUrl,
       info: {
         w: gif.width,
         h: gif.height,
-        mimetype: gif.mimetype ?? 'image/gif',
-        ...(gif.size !== undefined ? { size: gif.size } : {}),
+        mimetype,
+        ...(gif.size ? { size: gif.size } : {}),
       },
-      ...(spoiler ? { [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true } : {}),
+      ...spoiler,
     };
   }
 
-  return {
-    msgtype: MsgType.Text,
-    body: gif.shareUrl || metadata.media_url,
-    'pet.plz.gif': metadata,
-    ...(spoiler ? { [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true } : {}),
+  if (!isAllowedGifMediaUrl(gif.mediaUrl)) return undefined;
+
+  const response = await fetch(gif.mediaUrl);
+  if (!response.ok) throw new Error(`Failed to fetch GIF: HTTP ${response.status}`);
+  const blob = await response.blob();
+  const file = new File([blob], body, { type: mimetype });
+
+  const encData = options.encrypt ? await encryptFile(file) : undefined;
+  const uploadData = await uploadContentToServer(mx, encData?.file ?? file);
+  const mxc = uploadData?.content_uri;
+  if (!mxc) throw new Error('Failed when uploading GIF!');
+
+  const objectUrl = URL.createObjectURL(blob);
+  let imgEl: HTMLImageElement | undefined;
+  try {
+    imgEl = await loadImageElement(objectUrl);
+  } catch (e) {
+    log.warn('Failed to load GIF for blurhash, falling back to basic metadata:', e);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  const blurHash = imgEl
+    ? await encodeBlurHashAsync(imgEl, 512, scaleYDimension(imgEl.width, 512, imgEl.height))
+    : undefined;
+
+  const content: IContent = {
+    msgtype: MsgType.Image,
+    body,
+    info: {
+      w: imgEl?.width ?? gif.width,
+      h: imgEl?.height ?? gif.height,
+      mimetype,
+      size: blob.size,
+      ...(blurHash ? { [MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]: blurHash } : {}),
+    },
+    ...spoiler,
   };
+
+  if (encData?.encInfo) {
+    content.file = { ...encData.encInfo, url: mxc };
+  } else {
+    content.url = mxc;
+  }
+
+  return content;
 };
 
 const swapMsgTypeToItemType = (
