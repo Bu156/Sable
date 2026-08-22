@@ -1,8 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as MatrixUtils from '$utils/matrix';
 import { MsgType, type MatrixClient } from '$types/matrix-sdk';
 import type { TUploadItem } from '$state/room/roomInputDrafts';
 import { TGS_MIMETYPE } from '$utils/mimeTypes';
+import { MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME } from '$unstable/prefixes';
 import { getGalleryItemContent, getGifMsgContent, getImageMsgContent } from './msgContent';
+
+const { fetchMock, uploadMock, encryptFileMock } = vi.hoisted(() => ({
+  fetchMock: vi.fn<(url: string) => Promise<Response>>(),
+  uploadMock: vi.fn<(mx: unknown, file: File) => Promise<{ content_uri?: string }>>(),
+  encryptFileMock: vi.fn<(file: File) => Promise<{ file: File; encInfo: object }>>(),
+}));
+
+vi.mock('$utils/fetch', () => ({ fetch: fetchMock }));
+vi.mock('$utils/matrix', async (importOriginal) => ({
+  ...(await importOriginal<typeof MatrixUtils>()),
+  uploadContentToServer: uploadMock,
+  encryptFile: encryptFileMock,
+}));
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  uploadMock.mockReset();
+  encryptFileMock.mockReset();
+});
 
 vi.mock('$utils/dom', () => ({
   getImageFileUrl: vi.fn<(file: File | Blob) => string>(() => 'blob:test'),
@@ -56,54 +77,75 @@ describe('TGS message content', () => {
   });
 });
 
-describe('KLIPY message content', () => {
-  it('sends a direct-link text event without fetching media', () => {
-    expect(
-      getGifMsgContent({
-        id: 'gif-id',
-        title: 'Reaction',
-        shareUrl: 'https://klipy.com/gif/gif-id',
-        mediaUrl: 'https://static.klipy.com/ii/reaction.gif',
-        width: 480,
-        height: 270,
-        mimetype: 'image/gif',
-      })
-    ).toEqual({
-      msgtype: MsgType.Text,
-      body: 'https://klipy.com/gif/gif-id',
-      'pet.plz.gif': {
-        v: 1,
-        provider: 'klipy',
-        media_url: 'https://static.klipy.com/ii/reaction.gif',
-        w: 480,
-        h: 270,
-        mimetype: 'image/gif',
-        id: 'gif-id',
-        title: 'Reaction',
-      },
+describe('GIF message content', () => {
+  const searchResult = {
+    id: 'gif-id',
+    title: 'Reaction',
+    shareUrl: 'https://tenor.com/view/gif-id',
+    mediaUrl: 'https://media.tenor.com/gif-id/reaction.gif',
+    width: 480,
+    height: 270,
+    mimetype: 'image/gif',
+  };
+
+  it('uploads the gif and sends it as an image event', async () => {
+    fetchMock.mockResolvedValue(new Response('gif-bytes', { status: 200 }));
+    uploadMock.mockResolvedValue({ content_uri: 'mxc://server/uploaded' });
+
+    const content = await getGifMsgContent({} as MatrixClient, searchResult, { encrypt: false });
+
+    expect(fetchMock).toHaveBeenCalledWith(searchResult.mediaUrl);
+    expect(encryptFileMock).not.toHaveBeenCalled();
+    expect(content).toEqual({
+      msgtype: MsgType.Image,
+      body: 'Reaction.gif',
+      url: 'mxc://server/uploaded',
+      info: { w: 480, h: 270, mimetype: 'image/gif', size: 9 },
     });
   });
 
-  it('keeps Matrix MXC favorites on the standard image path', () => {
-    expect(
-      getGifMsgContent({
-        id: 'matrix-gif',
-        title: 'Favorite',
-        shareUrl: 'mxc://matrix.example/media-id',
-        mediaUrl: 'mxc://matrix.example/media-id',
-        width: 320,
-        height: 240,
-        mimetype: 'image/gif',
-      })
-    ).toMatchObject({
-      msgtype: MsgType.Image,
-      body: 'Favorite',
-      url: 'mxc://matrix.example/media-id',
-      info: {
-        w: 320,
-        h: 240,
-        mimetype: 'image/gif',
-      },
+  it('encrypts the upload for encrypted rooms', async () => {
+    fetchMock.mockResolvedValue(new Response('gif-bytes', { status: 200 }));
+    uploadMock.mockResolvedValue({ content_uri: 'mxc://server/encrypted' });
+    encryptFileMock.mockImplementation(async (file: File) => ({
+      file,
+      encInfo: { key: { k: 'secret' } },
+    }));
+
+    const content = await getGifMsgContent({} as MatrixClient, searchResult, {
+      encrypt: true,
+      spoiler: true,
     });
+
+    expect(content?.url).toBeUndefined();
+    expect(content?.file).toEqual({ key: { k: 'secret' }, url: 'mxc://server/encrypted' });
+    expect(content?.[MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]).toBe(true);
+  });
+
+  it('sends favorited homeserver gifs without re-uploading', async () => {
+    const content = await getGifMsgContent(
+      {} as MatrixClient,
+      { ...searchResult, mediaUrl: 'mxc://matrix.example/media-id' },
+      { encrypt: false }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(content).toMatchObject({
+      msgtype: MsgType.Image,
+      body: 'Reaction.gif',
+      url: 'mxc://matrix.example/media-id',
+      info: { w: 480, h: 270, mimetype: 'image/gif' },
+    });
+  });
+
+  it('refuses media URLs outside the configured providers', async () => {
+    await expect(
+      getGifMsgContent(
+        {} as MatrixClient,
+        { ...searchResult, mediaUrl: 'https://media.tenor.com.attacker.example/a.gif' },
+        { encrypt: false }
+      )
+    ).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

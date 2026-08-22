@@ -185,7 +185,6 @@ import { AttachmentContent } from '$components/attachment-sheet/AttachmentConten
 import { MobileSwipeDownModal } from '$components/MobileSwipeDownModal';
 import { SchedulePickerDialog } from './schedule-send';
 import * as css from './schedule-send/SchedulePickerDialog.css';
-import { getKlipyGifBlurhash } from '$utils/klipy';
 import {
   getAudioMsgContent,
   getFileMsgContent,
@@ -1901,8 +1900,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const submission = takeSubmission({ clearEditor: false });
       return composerControllerRef.current?.enqueue(async (isLive) => {
         try {
-          const blurhash = gif.blurhash ?? (await getKlipyGifBlurhash(gif));
-          const content = getGifMsgContent(blurhash ? { ...gif, blurhash } : gif, spoiler);
+          const content = await getGifMsgContent(mx, gif, {
+            encrypt: room.hasEncryptionStateEvent(),
+            spoiler,
+          });
           if (!content) throw new Error('Unsendable GIF content');
 
           const sent = await handleSendContents({ contents: [content], submission, isLive });
