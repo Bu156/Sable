@@ -40,6 +40,7 @@ import { createLogger } from '$utils/debug';
 import { useSyncNicknames } from '$hooks/useNickname';
 import { useAppVisibility } from '$hooks/useAppVisibility';
 import { useNetworkRecovery } from '$hooks/useNetworkRecovery';
+import { useLoopbackMediaRecovery } from '$hooks/useLoopbackMediaRecovery';
 import { useBackgroundSyncPause } from '$hooks/useBackgroundSyncPause';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { getHomePath } from '$pages/pathUtils';
@@ -348,6 +349,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   useAppVisibility(mx);
   useNetworkRecovery(mx);
   useBackgroundSyncPause(mx);
+  useLoopbackMediaRecovery();
   useCrossSigningResetDetect(mx);
   useDeviceDisplayName(mx);
 

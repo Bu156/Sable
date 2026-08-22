@@ -458,6 +458,7 @@ pub fn run() {
             network::media_protocol::clear_media_session,
             network::media_protocol::set_media_encryption,
             network::media_protocol::prepare_loopback_media,
+            network::media_protocol::ensure_loopback_media,
             sentry::set_native_sentry_enabled,
             share_inbox::share_inbox_drain,
             share_inbox::share_inbox_read,
