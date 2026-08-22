@@ -194,6 +194,7 @@ import {
   buildGalleryContent,
   getGalleryItemContent,
 } from './msgContent';
+import { useClientConfig } from '$hooks/useClientConfig';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import type {
   AudioMessageRecorderHandle,
@@ -321,6 +322,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     // don't clobber the main room draft (and vice versa).
     const draftKey = threadRootId ?? roomId;
     const mx = useMatrixClient();
+    const gifProxyUrl = useClientConfig().gifs?.proxyUrl;
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [editorOldAddFile] = useSetting(settingsAtom, 'editorOldAddFile');
@@ -1900,8 +1902,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const submission = takeSubmission({ clearEditor: false });
       return composerControllerRef.current?.enqueue(async (isLive) => {
         try {
-          const content = await getGifMsgContent(mx, gif, {
-            encrypt: room.hasEncryptionStateEvent(),
+          const content = await getGifMsgContent(gif, {
+            proxyUrl: gifProxyUrl,
             spoiler,
           });
           if (!content) throw new Error('Unsendable GIF content');

@@ -77,75 +77,79 @@ describe('TGS message content', () => {
   });
 });
 
+const proxyId = (prefix: string, payload: string) =>
+  `mxc://gifs.sable.moe/${prefix}_${btoa(payload).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')}`;
+
 describe('GIF message content', () => {
   const searchResult = {
     id: 'gif-id',
     title: 'Reaction',
     shareUrl: 'https://tenor.com/view/gif-id',
-    mediaUrl: 'https://media.tenor.com/gif-id/reaction.gif',
+    mediaUrl: 'https://media.tenor.com/AbCdEf123/reaction.gif',
     width: 480,
     height: 270,
     mimetype: 'image/gif',
   };
 
-  it('uploads the gif and sends it as an image event', async () => {
-    fetchMock.mockResolvedValue(new Response('gif-bytes', { status: 200 }));
-    uploadMock.mockResolvedValue({ content_uri: 'mxc://server/uploaded' });
+  it('sends a proxy mxc url without fetching or uploading the gif', async () => {
+    const content = await getGifMsgContent(searchResult, { proxyUrl: 'gifs.sable.moe' });
 
-    const content = await getGifMsgContent({} as MatrixClient, searchResult, { encrypt: false });
-
-    expect(fetchMock).toHaveBeenCalledWith(searchResult.mediaUrl);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(uploadMock).not.toHaveBeenCalled();
     expect(encryptFileMock).not.toHaveBeenCalled();
     expect(content).toEqual({
       msgtype: MsgType.Image,
       body: 'Reaction.gif',
-      url: 'mxc://server/uploaded',
-      info: { w: 480, h: 270, mimetype: 'image/gif', size: 9 },
-    });
-  });
-
-  it('encrypts the upload for encrypted rooms', async () => {
-    fetchMock.mockResolvedValue(new Response('gif-bytes', { status: 200 }));
-    uploadMock.mockResolvedValue({ content_uri: 'mxc://server/encrypted' });
-    encryptFileMock.mockImplementation(async (file: File) => ({
-      file,
-      encInfo: { key: { k: 'secret' } },
-    }));
-
-    const content = await getGifMsgContent({} as MatrixClient, searchResult, {
-      encrypt: true,
-      spoiler: true,
-    });
-
-    expect(content?.url).toBeUndefined();
-    expect(content?.file).toEqual({ key: { k: 'secret' }, url: 'mxc://server/encrypted' });
-    expect(content?.[MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]).toBe(true);
-  });
-
-  it('sends favorited homeserver gifs without re-uploading', async () => {
-    const content = await getGifMsgContent(
-      {} as MatrixClient,
-      { ...searchResult, mediaUrl: 'mxc://matrix.example/media-id' },
-      { encrypt: false }
-    );
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(content).toMatchObject({
-      msgtype: MsgType.Image,
-      body: 'Reaction.gif',
-      url: 'mxc://matrix.example/media-id',
+      url: proxyId('tenor', 'AbCdEf123'),
       info: { w: 480, h: 270, mimetype: 'image/gif' },
     });
   });
 
-  it('refuses media URLs outside the configured providers', async () => {
+  it('marks Giphy gifs as webp because that is what the proxy serves', async () => {
+    const content = await getGifMsgContent(
+      {
+        ...searchResult,
+        id: 'l0MYt5jPR6QX5pnqM',
+        mediaUrl: 'https://media0.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+      },
+      { proxyUrl: 'gifs.sable.moe' }
+    );
+
+    expect(content).toMatchObject({
+      body: 'Reaction.webp',
+      url: proxyId('giphy', 'l0MYt5jPR6QX5pnqM'),
+      info: { mimetype: 'image/webp' },
+    });
+  });
+
+  it('encodes the Klipy cdn path after /ii/', async () => {
+    const content = await getGifMsgContent(
+      { ...searchResult, mediaUrl: 'https://static.klipy.com/ii/abc/e8/3a/x.gif' },
+      { proxyUrl: 'gifs.sable.moe' }
+    );
+
+    expect(content?.url).toBe(proxyId('klipy', 'abc/e8/3a/x.gif'));
+  });
+
+  it('sends favorited homeserver gifs unchanged', async () => {
+    const content = await getGifMsgContent(
+      { ...searchResult, mediaUrl: 'mxc://matrix.example/media-id' },
+      { proxyUrl: 'gifs.sable.moe', spoiler: true }
+    );
+
+    expect(content).toMatchObject({
+      url: 'mxc://matrix.example/media-id',
+      [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true,
+    });
+  });
+
+  it('refuses to send when no proxy is configured or the host is unknown', async () => {
+    await expect(getGifMsgContent(searchResult, {})).resolves.toBeUndefined();
     await expect(
       getGifMsgContent(
-        {} as MatrixClient,
-        { ...searchResult, mediaUrl: 'https://media.tenor.com.attacker.example/a.gif' },
-        { encrypt: false }
+        { ...searchResult, mediaUrl: 'https://media.tenor.com.attacker.example/a/x.gif' },
+        { proxyUrl: 'gifs.sable.moe' }
       )
     ).resolves.toBeUndefined();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

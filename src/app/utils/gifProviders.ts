@@ -6,6 +6,7 @@ export type GifProviderId = (typeof GIF_PROVIDER_IDS)[number];
 
 export type GifsConfig = {
   provider?: GifProviderId;
+  proxyUrl?: string;
   klipyApiKey?: string;
   tenorApiKey?: string;
   giphyApiKey?: string;
@@ -19,6 +20,8 @@ export type GifProvider = {
   buildSearchUrl: (apiKey: string, query: string) => string;
   parseResults: (payload: unknown) => GifData[];
   isMediaUrlAllowed: (url: URL) => boolean;
+  getProxyPayload: (url: URL, gif: GifData) => string | undefined;
+  proxyMimetype: string;
 };
 
 const RESULT_LIMIT = 50; // TODO: infinite scroll?
@@ -34,6 +37,9 @@ const toPositiveInt = (value: unknown): number | undefined => {
     ? parsed
     : undefined;
 };
+
+const idBeforeFilename = (url: URL): string | undefined =>
+  url.pathname.split('/').filter(Boolean).at(-2);
 
 const isPlainHttpsUrl = (url: URL): boolean =>
   url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '';
@@ -172,11 +178,10 @@ const parseGiphyResults = (payload: unknown): GifData[] => {
     const images = isRecord(result.images) ? result.images : {};
     const preview =
       parseGiphyRendition(images, 'fixed_width') ?? parseGiphyRendition(images, 'preview_gif');
-    const fullRes = pickFullRes([
-      parseGiphyRendition(images, 'original'),
-      parseGiphyRendition(images, 'downsized'),
-      preview,
-    ]);
+    const fullRes =
+      parseGiphyRendition(images, 'original') ??
+      parseGiphyRendition(images, 'downsized') ??
+      preview;
 
     return toGifData(
       typeof result.id === 'string' ? result.id : '',
@@ -203,6 +208,8 @@ export const GIF_PROVIDERS: Record<GifProviderId, GifProvider> = {
     parseResults: parseKlipyResults,
     isMediaUrlAllowed: (url) =>
       isPlainHttpsUrl(url) && url.hostname === 'static.klipy.com' && /^\/ii\/.+/.test(url.pathname),
+    getProxyPayload: (url) => url.pathname.slice('/ii/'.length) || undefined,
+    proxyMimetype: 'image/gif',
   },
   tenor: {
     id: 'tenor',
@@ -221,6 +228,8 @@ export const GIF_PROVIDERS: Record<GifProviderId, GifProvider> = {
     parseResults: parseTenorResults,
     isMediaUrlAllowed: (url) =>
       isPlainHttpsUrl(url) && /^(?:c|media\d*)\.tenor\.com$/.test(url.hostname),
+    getProxyPayload: (url) => idBeforeFilename(url),
+    proxyMimetype: 'image/gif',
   },
   giphy: {
     id: 'giphy',
@@ -237,6 +246,8 @@ export const GIF_PROVIDERS: Record<GifProviderId, GifProvider> = {
     parseResults: parseGiphyResults,
     isMediaUrlAllowed: (url) =>
       isPlainHttpsUrl(url) && /^(?:i|media\d*)\.giphy\.com$/.test(url.hostname),
+    getProxyPayload: (url, gif) => gif.id || idBeforeFilename(url),
+    proxyMimetype: 'image/webp',
   },
 };
 
@@ -270,6 +281,37 @@ export const getGifProviderOptions = (
     disabled: !GIF_PROVIDERS[id].getApiKey(config ?? {}),
   })),
 ];
+
+const toBase64Url = (value: string): string => {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCodePoint(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll(/=+$/g, '');
+};
+
+export type ProxiedGif = { mxcUrl: string; mimetype: string };
+
+export const getProxiedGif = (gif: GifData, proxyUrl?: string): ProxiedGif | undefined => {
+  if (!proxyUrl?.trim()) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(gif.mediaUrl);
+  } catch {
+    return undefined;
+  }
+
+  const provider = Object.values(GIF_PROVIDERS).find((candidate) =>
+    candidate.isMediaUrlAllowed(url)
+  );
+  const payload = provider?.getProxyPayload(url, gif);
+  if (!provider || !payload) return undefined;
+
+  return {
+    mxcUrl: `mxc://${proxyUrl.trim()}/${provider.id}_${toBase64Url(payload)}`,
+    mimetype: provider.proxyMimetype,
+  };
+};
 
 export const isAllowedGifMediaUrl = (value: string | URL): boolean => {
   try {

@@ -3,6 +3,7 @@ import {
   GIF_PROVIDERS,
   getGifProvider,
   getGifProviderOptions,
+  getProxiedGif,
   isAllowedGifMediaUrl,
 } from './gifProviders';
 
@@ -191,5 +192,64 @@ describe('search response parsing', () => {
     expect(GIF_PROVIDERS.tenor.parseResults({})).toEqual([]);
     expect(GIF_PROVIDERS.giphy.parseResults(null)).toEqual([]);
     expect(GIF_PROVIDERS.klipy.parseResults({ data: {} })).toEqual([]);
+  });
+});
+
+describe('proxy mxc minting', () => {
+  const gif = { id: 'id', title: 'GIF', shareUrl: '', mediaUrl: '', width: 1, height: 1 };
+
+  it('uses the url-safe base64 alphabet with no padding', () => {
+    const proxied = getProxiedGif(
+      { ...gif, mediaUrl: 'https://static.klipy.com/ii/a?b/c~d/e+f/g.gif' },
+      'gifs.sable.moe'
+    );
+
+    expect(proxied?.mxcUrl.split('klipy_')[1]).toMatch(/^[\w-]+$/);
+  });
+
+  it('round-trips through the decoder the proxy uses', () => {
+    const path = 'ffd4ac143e6335ac68951b787d3c1902/e8/3a/5LM0jRpL.gif';
+    const proxied = getProxiedGif(
+      { ...gif, mediaUrl: `https://static.klipy.com/ii/${path}` },
+      'gifs.sable.moe'
+    );
+    const encoded = proxied?.mxcUrl.slice(proxied.mxcUrl.indexOf('_') + 1) ?? '';
+    const normalized = encoded.replaceAll('-', '+').replaceAll('_', '/');
+
+    expect(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))).toBe(path);
+  });
+
+  it('encodes the Tenor media id, not the /m/ path prefix', () => {
+    const full = getProxiedGif(
+      { ...gif, mediaUrl: 'https://media1.tenor.com/m/lfDATg4Bhc0AAAAC/happy-cat.gif' },
+      'gifs.sable.moe'
+    );
+    const preview = getProxiedGif(
+      { ...gif, mediaUrl: 'https://media.tenor.com/lfDATg4Bhc0AAAAM/happy-cat.gif' },
+      'gifs.sable.moe'
+    );
+
+    expect(full?.mxcUrl).toBe('mxc://gifs.sable.moe/tenor_bGZEQVRnNEJoYzBBQUFBQw');
+    expect(preview?.mxcUrl).toBe('mxc://gifs.sable.moe/tenor_bGZEQVRnNEJoYzBBQUFBTQ');
+    expect(full?.mxcUrl).not.toBe('mxc://gifs.sable.moe/tenor_bQ');
+  });
+
+  it('encodes the Giphy media id rather than the rendition path', () => {
+    const proxied = getProxiedGif(
+      {
+        ...gif,
+        id: 'tphCApwvdtC1VJabZ1',
+        mediaUrl: 'https://media4.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3/tphCApwvdtC1VJabZ1/giphy.gif',
+      },
+      'gifs.sable.moe'
+    );
+
+    expect(proxied?.mxcUrl).toBe('mxc://gifs.sable.moe/giphy_dHBoQ0Fwd3ZkdEMxVkphYlox');
+  });
+
+  it('needs a configured proxy host', () => {
+    expect(
+      getProxiedGif({ ...gif, mediaUrl: 'https://media.tenor.com/abc/x.gif' }, '  ')
+    ).toBeUndefined();
   });
 });
