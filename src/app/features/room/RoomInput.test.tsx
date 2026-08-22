@@ -255,10 +255,10 @@ vi.mock('$components/upload-card', () => ({
 }));
 vi.mock('./msgContent', async (importOriginal) => ({
   ...(await importOriginal<typeof MsgContentModule>()),
-  getGifMsgContent: (_mx: unknown, gif: { title: string }) => ({
+  getGifMsgContent: (gif: { title: string }) => ({
     msgtype: 'm.image',
     body: `${gif.title}.gif`,
-    url: 'mxc://server/gif',
+    url: 'mxc://gifs.sable.moe/tenor_QWJDZEVmMTIz',
     info: { w: 320, h: 240, mimetype: 'image/gif' },
   }),
 }));

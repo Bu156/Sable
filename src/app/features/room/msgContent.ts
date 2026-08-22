@@ -24,8 +24,7 @@ import type { GifData } from '$components/emoji-board/types';
 import { encodeBlurHashAsync } from '$utils/blurHash';
 import { scaleYDimension } from '$utils/common';
 import { createLogger } from '$utils/debug';
-import { isAllowedGifMediaUrl } from '$utils/gifProviders';
-import { fetch } from '$utils/fetch';
+import { getProxiedGif, isAllowedGifMediaUrl } from '$utils/gifProviders';
 import {
   MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME,
   MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME,
@@ -270,78 +269,45 @@ export const getFileMsgContent = (item: TUploadItem, mxc: string): IContent => {
   return content;
 };
 
-export const getGifMsgContent = async (
-  mx: MatrixClient,
-  gif: GifData,
-  options: { encrypt: boolean; spoiler?: boolean }
-): Promise<IContent | undefined> => {
-  const mimetype = gif.mimetype ?? 'image/gif';
-  const ext = mimeTypeToExt(mimetype);
-  const body = gif.title.endsWith(`.${ext}`) ? gif.title : `${gif.title}.${ext}`;
-  const spoiler = options.spoiler ? { [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true } : undefined;
+const getGifBlurHash = async (gif: GifData): Promise<string | undefined> => {
+  const source =
+    gif.preview_url && isAllowedGifMediaUrl(gif.preview_url) ? gif.preview_url : gif.mediaUrl;
+  if (!isAllowedGifMediaUrl(source) || !gif.width || !gif.height) return undefined;
 
-  // Favorites saved from a sent message already live on a homeserver.
-  if (gif.mediaUrl.startsWith('mxc://')) {
-    return {
-      msgtype: MsgType.Image,
-      body,
-      url: gif.mediaUrl,
-      info: {
-        w: gif.width,
-        h: gif.height,
-        mimetype,
-        ...(gif.size ? { size: gif.size } : {}),
-      },
-      ...spoiler,
-    };
-  }
-
-  if (!isAllowedGifMediaUrl(gif.mediaUrl)) return undefined;
-
-  const response = await fetch(gif.mediaUrl);
-  if (!response.ok) throw new Error(`Failed to fetch GIF: HTTP ${response.status}`);
-  const blob = await response.blob();
-  const file = new File([blob], body, { type: mimetype });
-
-  const encData = options.encrypt ? await encryptFile(file) : undefined;
-  const uploadData = await uploadContentToServer(mx, encData?.file ?? file);
-  const mxc = uploadData?.content_uri;
-  if (!mxc) throw new Error('Failed when uploading GIF!');
-
-  const objectUrl = URL.createObjectURL(blob);
-  let imgEl: HTMLImageElement | undefined;
   try {
-    imgEl = await loadImageElement(objectUrl);
+    const imgEl = await loadImageElement(source, 'anonymous');
+    return await encodeBlurHashAsync(imgEl, 32, scaleYDimension(gif.width, 32, gif.height));
   } catch (e) {
-    log.warn('Failed to load GIF for blurhash, falling back to basic metadata:', e);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
+    log.warn('Failed to load GIF for blurhash:', e);
+    return undefined;
   }
+};
 
-  const blurHash = imgEl
-    ? await encodeBlurHashAsync(imgEl, 512, scaleYDimension(imgEl.width, 512, imgEl.height))
-    : undefined;
+export const getGifMsgContent = async (
+  gif: GifData,
+  options: { proxyUrl?: string; spoiler?: boolean }
+): Promise<IContent | undefined> => {
+  const proxied = gif.mediaUrl.startsWith('mxc://')
+    ? { mxcUrl: gif.mediaUrl, mimetype: gif.mimetype ?? 'image/gif' }
+    : getProxiedGif(gif, options.proxyUrl);
+  if (!proxied) return undefined;
 
-  const content: IContent = {
+  const ext = mimeTypeToExt(proxied.mimetype);
+  const blurHash = await getGifBlurHash(gif);
+
+  return {
     msgtype: MsgType.Image,
-    body,
+    body: gif.title.endsWith(`.${ext}`) ? gif.title : `${gif.title}.${ext}`,
+    url: proxied.mxcUrl,
     info: {
-      w: imgEl?.width ?? gif.width,
-      h: imgEl?.height ?? gif.height,
-      mimetype,
-      size: blob.size,
+      w: gif.width,
+      h: gif.height,
+      mimetype: proxied.mimetype,
+      ...(gif.size && proxied.mimetype === (gif.mimetype ?? 'image/gif') ? { size: gif.size } : {}),
       ...(blurHash ? { [MATRIX_UNSTABLE_BLUR_HASH_PROPERTY_NAME]: blurHash } : {}),
     },
-    ...spoiler,
+    ...(options.spoiler ? { [MATRIX_UNSTABLE_SPOILER_PROPERTY_NAME]: true } : {}),
   };
-
-  if (encData?.encInfo) {
-    content.file = { ...encData.encInfo, url: mxc };
-  } else {
-    content.url = mxc;
-  }
-
-  return content;
 };
 
 const swapMsgTypeToItemType = (
