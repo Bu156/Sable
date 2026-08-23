@@ -2457,7 +2457,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             focusTrap
                             dialogLabel="Emoji picker"
                             sheetClassName={messageCss.MessageMobileOptionsContainerPicker}
-                            keyboardAware
                             skipReturnFocusRef={emojiBoardSkipReturnFocusRef}
                           >
                             {() => emojiBoard}
