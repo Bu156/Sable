@@ -2,7 +2,6 @@ name: Cloudflare Worker Preview Deploy
 
 on:
   pull_request:
-    types: [labeled]
     paths:
       - 'src/**'
       - 'index.html'
@@ -30,7 +29,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: (github.event_name == 'pull_request' && github.event.label.name == 'deploy-preview' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref != 'release') || github.event_name == 'push'
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref != 'release') || github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
