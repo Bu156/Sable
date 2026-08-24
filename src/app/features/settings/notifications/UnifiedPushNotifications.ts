@@ -1,5 +1,4 @@
 import {
-  type CryptoBackend,
   type IPusherRequest,
   type MatrixClient,
   MatrixEvent,
@@ -357,8 +356,8 @@ async function resolvePreviewEvent(
   try {
     const evt = await mx.fetchRoomEvent(roomId, eventId);
     const mEvent = new MatrixEvent(evt);
-    if (mEvent.isEncrypted() && mx.getCrypto()) {
-      await mEvent.attemptDecryption(mx.getCrypto() as CryptoBackend);
+    if (mEvent.isEncrypted()) {
+      await mx.decryptEventIfNeeded(mEvent);
     }
     return mEvent;
   } catch (error) {
@@ -819,7 +818,7 @@ function scheduleEncryptedPreviewEnrichment(
   };
 
   whenDecrypted(decrypted, applyDecryptedPreview);
-  void decrypted.attemptDecryption(crypto as CryptoBackend).catch(() => {
+  void initialSettings.mx.decryptEventIfNeeded(decrypted).catch(() => {
     unifiedPushLog.warn('notification', 'Encrypted preview decryption failed');
   });
 }
