@@ -119,6 +119,27 @@ const startPresenceAfterInitialSync = (
   return cleanup;
 };
 
+// The SDK's only check runs inside `initRustCrypto`, before the client starts, and latches off.
+export const recheckKeyBackupAfterInitialSync = (mx: MatrixClient): void => {
+  const recheck = () => {
+    mx.removeListener(ClientEvent.Sync, onSync);
+    const crypto = mx.getCrypto();
+    if (!crypto) return;
+    crypto.checkKeyBackupAndEnable().catch((error: unknown) => {
+      debugLog.warn('sync', 'Failed to re-check key backup after initial sync', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
+
+  const onSync = (state: SyncState) => {
+    if (isInitialSyncReady(state)) recheck();
+  };
+
+  if (isInitialSyncReady(mx.getSyncState())) recheck();
+  else mx.on(ClientEvent.Sync, onSync);
+};
+
 type StartupPhase = 'sync_store' | 'rust_crypto' | 'client_init' | 'client_start';
 
 const measureStartupPhase = async <T>(
@@ -566,6 +587,7 @@ export const startClient = async (mx: MatrixClient, config?: StartClientConfig):
       { transport: useSliding ? 'sliding' : 'classic' }
     );
     if (!useSliding) installSyncStorePersistence(mx);
+    recheckKeyBackupAfterInitialSync(mx);
     if (manager && (await manager.waitForSidebarCacheHydration())) {
       config?.onCachedRoomsLoaded?.();
     }
