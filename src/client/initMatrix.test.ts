@@ -15,10 +15,13 @@ vi.mock('$utils/platform', async (importOriginal) => ({
 }));
 
 import {
+  claimCryptoStore,
+  getCryptoStoreOwner,
   installSlidingSyncRequestPatch,
   newSlidingSyncConnId,
   ownsActiveMediaSession,
   recheckKeyBackupAfterInitialSync,
+  releaseCryptoStore,
   resolvePollTimeoutMs,
   supportsSlidingSync,
 } from './initMatrix';
@@ -338,5 +341,46 @@ describe('recheckKeyBackupAfterInitialSync', () => {
     emitSync(SyncState.Error);
 
     expect(checkKeyBackupAndEnable).not.toHaveBeenCalled();
+  });
+});
+
+describe('crypto store ownership', () => {
+  const clientA = { id: 'a' } as unknown as MatrixClient;
+  const clientB = { id: 'b' } as unknown as MatrixClient;
+  const storeKey = 'sync@alice:example.org';
+
+  beforeEach(() => {
+    releaseCryptoStore(clientA);
+    releaseCryptoStore(clientB);
+  });
+
+  it('reports the client currently holding the store', () => {
+    claimCryptoStore(clientA, storeKey);
+
+    expect(getCryptoStoreOwner(storeKey)).toBe(clientA);
+  });
+
+  it('reports no owner once the holder releases it', () => {
+    claimCryptoStore(clientA, storeKey);
+    releaseCryptoStore(clientA);
+
+    expect(getCryptoStoreOwner(storeKey)).toBeUndefined();
+  });
+
+  it('keeps the new owner when a superseded client is released afterwards', () => {
+    claimCryptoStore(clientA, storeKey);
+    claimCryptoStore(clientB, storeKey);
+
+    // Otherwise the next init sees a free store and opens a second OlmMachine.
+    releaseCryptoStore(clientA);
+
+    expect(getCryptoStoreOwner(storeKey)).toBe(clientB);
+  });
+
+  it('ignores a release from a client that never claimed a store', () => {
+    claimCryptoStore(clientA, storeKey);
+    releaseCryptoStore(clientB);
+
+    expect(getCryptoStoreOwner(storeKey)).toBe(clientA);
   });
 });
