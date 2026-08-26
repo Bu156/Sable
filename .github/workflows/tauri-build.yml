@@ -998,6 +998,7 @@ jobs:
           FLATPAK_GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
         run: |
           # A fresh repo each night: older commits point at pruned assets.
+          mkdir -p site/repo
           ostree --repo=site/repo init --mode=archive-z2
           for src in arch-repos/*/; do
             echo "Pulling $src"
