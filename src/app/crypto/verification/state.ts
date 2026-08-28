@@ -47,7 +47,7 @@ export type EngineVerificationState = {
   theirSupportedMethods?: number[] | null;
   ourSupportedMethods?: number[] | null;
   cancelInfo?: EngineCancelInfo | null;
-  verification?: { className?: string } | null;
+  verification?: { className?: string; isDone?: boolean } | null;
 };
 
 export const methodFromCode = (code: number): string | undefined => METHOD_BY_CODE[code];

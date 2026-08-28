@@ -7,9 +7,13 @@ import {
   encodeRecoveryKey,
   EventType,
   ImportRoomKeyStage,
+  KnownMembership,
+  MatrixEventEvent,
+  MsgType,
   UserVerificationStatus,
   VerificationMethod,
 } from '$types/matrix-sdk';
+import { isVerificationEvent } from 'matrix-js-sdk/lib/rust-crypto/verification';
 import { Device, DeviceVerification } from 'matrix-js-sdk/lib/models/device';
 import { getHttpUriForMxc } from 'matrix-js-sdk/lib/content-repo';
 import * as RustSdkCryptoJs from '@matrix-org/matrix-sdk-crypto-wasm';
@@ -65,12 +69,15 @@ import type {
   MatrixEvent,
   OwnDeviceKeys,
   Room,
+  RoomMember,
   SecretStorageStatus,
   StartDehydrationOpts,
   VerificationRequest,
 } from '$types/matrix-sdk';
 
 const engineCryptoLog = createDebugLogger('engine-crypto');
+
+const DECRYPTION_WAIT_MS = 5 * 60 * 1000;
 
 /** js-sdk keeps this union private to its own rust-crypto module; derived the same way. */
 type CryptoEvents = (typeof CryptoEvent)[keyof typeof CryptoEvent];
@@ -244,6 +251,8 @@ export class EngineCrypto
   /** Live requests, keyed by flow id, so the synchronous CryptoApi getters can answer. */
   readonly #verificationRequests = new Map<string, EngineVerificationRequest>();
 
+  #flushing: Promise<void> = Promise.resolve();
+
   constructor(mx: MatrixClient, identity: EngineIdentity) {
     super();
     this.#mx = mx;
@@ -349,6 +358,100 @@ export class EngineCrypto
     return request;
   }
 
+  async onLiveEventFromSync(event: MatrixEvent): Promise<void> {
+    if (event.isState() || event.getUnsigned().transaction_id) return;
+
+    const handle = async (candidate: MatrixEvent): Promise<void> => {
+      if (isVerificationEvent(candidate)) await this.onKeyVerificationEvent(candidate);
+    };
+
+    if (event.isDecryptionFailure() || event.isEncrypted()) {
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const onDecrypted = (decrypted: MatrixEvent, error?: Error) => {
+        if (error) return;
+        clearTimeout(timeoutId);
+        event.off(MatrixEventEvent.Decrypted, onDecrypted);
+        void handle(decrypted);
+      };
+      timeoutId = setTimeout(() => {
+        event.off(MatrixEventEvent.Decrypted, onDecrypted);
+      }, DECRYPTION_WAIT_MS);
+      event.on(MatrixEventEvent.Decrypted, onDecrypted);
+      return;
+    }
+
+    await handle(event);
+  }
+
+  async onKeyVerificationEvent(event: MatrixEvent): Promise<void> {
+    const roomId = event.getRoomId();
+    const senderId = event.getSender();
+    const eventId = event.getId();
+    if (!roomId || !senderId || !eventId) return;
+
+    const content = event.getContent();
+    const isRequest =
+      event.getType() === EventType.RoomMessage &&
+      content.msgtype === MsgType.KeyVerificationRequest;
+
+    if (isRequest) {
+      await this.#sendTracked(await this.#call('queryKeysForUsers', { users: [senderId] }));
+    }
+
+    await this.#call('receiveVerificationEvent', {
+      roomId,
+      event: JSON.stringify({
+        event_id: eventId,
+        type: event.getType(),
+        sender: senderId,
+        state_key: event.getStateKey(),
+        content,
+        origin_server_ts: event.getTs(),
+      }),
+    });
+
+    if (isRequest) {
+      await this.onIncomingKeyVerificationRequest(senderId, eventId);
+    } else {
+      const flowId = (content['m.relates_to'] as { event_id?: string } | undefined)?.event_id;
+      if (flowId) await this.#verificationRequests.get(flowId)?.refresh();
+    }
+
+    await this.#flushOutgoingRequests();
+  }
+
+  onRoomStateEvent(event: MatrixEvent): void {
+    if (event.getType() !== EventType.RoomMember) return;
+    if (
+      event.getStateKey() !== this.#identity.userId &&
+      event.getContent().membership !== KnownMembership.Join
+    ) {
+      void this.forceDiscardSession(event.getRoomId() ?? '');
+    }
+  }
+
+  onRoomMembership(event: MatrixEvent, member: RoomMember, oldMembership?: string): void {
+    const roomId = event.getRoomId();
+    if (!roomId) return;
+    if (
+      oldMembership === KnownMembership.Join &&
+      member.membership !== KnownMembership.Join &&
+      member.userId === this.#identity.userId
+    ) {
+      void this.#call('clearRoomPendingKeyBundle', { roomId });
+    }
+  }
+
+  async #sendTracked(request: unknown): Promise<void> {
+    if (!isOutgoingRequest(request)) return;
+    const response = await sendOutgoingRequest(this.#mx, request);
+    await this.#call('markRequestAsSent', {
+      requestId: request.id,
+      requestType: request.type,
+      response,
+    });
+  }
+
   async onIncomingKeyVerificationRequest(sender: string, transactionId: string): Promise<void> {
     const state = (await this.#call('getVerificationRequest', {
       userId: sender,
@@ -366,9 +469,14 @@ export class EngineCrypto
     this.emit(CryptoEvent.VerificationRequestReceived, request);
   }
 
+  #flushOutgoingRequests(): Promise<void> {
+    this.#flushing = this.#flushing.then(() => this.#drainOutgoingRequests());
+    return this.#flushing;
+  }
+
   /** matrix-sdk-crypto only clears a request once told it was sent, so a failure here
    * leaves it queued for the next drain rather than losing it. */
-  async #flushOutgoingRequests(): Promise<void> {
+  async #drainOutgoingRequests(): Promise<void> {
     if (this.#stopped) return;
     const requests = ((await this.#call('outgoingRequests')) ?? []) as OutgoingRequest[];
 
@@ -396,15 +504,30 @@ export class EngineCrypto
     const processed = await this.#receiveSyncChanges({ toDeviceEvents: events });
     const received: ReceivedToDeviceMessage[] = [];
 
-    for (const event of processed) {
-      const message = JSON.parse(event.rawEvent) as IToDeviceEvent;
+    const messages = processed.map(
+      (event) => [event, JSON.parse(event.rawEvent) as IToDeviceEvent] as const
+    );
 
+    if (
+      messages.some(
+        ([, message]) =>
+          typeof message.type === 'string' && message.type.startsWith('m.key.verification.')
+      )
+    ) {
+      await this.#flushOutgoingRequests();
+    }
+
+    for (const [event, message] of messages) {
       if (typeof message.type === 'string' && message.type.startsWith('m.key.verification.')) {
         const transactionId = (message.content as { transaction_id?: string })?.transaction_id;
         if (transactionId && message.sender) {
           if (message.type === EventType.KeyVerificationRequest) {
             // eslint-disable-next-line no-await-in-loop
             await this.onIncomingKeyVerificationRequest(message.sender, transactionId);
+          } else if (message.type === EventType.KeyVerificationDone) {
+            // Rust removes completed requests while consuming the event, so no state snapshot
+            // exists to refresh. Keep the JS request alive long enough to expose Done.
+            this.#verificationRequests.get(transactionId)?.markDone();
           } else {
             // Without this the verifier never learns the SAS digits arrived.
             // eslint-disable-next-line no-await-in-loop
@@ -444,9 +567,22 @@ export class EngineCrypto
   }
 
   async onCryptoEvent(room: Room, event: MatrixEvent): Promise<void> {
-    engineCryptoLog.debug('general', 'Room encryption configured', {
+    const config = event.getContent();
+    if (config.algorithm !== 'm.megolm.v1.aes-sha2') {
+      engineCryptoLog.warn('general', 'Ignoring encryption event with invalid algorithm', {
+        roomId: room.roomId,
+        algorithm: config.algorithm,
+      });
+      return;
+    }
+
+    await this.#call('setRoomSettings', {
       roomId: room.roomId,
-      algorithm: event.getContent().algorithm,
+      settings: {
+        algorithm: config.algorithm,
+        sessionRotationPeriodMs: config.rotation_period_ms,
+        sessionRotationPeriodMessages: config.rotation_period_msgs,
+      },
     });
   }
 
@@ -1032,7 +1168,7 @@ export class EngineCrypto
     const started = (await this.#call('userIdentity.requestVerificationDm', {
       userId,
       roomId,
-      eventId,
+      requestEventId: eventId,
       methods: SUPPORTED_VERIFICATION_METHOD_CODES,
     })) as { request: EngineVerificationState; outgoingRequest?: unknown };
 
@@ -1040,7 +1176,10 @@ export class EngineCrypto
       await sendOutgoingRequest(this.#mx, started.outgoingRequest);
     }
     await this.#flushOutgoingRequests();
-    return new EngineVerificationRequest(this.#engineCall, started.request);
+
+    const request = new EngineVerificationRequest(this.#engineCall, started.request);
+    this.#verificationRequests.set(started.request.flowId, request);
+    return request;
   }
 
   async requestOwnUserVerification(): Promise<VerificationRequest> {
