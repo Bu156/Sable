@@ -470,7 +470,11 @@ export class EngineCrypto
   }
 
   #flushOutgoingRequests(): Promise<void> {
-    this.#flushing = this.#flushing.then(() => this.#drainOutgoingRequests());
+    this.#flushing = this.#flushing.then(() =>
+      this.#drainOutgoingRequests().catch((error: unknown) => {
+        engineCryptoLog.error('general', 'Draining outgoing crypto requests failed', error);
+      })
+    );
     return this.#flushing;
   }
 
