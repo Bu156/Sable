@@ -232,6 +232,41 @@ type SlidingSyncRequestWithConnId = MSC3575SlidingSyncRequest & {
 export const newSlidingSyncConnId = (): string =>
   `sable-${globalThis.crypto?.randomUUID?.().slice(0, 8) ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 
+type CryptoWithDeviceListInvalidation = { markAllTrackedUsersAsDirty: () => Promise<void> };
+
+const coalesceDeviceListInvalidation = (mx: MatrixClient) => {
+  let invalidatedThisRun = false;
+  let patched: CryptoWithDeviceListInvalidation | undefined;
+  let restore: (() => void) | undefined;
+
+  const install = (invalidationAlreadyRan: boolean): void => {
+    const crypto = mx.getCrypto?.() as unknown as CryptoWithDeviceListInvalidation | undefined;
+    if (!crypto?.markAllTrackedUsersAsDirty || crypto === patched) return;
+
+    patched = crypto;
+    invalidatedThisRun = invalidationAlreadyRan;
+    const original = crypto.markAllTrackedUsersAsDirty.bind(crypto);
+    restore = () => {
+      crypto.markAllTrackedUsersAsDirty = original;
+    };
+    crypto.markAllTrackedUsersAsDirty = async () => {
+      if (invalidatedThisRun) return;
+      invalidatedThisRun = true;
+      await original();
+    };
+  };
+
+  install(false);
+
+  return {
+    onRequest: (pos: string | undefined) => install(pos === undefined),
+    onResponse: (pos: string | undefined) => {
+      if (pos !== undefined) invalidatedThisRun = false;
+    },
+    dispose: () => restore?.(),
+  };
+};
+
 export function installSlidingSyncRequestPatch(
   mx: MatrixClient,
   manager: SlidingSyncManager
@@ -239,6 +274,7 @@ export function installSlidingSyncRequestPatch(
   slidingSyncRequestCleanupByClient.get(mx)?.();
 
   const connId = newSlidingSyncConnId();
+  const deviceListInvalidation = coalesceDeviceListInvalidation(mx);
   const mxWritable = mx as MatrixClientWithWritableSlidingSync;
   const original = mx.slidingSync.bind(mx) as SlidingSyncMethod;
   mxWritable.slidingSync = async (reqBody, baseUrl, abortSignal) => {
@@ -260,8 +296,10 @@ export function installSlidingSyncRequestPatch(
 
     const roomIds = manager.getActiveRoomSubscriptionIds();
     scopeTypingExtension(req.extensions, roomIds);
+    deviceListInvalidation.onRequest(req.pos);
 
     const response = await original(reqBody, baseUrl, abortSignal);
+    deviceListInvalidation.onResponse(response.pos);
     trackResponse(response);
     // Must run before the SDK processes the response. A throw would reach the SDK's
     // loop, which drops the response and retries the same `pos` forever.
@@ -282,6 +320,7 @@ export function installSlidingSyncRequestPatch(
 
   slidingSyncRequestCleanupByClient.set(mx, () => {
     slidingSyncRequestCleanupByClient.delete(mx);
+    deviceListInvalidation.dispose();
     mxWritable.slidingSync = original;
   });
 }
