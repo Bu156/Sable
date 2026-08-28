@@ -1008,6 +1008,9 @@ jobs:
             repos=(arch-repos/*/)
           fi
           for src in "${repos[@]}"; do
+            # Zip artifacts drop empty directories; ostree needs refs/remotes
+            # to exist when listing the source repo's refs.
+            mkdir -p "$src/refs/remotes"
             echo "Pulling $src"
             ostree --repo=site/repo pull-local "$src"
           done
