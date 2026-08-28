@@ -21,6 +21,8 @@ const wasmCryptoStoreExists = async (cryptoDatabasePrefix: string): Promise<bool
 };
 
 export class LegacyWasmCryptoStoreError extends Error {
+  client?: MatrixClient;
+
   constructor() {
     super(
       'Encrypted chat has been upgraded to the native crypto engine. Sign out and sign in again to continue. Local encrypted-message keys from this installation will need to be restored from backup.'

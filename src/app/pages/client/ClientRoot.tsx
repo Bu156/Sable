@@ -19,6 +19,7 @@ import {
   stopClient,
 } from '$client/initMatrix';
 import { isLegacyWasmCryptoStoreError } from '$app/crypto/install';
+import { LegacyKeyExport } from './LegacyKeyExport';
 import { AsyncError } from '$components/AsyncError';
 import { SplashScreen } from '$components/splash-screen';
 import { ServerConfigsLoader } from '$components/ServerConfigsLoader';
@@ -289,6 +290,12 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
 
+  const legacyCryptoError =
+    loadState.status === AsyncStatus.Error && isLegacyWasmCryptoStoreError(loadState.error)
+      ? loadState.error
+      : undefined;
+  const legacyCryptoClient = legacyCryptoError?.client;
+
   const roomMatch =
     matchPath(HOME_ROOM_PATH, location.pathname) ??
     matchPath(DIRECT_ROOM_PATH, location.pathname) ??
@@ -352,13 +359,14 @@ export function ClientRoot({ children }: ClientRootProps) {
   const [upgradeState, signOutForCryptoUpgrade] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
       if (!activeSession) return;
+      if (legacyCryptoClient) stopClient(legacyCryptoClient);
       await discardSessionStores(activeSession);
       setSessions({ type: 'DELETE', session: activeSession } as SessionsAction);
       setActiveSessionId(
         sessions.find((session) => session.userId !== activeSession.userId)?.userId ?? undefined
       );
       window.location.reload();
-    }, [activeSession, sessions, setSessions, setActiveSessionId])
+    }, [activeSession, legacyCryptoClient, sessions, setSessions, setActiveSessionId])
   );
 
   useSyncNicknames(mx);
@@ -426,8 +434,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   );
 
   const isError = loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
-  const legacyCryptoUpgradeRequired =
-    loadState.status === AsyncStatus.Error && isLegacyWasmCryptoStoreError(loadState.error);
+  const legacyCryptoUpgradeRequired = legacyCryptoError !== undefined;
 
   // Set matrix client context: homeserver and sync type (not PII)
   useEffect(() => {
@@ -496,6 +503,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                         Sign out and sign in again to use native crypto. Local encrypted-message
                         keys from this installation must be restored from backup.
                       </Text>
+                      {legacyCryptoClient && <LegacyKeyExport client={legacyCryptoClient} />}
                       <AsyncError
                         state={upgradeState}
                         prefix="Failed to sign out for the crypto upgrade"
