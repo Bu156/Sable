@@ -22,6 +22,8 @@ export type OutgoingRequest = {
   version?: string;
 };
 
+const OUTGOING_REQUEST_TIMEOUT_MS = 60000;
+
 const path = {
   keysUpload: '/_matrix/client/v3/keys/upload',
   keysQuery: '/_matrix/client/v3/keys/query',
@@ -43,7 +45,8 @@ export const sendOutgoingRequest = async (
     mx.http.authedRequest<string>(method, url, params, request.body, {
       prefix: '',
       json: false,
-      headers: { 'Content-Type': 'application/json' },
+      localTimeoutMs: OUTGOING_REQUEST_TIMEOUT_MS,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     });
 
   switch (request.type) {

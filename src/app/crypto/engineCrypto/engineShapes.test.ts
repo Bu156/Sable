@@ -24,6 +24,13 @@ describe('engine payload shapes', () => {
     });
 
     await expect(crypto().getSessionBackupPrivateKey()).resolves.not.toBeNull();
+  });
+
+  it('asks the engine for the active backup version rather than the stored one', async () => {
+    mockInvoke.mockImplementation(async (_identity, method) =>
+      method === 'backupVersion' ? '7' : { className: 'BackupKeys', backupVersion: null }
+    );
+
     await expect(crypto().getActiveSessionBackupVersion()).resolves.toBe('7');
   });
 

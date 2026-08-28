@@ -47,6 +47,7 @@ describe('key backup upload', () => {
       if (method === 'verifyBackup') return { trusted: true };
       if (method === 'getBackupKeys') return { backupVersion: '7', decryptionKeyBase64: null };
       if (method === 'isBackupEnabled') return true;
+      if (method === 'backupVersion') return '7';
       if (method === 'backupRoomKeys') {
         if (pending === 0) return null;
         pending -= 1;
@@ -72,6 +73,7 @@ describe('key backup upload', () => {
       if (method === 'verifyBackup') return { trusted: false };
       if (method === 'getBackupKeys') return { backupVersion: null, decryptionKeyBase64: null };
       if (method === 'isBackupEnabled') return false;
+      if (method === 'backupVersion') return null;
       return null;
     });
 
@@ -88,6 +90,7 @@ describe('key backup upload', () => {
       if (method === 'verifyBackup') return { trusted: false };
       if (method === 'getBackupKeys') return { backupVersion: '7', decryptionKeyBase64: null };
       if (method === 'isBackupEnabled') return true;
+      if (method === 'backupVersion') return '7';
       if (method === 'backupRoomKeys') {
         if (pending === 0) return null;
         pending -= 1;
@@ -114,6 +117,7 @@ describe('resetKeyBackup', () => {
   it('gossips the new backup key to our other verified devices', async () => {
     mockInvoke.mockImplementation(async (_identity, method) => {
       if (method === 'isBackupEnabled') return false;
+      if (method === 'backupVersion') return null;
       return null;
     });
     const store = vi.fn<(name: string, value: string) => Promise<void>>(async () => undefined);

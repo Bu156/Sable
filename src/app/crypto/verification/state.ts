@@ -54,6 +54,15 @@ export const methodFromCode = (code: number): string | undefined => METHOD_BY_CO
 
 export const codeFromMethod = (method: string): number | undefined => CODE_BY_METHOD[method];
 
+export const SUPPORTED_VERIFICATION_METHOD_CODES = [
+  VerificationMethod.Sas,
+  VerificationMethod.ScanQrCode,
+  VerificationMethod.ShowQrCode,
+  VerificationMethod.Reciprocate,
+]
+  .map(codeFromMethod)
+  .filter((code): code is number => code !== undefined);
+
 export const methodsFromCodes = (codes: number[] | null | undefined): string[] =>
   (codes ?? []).map(methodFromCode).filter((method): method is string => method !== undefined);
 

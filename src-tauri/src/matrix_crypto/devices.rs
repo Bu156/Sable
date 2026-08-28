@@ -233,7 +233,7 @@ async fn encrypt_to_device_event(
         .get("content")
         .ok_or_else(|| format!("{method}: missing argument `content`"))?;
     let Some(device) = device_for(machine, args, method).await? else {
-        return Err(format!("{method}: unknown device"));
+        return Ok(Value::Null);
     };
 
     let encrypted = device

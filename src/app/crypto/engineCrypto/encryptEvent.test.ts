@@ -14,9 +14,8 @@ vi.mock('../olmMachine/engineInvoke', () => ({
 
 const mockInvoke = vi.mocked(engineInvoke);
 
-const mx = {
-  http: { authedRequest: vi.fn<(...args: never[]) => Promise<unknown>>(async () => null) },
-} as unknown as MatrixClient;
+const authedRequest = vi.fn<(...args: never[]) => Promise<unknown>>(async () => null);
+const mx = { http: { authedRequest } } as unknown as MatrixClient;
 
 type RoomOptions = {
   encryption?: Record<string, unknown>;
@@ -59,8 +58,10 @@ const encrypt = async (room: Room, isolation?: AllDevicesIsolationMode) => {
 describe('encryptEvent settings', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
+    authedRequest.mockClear();
     mockInvoke.mockImplementation(async (_identity, method) => {
       if (method === 'encryptRoomEvent') return '{}';
+      if (method === 'identityKeys') return { ed25519: 'ed', curve25519: 'curve' };
       return null;
     });
   });
@@ -126,5 +127,59 @@ describe('encryptEvent settings', () => {
     expect(shareArgs()?.encryptionSettings).toMatchObject({
       sharingStrategy: 'errorOnVerifiedUserProblem',
     });
+  });
+});
+
+describe('encryptEvent request delivery', () => {
+  const claim = { id: 'c1', type: 2, body: '{}' };
+  const share = [
+    { id: 's1', type: 3, event_type: 'm.room.encrypted', txn_id: 's1', body: '{"messages":{}}' },
+    { id: 's2', type: 3, event_type: 'm.room.encrypted', txn_id: 's2', body: '{"messages":{}}' },
+  ];
+
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    authedRequest.mockClear();
+    mockInvoke.mockImplementation(async (_identity, method) => {
+      if (method === 'getMissingSessions') return claim;
+      if (method === 'shareRoomKey') return share;
+      if (method === 'encryptRoomEvent') return '{}';
+      if (method === 'identityKeys') return { ed25519: 'ed', curve25519: 'curve' };
+      return null;
+    });
+  });
+
+  it('sends the key-claim request the engine hands back', async () => {
+    await encrypt(roomStub());
+
+    expect(
+      authedRequest.mock.calls.some((call) => call[1] === '/_matrix/client/v3/keys/claim')
+    ).toBe(true);
+  });
+
+  it('sends every room-key to-device message the engine hands back', async () => {
+    await encrypt(roomStub());
+
+    const sent = authedRequest.mock.calls.filter((call) =>
+      String(call[1]).startsWith('/_matrix/client/v3/sendToDevice/')
+    );
+    expect(sent).toHaveLength(2);
+  });
+
+  it('acknowledges each one so the engine stops reissuing it', async () => {
+    await encrypt(roomStub());
+
+    const marked = mockInvoke.mock.calls
+      .filter(([, method]) => method === 'markRequestAsSent')
+      .map(([, , args]) => (args as { requestId: string }).requestId);
+    expect(marked).toEqual(['c1', 's1', 's2']);
+  });
+
+  it('shares the key before it encrypts the event', async () => {
+    await encrypt(roomStub());
+
+    const order = mockInvoke.mock.calls.map(([, method]) => method);
+    expect(order.indexOf('shareRoomKey')).toBeLessThan(order.indexOf('encryptRoomEvent'));
+    expect(order.indexOf('getMissingSessions')).toBeLessThan(order.indexOf('shareRoomKey'));
   });
 });

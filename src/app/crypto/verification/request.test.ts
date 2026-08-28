@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { VerificationMethod, VerificationPhase } from '$types/matrix-sdk';
 import { EngineVerificationRequest } from './request';
-import { EnginePhase, type EngineVerificationState } from './state';
+import {
+  EnginePhase,
+  SUPPORTED_VERIFICATION_METHOD_CODES,
+  type EngineVerificationState,
+} from './state';
 
 const state = (patch: Partial<EngineVerificationState> = {}): EngineVerificationState => ({
   ownUserId: '@me:example.org',
@@ -19,14 +23,14 @@ const state = (patch: Partial<EngineVerificationState> = {}): EngineVerification
   timedOut: false,
   timeRemainingMillis: 600000,
   theirSupportedMethods: [0],
-  ourSupportedMethods: [0],
+  ourSupportedMethods: null,
   cancelInfo: null,
   verification: null,
   ...patch,
 });
 
 describe('EngineVerificationRequest', () => {
-  it('accepts through the engine with our supported methods and refreshes', async () => {
+  it('accepts advertising every method we support, not the empty set the engine reports', async () => {
     const call = vi.fn<(m: string, a?: Record<string, unknown>) => Promise<unknown>>(
       async (method) =>
         method === 'verificationRequest.state' ? state({ phase: EnginePhase.Ready }) : null
@@ -38,8 +42,9 @@ describe('EngineVerificationRequest', () => {
     expect(call).toHaveBeenCalledWith('verificationRequest.accept', {
       userId: '@them:example.org',
       flowId: '$flow',
-      methods: [0],
+      methods: SUPPORTED_VERIFICATION_METHOD_CODES,
     });
+    expect(SUPPORTED_VERIFICATION_METHOD_CODES).toEqual([0, 1, 2, 3]);
     expect(request.phase).toBe(VerificationPhase.Ready);
   });
 

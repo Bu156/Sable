@@ -15,6 +15,7 @@ import {
   isPending,
   methodsFromCodes,
   otherPartySupportsMethod,
+  SUPPORTED_VERIFICATION_METHOD_CODES,
   toVerificationPhase,
   type EngineVerificationState,
 } from './state';
@@ -62,15 +63,25 @@ export class EngineVerificationRequest
       return;
     }
 
-    if (!this.#verifier) {
-      if (verification.className === 'Sas') {
+    const wanted = verification.className;
+    const current =
+      // eslint-disable-next-line no-nested-ternary
+      this.#verifier instanceof EngineSasVerifier
+        ? 'Sas'
+        : this.#verifier instanceof EngineQrVerifier
+          ? 'Qr'
+          : undefined;
+
+    if (current !== wanted) {
+      if (wanted === 'Sas') {
         this.#verifier = new EngineSasVerifier(
           this.#call,
           this.#flow,
           verification as SasState,
           this.#state.otherUserId
         );
-      } else if (verification.className === 'Qr') {
+        if (current !== undefined) void this.#reaccept();
+      } else if (wanted === 'Qr') {
         this.#verifier = new EngineQrVerifier(
           this.#call,
           this.#flow,
@@ -85,6 +96,14 @@ export class EngineVerificationRequest
       this.#verifier.onChange(verification as SasState);
     } else if (this.#verifier instanceof EngineQrVerifier) {
       this.#verifier.onChange(verification as QrState);
+    }
+  }
+
+  async #reaccept(): Promise<void> {
+    try {
+      await this.#call('sas.accept', this.#flow);
+    } catch {
+      this.emit(VerificationRequestEvent.Change);
     }
   }
 
@@ -199,7 +218,7 @@ export class EngineVerificationRequest
     try {
       await this.#call('verificationRequest.accept', {
         ...this.#flow,
-        methods: this.#state.ourSupportedMethods ?? undefined,
+        methods: SUPPORTED_VERIFICATION_METHOD_CODES,
       });
       await this.refresh();
     } finally {
