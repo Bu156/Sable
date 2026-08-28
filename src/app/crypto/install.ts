@@ -4,7 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { ClientEvent, RoomMemberEvent, RoomStateEvent } from '$types/matrix-sdk';
 import type { MatrixClient, MatrixEvent, RoomMember } from '$types/matrix-sdk';
 import { createDebugLogger } from '$utils/debugLogger';
-import { engineOpen } from '$generated/tauri/commands';
+import { engineClose, engineOpen } from '$generated/tauri/commands';
 import * as RustSdkCryptoJs from '@matrix-org/matrix-sdk-crypto-wasm';
 import { engineInvoke } from './olmMachine/engineInvoke';
 import { EngineCrypto } from './engineCrypto/EngineCrypto';
@@ -136,11 +136,14 @@ export const installRustCrypto = async (
     stopClientEvents();
     stopEventBridge();
     stopEngineCrypto();
+    engineClose({ userId, deviceId }).catch((error: unknown) => {
+      cryptoLog.warn('general', 'Could not close the native crypto engine', error);
+    });
   };
 
-  await acceptPendingKeyBundles(engineCrypto, identity);
-
   (mx as unknown as { cryptoBackend?: unknown }).cryptoBackend = engineCrypto;
+
+  void acceptPendingKeyBundles(engineCrypto, identity);
   cryptoLog.info('general', 'Installed the Rust IPC crypto engine', { userId, deviceId });
 
   return { rustCrypto: engineCrypto };
@@ -162,12 +165,14 @@ const acceptPendingKeyBundles = async (
   }[];
 
   for (const { roomId, inviterId, inviteAcceptedAtMillis } of pending) {
-    if (Date.now() - inviteAcceptedAtMillis <= MAX_INVITE_ACCEPTANCE_MS_FOR_KEY_BUNDLE) {
+    const expired = Date.now() - inviteAcceptedAtMillis > MAX_INVITE_ACCEPTANCE_MS_FOR_KEY_BUNDLE;
+    try {
       // eslint-disable-next-line no-await-in-loop
-      await crypto.maybeAcceptKeyBundle(roomId, inviterId);
-    } else {
+      if (expired) await engineInvoke(identity, 'clearRoomPendingKeyBundle', { roomId });
       // eslint-disable-next-line no-await-in-loop
-      await engineInvoke(identity, 'clearRoomPendingKeyBundle', { roomId });
+      else await crypto.maybeAcceptKeyBundle(roomId, inviterId);
+    } catch (error) {
+      cryptoLog.warn('general', 'Could not accept a pending room key bundle', { roomId, error });
     }
   }
 };

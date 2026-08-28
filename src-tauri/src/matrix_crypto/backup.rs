@@ -99,6 +99,10 @@ async fn handle(machine: &OlmMachine, method: &str, args: &Value) -> Result<Opti
             Value::Null
         }
         "isBackupEnabled" => Value::Bool(machine.backup_machine().enabled().await),
+        "backupVersion" => match machine.backup_machine().backup_version().await {
+            Some(version) => Value::String(version),
+            None => Value::Null,
+        },
         "verifyBackup" => {
             let info: RoomKeyBackupInfo =
                 serde_json::from_str(&str_arg(args, method, "backupInfo")?)

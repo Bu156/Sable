@@ -13,6 +13,7 @@ pub mod push;
 pub mod requests;
 pub mod rooms;
 pub mod verification;
+pub mod message_flow;
 pub mod wasm_enums;
 
 use std::collections::HashMap;
@@ -75,6 +76,23 @@ impl CryptoEngineState {
             .map_err(|e| e.to_string())?
             .remove(account)
             .is_some())
+    }
+
+    pub fn close_account_if(&self, account: &str, machine: &Arc<OlmMachine>) -> Result<(), String> {
+        let registered = self
+            .machines
+            .lock()
+            .map_err(|e| e.to_string())?
+            .get(account)
+            .cloned();
+
+        match registered {
+            Some(current) if Arc::ptr_eq(&current, machine) => {
+                self.close_account(account)?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }
 
@@ -139,6 +157,8 @@ fn store_dir(
     Ok(base.join(store_subpath(user_id, device_id)))
 }
 
+pub(super) static OPEN_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Opens a store and registers its machine, replacing any machine already open for the
 /// account. Tauri-free so a cold push can open the same store without an `AppHandle`.
 pub async fn open_machine(
@@ -147,6 +167,7 @@ pub async fn open_machine(
     user_id: &str,
     device_id: &str,
 ) -> Result<(Arc<OlmMachine>, EngineInfo), String> {
+    let _guard = OPEN_GUARD.lock().await;
     let user: &matrix_sdk::ruma::UserId = user_id
         .try_into()
         .map_err(|e| format!("bad user id: {e}"))?;
@@ -203,11 +224,16 @@ pub async fn engine_open(
 
     let account = account_key(&user_id, &device_id);
     let listeners = events::spawn(&app, &machine, account.clone());
-    engines()
+    if let Some(displaced) = engines()
         .listeners
         .lock()
         .map_err(|e| e.to_string())?
-        .insert(account, listeners);
+        .insert(account, listeners)
+    {
+        for handle in displaced {
+            handle.abort();
+        }
+    }
 
     Ok(info)
 }

@@ -11,7 +11,6 @@ import {
   MatrixEventEvent,
   MsgType,
   UserVerificationStatus,
-  VerificationMethod,
 } from '$types/matrix-sdk';
 import { isVerificationEvent } from 'matrix-js-sdk/lib/rust-crypto/verification';
 import { Device, DeviceVerification } from 'matrix-js-sdk/lib/models/device';
@@ -29,10 +28,15 @@ import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import { TypedEventEmitter } from 'matrix-js-sdk/lib/models/typed-event-emitter';
 import { CryptoEvent, DeviceIsolationModeKind } from 'matrix-js-sdk/lib/crypto-api';
+import { DecryptionFailureCode } from 'matrix-js-sdk/lib/crypto-api';
+import { DecryptionError } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import type { CryptoEventHandlerMap } from 'matrix-js-sdk/lib/crypto-api/CryptoEventHandlerMap';
 import { createDebugLogger } from '$utils/debugLogger';
 import { EngineVerificationRequest } from '../verification/request';
-import { codeFromMethod, type EngineVerificationState } from '../verification/state';
+import {
+  SUPPORTED_VERIFICATION_METHOD_CODES,
+  type EngineVerificationState,
+} from '../verification/state';
 import { engineInvoke, type EngineIdentity } from '../olmMachine/engineInvoke';
 import { sendOutgoingRequest, type OutgoingRequest } from './outgoing';
 import type {
@@ -79,6 +83,50 @@ const engineCryptoLog = createDebugLogger('engine-crypto');
 
 const DECRYPTION_WAIT_MS = 5 * 60 * 1000;
 
+const MAX_OUTGOING_DRAIN_PASSES = 5;
+
+const RESTORE_CHUNK_SIZE = 200;
+
+const MAX_BACKUP_UPLOAD_FAILURES = 5;
+const MAX_BACKUP_VERSIONS_TO_DELETE = 50;
+const BACKUP_RETRY_DELAY_MS = 5000;
+const MAX_BACKUP_RETRY_DELAY_MS = 60000;
+
+const DecryptionErrorCode = {
+  MissingRoomKey: 0,
+  UnknownMessageIndex: 1,
+  UnknownSenderDevice: 3,
+  UnsignedSenderDevice: 4,
+  SenderIdentityVerificationViolation: 5,
+} as const;
+
+const WITHHELD_FOR_UNVERIFIED_DEVICE = 'The sender has disabled encrypting to unverified devices.';
+
+type EngineDecryptionError = {
+  className: 'DecryptionError';
+  code: number;
+  description: string;
+  maybeWithheld?: string | null;
+};
+
+const isDecryptionError = (value: unknown): value is EngineDecryptionError =>
+  typeof value === 'object' &&
+  value !== null &&
+  'className' in value &&
+  (value as { className?: string }).className === 'DecryptionError';
+
+const ROOM_KEY_BUNDLE_TYPES = new Set(['io.element.msc4268.room_key_bundle', 'm.room_key_bundle']);
+
+const canonicalJson = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : 1));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+};
+
 /** js-sdk keeps this union private to its own rust-crypto module; derived the same way. */
 type CryptoEvents = (typeof CryptoEvent)[keyof typeof CryptoEvent];
 
@@ -91,15 +139,6 @@ const SECRETS_IN_STORAGE = [
   'm.cross_signing.user_signing',
 ] as const satisfies readonly SecretStorageKey[];
 
-const SUPPORTED_VERIFICATION_METHOD_CODES = [
-  VerificationMethod.Sas,
-  VerificationMethod.ScanQrCode,
-  VerificationMethod.ShowQrCode,
-  VerificationMethod.Reciprocate,
-]
-  .map(codeFromMethod)
-  .filter((code): code is number => code !== undefined);
-
 type EngineDevice = {
   userId: string;
   deviceId: string;
@@ -109,6 +148,8 @@ type EngineDevice = {
   isCrossSigningTrusted: boolean;
   isCrossSignedByOwner: boolean;
   isLocallyTrusted: boolean;
+  isVerified: boolean;
+  isBlacklisted: boolean;
   isDehydrated: boolean;
 };
 
@@ -185,6 +226,8 @@ type EngineDecryptedEvent = {
   senderCurve25519Key?: string | null;
   senderClaimedEd25519Key?: string | null;
   forwardingCurve25519KeyChain?: string[];
+  forwarder?: string | null;
+  forwarderDevice?: string | null;
 };
 
 const isOutgoingRequest = (value: unknown): value is OutgoingRequest => {
@@ -235,14 +278,23 @@ type EngineIdentityInfo = {
   userSigningKey?: unknown;
 };
 
+const deviceVerification = (device: EngineDevice): DeviceVerification => {
+  if (device.isBlacklisted) return DeviceVerification.Blocked;
+  return device.isVerified ? DeviceVerification.Verified : DeviceVerification.Unverified;
+};
+
+const ENCRYPTION_ALGORITHMS = ['m.olm.v1.curve25519-aes-sha2', 'm.megolm.v1.aes-sha2'];
+
 const toSdkDevice = (device: EngineDevice): Device =>
   new Device({
     userId: device.userId,
     deviceId: device.deviceId,
     displayName: device.displayName ?? undefined,
-    algorithms: [],
+    algorithms: ENCRYPTION_ALGORITHMS.filter((_, index) =>
+      device.algorithms?.includes(index)
+    ) as string[],
     keys: new Map(Object.entries(device.keys)),
-    verified: device.isLocallyTrusted ? DeviceVerification.Verified : DeviceVerification.Unverified,
+    verified: deviceVerification(device),
     signatures: new Map(),
     dehydrated: device.isDehydrated,
   });
@@ -270,7 +322,11 @@ export class EngineCrypto
 
   #flushing: Promise<void> = Promise.resolve();
 
+  readonly #roomsWithTrackedMembers = new Set<string>();
+
   #backingUp: Promise<void> = Promise.resolve();
+
+  #checkingKeyBackup: Promise<KeyBackupCheck | null> = Promise.resolve(null);
 
   readonly #eventsPendingKey = new Map<string, Set<MatrixEvent>>();
 
@@ -286,11 +342,8 @@ export class EngineCrypto
   async #connectKeyBackup(): Promise<void> {
     try {
       await this.checkKeyBackupAndEnable();
-      const enabled = (await this.getActiveSessionBackupVersion()) !== null;
-      this.emit(CryptoEvent.KeyBackupStatus, enabled);
-      if (enabled) this.#scheduleKeyBackup();
-    } catch {
-      // Backup is optional; failing here must not break the session.
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Could not connect the key backup', error);
     }
   }
 
@@ -298,8 +351,6 @@ export class EngineCrypto
     this.#backingUp = this.#backingUp.then(() =>
       this.#uploadRoomKeysToBackup().catch((error: unknown) => {
         engineCryptoLog.error('general', 'Uploading room keys to backup failed', error);
-        const errcode = (error as { data?: { errcode?: string } }).data?.errcode;
-        if (errcode) this.emit(CryptoEvent.KeyBackupFailed, errcode);
       })
     );
   }
@@ -308,20 +359,29 @@ export class EngineCrypto
     if (this.#stopped) return;
     if (!(await this.#call('isBackupEnabled'))) return;
 
-    for (;;) {
+    for (let failures = 0; failures < MAX_BACKUP_UPLOAD_FAILURES;) {
       if (this.#stopped) return;
       // eslint-disable-next-line no-await-in-loop
       const request = (await this.#call('backupRoomKeys')) as OutgoingRequest | null;
       if (!request) break;
 
-      // eslint-disable-next-line no-await-in-loop
-      const response = await sendOutgoingRequest(this.#mx, request);
-      // eslint-disable-next-line no-await-in-loop
-      await this.#call('markRequestAsSent', {
-        requestId: request.id,
-        requestType: request.type,
-        response,
-      });
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await sendOutgoingRequest(this.#mx, request);
+        // eslint-disable-next-line no-await-in-loop
+        await this.#call('markRequestAsSent', {
+          requestId: request.id,
+          requestType: request.type,
+          response,
+        });
+        failures = 0;
+      } catch (error) {
+        failures += 1;
+        // eslint-disable-next-line no-await-in-loop
+        if (!(await this.#recoverFromBackupUploadError(error))) return;
+        // eslint-disable-next-line no-await-in-loop
+        continue;
+      }
 
       // eslint-disable-next-line no-await-in-loop
       const counts = (await this.#call('roomKeyCounts')) as { total: number; backedUp: number };
@@ -331,17 +391,39 @@ export class EngineCrypto
     this.emit(CryptoEvent.KeyBackupSessionsRemaining, 0);
   }
 
+  async #recoverFromBackupUploadError(error: unknown): Promise<boolean> {
+    const failure = error as { data?: { errcode?: string; retry_after_ms?: number } };
+    const errcode = failure.data?.errcode;
+
+    if (errcode === 'M_WRONG_ROOM_KEYS_VERSION' || errcode === 'M_NOT_FOUND') {
+      this.emit(CryptoEvent.KeyBackupFailed, errcode);
+      await this.#disableKeyBackup();
+      await this.#connectKeyBackup();
+      return false;
+    }
+
+    if (errcode === 'M_LIMIT_EXCEEDED') {
+      const wait = failure.data?.retry_after_ms ?? BACKUP_RETRY_DELAY_MS;
+      await new Promise((resolve) => {
+        setTimeout(resolve, Math.min(wait, MAX_BACKUP_RETRY_DELAY_MS));
+      });
+      return true;
+    }
+
+    if (errcode) this.emit(CryptoEvent.KeyBackupFailed, errcode);
+    return false;
+  }
+
   onUserIdentityUpdated(userId: string): void {
-    this.emit(
-      CryptoEvent.UserTrustStatusChanged,
-      userId,
-      new UserVerificationStatus(false, false, true)
-    );
+    void this.getUserVerificationStatus(userId)
+      .then((status) => this.emit(CryptoEvent.UserTrustStatusChanged, userId, status))
+      .catch(() => undefined);
     // Our own identity becoming trusted can make a backup we rejected trustworthy.
     if (userId === this.#identity.userId) void this.#connectKeyBackup();
   }
 
   onDevicesUpdated(userIds: string[]): void {
+    this.emit(CryptoEvent.WillUpdateDevices, userIds, false);
     this.emit(CryptoEvent.DevicesUpdated, userIds, false);
   }
 
@@ -360,6 +442,7 @@ export class EngineCrypto
   }
 
   #retryEventsPendingKey({ roomId, sessionId }: EngineRoomKeyInfo): void {
+    if (this.#stopped) return;
     const pending = this.#eventsPendingKey.get(`${roomId}|${sessionId}`);
     if (!pending) return;
     this.#eventsPendingKey.delete(`${roomId}|${sessionId}`);
@@ -367,6 +450,21 @@ export class EngineCrypto
     pending.forEach((event) => {
       event.attemptDecryption(this, { isRetry: true }).catch(() => undefined);
     });
+  }
+
+  #dropEventPendingKey(event: MatrixEvent): void {
+    const key = this.#pendingKeyFor(event);
+    if (!key) return;
+    const pending = this.#eventsPendingKey.get(key);
+    if (!pending) return;
+    pending.delete(event);
+    if (pending.size === 0) this.#eventsPendingKey.delete(key);
+  }
+
+  #pendingKeyFor(event: MatrixEvent): string | undefined {
+    const roomId = event.getRoomId();
+    const sessionId = (event.getWireContent() as { session_id?: string }).session_id;
+    return roomId && sessionId ? `${roomId}|${sessionId}` : undefined;
   }
 
   #holdEventPendingKey(event: MatrixEvent): void {
@@ -391,7 +489,7 @@ export class EngineCrypto
       changedDevices: input.deviceLists?.changed ?? [],
       leftDevices: input.deviceLists?.left ?? [],
       oneTimeKeysCounts: input.oneTimeKeysCounts ?? {},
-      unusedFallbackKeys: input.unusedFallbackKeys ?? null,
+      ...(input.unusedFallbackKeys ? { unusedFallbackKeys: input.unusedFallbackKeys } : {}),
     })) as EngineProcessedToDeviceEvent[] | null;
 
     void this.#flushOutgoingRequests();
@@ -524,6 +622,14 @@ export class EngineCrypto
   onRoomMembership(event: MatrixEvent, member: RoomMember, oldMembership?: string): void {
     const roomId = event.getRoomId();
     if (!roomId) return;
+
+    if (
+      member.membership === KnownMembership.Join ||
+      member.membership === KnownMembership.Invite
+    ) {
+      void this.#trackUsers([member.userId]);
+    }
+
     if (
       oldMembership === KnownMembership.Join &&
       member.membership !== KnownMembership.Join &&
@@ -533,9 +639,19 @@ export class EngineCrypto
     }
   }
 
+  async #trackUsers(users: string[]): Promise<void> {
+    if (users.length === 0) return;
+    try {
+      await this.#call('updateTrackedUsers', { users });
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Could not track device lists for users', error);
+    }
+  }
+
   async #sendTracked(request: unknown): Promise<void> {
     if (!isOutgoingRequest(request)) return;
     const response = await sendOutgoingRequest(this.#mx, request);
+    if (typeof request.id !== 'string') return;
     await this.#call('markRequestAsSent', {
       requestId: request.id,
       requestType: request.type,
@@ -572,11 +688,19 @@ export class EngineCrypto
   /** matrix-sdk-crypto only clears a request once told it was sent, so a failure here
    * leaves it queued for the next drain rather than losing it. */
   async #drainOutgoingRequests(): Promise<void> {
-    if (this.#stopped) return;
+    for (let pass = 0; pass < MAX_OUTGOING_DRAIN_PASSES; pass += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await this.#drainOutgoingRequestsOnce())) return;
+    }
+  }
+
+  async #drainOutgoingRequestsOnce(): Promise<boolean> {
+    if (this.#stopped) return false;
     const requests = ((await this.#call('outgoingRequests')) ?? []) as OutgoingRequest[];
 
+    let sent = 0;
     for (const request of requests) {
-      if (this.#stopped) return;
+      if (this.#stopped) return false;
       try {
         // Sequential: the engine's queue is ordered and later requests can depend on
         // earlier ones having landed.
@@ -588,11 +712,14 @@ export class EngineCrypto
           requestType: request.type,
           response,
         });
+        sent += 1;
       } catch (error) {
         // Loud: a request the engine never marks sent is retried on every sync forever.
         engineCryptoLog.error('general', `Outgoing crypto request ${request.id} failed`, error);
       }
     }
+
+    return sent > 0;
   }
 
   async preprocessToDeviceMessages(events: IToDeviceEvent[]): Promise<ReceivedToDeviceMessage[]> {
@@ -629,6 +756,10 @@ export class EngineCrypto
             await this.#verificationRequests.get(transactionId)?.refresh();
           }
         }
+      }
+
+      if (ROOM_KEY_BUNDLE_TYPES.has(message.type) && message.sender) {
+        void this.#acceptArrivedKeyBundle(message.sender);
       }
 
       if (event.type === ProcessedToDeviceEventType.Decrypted && event.encryptionInfo) {
@@ -671,14 +802,21 @@ export class EngineCrypto
       return;
     }
 
-    await this.#call('setRoomSettings', {
-      roomId: room.roomId,
-      settings: {
-        algorithm: config.algorithm,
-        sessionRotationPeriodMs: config.rotation_period_ms,
-        sessionRotationPeriodMessages: config.rotation_period_msgs,
-      },
-    });
+    try {
+      await this.#call('setRoomSettings', {
+        roomId: room.roomId,
+        settings: {
+          algorithm: config.algorithm,
+          sessionRotationPeriodMs: config.rotation_period_ms,
+          sessionRotationPeriodMessages: config.rotation_period_msgs,
+        },
+      });
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Could not update room encryption settings', {
+        roomId: room.roomId,
+        error,
+      });
+    }
   }
 
   onSyncCompleted(syncState: OnSyncCompletedData): void {
@@ -693,12 +831,14 @@ export class EngineCrypto
 
   stop(): void {
     this.#stopped = true;
+    this.#eventsPendingKey.clear();
+    this.#roomsWithTrackedMembers.clear();
   }
 
   #trustRequirement(): number {
     return this.#deviceIsolationMode?.kind ===
       DeviceIsolationModeKind.OnlySignedDevicesIsolationMode
-      ? TrustRequirement.CrossSigned
+      ? TrustRequirement.CrossSignedOrLegacy
       : TrustRequirement.Untrusted;
   }
 
@@ -708,7 +848,9 @@ export class EngineCrypto
     ) {
       return 'identityBasedStrategy';
     }
-    if (room.getBlacklistUnverifiedDevices()) return 'onlyTrustedDevices';
+    if (room.getBlacklistUnverifiedDevices() ?? this.globalBlacklistUnverifiedDevices) {
+      return 'onlyTrustedDevices';
+    }
     if (this.#deviceIsolationMode?.errorOnVerifiedUserProblems) {
       return 'errorOnVerifiedUserProblem';
     }
@@ -736,13 +878,27 @@ export class EngineCrypto
   async encryptEvent(event: MatrixEvent, room: Room): Promise<void> {
     // The megolm session has to reach every device in the room before the event does.
     const members = await room.getEncryptionTargetMembers();
-    await this.#call('getMissingSessions', { users: members.map((member) => member.userId) });
+    const users = members.map((member) => member.userId);
+
+    if (!this.#roomsWithTrackedMembers.has(room.roomId)) {
+      await this.#trackUsers(users);
+      await this.#flushOutgoingRequests();
+      this.#roomsWithTrackedMembers.add(room.roomId);
+    }
+
+    const claim = (await this.#call('getMissingSessions', { users })) as OutgoingRequest | null;
+    await this.#sendTracked(claim);
     await this.#flushOutgoingRequests();
-    await this.#call('shareRoomKey', {
+
+    const shared = ((await this.#call('shareRoomKey', {
       roomId: room.roomId,
-      users: members.map((m) => m.userId),
+      users,
       encryptionSettings: this.#encryptionSettings(room),
-    });
+    })) ?? []) as OutgoingRequest[];
+    for (const request of shared) {
+      // eslint-disable-next-line no-await-in-loop
+      await this.#sendTracked(request);
+    }
     await this.#flushOutgoingRequests();
 
     const encrypted = (await this.#call('encryptRoomEvent', {
@@ -751,11 +907,12 @@ export class EngineCrypto
       content: JSON.stringify(event.getContent()),
     })) as string;
 
+    const own = await this.getOwnDeviceKeys();
     event.makeEncrypted(
       'm.room.encrypted',
       JSON.parse(encrypted) as Record<string, unknown>,
-      '',
-      ''
+      own.curve25519,
+      own.ed25519
     );
   }
 
@@ -763,31 +920,128 @@ export class EngineCrypto
     const roomId = event.getRoomId();
     if (!roomId) throw new Error('Cannot decrypt an event with no room id');
 
-    let decrypted: EngineDecryptedEvent;
-    try {
-      decrypted = (await this.#call('decryptRoomEvent', {
-        event: JSON.stringify({
-          event_id: event.getId(),
-          type: event.getWireType(),
-          sender: event.getSender(),
-          room_id: roomId,
-          origin_server_ts: event.getTs(),
-          content: event.getWireContent(),
-        }),
-        roomId,
-        decryptionSettings: { senderDeviceTrustRequirement: this.#trustRequirement() },
-      })) as EngineDecryptedEvent;
-    } catch (error) {
-      this.#holdEventPendingKey(event);
-      throw error;
-    }
+    this.#holdEventPendingKey(event);
+
+    const result = (await this.#call('decryptRoomEvent', {
+      event: JSON.stringify({
+        event_id: event.getId(),
+        type: event.getWireType(),
+        sender: event.getSender(),
+        room_id: roomId,
+        origin_server_ts: event.getTs(),
+        content: event.getWireContent(),
+      }),
+      roomId,
+      decryptionSettings: { senderDeviceTrustRequirement: this.#trustRequirement() },
+    })) as unknown;
+
+    if (isDecryptionError(result)) await this.#throwDecryptionError(event, result);
+    const decrypted = result as EngineDecryptedEvent;
+
+    this.#dropEventPendingKey(event);
 
     return {
       clearEvent: JSON.parse(decrypted.event) as EventDecryptionResult['clearEvent'],
       senderCurve25519Key: decrypted.senderCurve25519Key ?? undefined,
       claimedEd25519Key: decrypted.senderClaimedEd25519Key ?? undefined,
       forwardingCurve25519KeyChain: decrypted.forwardingCurve25519KeyChain ?? [],
+      ...(decrypted.forwarder ? { keyForwardedBy: decrypted.forwarder } : {}),
     };
+  }
+
+  async #throwDecryptionError(event: MatrixEvent, error: EngineDecryptionError): Promise<never> {
+    const content = event.getWireContent() as { sender_key?: string; session_id?: string };
+    const details: Record<string, string> = {};
+    if (content.sender_key) details.sender_key = content.sender_key;
+    if (content.session_id) details.session_id = content.session_id;
+
+    const recoverable =
+      error.code === DecryptionErrorCode.MissingRoomKey ||
+      error.code === DecryptionErrorCode.UnknownMessageIndex;
+
+    if (recoverable) {
+      const membership = event.getMembershipAtEvent();
+      if (
+        membership &&
+        membership !== KnownMembership.Join &&
+        membership !== KnownMembership.Invite
+      ) {
+        throw new DecryptionError(
+          DecryptionFailureCode.HISTORICAL_MESSAGE_USER_NOT_JOINED,
+          'This message was sent when we were not a member of the room.',
+          details
+        );
+      }
+      await this.#throwIfHistorical(event, details);
+    }
+
+    if (error.maybeWithheld) {
+      throw new DecryptionError(
+        error.maybeWithheld === WITHHELD_FOR_UNVERIFIED_DEVICE
+          ? DecryptionFailureCode.MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE
+          : DecryptionFailureCode.MEGOLM_KEY_WITHHELD,
+        error.maybeWithheld,
+        details
+      );
+    }
+
+    switch (error.code) {
+      case DecryptionErrorCode.MissingRoomKey:
+        throw new DecryptionError(
+          DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID,
+          "The sender's device has not sent us the keys for this message.",
+          details
+        );
+      case DecryptionErrorCode.UnknownMessageIndex:
+        throw new DecryptionError(
+          DecryptionFailureCode.OLM_UNKNOWN_MESSAGE_INDEX,
+          "The sender's device has not sent us the keys for this message at this index.",
+          details
+        );
+      case DecryptionErrorCode.SenderIdentityVerificationViolation:
+        this.#dropEventPendingKey(event);
+        throw new DecryptionError(
+          DecryptionFailureCode.SENDER_IDENTITY_PREVIOUSLY_VERIFIED,
+          'The sender identity is unverified, but was previously verified.'
+        );
+      case DecryptionErrorCode.UnknownSenderDevice:
+        this.#dropEventPendingKey(event);
+        throw new DecryptionError(
+          DecryptionFailureCode.UNKNOWN_SENDER_DEVICE,
+          'The sender device is not known.'
+        );
+      case DecryptionErrorCode.UnsignedSenderDevice:
+        this.#dropEventPendingKey(event);
+        throw new DecryptionError(
+          DecryptionFailureCode.UNSIGNED_SENDER_DEVICE,
+          'The sender identity is not cross-signed.'
+        );
+      default:
+        throw new DecryptionError(DecryptionFailureCode.UNKNOWN_ERROR, error.description, details);
+    }
+  }
+
+  async #throwIfHistorical(event: MatrixEvent, details: Record<string, string>): Promise<void> {
+    const createdAt = (await this.#call('deviceCreationTimeMs')) as number | null;
+    if (createdAt === null || event.getTs() > createdAt) return;
+
+    const backupInfo = await this.getKeyBackupInfo().catch(() => null);
+    if (!backupInfo) {
+      throw new DecryptionError(
+        DecryptionFailureCode.HISTORICAL_MESSAGE_NO_KEY_BACKUP,
+        'This message was sent before this device logged in, and there is no key backup on the server.',
+        details
+      );
+    }
+
+    const usable = (await this.getSessionBackupPrivateKey()) !== null;
+    throw new DecryptionError(
+      usable
+        ? DecryptionFailureCode.HISTORICAL_MESSAGE_WORKING_BACKUP
+        : DecryptionFailureCode.HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED,
+      'This message was sent before this device logged in.',
+      details
+    );
   }
 
   /** Stateless: needs the backup key, not the crypto store, so it stays in-process. */
@@ -808,17 +1062,27 @@ export class EngineCrypto
     return {
       sourceTrusted: false,
       async decryptSessions(ciphertexts) {
-        return Object.entries(ciphertexts).map(([sessionId, session]) => {
-          const decrypted = JSON.parse(
-            key.decryptV1(
-              session.session_data.ephemeral,
-              session.session_data.mac,
-              session.session_data.ciphertext
-            )
-          ) as IMegolmSessionData;
-          decrypted.session_id = sessionId;
-          return decrypted;
-        });
+        const decrypted: IMegolmSessionData[] = [];
+        for (const [sessionId, session] of Object.entries(ciphertexts)) {
+          try {
+            const data = JSON.parse(
+              key.decryptV1(
+                session.session_data.ephemeral,
+                session.session_data.mac,
+                session.session_data.ciphertext
+              )
+            ) as IMegolmSessionData;
+            data.session_id = sessionId;
+            decrypted.push(data);
+          } catch (error) {
+            engineCryptoLog.warn(
+              'general',
+              `Could not decrypt backed up session ${sessionId}`,
+              error
+            );
+          }
+        }
+        return decrypted;
       },
       free() {
         key.free();
@@ -831,23 +1095,44 @@ export class EngineCrypto
     backupVersion: string,
     opts?: ImportRoomKeysOpts
   ): Promise<void> {
+    await this.#importBackedUpRoomKeys(keys, backupVersion, opts);
+  }
+
+  async #importBackedUpRoomKeys(
+    keys: IMegolmSessionData[],
+    backupVersion: string,
+    opts?: ImportRoomKeysOpts,
+    already = 0,
+    grandTotal = keys.length
+  ): Promise<number> {
     const result = (await this.#call('importBackedUpRoomKeys', {
       keys: JSON.stringify(keys),
       backupVersion,
     })) as { importedCount?: number; totalCount?: number } | null;
 
-    const total = result?.totalCount ?? keys.length;
-    const successes = result?.importedCount ?? 0;
+    const successes = already + (result?.importedCount ?? 0);
     opts?.progressCallback?.({
       stage: ImportRoomKeyStage.LoadKeys,
       successes,
-      failures: total - successes,
-      total,
+      failures: grandTotal - successes,
+      total: grandTotal,
     });
+    return result?.importedCount ?? 0;
   }
 
   /** MSC4268. The engine encrypts; we upload; only the mxc URL goes back. */
+  async #downloadAllRoomKeys(roomId: string): Promise<void> {
+    if ((await this.#call('hasDownloadedAllRoomKeys', { roomId })) === true) return;
+    try {
+      await this.restoreKeyBackup();
+      await this.#call('setHasDownloadedAllRoomKeys', { roomId });
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Could not download room keys before sharing', error);
+    }
+  }
+
   async shareRoomHistoryWithUser(roomId: string, userId: string): Promise<void> {
+    await this.#downloadAllRoomKeys(roomId);
     const own = await this.getUserVerificationStatus(this.#identity.userId);
     if (!own.isCrossSigningVerified()) {
       engineCryptoLog.warn(
@@ -867,23 +1152,31 @@ export class EngineCrypto
       { includeFilename: false }
     );
 
-    await this.#call('queryKeysForUsers', { users: [userId] });
+    await this.#sendTracked(await this.#call('queryKeysForUsers', { users: [userId] }));
     await this.#flushOutgoingRequests();
-    await this.#call('getMissingSessions', { users: [userId] });
+    await this.#sendTracked(await this.#call('getMissingSessions', { users: [userId] }));
     await this.#flushOutgoingRequests();
 
-    await this.#call('shareRoomKeyBundleData', {
+    const requests = ((await this.#call('shareRoomKeyBundleData', {
       userId,
       roomId,
       url,
       mediaEncryptionInfo: bundle.mediaEncryptionInfo,
       sharingStrategy: 'identityBasedStrategy',
-    });
+    })) ?? []) as OutgoingRequest[];
+    for (const request of requests) {
+      // eslint-disable-next-line no-await-in-loop
+      await this.#sendTracked(request);
+    }
     await this.#flushOutgoingRequests();
   }
 
   /** MSC4268. The engine stores the bundle metadata; we fetch the media it points at. */
   async maybeAcceptKeyBundle(roomId: string, inviter: string): Promise<boolean> {
+    await this.#trackUsers([inviter]);
+    await this.#sendTracked(await this.#call('queryKeysForUsers', { users: [inviter] }));
+    await this.#flushOutgoingRequests();
+
     const data = (await this.#call('getReceivedRoomKeyBundleData', {
       roomId,
       inviterId: inviter,
@@ -919,6 +1212,22 @@ export class EngineCrypto
     return true;
   }
 
+  async #acceptArrivedKeyBundle(inviter: string): Promise<void> {
+    try {
+      const pending = ((await this.#call('getAllRoomsPendingKeyBundles')) ?? []) as {
+        roomId: string;
+        inviterId: string;
+      }[];
+
+      for (const room of pending.filter((entry) => entry.inviterId === inviter)) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.maybeAcceptKeyBundle(room.roomId, inviter);
+      }
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Could not accept an arrived room key bundle', error);
+    }
+  }
+
   async markRoomAsPendingKeyBundle(roomId: string, inviterId: string): Promise<void> {
     await this.#call('storeRoomPendingKeyBundle', { roomId, inviterId });
   }
@@ -950,10 +1259,12 @@ export class EngineCrypto
   prepareToEncrypt(room: Room): void {
     void room
       .getEncryptionTargetMembers()
-      .then((members) =>
-        this.#call('getMissingSessions', { users: members.map((member) => member.userId) })
-      )
-      .then(() => this.#flushOutgoingRequests())
+      .then(async (members) => {
+        const users = members.map((member) => member.userId);
+        await this.#trackUsers(users);
+        await this.#sendTracked(await this.#call('getMissingSessions', { users }));
+        await this.#flushOutgoingRequests();
+      })
       .catch((error: unknown) => engineCryptoLog.warn('general', 'prepareToEncrypt failed', error));
   }
 
@@ -990,33 +1301,32 @@ export class EngineCrypto
     devices: { userId: string; deviceId: string }[],
     payload: ToDevicePayload
   ): Promise<ToDeviceBatch> {
-    const batch = await Promise.all(
-      devices.map(async ({ userId, deviceId }) => ({
-        userId,
-        deviceId,
-        payload: JSON.parse(
-          (await this.#call('device.encryptToDeviceEvent', {
-            userId,
-            deviceId,
-            eventType,
-            content: JSON.stringify(payload),
-          })) as string
-        ) as ToDevicePayload,
-      }))
+    const users = [...new Set(devices.map(({ userId }) => userId))];
+    await this.#sendTracked(await this.#call('getMissingSessions', { users }));
+    await this.#flushOutgoingRequests();
+
+    const encrypted = await Promise.all(
+      devices.map(async ({ userId, deviceId }) => {
+        const content = (await this.#call('device.encryptToDeviceEvent', {
+          userId,
+          deviceId,
+          eventType,
+          content: payload,
+        })) as string | null;
+        if (!content) return null;
+        return { userId, deviceId, payload: JSON.parse(content) as ToDevicePayload };
+      })
     );
 
-    return { eventType: EventType.RoomMessageEncrypted, batch };
+    return {
+      eventType: EventType.RoomMessageEncrypted,
+      batch: encrypted.filter((entry) => entry !== null),
+    };
   }
 
-  /** The outgoing-request queue has no interactive-auth path, so a server that challenges
-   * the signing-key upload will reject it. */
   async resetEncryption(authUploadDeviceSigningKeys: UIAuthCallback<void>): Promise<void> {
-    engineCryptoLog.info('general', 'Resetting encryption', {
-      interactiveAuthAvailable: typeof authUploadDeviceSigningKeys === 'function',
-    });
     await this.disableKeyStorage();
-    await this.#call('bootstrapCrossSigning', { reset: true });
-    await this.#flushOutgoingRequests();
+    await this.#resetCrossSigning(authUploadDeviceSigningKeys);
     await this.resetKeyBackup();
   }
 
@@ -1047,21 +1357,26 @@ export class EngineCrypto
     userId: string = this.#identity.userId,
     downloadUncached = false
   ): Promise<boolean> {
-    if (downloadUncached) await this.#call('queryKeysForUsers', { users: [userId] });
+    if (downloadUncached) {
+      await this.#sendTracked(await this.#call('queryKeysForUsers', { users: [userId] }));
+    }
     const identity = (await this.#call('getIdentity', { userId })) as EngineIdentityInfo | null;
     return identity !== null;
   }
 
   async getUserDeviceInfo(userIds: string[], downloadUncached = false): Promise<DeviceMap> {
-    if (downloadUncached) await this.#call('queryKeysForUsers', { users: userIds });
+    if (downloadUncached) {
+      await this.#sendTracked(await this.#call('queryKeysForUsers', { users: userIds }));
+    }
 
     const map: DeviceMap = new Map();
     await Promise.all(
       userIds.map(async (userId) => {
-        const devices = ((await this.#call('getUserDevices', {
+        const answer = (await this.#call('getUserDevices', {
           userId,
           timeoutSecs: null,
-        })) ?? []) as EngineDevice[];
+        })) as { devices?: EngineDevice[] } | null;
+        const devices = answer?.devices ?? [];
 
         map.set(userId, new Map(devices.map((device) => [device.deviceId, toSdkDevice(device)])));
       })
@@ -1136,7 +1451,9 @@ export class EngineCrypto
   }
 
   async crossSignDevice(deviceId: string): Promise<void> {
-    await this.#call('device.verify', { userId: this.#identity.userId, deviceId });
+    await this.#sendTracked(
+      await this.#call('device.verify', { userId: this.#identity.userId, deviceId })
+    );
     await this.#flushOutgoingRequests();
   }
 
@@ -1382,7 +1699,7 @@ export class EngineCrypto
 
   getVerificationRequestsToDeviceInProgress(userId: string): VerificationRequest[] {
     return [...this.#verificationRequests.values()].filter(
-      (request) => request.otherUserId === userId && request.roomId === undefined
+      (request) => request.otherUserId === userId && request.roomId === undefined && request.pending
     );
   }
 
@@ -1400,11 +1717,14 @@ export class EngineCrypto
 
   /** The engine needs the event id of the request we send, so build, send, then register. */
   async requestVerificationDM(userId: string, roomId: string): Promise<VerificationRequest> {
-    const content = (await this.#call('userIdentity.verificationRequestContent', {
+    const requestContent = (await this.#call('userIdentity.verificationRequestContent', {
       userId,
       roomId,
       methods: SUPPORTED_VERIFICATION_METHOD_CODES,
-    })) as string;
+    })) as { outgoingRequest?: { body?: string } } | null;
+
+    const content = requestContent?.outgoingRequest?.body;
+    if (!content) throw new Error('The engine produced no verification request content');
 
     const { event_id: eventId } = await this.#mx.sendEvent(
       roomId,
@@ -1514,10 +1834,7 @@ export class EngineCrypto
   }
 
   async getActiveSessionBackupVersion(): Promise<string | null> {
-    const enabled = (await this.#call('isBackupEnabled')) as boolean;
-    if (!enabled) return null;
-    const keys = (await this.#call('getBackupKeys')) as EngineBackupKeys | null;
-    return keys?.backupVersion ?? null;
+    return (await this.#call('backupVersion')) as string | null;
   }
 
   /** The engine reports signature trust only; whether our key opens it is separate. */
@@ -1556,22 +1873,68 @@ export class EngineCrypto
     }
   }
 
+  async #getKeyBackupInfoForVersion(version: string): Promise<KeyBackupInfo | null> {
+    try {
+      return await this.#mx.http.authedRequest<KeyBackupInfo>(
+        Method.Get,
+        encodeUri('/room_keys/version/$version', { $version: version }),
+        undefined,
+        undefined,
+        { prefix: ClientPrefix.V3 }
+      );
+    } catch (error) {
+      if ((error as { errcode?: string }).errcode === 'M_NOT_FOUND') return null;
+      throw error;
+    }
+  }
+
   async checkKeyBackupAndEnable(): Promise<KeyBackupCheck | null> {
+    this.#checkingKeyBackup = this.#checkingKeyBackup
+      .catch(() => null)
+      .then(() => this.#checkKeyBackupAndEnable());
+    return this.#checkingKeyBackup;
+  }
+
+  async #checkKeyBackupAndEnable(): Promise<KeyBackupCheck | null> {
     const backupInfo = await this.getKeyBackupInfo();
-    if (!backupInfo?.version) return null;
+    const activeVersion = await this.getActiveSessionBackupVersion();
+
+    if (!backupInfo?.version) {
+      if (activeVersion !== null) await this.#disableKeyBackup();
+      return null;
+    }
 
     const trustInfo = await this.isKeyBackupTrusted(backupInfo);
-    const authData = backupInfo.auth_data as { public_key?: string } | undefined;
-    if (trustInfo.trusted && authData?.public_key) {
-      await this.#call('enableBackupV1', {
-        publicKeyBase64: authData.public_key,
-        version: backupInfo.version,
-      });
+    const publicKey = (backupInfo.auth_data as { public_key?: string } | undefined)?.public_key;
+
+    if (!publicKey || (!trustInfo.trusted && !trustInfo.matchesDecryptionKey)) {
+      if (activeVersion !== null) await this.#disableKeyBackup();
+      return { backupInfo, trustInfo };
+    }
+
+    if (activeVersion !== backupInfo.version) {
+      if (activeVersion !== null) await this.#disableKeyBackup();
+      await this.#enableKeyBackup(backupInfo.version, publicKey);
+    } else {
+      this.#scheduleKeyBackup();
     }
     return { backupInfo, trustInfo };
   }
 
+  async #enableKeyBackup(version: string, publicKeyBase64: string): Promise<void> {
+    await this.#call('enableBackupV1', { publicKeyBase64, version });
+    this.emit(CryptoEvent.KeyBackupStatus, true);
+    this.#scheduleKeyBackup();
+  }
+
+  async #disableKeyBackup(): Promise<void> {
+    await this.#call('disableBackup');
+    this.emit(CryptoEvent.KeyBackupStatus, false);
+  }
+
   async resetKeyBackup(): Promise<void> {
+    await this.#deleteAllKeyBackupVersions();
+
     const key = await this.createRecoveryKeyFromPassphrase();
     const decryptionKey = RustSdkCryptoJs.BackupDecryptionKey.fromBase64(
       encodeBase64(key.privateKey)
@@ -1583,13 +1946,17 @@ export class EngineCrypto
       decryptionKey.free();
     }
 
+    const authData: Record<string, unknown> = { public_key: publicKey };
+    const signatures = await this.#signatureFor(authData);
+    if (signatures) authData.signatures = signatures;
+
     const created = await this.#mx.http.authedRequest<{ version: string }>(
       Method.Post,
       '/room_keys/version',
       undefined,
       {
         algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2',
-        auth_data: { public_key: publicKey },
+        auth_data: authData,
       },
       { prefix: ClientPrefix.V3 }
     );
@@ -1600,20 +1967,58 @@ export class EngineCrypto
     await this.#mx.secretStorage.store('m.megolm_backup.v1', encodeBase64(key.privateKey));
   }
 
+  async #signatureFor(value: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    const signed = (await this.#call('sign', { message: canonicalJson(value) })) as {
+      json?: string;
+    } | null;
+    if (!signed?.json) return null;
+    return JSON.parse(signed.json) as Record<string, unknown>;
+  }
+
   async #pushSecretToVerifiedDevices(secretName: string): Promise<void> {
-    await this.#call('getMissingSessions', { users: [this.#identity.userId] });
+    await this.#sendTracked(
+      await this.#call('getMissingSessions', { users: [this.#identity.userId] })
+    );
     await this.#flushOutgoingRequests();
     await this.#call('pushSecretToVerifiedDevices', { secretName });
     await this.#flushOutgoingRequests();
   }
 
   async disableKeyStorage(): Promise<void> {
-    const backupInfo = await this.getKeyBackupInfo();
-    if (backupInfo?.version) await this.deleteKeyBackupVersion(backupInfo.version);
-    else await this.#call('disableBackup');
+    await this.#deleteAllKeyBackupVersions();
+    await this.#disableKeyBackup();
+    await this.#deleteSecretStorage();
+  }
+
+  async #deleteAllKeyBackupVersions(): Promise<void> {
+    const seen = new Set<string>();
+
+    for (let attempt = 0; attempt < MAX_BACKUP_VERSIONS_TO_DELETE; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      const info = await this.getKeyBackupInfo();
+      if (!info?.version || seen.has(info.version)) return;
+      seen.add(info.version);
+      // eslint-disable-next-line no-await-in-loop
+      await this.deleteKeyBackupVersion(info.version);
+    }
+  }
+
+  async #deleteSecretStorage(): Promise<void> {
+    const secrets: SecretStorageKey[] = [...SECRETS_IN_STORAGE, 'm.megolm_backup.v1'];
+    await Promise.all(secrets.map((name) => this.#mx.secretStorage.store(name, null)));
+
+    const defaultKeyId = await this.#mx.secretStorage.getDefaultKeyId();
+    if (defaultKeyId) {
+      await this.#mx.secretStorage.store(
+        `m.secret_storage.key.${defaultKeyId}` as SecretStorageKey,
+        null
+      );
+    }
+    await this.#mx.secretStorage.setDefaultKeyId(null);
   }
 
   async deleteKeyBackupVersion(version: string): Promise<void> {
+    const active = await this.getActiveSessionBackupVersion();
     await this.#mx.http.authedRequest(
       Method.Delete,
       encodeUri('/room_keys/version/$version', { $version: version }),
@@ -1621,18 +2026,18 @@ export class EngineCrypto
       undefined,
       { prefix: ClientPrefix.V3 }
     );
-    await this.#call('disableBackup');
+    if (active === version) await this.#disableKeyBackup();
   }
 
   async restoreKeyBackup(opts?: KeyBackupRestoreOpts): Promise<KeyBackupRestoreResult> {
     const keys = (await this.#call('getBackupKeys')) as EngineBackupKeys | null;
     if (!keys?.decryptionKeyBase64 || !keys.backupVersion) {
-      throw new Error('No backup decryption key found in the crypto store');
+      throw new Error('No decryption key found in crypto store');
     }
 
-    const backupInfo = await this.getKeyBackupInfo();
-    if (backupInfo?.version !== keys.backupVersion) {
-      throw new Error(`Backup version ${keys.backupVersion} is not the one on the server`);
+    const backupInfo = await this.#getKeyBackupInfoForVersion(keys.backupVersion);
+    if (!backupInfo) {
+      throw new Error(`Backup version ${keys.backupVersion} is not on the server`);
     }
 
     opts?.progressCallback?.({ stage: ImportRoomKeyStage.Fetch });
@@ -1648,28 +2053,31 @@ export class EngineCrypto
         prefix: ClientPrefix.V3,
       });
 
-      const sessions: KeyBackupSession[] = [];
-      const sessionIds: string[] = [];
-      for (const [roomId, room] of Object.entries(response.rooms ?? {})) {
-        for (const [sessionId, session] of Object.entries(room.sessions ?? {})) {
-          sessionIds.push(sessionId);
-          sessions.push({ ...session, room_id: roomId } as KeyBackupSession);
+      const rooms = Object.entries(response.rooms ?? {});
+      const total = rooms.reduce(
+        (count, [, room]) => count + Object.keys(room.sessions ?? {}).length,
+        0
+      );
+
+      let imported = 0;
+      for (const [roomId, room] of rooms) {
+        // eslint-disable-next-line no-await-in-loop
+        const decrypted = await decryptor.decryptSessions(room.sessions ?? {});
+        const withRoom = decrypted.map((session) => ({ ...session, room_id: roomId }));
+
+        for (let start = 0; start < withRoom.length; start += RESTORE_CHUNK_SIZE) {
+          // eslint-disable-next-line no-await-in-loop
+          imported += await this.#importBackedUpRoomKeys(
+            withRoom.slice(start, start + RESTORE_CHUNK_SIZE),
+            keys.backupVersion,
+            opts,
+            imported,
+            total
+          );
         }
       }
 
-      const ciphertexts: Record<string, KeyBackupSession> = {};
-      sessionIds.forEach((sessionId, index) => {
-        const session = sessions[index];
-        if (session) ciphertexts[sessionId] = session;
-      });
-      const decrypted = await decryptor.decryptSessions(ciphertexts);
-      const withRooms = decrypted.map((session, index) => ({
-        ...session,
-        room_id: (sessions[index] as unknown as { room_id: string }).room_id,
-      }));
-
-      await this.importBackedUpRoomKeys(withRooms, keys.backupVersion, opts);
-      return { total: withRooms.length, imported: withRooms.length };
+      return { total, imported };
     } finally {
       decryptor.free();
     }

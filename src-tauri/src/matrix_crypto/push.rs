@@ -8,14 +8,9 @@ use matrix_sdk::ruma::RoomId;
 use matrix_sdk_crypto::types::events::room::encrypted::EncryptedEvent;
 use matrix_sdk_crypto::OlmMachine;
 use serde_json::Value;
-use tokio::sync::Mutex as AsyncMutex;
 
 use super::args::decryption_settings;
 use super::{account_key, engines, open_machine};
-
-/// Serialises open-if-absent. Two pushes racing here would otherwise build two
-/// `OlmMachine`s over one sqlite store, which wedges Olm sessions.
-static OPEN_GUARD: AsyncMutex<()> = AsyncMutex::const_new(());
 
 /// Returns the machine already registered for the account, opening one if the process is
 /// cold, and reports whether this call is what opened the store. Never evicts a machine
@@ -26,12 +21,6 @@ pub async fn open_machine_for_push(
     user_id: &str,
     device_id: &str,
 ) -> Result<(Arc<OlmMachine>, bool), String> {
-    if let Ok(machine) = engines().machine(user_id, device_id) {
-        return Ok((machine, false));
-    }
-
-    let _guard = OPEN_GUARD.lock().await;
-    // Another push may have opened it while we waited for the guard.
     if let Ok(machine) = engines().machine(user_id, device_id) {
         return Ok((machine, false));
     }
@@ -83,13 +72,13 @@ fn string_at(value: &Value, path: &[&str]) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Closes the machine this process opened for a push, leaving a webview-owned machine
-/// alone. Callers on a cold path should release the store once the notification is shown.
-pub fn release_after_push(user_id: &str, device_id: &str, was_cold: bool) -> Result<(), String> {
-    if was_cold {
-        engines().close_account(&account_key(user_id, device_id))?;
-    }
-    Ok(())
+pub fn release_after_push(
+    user_id: &str,
+    device_id: &str,
+    opened: Option<&Arc<OlmMachine>>,
+) -> Result<(), String> {
+    let Some(opened) = opened else { return Ok(()) };
+    engines().close_account_if(&account_key(user_id, device_id), opened)
 }
 
 /// One-shot headless decrypt: opens the store if the process is cold, decrypts, then
@@ -106,9 +95,7 @@ pub async fn decrypt_push(
     let (machine, was_cold) = open_machine_for_push(dir, passphrase, user_id, device_id).await?;
     let decrypted = decrypt_push_event(&machine, room_id, event_json).await;
 
-    // The registry holds the other reference; drop ours so the close actually frees it.
-    drop(machine);
-    release_after_push(user_id, device_id, was_cold)?;
+    release_after_push(user_id, device_id, was_cold.then_some(&machine))?;
 
     decrypted
 }

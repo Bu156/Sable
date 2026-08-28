@@ -18,6 +18,9 @@ use matrix_sdk_crypto::{EncryptionSyncChanges, OlmMachine};
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use matrix_sdk::deserialized_responses::{DeviceLinkProblem, VerificationLevel};
+use matrix_sdk_crypto::MegolmError;
+
 use super::args::{caller_decryption_settings, decryption_settings, room_id, str_arg};
 use super::requests::{mark_request_sent, outgoing_requests};
 use super::wasm_enums::processed_to_device_event_type;
@@ -135,6 +138,57 @@ fn processed_to_device_event_json(
         value["verificationRequest"] = request;
     }
     Ok(value)
+}
+
+mod decryption_error_code {
+    pub const MISSING_ROOM_KEY: u8 = 0;
+    pub const UNKNOWN_MESSAGE_INDEX: u8 = 1;
+    pub const MISMATCHED_IDENTITY_KEYS: u8 = 2;
+    pub const UNKNOWN_SENDER_DEVICE: u8 = 3;
+    pub const UNSIGNED_SENDER_DEVICE: u8 = 4;
+    pub const SENDER_IDENTITY_VERIFICATION_VIOLATION: u8 = 5;
+    pub const UNABLE_TO_DECRYPT: u8 = 6;
+    pub const MISMATCHED_SENDER: u8 = 7;
+}
+
+fn decryption_error_json(error: &MegolmError) -> Value {
+    use decryption_error_code as code;
+
+    let (error_code, withheld) = match error {
+        MegolmError::MissingRoomKey(withheld) => (
+            code::MISSING_ROOM_KEY,
+            withheld.as_ref().map(|code| code.to_string()),
+        ),
+        MegolmError::Decryption(
+            matrix_sdk_crypto::vodozemac::megolm::DecryptionError::UnknownMessageIndex(_, _),
+        ) => {
+            (code::UNKNOWN_MESSAGE_INDEX, None)
+        }
+        MegolmError::MismatchedIdentityKeys(_) => (code::MISMATCHED_IDENTITY_KEYS, None),
+        MegolmError::SenderIdentityNotTrusted(level) => (
+            match level {
+                VerificationLevel::VerificationViolation => {
+                    code::SENDER_IDENTITY_VERIFICATION_VIOLATION
+                }
+                VerificationLevel::UnsignedDevice => code::UNSIGNED_SENDER_DEVICE,
+                VerificationLevel::MismatchedSender => code::MISMATCHED_SENDER,
+                VerificationLevel::None(DeviceLinkProblem::MissingDevice)
+                | VerificationLevel::None(DeviceLinkProblem::InsecureSource) => {
+                    code::UNKNOWN_SENDER_DEVICE
+                }
+                _ => code::UNABLE_TO_DECRYPT,
+            },
+            None,
+        ),
+        _ => (code::UNABLE_TO_DECRYPT, None),
+    };
+
+    json!({
+        "className": "DecryptionError",
+        "code": error_code,
+        "description": error.to_string(),
+        "maybeWithheld": withheld,
+    })
 }
 
 fn verification_request_snapshot(
@@ -280,10 +334,13 @@ pub async fn invoke(machine: &OlmMachine, method: &str, args: Value) -> Result<V
             let event: Raw<EncryptedEvent> = serde_json::from_str(&event_json)
                 .map_err(|e| format!("decryptRoomEvent: bad event json: {e}"))?;
 
-            let decrypted = machine
+            let decrypted = match machine
                 .decrypt_room_event(&event, &room, &caller_decryption_settings(&args))
                 .await
-                .map_err(|e| format!("decryptRoomEvent failed: {e:?}"))?;
+            {
+                Ok(decrypted) => decrypted,
+                Err(error) => return Ok(decryption_error_json(&error)),
+            };
 
             let info = decrypted.encryption_info;
             let (sender_curve25519_key, claimed_ed25519_key) = match &info.algorithm_info {
@@ -308,8 +365,14 @@ pub async fn invoke(machine: &OlmMachine, method: &str, args: Value) -> Result<V
                 "senderDevice": info.sender_device.as_ref().map(ToString::to_string),
                 "senderCurve25519Key": sender_curve25519_key,
                 "senderClaimedEd25519Key": claimed_ed25519_key,
-                "forwarder": Value::Null,
-                "forwarderDevice": Value::Null,
+                "forwarder": info
+                    .forwarder
+                    .as_ref()
+                    .map(|forwarder| forwarder.user_id.to_string()),
+                "forwarderDevice": info
+                    .forwarder
+                    .as_ref()
+                    .map(|forwarder| forwarder.device_id.to_string()),
                 "forwardingCurve25519KeyChain": Vec::<String>::new(),
             }))
         }

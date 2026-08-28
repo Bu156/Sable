@@ -57,16 +57,21 @@ async fn bootstrap(machine: &OlmMachine, args: &Value) -> Result<Value, String> 
 
     let upload_keys_request = match requests.upload_keys_req.as_ref() {
         Some(request) => match request.request() {
-            AnyOutgoingRequest::KeysUpload(req) => json!({
-                "id": request.request_id().to_string(),
-                "type": KEYS_UPLOAD_REQUEST_TYPE,
-                "className": "KeysUploadRequest",
-                "body": json!({
-                    "device_keys": req.device_keys,
+            AnyOutgoingRequest::KeysUpload(req) => {
+                let mut body = json!({
                     "one_time_keys": req.one_time_keys,
                     "fallback_keys": req.fallback_keys,
-                }).to_string(),
-            }),
+                });
+                if let Some(device_keys) = &req.device_keys {
+                    body["device_keys"] = json!(device_keys);
+                }
+                json!({
+                    "id": request.request_id().to_string(),
+                    "type": KEYS_UPLOAD_REQUEST_TYPE,
+                    "className": "KeysUploadRequest",
+                    "body": body.to_string(),
+                })
+            }
             _ => {
                 return Err(
                     "bootstrapCrossSigning: upload_keys_req was not a /keys/upload request"

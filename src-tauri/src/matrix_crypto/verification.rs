@@ -449,7 +449,13 @@ pub async fn invoke(
             Err(e) => Err(e),
         },
 
-        "verificationRequest.state" => request(machine, args, method).map(|r| request_state(&r)),
+        "verificationRequest.state" => match flow(args, method) {
+            Ok((user, flow_id)) => Ok(machine
+                .get_verification_request(&user, &flow_id)
+                .map(|request| request_state(&request))
+                .unwrap_or(Value::Null)),
+            Err(e) => Err(e),
+        },
         "verification.state" => {
             let (user, flow_id) = match flow(args, method) {
                 Ok(flow) => flow,
