@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, Button, config, color, Text, Input, IconButton } from 'folds';
 import { menuIcon, X } from '$components/icons/phosphor';
-import { HexColorPicker } from 'react-colorful';
 import { SettingTile } from '$components/setting-tile';
 import { HexColorPickerPopOut } from '$components/HexColorPickerPopOut';
 import { isValidHex } from '$hooks/useUserProfile';
@@ -36,7 +35,6 @@ export function NameColorEditor({
   const [tempColor, setTempColor] = useState(
     stripQuotes(newNameColor) || stripQuotes(current) || undefined
   );
-  const [pickerColor, setPickerColor] = useState(tempColor ?? '#FFFFFF');
   const [hasChanged, setHasChanged] = useState(false);
 
   useEffect(() => {
@@ -50,10 +48,6 @@ export function NameColorEditor({
   useEffect(() => {
     setHasChanged(newNameColor !== current);
   }, [newNameColor, current]);
-
-  useEffect(() => {
-    if (tempColor && isValidHex(tempColor)) setPickerColor(tempColor);
-  }, [tempColor]);
 
   // Valid in the sense that it should look like an error during input.
   // It's disruptive to the user to immediately present their input as an error.
@@ -121,17 +115,7 @@ export function NameColorEditor({
                   <Text size="B300">Save</Text>
                 </Button>
               )}
-              <HexColorPickerPopOut
-                picker={
-                  <HexColorPicker
-                    color={pickerColor}
-                    onChange={(newColor) => {
-                      setPickerColor(newColor);
-                      handleUpdate(newColor);
-                    }}
-                  />
-                }
-              >
+              <HexColorPickerPopOut color={tempColor ?? '#FFFFFF'} onChange={handleUpdate}>
                 {(onOpen, opened) => (
                   <Button
                     onClick={onOpen}
