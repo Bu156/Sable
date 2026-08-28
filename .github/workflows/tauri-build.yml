@@ -1000,7 +1000,14 @@ jobs:
           # A fresh repo each night: older commits point at pruned assets.
           mkdir -p site/repo
           ostree --repo=site/repo init --mode=archive-z2
-          for src in arch-repos/*/; do
+          # download-artifact extracts a solo pattern match directly into the
+          # path; multiple matches land in per-artifact subdirectories.
+          if [ -e arch-repos/config ]; then
+            repos=(arch-repos/)
+          else
+            repos=(arch-repos/*/)
+          fi
+          for src in "${repos[@]}"; do
             echo "Pulling $src"
             ostree --repo=site/repo pull-local "$src"
           done
