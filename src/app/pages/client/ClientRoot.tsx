@@ -60,6 +60,9 @@ const log = createLogger('ClientRoot');
 
 const SESSION_SWITCH_KEY = 'sable-session-switch';
 
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 const isClientReady = (syncState: string | null): boolean =>
   syncState === 'PREPARED' || syncState === 'SYNCING' || syncState === 'CATCHUP';
 
@@ -509,10 +512,10 @@ export function ClientRoot({ children }: ClientRootProps) {
                       </Button>
                     </>
                   ) : (
-                    <Text>{`Failed to load. ${loadState.error.message}`}</Text>
+                    <Text>{`Failed to load. ${errorMessage(loadState.error)}`}</Text>
                   ))}
                 {startState.status === AsyncStatus.Error && (
-                  <Text>{`Failed to start. ${startState.error.message}`}</Text>
+                  <Text>{`Failed to start. ${errorMessage(startState.error)}`}</Text>
                 )}
                 {!legacyCryptoUpgradeRequired && (
                   <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
