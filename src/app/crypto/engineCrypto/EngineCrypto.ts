@@ -28,7 +28,7 @@ import { ClientPrefix, Method } from 'matrix-js-sdk/lib/http-api';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import { TypedEventEmitter } from 'matrix-js-sdk/lib/models/typed-event-emitter';
-import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
+import { CryptoEvent, DeviceIsolationModeKind } from 'matrix-js-sdk/lib/crypto-api';
 import type { CryptoEventHandlerMap } from 'matrix-js-sdk/lib/crypto-api/CryptoEventHandlerMap';
 import { createDebugLogger } from '$utils/debugLogger';
 import { EngineVerificationRequest } from '../verification/request';
@@ -49,7 +49,7 @@ import type {
 } from 'matrix-js-sdk/lib/sync-accumulator';
 import type { IMegolmSessionData } from 'matrix-js-sdk/lib/@types/crypto';
 import type { ToDeviceBatch, ToDevicePayload } from 'matrix-js-sdk/lib/models/ToDeviceMessage';
-import type { UIAuthCallback } from 'matrix-js-sdk/lib/interactive-auth';
+import type { AuthDict, UIAuthCallback } from 'matrix-js-sdk/lib/interactive-auth';
 import type {
   BackupTrustInfo,
   BootstrapCrossSigningOpts,
@@ -111,6 +111,12 @@ type EngineDevice = {
   isLocallyTrusted: boolean;
   isDehydrated: boolean;
 };
+
+const TrustRequirement = {
+  Untrusted: 0,
+  CrossSignedOrLegacy: 1,
+  CrossSigned: 2,
+} as const;
 
 /** wasm's ProcessedToDeviceEventType, which the engine emits as bare numbers. */
 const ProcessedToDeviceEventType = {
@@ -187,9 +193,20 @@ const isOutgoingRequest = (value: unknown): value is OutgoingRequest => {
   return typeof candidate.type === 'number' && typeof candidate.body === 'string';
 };
 
+type EngineRoomKeyInfo = {
+  roomId: string;
+  sessionId: string;
+};
+
 type EngineRoomKeyBundle = {
   encryptedData: string;
   mediaEncryptionInfo: string;
+};
+
+type EngineBootstrapRequests = {
+  uploadKeysRequest?: OutgoingRequest | null;
+  uploadSigningKeysRequest?: { body: string } | null;
+  uploadSignaturesRequest?: OutgoingRequest | null;
 };
 
 type EngineBackupKeys = {
@@ -253,6 +270,10 @@ export class EngineCrypto
 
   #flushing: Promise<void> = Promise.resolve();
 
+  #backingUp: Promise<void> = Promise.resolve();
+
+  readonly #eventsPendingKey = new Map<string, Set<MatrixEvent>>();
+
   constructor(mx: MatrixClient, identity: EngineIdentity) {
     super();
     this.#mx = mx;
@@ -265,10 +286,49 @@ export class EngineCrypto
   async #connectKeyBackup(): Promise<void> {
     try {
       await this.checkKeyBackupAndEnable();
-      this.emit(CryptoEvent.KeyBackupStatus, (await this.getActiveSessionBackupVersion()) !== null);
+      const enabled = (await this.getActiveSessionBackupVersion()) !== null;
+      this.emit(CryptoEvent.KeyBackupStatus, enabled);
+      if (enabled) this.#scheduleKeyBackup();
     } catch {
       // Backup is optional; failing here must not break the session.
     }
+  }
+
+  #scheduleKeyBackup(): void {
+    this.#backingUp = this.#backingUp.then(() =>
+      this.#uploadRoomKeysToBackup().catch((error: unknown) => {
+        engineCryptoLog.error('general', 'Uploading room keys to backup failed', error);
+        const errcode = (error as { data?: { errcode?: string } }).data?.errcode;
+        if (errcode) this.emit(CryptoEvent.KeyBackupFailed, errcode);
+      })
+    );
+  }
+
+  async #uploadRoomKeysToBackup(): Promise<void> {
+    if (this.#stopped) return;
+    if (!(await this.#call('isBackupEnabled'))) return;
+
+    for (;;) {
+      if (this.#stopped) return;
+      // eslint-disable-next-line no-await-in-loop
+      const request = (await this.#call('backupRoomKeys')) as OutgoingRequest | null;
+      if (!request) break;
+
+      // eslint-disable-next-line no-await-in-loop
+      const response = await sendOutgoingRequest(this.#mx, request);
+      // eslint-disable-next-line no-await-in-loop
+      await this.#call('markRequestAsSent', {
+        requestId: request.id,
+        requestType: request.type,
+        response,
+      });
+
+      // eslint-disable-next-line no-await-in-loop
+      const counts = (await this.#call('roomKeyCounts')) as { total: number; backedUp: number };
+      this.emit(CryptoEvent.KeyBackupSessionsRemaining, counts.total - counts.backedUp);
+    }
+
+    this.emit(CryptoEvent.KeyBackupSessionsRemaining, 0);
   }
 
   onUserIdentityUpdated(userId: string): void {
@@ -287,6 +347,37 @@ export class EngineCrypto
 
   onKeysChanged(): void {
     this.emit(CryptoEvent.KeysChanged, {});
+    this.#scheduleKeyBackup();
+  }
+
+  onRoomKeysUpdated(keys: EngineRoomKeyInfo[]): void {
+    this.onKeysChanged();
+    keys.forEach((key) => this.#retryEventsPendingKey(key));
+  }
+
+  onRoomKeysWithheld(sessions: EngineRoomKeyInfo[]): void {
+    sessions.forEach((session) => this.#retryEventsPendingKey(session));
+  }
+
+  #retryEventsPendingKey({ roomId, sessionId }: EngineRoomKeyInfo): void {
+    const pending = this.#eventsPendingKey.get(`${roomId}|${sessionId}`);
+    if (!pending) return;
+    this.#eventsPendingKey.delete(`${roomId}|${sessionId}`);
+
+    pending.forEach((event) => {
+      event.attemptDecryption(this, { isRetry: true }).catch(() => undefined);
+    });
+  }
+
+  #holdEventPendingKey(event: MatrixEvent): void {
+    const roomId = event.getRoomId();
+    const sessionId = (event.getWireContent() as { session_id?: string }).session_id;
+    if (!roomId || !sessionId) return;
+
+    const key = `${roomId}|${sessionId}`;
+    const pending = this.#eventsPendingKey.get(key) ?? new Set<MatrixEvent>();
+    pending.add(event);
+    this.#eventsPendingKey.set(key, pending);
   }
 
   async #receiveSyncChanges(input: {
@@ -604,12 +695,54 @@ export class EngineCrypto
     this.#stopped = true;
   }
 
+  #trustRequirement(): number {
+    return this.#deviceIsolationMode?.kind ===
+      DeviceIsolationModeKind.OnlySignedDevicesIsolationMode
+      ? TrustRequirement.CrossSigned
+      : TrustRequirement.Untrusted;
+  }
+
+  #sharingStrategy(room: Room): string {
+    if (
+      this.#deviceIsolationMode?.kind === DeviceIsolationModeKind.OnlySignedDevicesIsolationMode
+    ) {
+      return 'identityBasedStrategy';
+    }
+    if (room.getBlacklistUnverifiedDevices()) return 'onlyTrustedDevices';
+    if (this.#deviceIsolationMode?.errorOnVerifiedUserProblems) {
+      return 'errorOnVerifiedUserProblem';
+    }
+    return 'allDevices';
+  }
+
+  #encryptionSettings(room: Room): Record<string, unknown> {
+    const config =
+      room.currentState.getStateEvents(EventType.RoomEncryption, '')?.getContent() ?? {};
+
+    const settings: Record<string, unknown> = {
+      algorithm: 'm.megolm.v1.aes-sha2',
+      historyVisibility: room.getHistoryVisibility(),
+      sharingStrategy: this.#sharingStrategy(room),
+    };
+    if (typeof config.rotation_period_ms === 'number') {
+      settings.rotationPeriod = config.rotation_period_ms * 1000;
+    }
+    if (typeof config.rotation_period_msgs === 'number') {
+      settings.rotationPeriodMessages = config.rotation_period_msgs;
+    }
+    return settings;
+  }
+
   async encryptEvent(event: MatrixEvent, room: Room): Promise<void> {
     // The megolm session has to reach every device in the room before the event does.
     const members = await room.getEncryptionTargetMembers();
     await this.#call('getMissingSessions', { users: members.map((member) => member.userId) });
     await this.#flushOutgoingRequests();
-    await this.#call('shareRoomKey', { roomId: room.roomId, users: members.map((m) => m.userId) });
+    await this.#call('shareRoomKey', {
+      roomId: room.roomId,
+      users: members.map((m) => m.userId),
+      encryptionSettings: this.#encryptionSettings(room),
+    });
     await this.#flushOutgoingRequests();
 
     const encrypted = (await this.#call('encryptRoomEvent', {
@@ -630,18 +763,24 @@ export class EngineCrypto
     const roomId = event.getRoomId();
     if (!roomId) throw new Error('Cannot decrypt an event with no room id');
 
-    const decrypted = (await this.#call('decryptRoomEvent', {
-      event: JSON.stringify({
-        event_id: event.getId(),
-        type: event.getWireType(),
-        sender: event.getSender(),
-        room_id: roomId,
-        origin_server_ts: event.getTs(),
-        content: event.getWireContent(),
-      }),
-      roomId,
-      decryptionSettings: { senderDeviceTrustRequirement: this.#deviceIsolationMode },
-    })) as EngineDecryptedEvent;
+    let decrypted: EngineDecryptedEvent;
+    try {
+      decrypted = (await this.#call('decryptRoomEvent', {
+        event: JSON.stringify({
+          event_id: event.getId(),
+          type: event.getWireType(),
+          sender: event.getSender(),
+          room_id: roomId,
+          origin_server_ts: event.getTs(),
+          content: event.getWireContent(),
+        }),
+        roomId,
+        decryptionSettings: { senderDeviceTrustRequirement: this.#trustRequirement() },
+      })) as EngineDecryptedEvent;
+    } catch (error) {
+      this.#holdEventPendingKey(event);
+      throw error;
+    }
 
     return {
       clearEvent: JSON.parse(decrypted.event) as EventDecryptionResult['clearEvent'],
@@ -1021,8 +1160,127 @@ export class EngineCrypto
   }
 
   async bootstrapCrossSigning(opts: BootstrapCrossSigningOpts): Promise<void> {
-    await this.#call('bootstrapCrossSigning', { reset: opts.setupNewCrossSigning ?? false });
+    if (opts.setupNewCrossSigning) {
+      await this.#resetCrossSigning(opts.authUploadDeviceSigningKeys);
+      return;
+    }
+
+    const status = (await this.#call('crossSigningStatus')) as {
+      hasMaster: boolean;
+      hasSelfSigning: boolean;
+      hasUserSigning: boolean;
+    };
+    const stored = await this.#crossSigningKeysInStorage();
+
+    if (status.hasMaster && status.hasSelfSigning && status.hasUserSigning) {
+      if (!stored && (await this.#mx.secretStorage.hasKey())) {
+        await this.#exportCrossSigningKeysToStorage();
+      }
+      return;
+    }
+
+    if (!stored) {
+      await this.#resetCrossSigning(opts.authUploadDeviceSigningKeys);
+      return;
+    }
+
+    await this.#importCrossSigningKeys(stored);
+  }
+
+  async #crossSigningKeysInStorage(): Promise<Record<string, string> | null> {
+    const [masterKey, selfSigningKey, userSigningKey] = await Promise.all([
+      this.#mx.secretStorage.get('m.cross_signing.master'),
+      this.#mx.secretStorage.get('m.cross_signing.self_signing'),
+      this.#mx.secretStorage.get('m.cross_signing.user_signing'),
+    ]);
+
+    if (!masterKey || !selfSigningKey || !userSigningKey) return null;
+    return {
+      master_key: masterKey,
+      self_signing_key: selfSigningKey,
+      user_signing_key: userSigningKey,
+    };
+  }
+
+  async #importCrossSigningKeys(keys: Record<string, string>): Promise<void> {
+    const status = (await this.#call('importCrossSigningKeys', keys)) as {
+      hasMaster: boolean;
+      hasSelfSigning: boolean;
+      hasUserSigning: boolean;
+    };
+    if (!status.hasMaster || !status.hasSelfSigning || !status.hasUserSigning) {
+      throw new Error('The cross-signing keys in secret storage could not be imported');
+    }
+
+    const request = (await this.#call('device.verify', {
+      userId: this.#identity.userId,
+      deviceId: this.#identity.deviceId,
+    })) as OutgoingRequest | null;
+    if (request) await sendOutgoingRequest(this.#mx, request);
+  }
+
+  async #exportCrossSigningKeysToStorage(): Promise<void> {
+    const exported = (await this.#call('exportCrossSigningKeys')) as Record<
+      string,
+      string | undefined
+    > | null;
+    if (!exported) return;
+
+    const entries: [SecretStorageKey, string | undefined][] = [
+      ['m.cross_signing.master', exported.masterKey],
+      ['m.cross_signing.self_signing', exported.self_signing_key ?? exported.selfSigningKey],
+      ['m.cross_signing.user_signing', exported.user_signing_key ?? exported.userSigningKey],
+    ];
+    await Promise.all(
+      entries
+        .filter(([, value]) => Boolean(value))
+        .map(([name, value]) => this.#mx.secretStorage.store(name, value as string))
+    );
+  }
+
+  async #resetCrossSigning(uiaCallback?: UIAuthCallback<void>): Promise<void> {
+    const requests = (await this.#call('bootstrapCrossSigning', {
+      reset: true,
+    })) as EngineBootstrapRequests | null;
+
+    if (await this.#mx.secretStorage.hasKey()) await this.#exportCrossSigningKeysToStorage();
+
+    const uploadKeys = requests?.uploadKeysRequest;
+    if (uploadKeys) {
+      const response = await sendOutgoingRequest(this.#mx, uploadKeys);
+      await this.#call('markRequestAsSent', {
+        requestId: uploadKeys.id,
+        requestType: uploadKeys.type,
+        response,
+      });
+    }
+
+    await this.#uploadDeviceSigningKeys(requests?.uploadSigningKeysRequest, uiaCallback);
+
+    const signatures = requests?.uploadSignaturesRequest;
+    if (signatures) await sendOutgoingRequest(this.#mx, signatures);
+
     await this.#flushOutgoingRequests();
+  }
+
+  async #uploadDeviceSigningKeys(
+    request: { body: string } | null | undefined,
+    uiaCallback?: UIAuthCallback<void>
+  ): Promise<void> {
+    if (!request) return;
+
+    const body = JSON.parse(request.body) as Record<string, unknown>;
+    const send = (auth: AuthDict | null) =>
+      this.#mx.http.authedRequest<void>(
+        Method.Post,
+        '/keys/device_signing/upload',
+        undefined,
+        auth ? { ...body, auth } : body,
+        { prefix: ClientPrefix.V3 }
+      );
+
+    if (uiaCallback) await uiaCallback(send);
+    else await send(null);
   }
 
   async isSecretStorageReady(): Promise<boolean> {
@@ -1072,22 +1330,7 @@ export class EngineCrypto
       });
     }
 
-    const exported = (await this.#call('exportCrossSigningKeys')) as Record<
-      string,
-      string | undefined
-    > | null;
-    if (exported) {
-      const entries: [SecretStorageKey, string | undefined][] = [
-        ['m.cross_signing.master', exported.masterKey],
-        ['m.cross_signing.self_signing', exported.self_signing_key ?? exported.selfSigningKey],
-        ['m.cross_signing.user_signing', exported.user_signing_key ?? exported.userSigningKey],
-      ];
-      await Promise.all(
-        entries
-          .filter(([, value]) => Boolean(value))
-          .map(([name, value]) => this.#mx.secretStorage.store(name, value as string))
-      );
-    }
+    await this.#exportCrossSigningKeysToStorage();
 
     if (opts.setupNewKeyBackup) await this.resetKeyBackup();
   }
@@ -1209,6 +1452,55 @@ export class EngineCrypto
 
   async storeSessionBackupPrivateKey(key: Uint8Array, version: string): Promise<void> {
     await this.#call('saveBackupDecryptionKey', { decryptionKey: encodeBase64(key), version });
+    this.emit(CryptoEvent.KeyBackupDecryptionKeyCached, version);
+  }
+
+  async checkSecrets(name: string): Promise<void> {
+    const values = ((await this.#call('getSecretsFromInbox', { secretName: name })) ??
+      []) as string[];
+
+    for (const value of values) {
+      // eslint-disable-next-line no-await-in-loop
+      if (await this.#handleSecretReceived(name, value)) break;
+    }
+
+    await this.#call('deleteSecretsFromInbox', { secretName: name });
+  }
+
+  async #handleSecretReceived(name: string, value: string): Promise<boolean> {
+    if (name !== 'm.megolm_backup.v1') return false;
+
+    const backupInfo = await this.getKeyBackupInfo();
+    if (!backupInfo?.version) {
+      engineCryptoLog.warn('general', 'Received a backup key with no server-side backup');
+      return false;
+    }
+
+    const publicKey = (backupInfo.auth_data as { public_key?: string } | undefined)?.public_key;
+    let matches = false;
+    try {
+      const key = RustSdkCryptoJs.BackupDecryptionKey.fromBase64(value);
+      try {
+        matches = key.megolmV1PublicKey.publicKeyBase64 === publicKey;
+      } finally {
+        key.free();
+      }
+    } catch (error) {
+      engineCryptoLog.warn('general', 'Received an invalid backup decryption key', error);
+      return false;
+    }
+
+    if (!matches) {
+      engineCryptoLog.warn(
+        'general',
+        `Received a backup key for another backup than version ${backupInfo.version}`
+      );
+      return false;
+    }
+
+    await this.storeSessionBackupPrivateKey(decodeBase64(value), backupInfo.version);
+    await this.#connectKeyBackup();
+    return true;
   }
 
   async loadSessionBackupPrivateKeyFromSecretStorage(): Promise<void> {
@@ -1281,10 +1573,15 @@ export class EngineCrypto
 
   async resetKeyBackup(): Promise<void> {
     const key = await this.createRecoveryKeyFromPassphrase();
-    const publicKey = encodeBase64(
-      RustSdkCryptoJs.BackupDecryptionKey.fromBase64(encodeBase64(key.privateKey)).megolmV1PublicKey
-        .publicKeyBase64 as unknown as Uint8Array
+    const decryptionKey = RustSdkCryptoJs.BackupDecryptionKey.fromBase64(
+      encodeBase64(key.privateKey)
     );
+    let publicKey: string;
+    try {
+      publicKey = decryptionKey.megolmV1PublicKey.publicKeyBase64;
+    } finally {
+      decryptionKey.free();
+    }
 
     const created = await this.#mx.http.authedRequest<{ version: string }>(
       Method.Post,
@@ -1299,7 +1596,15 @@ export class EngineCrypto
 
     await this.#call('enableBackupV1', { publicKeyBase64: publicKey, version: created.version });
     await this.storeSessionBackupPrivateKey(key.privateKey, created.version);
+    await this.#pushSecretToVerifiedDevices('m.megolm_backup.v1');
     await this.#mx.secretStorage.store('m.megolm_backup.v1', encodeBase64(key.privateKey));
+  }
+
+  async #pushSecretToVerifiedDevices(secretName: string): Promise<void> {
+    await this.#call('getMissingSessions', { users: [this.#identity.userId] });
+    await this.#flushOutgoingRequests();
+    await this.#call('pushSecretToVerifiedDevices', { secretName });
+    await this.#flushOutgoingRequests();
   }
 
   async disableKeyStorage(): Promise<void> {

@@ -124,6 +124,10 @@ export const installRustCrypto = async (
   const stopClientEvents = wireCryptoClientEvents(mx, engineCrypto);
   const stopEventBridge = await startCryptoEventBridge(engineCrypto, identity);
 
+  engineCrypto.checkSecrets('m.megolm_backup.v1').catch((error: unknown) => {
+    cryptoLog.warn('general', 'Failed to read the gossiped backup key', error);
+  });
+
   const stopEngineCrypto = engineCrypto.stop.bind(engineCrypto);
   engineCrypto.stop = () => {
     stopReEmittingCryptoEvents();
