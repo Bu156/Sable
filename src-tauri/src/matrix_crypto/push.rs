@@ -117,7 +117,7 @@ pub async fn decrypt_push(
 /// with no webview alive there is nothing to invoke a command.
 #[tauri::command]
 pub async fn engine_decrypt_push(
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<crate::BrowserEngine>,
     user_id: String,
     device_id: String,
     room_id: String,

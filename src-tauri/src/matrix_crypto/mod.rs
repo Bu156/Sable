@@ -122,7 +122,11 @@ pub fn store_subpath(user_id: &str, device_id: &str) -> PathBuf {
 /// Per-account store directory. Resolved here rather than passed in so the
 /// webview never has to know an absolute path, and so the native notification
 /// handler can derive the same location independently.
-fn store_dir(app: &tauri::AppHandle, user_id: &str, device_id: &str) -> Result<PathBuf, String> {
+fn store_dir(
+    app: &tauri::AppHandle<crate::BrowserEngine>,
+    user_id: &str,
+    device_id: &str,
+) -> Result<PathBuf, String> {
     let base = match app_group_dir() {
         Some(shared) => shared,
         None => app
@@ -182,7 +186,7 @@ pub async fn open_machine(
 
 #[tauri::command]
 pub async fn engine_open(
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<crate::BrowserEngine>,
     dir: Option<String>,
     passphrase: Option<String>,
     user_id: String,
@@ -213,7 +217,7 @@ pub async fn engine_close(user_id: String, device_id: String) -> Result<bool, St
 
 #[tauri::command]
 pub async fn engine_wipe(
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<crate::BrowserEngine>,
     user_id: String,
     device_id: String,
 ) -> Result<(), String> {

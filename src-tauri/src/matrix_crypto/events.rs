@@ -33,7 +33,11 @@ fn withheld_json(info: &RoomKeyWithheldInfo) -> Value {
 /// One task per stream. The returned handles must be aborted when the engine is
 /// closed: the streams outlive the machine, so they would otherwise keep the
 /// listeners alive for an account that is no longer open.
-pub fn spawn(app: &AppHandle, machine: &OlmMachine, account: String) -> Vec<JoinHandle<()>> {
+pub fn spawn(
+    app: &AppHandle<crate::BrowserEngine>,
+    machine: &OlmMachine,
+    account: String,
+) -> Vec<JoinHandle<()>> {
     let store = machine.store();
 
     let mut room_keys = store.room_keys_received_stream();
@@ -41,7 +45,10 @@ pub fn spawn(app: &AppHandle, machine: &OlmMachine, account: String) -> Vec<Join
     let mut identities = store.identities_stream_raw();
     let mut secrets = store.secrets_stream();
 
-    let emit = |app: AppHandle, event: &'static str, account: String, payload: Value| {
+    let emit = |app: AppHandle<crate::BrowserEngine>,
+                event: &'static str,
+                account: String,
+                payload: Value| {
         // A failed emit means the webview is gone; the abort on close is what
         // stops these tasks, so there is nothing to recover here.
         let _ = app.emit(event, json!({ "account": account, "payload": payload }));
