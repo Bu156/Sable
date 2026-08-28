@@ -114,8 +114,10 @@ fn app_group_dir() -> Option<PathBuf> {
 /// Per-account store directory, appended to whichever base directory the platform
 /// exposes to background code.
 pub fn store_subpath(user_id: &str, device_id: &str) -> PathBuf {
-    // `/` and `:` in a user id are not path-safe.
-    let account = account_key(user_id, device_id).replace(['/', ':'], "_");
+    // `/` and `:` come from the user id; the rest are the characters Windows
+    // rejects in a path component, including the `|` account_key separates on.
+    let account = account_key(user_id, device_id)
+        .replace(['/', ':', '|', '\\', '<', '>', '"', '?', '*'], "_");
     PathBuf::from("matrix-crypto").join(account)
 }
 
@@ -261,6 +263,16 @@ mod tests {
     use matrix_sdk_crypto::{DecryptionSettings, EncryptionSyncChanges, TrustRequirement};
 
     use super::*;
+
+    #[test]
+    fn the_store_subpath_has_no_characters_windows_rejects() {
+        let subpath = store_subpath("@user:example.org", "DEVICE|ID");
+        let account = subpath.file_name().unwrap().to_str().unwrap();
+        assert!(
+            !account.contains(['/', ':', '|', '\\', '<', '>', '"', '?', '*']),
+            "{account}"
+        );
+    }
 
     #[tokio::test]
     async fn engine_plumbing() {

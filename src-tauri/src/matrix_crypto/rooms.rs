@@ -389,6 +389,35 @@ mod tests {
     }
 
     #[test]
+    fn reads_the_settings_shape_encrypt_event_sends() {
+        let settings = encryption_settings(
+            &json!({
+                "roomId": "!room:example.org",
+                "users": ["@a:example.org"],
+                "encryptionSettings": {
+                    "algorithm": "m.megolm.v1.aes-sha2",
+                    "historyVisibility": "invited",
+                    "sharingStrategy": "allDevices",
+                    "rotationPeriod": 604_800_000_000u64,
+                    "rotationPeriodMessages": 100,
+                }
+            }),
+            "shareRoomKey",
+        )
+        .unwrap();
+
+        assert_eq!(
+            settings.algorithm,
+            matrix_sdk_crypto::types::EventEncryptionAlgorithm::MegolmV1AesSha2
+        );
+        assert_eq!(
+            settings.history_visibility,
+            matrix_sdk::ruma::events::room::history_visibility::HistoryVisibility::Invited
+        );
+        assert_eq!(settings.rotation_period_msgs, 100);
+    }
+
+    #[test]
     fn rejects_an_unknown_strategy_rather_than_silently_sharing_with_everyone() {
         let error = collect_strategy(Some(&json!("somethingElse")), "shareRoomKey").unwrap_err();
         assert!(error.contains("somethingElse"), "{error}");

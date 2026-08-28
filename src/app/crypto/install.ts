@@ -21,6 +21,8 @@ const wasmCryptoStoreExists = async (cryptoDatabasePrefix: string): Promise<bool
 };
 
 export class LegacyWasmCryptoStoreError extends Error {
+  client?: MatrixClient;
+
   constructor() {
     super(
       'Encrypted chat has been upgraded to the native crypto engine. Sign out and sign in again to continue. Local encrypted-message keys from this installation will need to be restored from backup.'
@@ -123,6 +125,10 @@ export const installRustCrypto = async (
   const stopReEmittingCryptoEvents = reEmitCryptoEvents(mx, engineCrypto);
   const stopClientEvents = wireCryptoClientEvents(mx, engineCrypto);
   const stopEventBridge = await startCryptoEventBridge(engineCrypto, identity);
+
+  engineCrypto.checkSecrets('m.megolm_backup.v1').catch((error: unknown) => {
+    cryptoLog.warn('general', 'Failed to read the gossiped backup key', error);
+  });
 
   const stopEngineCrypto = engineCrypto.stop.bind(engineCrypto);
   engineCrypto.stop = () => {
