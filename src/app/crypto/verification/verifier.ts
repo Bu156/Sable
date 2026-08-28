@@ -91,6 +91,15 @@ abstract class EngineVerifier<TState>
     this.#cancelled = true;
   }
 
+  settle(done: boolean): void {
+    if (done) {
+      this.completion.resolve();
+      return;
+    }
+    this.markCancelled();
+    this.completion.reject(new Error('Verification cancelled'));
+  }
+
   abstract onChange(state: TState): void;
 
   abstract get verificationPhase(): VerificationPhase;

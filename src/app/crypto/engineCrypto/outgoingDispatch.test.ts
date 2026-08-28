@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MatrixClient } from '$types/matrix-sdk';
+import { VerificationPhase, EventType, type MatrixClient } from '$types/matrix-sdk';
 import { engineInvoke } from '../olmMachine/engineInvoke';
 import { EngineCrypto } from './EngineCrypto';
 
@@ -99,5 +99,123 @@ describe('verification outgoing requests', () => {
       ([, url]) => !String(url).startsWith('/room_keys/')
     );
     expect(verificationCalls).toEqual([]);
+  });
+
+  it('completes a request when the engine consumes the final done event', async () => {
+    const { mx } = clientSpy();
+    mockInvoke.mockImplementation(async (_identity, method) => {
+      if (method === 'device.requestVerification') {
+        return {
+          request: {
+            flowId: '$f',
+            otherUserId: '@them:e.org',
+            phase: 3,
+            verification: { className: 'Sas' },
+          },
+        };
+      }
+      if (method === 'receiveSyncChanges') {
+        return [
+          {
+            type: 3,
+            rawEvent: JSON.stringify({
+              type: EventType.KeyVerificationDone,
+              sender: '@them:e.org',
+              content: { transaction_id: '$f' },
+            }),
+          },
+        ];
+      }
+      if (method === 'verificationRequest.state') {
+        throw new Error('verificationRequest.state: no verification request');
+      }
+      return [];
+    });
+
+    const crypto = new EngineCrypto(mx, { userId: '@me:e.org', deviceId: 'D' });
+    const request = await crypto.requestDeviceVerification('@them:e.org', 'THEIRS');
+
+    await expect(
+      crypto.preprocessToDeviceMessages([
+        {
+          type: EventType.KeyVerificationDone,
+          sender: '@them:e.org',
+          content: { transaction_id: '$f' },
+        } as never,
+      ])
+    ).resolves.toEqual([]);
+    expect(request.phase).toBe(VerificationPhase.Done);
+  });
+
+  it('drains the outgoing queue before re-reading the SAS snapshot', async () => {
+    const authedRequest = vi.fn<(...args: never[]) => Promise<string>>(
+      async () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve('{}'), 5);
+        })
+    );
+    const mx = { http: { authedRequest } } as unknown as MatrixClient;
+    let peerKeyReceived = false;
+    let ourKeyAcked = false;
+
+    mockInvoke.mockImplementation(async (_identity, method) => {
+      if (method === 'device.requestVerification') {
+        return {
+          request: {
+            flowId: '$f',
+            otherUserId: '@them:e.org',
+            phase: 3,
+            verification: { className: 'Sas' },
+          },
+        };
+      }
+      if (method === 'receiveSyncChanges') {
+        peerKeyReceived = true;
+        return [
+          {
+            type: 3,
+            rawEvent: JSON.stringify({
+              type: 'm.key.verification.key',
+              sender: '@them:e.org',
+              content: { transaction_id: '$f' },
+            }),
+          },
+        ];
+      }
+      if (method === 'outgoingRequests') {
+        return peerKeyReceived
+          ? [{ id: 'k', type: 3, body: '{}', event_type: 'm.key.verification.key', txn_id: 'k' }]
+          : [];
+      }
+      if (method === 'markRequestAsSent') {
+        ourKeyAcked = true;
+        return null;
+      }
+      if (method === 'verificationRequest.state') {
+        return {
+          flowId: '$f',
+          otherUserId: '@them:e.org',
+          phase: 3,
+          verification: {
+            className: 'Sas',
+            emoji: ourKeyAcked ? [{ symbol: '🌏', description: 'Globe' }] : null,
+          },
+        };
+      }
+      return [];
+    });
+
+    const crypto = new EngineCrypto(mx, { userId: '@me:e.org', deviceId: 'D' });
+    const request = await crypto.requestDeviceVerification('@them:e.org', 'THEIRS');
+
+    await crypto.preprocessToDeviceMessages([
+      {
+        type: 'm.key.verification.key',
+        sender: '@them:e.org',
+        content: { transaction_id: '$f' },
+      } as never,
+    ]);
+
+    expect(request.verifier?.getShowSasCallbacks()?.sas.emoji).toEqual([['🌏', 'Globe']]);
   });
 });

@@ -591,4 +591,181 @@ mod tests {
         assert_eq!(method_from_code(3), Some(VerificationMethod::ReciprocateV1));
         assert_eq!(method_from_code(4), None);
     }
+
+    mod sas_flow {
+        use std::collections::BTreeMap;
+
+        use matrix_sdk::ruma::api::client::keys::get_keys;
+        use matrix_sdk::ruma::api::client::sync::sync_events::DeviceLists;
+        use matrix_sdk::ruma::api::client::to_device::send_event_to_device;
+        use matrix_sdk::ruma::encryption::DeviceKeys;
+        use matrix_sdk::ruma::events::AnyToDeviceEvent;
+        use matrix_sdk::ruma::serde::Raw;
+        use matrix_sdk_crypto::types::requests::{
+            AnyIncomingResponse, AnyOutgoingRequest, ToDeviceRequest,
+        };
+        use matrix_sdk_crypto::{DecryptionSettings, EncryptionSyncChanges, TrustRequirement};
+
+        use super::*;
+
+        const USER: &str = "@sable:example.org";
+
+        async fn machine(device: &str) -> OlmMachine {
+            let user = UserId::parse(USER).unwrap();
+            OlmMachine::new(&user, device.into()).await
+        }
+
+        async fn device_keys(of: &OlmMachine) -> Raw<DeviceKeys> {
+            for request in of.outgoing_requests().await.unwrap() {
+                if let AnyOutgoingRequest::KeysUpload(upload) = request.request() {
+                    if let Some(keys) = upload.device_keys.clone() {
+                        return keys;
+                    }
+                }
+            }
+            panic!("machine issued no keys upload");
+        }
+
+        async fn learn_device(learner: &OlmMachine, about: &OlmMachine) {
+            let user = UserId::parse(USER).unwrap();
+            let keys = device_keys(about).await;
+            learner.update_tracked_users([user.as_ref()]).await.unwrap();
+
+            let mut response = get_keys::v3::Response::new();
+            response.device_keys.insert(
+                user.clone(),
+                BTreeMap::from([(about.device_id().to_owned(), keys)]),
+            );
+
+            for request in learner.outgoing_requests().await.unwrap() {
+                if matches!(request.request(), AnyOutgoingRequest::KeysQuery(_)) {
+                    learner
+                        .mark_request_as_sent(
+                            request.request_id(),
+                            AnyIncomingResponse::KeysQuery(&response),
+                        )
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+            panic!("machine issued no keys query");
+        }
+
+        fn as_events(sender: &UserId, request: &ToDeviceRequest) -> Vec<Raw<AnyToDeviceEvent>> {
+            let mut events = Vec::new();
+            for devices in request.messages.values() {
+                for content in devices.values() {
+                    let event = json!({
+                        "sender": sender,
+                        "type": request.event_type.to_string(),
+                        "content": content,
+                    });
+                    events.push(Raw::new(&event).unwrap().cast_unchecked());
+                }
+            }
+            events
+        }
+
+        async fn deliver(to: &OlmMachine, events: Vec<Raw<AnyToDeviceEvent>>) {
+            let device_lists = DeviceLists::new();
+            let counts = BTreeMap::new();
+            let settings = DecryptionSettings {
+                sender_device_trust_requirement: TrustRequirement::Untrusted,
+            };
+            to.receive_sync_changes(
+                EncryptionSyncChanges {
+                    to_device_events: events,
+                    changed_devices: &device_lists,
+                    one_time_keys_counts: &counts,
+                    unused_fallback_keys: None,
+                    next_batch_token: None,
+                },
+                &settings,
+            )
+            .await
+            .unwrap();
+        }
+
+        async fn send_one(
+            from: &OlmMachine,
+            to: &OlmMachine,
+            request: OutgoingVerificationRequest,
+        ) {
+            match request {
+                OutgoingVerificationRequest::ToDevice(request) => {
+                    deliver(to, as_events(from.user_id(), &request)).await;
+                }
+                OutgoingVerificationRequest::InRoom(_) => panic!("expected a to-device request"),
+            }
+        }
+
+        async fn pump(from: &OlmMachine, to: &OlmMachine) {
+            for request in from.outgoing_requests().await.unwrap() {
+                if let AnyOutgoingRequest::ToDeviceRequest(to_device) = request.request() {
+                    deliver(to, as_events(from.user_id(), to_device)).await;
+                    from.mark_request_as_sent(
+                        request.request_id(),
+                        AnyIncomingResponse::ToDevice(&send_event_to_device::v3::Response::new()),
+                    )
+                    .await
+                    .unwrap();
+                }
+            }
+        }
+
+        fn emoji_of(machine: &OlmMachine, flow_id: &str) -> Value {
+            let user = UserId::parse(USER).unwrap();
+            let request = machine.get_verification_request(&user, flow_id).unwrap();
+            request_state(&request)["verification"]["emoji"].clone()
+        }
+
+        #[tokio::test]
+        async fn emoji_appear_only_once_our_own_key_is_acked() {
+            let alice = machine("DEVICEA").await;
+            let bob = machine("DEVICEB").await;
+            learn_device(&alice, &bob).await;
+            learn_device(&bob, &alice).await;
+
+            let user = UserId::parse(USER).unwrap();
+            let bob_device = alice
+                .get_device(&user, "DEVICEB".into(), None)
+                .await
+                .unwrap()
+                .expect("alice should know bob's device");
+
+            let (alice_request, outgoing) = bob_device.request_verification();
+            send_one(&alice, &bob, outgoing).await;
+            let flow_id = alice_request.flow_id().as_str().to_owned();
+
+            let bob_request = bob.get_verification_request(&user, &flow_id).unwrap();
+            send_one(&bob, &alice, bob_request.accept().unwrap()).await;
+
+            let (_, start) = alice_request.start_sas().await.unwrap().unwrap();
+            send_one(&alice, &bob, start).await;
+
+            let bob_sas = bob
+                .get_verification(&user, &flow_id)
+                .unwrap()
+                .sas_v1()
+                .unwrap();
+            send_one(&bob, &alice, bob_sas.accept().unwrap()).await;
+
+            pump(&alice, &bob).await;
+            assert!(
+                emoji_of(&bob, &flow_id).is_null(),
+                "the peer's key alone must not expose emoji"
+            );
+
+            pump(&bob, &alice).await;
+            assert!(
+                !emoji_of(&bob, &flow_id).is_null(),
+                "responder must have emoji once its own key is acked"
+            );
+            assert!(
+                !emoji_of(&alice, &flow_id).is_null(),
+                "initiator must have emoji once the responder's key arrives"
+            );
+        }
+    }
 }

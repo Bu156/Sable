@@ -1,7 +1,8 @@
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
 import { ReEmitter } from 'matrix-js-sdk/lib/ReEmitter';
 import { isTauri } from '@tauri-apps/api/core';
-import type { MatrixClient } from '$types/matrix-sdk';
+import { ClientEvent, RoomMemberEvent, RoomStateEvent } from '$types/matrix-sdk';
+import type { MatrixClient, MatrixEvent, RoomMember } from '$types/matrix-sdk';
 import { createDebugLogger } from '$utils/debugLogger';
 import { engineOpen } from '$generated/tauri/commands';
 import * as RustSdkCryptoJs from '@matrix-org/matrix-sdk-crypto-wasm';
@@ -72,6 +73,28 @@ export const reEmitCryptoEvents = (mx: MatrixClient, crypto: EngineCrypto): (() 
   return () => reEmitter.stopReEmitting(crypto, REEMITTED_CRYPTO_EVENTS);
 };
 
+export const wireCryptoClientEvents = (mx: MatrixClient, crypto: EngineCrypto): (() => void) => {
+  const onLiveEvent = (event: MatrixEvent) => {
+    void crypto.onLiveEventFromSync(event);
+  };
+  const onMembership = (event: MatrixEvent, member: RoomMember, oldMembership?: string) => {
+    crypto.onRoomMembership(event, member, oldMembership);
+  };
+  const onStateEvent = (event: MatrixEvent) => {
+    crypto.onRoomStateEvent(event);
+  };
+
+  mx.on(ClientEvent.Event, onLiveEvent);
+  mx.on(RoomMemberEvent.Membership, onMembership);
+  mx.on(RoomStateEvent.Events, onStateEvent);
+
+  return () => {
+    mx.removeListener(ClientEvent.Event, onLiveEvent);
+    mx.removeListener(RoomMemberEvent.Membership, onMembership);
+    mx.removeListener(RoomStateEvent.Events, onStateEvent);
+  };
+};
+
 export const installRustCrypto = async (
   mx: MatrixClient,
   options: { storeDir?: string; passphrase?: string } = {}
@@ -98,11 +121,13 @@ export const installRustCrypto = async (
   // `MatrixClient.initRustCrypto` normally wires these events to the client. The native
   // engine is installed independently, so reproduce that SDK initialization step here.
   const stopReEmittingCryptoEvents = reEmitCryptoEvents(mx, engineCrypto);
+  const stopClientEvents = wireCryptoClientEvents(mx, engineCrypto);
   const stopEventBridge = await startCryptoEventBridge(engineCrypto, identity);
 
   const stopEngineCrypto = engineCrypto.stop.bind(engineCrypto);
   engineCrypto.stop = () => {
     stopReEmittingCryptoEvents();
+    stopClientEvents();
     stopEventBridge();
     stopEngineCrypto();
   };

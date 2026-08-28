@@ -57,7 +57,8 @@ export class EngineVerificationRequest
   #syncVerifier(): void {
     const verification = this.#state.verification;
     if (!verification) {
-      this.#verifier = undefined;
+      if (this.#state.phase === EnginePhase.Done) this.#verifier?.settle(true);
+      else if (this.#state.phase === EnginePhase.Cancelled) this.#verifier?.settle(false);
       return;
     }
 
@@ -101,6 +102,19 @@ export class EngineVerificationRequest
 
   apply(state: EngineVerificationState): void {
     this.#state = state;
+    this.#syncVerifier();
+    this.emit(VerificationRequestEvent.Change);
+  }
+
+  markDone(): void {
+    this.#state = {
+      ...this.#state,
+      phase: EnginePhase.Done,
+      isDone: true,
+      verification: this.#state.verification
+        ? { ...this.#state.verification, isDone: true }
+        : this.#state.verification,
+    };
     this.#syncVerifier();
     this.emit(VerificationRequestEvent.Change);
   }
@@ -191,6 +205,7 @@ export class EngineVerificationRequest
     } finally {
       this.#accepting = false;
     }
+    this.emit(VerificationRequestEvent.Change);
   }
 
   async cancel(params?: { reason?: string; code?: string }): Promise<void> {
@@ -201,6 +216,7 @@ export class EngineVerificationRequest
     } finally {
       this.#declining = false;
     }
+    this.emit(VerificationRequestEvent.Change);
   }
 
   async startVerification(method: string): Promise<Verifier> {
