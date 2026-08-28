@@ -161,9 +161,7 @@ fn decryption_error_json(error: &MegolmError) -> Value {
         ),
         MegolmError::Decryption(
             matrix_sdk_crypto::vodozemac::megolm::DecryptionError::UnknownMessageIndex(_, _),
-        ) => {
-            (code::UNKNOWN_MESSAGE_INDEX, None)
-        }
+        ) => (code::UNKNOWN_MESSAGE_INDEX, None),
         MegolmError::MismatchedIdentityKeys(_) => (code::MISMATCHED_IDENTITY_KEYS, None),
         MegolmError::SenderIdentityNotTrusted(level) => (
             match level {

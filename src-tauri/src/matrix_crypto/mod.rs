@@ -9,11 +9,11 @@ pub mod dispatch;
 pub mod events;
 #[cfg(target_os = "android")]
 pub mod jni_push;
+pub mod message_flow;
 pub mod push;
 pub mod requests;
 pub mod rooms;
 pub mod verification;
-pub mod message_flow;
 pub mod wasm_enums;
 
 use std::collections::HashMap;

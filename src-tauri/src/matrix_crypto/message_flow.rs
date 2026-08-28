@@ -76,7 +76,12 @@ async fn publish_keys(peer: &Peer) -> (Raw<matrix_sdk::ruma::encryption::DeviceK
     )
 }
 
-async fn learn_about(learner: &Peer, about: &Peer, device: &str, keys: &Raw<matrix_sdk::ruma::encryption::DeviceKeys>) {
+async fn learn_about(
+    learner: &Peer,
+    about: &Peer,
+    device: &str,
+    keys: &Raw<matrix_sdk::ruma::encryption::DeviceKeys>,
+) {
     call(
         learner,
         "updateTrackedUsers",
