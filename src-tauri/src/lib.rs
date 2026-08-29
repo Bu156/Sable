@@ -30,10 +30,6 @@ use tauri::Wry as BrowserEngine;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
-fn versioned_shell_url(version: impl std::fmt::Display) -> tauri::WebviewUrl {
-    tauri::WebviewUrl::App(format!("index.html?build={version}").into())
-}
-
 #[cfg(target_os = "android")]
 fn is_internal_navigation(url: &tauri::Url, dev: bool) -> bool {
     url.scheme() == "tauri"
@@ -151,12 +147,11 @@ pub fn show_or_create_main_window(app: &AppHandle<crate::BrowserEngine>) -> taur
     #[cfg(desktop)]
     let desktop_settings = desktop::tray::load_desktop_settings(app)?;
 
-    // Version the shell URL so WebView cannot reuse an index.html from an older install.
-    let shell_url = versioned_shell_url(&app.package_info().version);
-    let builder = tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, shell_url)
-        .disable_drag_drop_handler()
-        .use_https_scheme(true)
-        .background_color(tauri::window::Color(0x1A, 0x1C, 0x28, 0xFF));
+    let builder =
+        tauri::WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, tauri::WebviewUrl::default())
+            .disable_drag_drop_handler()
+            .use_https_scheme(true)
+            .background_color(tauri::window::Color(0x1A, 0x1C, 0x28, 0xFF));
 
     // Only android: intercept navigation to external URLs and open them in the system browser
     // Other platforms: might need other URI schemes, and on_navigation might get called on iframe urls
@@ -548,18 +543,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn shell_cache_key_uses_native_version() {
-        assert_eq!(
-            crate::versioned_shell_url("1.21.1-nightly.260829"),
-            tauri::WebviewUrl::App("index.html?build=1.21.1-nightly.260829".into())
-        );
-        assert_ne!(
-            crate::versioned_shell_url("1.20.1"),
-            crate::versioned_shell_url("1.21.1")
-        );
-    }
-
     #[cfg(target_os = "android")]
     #[test]
     fn javascript_navigation_stays_in_webview() {
