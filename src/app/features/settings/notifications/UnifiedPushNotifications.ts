@@ -1193,7 +1193,7 @@ export async function listenForUnifiedPushMessages(getSettings: () => Notificati
   const listener = await addPluginListener('notifications', 'push-message', (data: unknown) => {
     const notification = parseUnifiedPushMessage(data);
     if (!notification) return;
-    getSlidingSyncManager(getSettings().mx)?.resumeForPush();
+    getSlidingSyncManager(getSettings().mx)?.requestPushDrain();
     dispatch(notification);
   });
 
