@@ -1178,6 +1178,23 @@ export async function setEncryptedContentAllowed(allowed: boolean): Promise<void
   }
 }
 
+const TAKE_PUSH_DIAGNOSTICS = 'plugin:notifications|take_push_diagnostics';
+
+export type PushDiagnostics = {
+  counts: Record<string, number>;
+  lastOutcome?: string;
+  lastAt: number;
+};
+
+export async function takePushDiagnostics(): Promise<PushDiagnostics | undefined> {
+  if (!isTauri()) return undefined;
+  try {
+    return await invoke<PushDiagnostics>(TAKE_PUSH_DIAGNOSTICS);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function listenForUnifiedPushMessages(getSettings: () => NotificationSettings) {
   const dispatch = createUnifiedPushMessageListener(
     (notification) => handleUnifiedPushPayload(notification, getSettings),
