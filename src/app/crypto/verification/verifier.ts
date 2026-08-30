@@ -13,6 +13,8 @@ export type EngineCall = (method: string, args?: Record<string, unknown>) => Pro
 
 export type SasState = {
   className?: string;
+  weStarted?: boolean;
+  hasBeenAccepted?: boolean;
   canBePresented?: boolean;
   haveWeConfirmed?: boolean;
   isDone?: boolean;
@@ -96,8 +98,11 @@ abstract class EngineVerifier<TState>
       this.completion.resolve();
       return;
     }
+    if (this.hasBeenCancelled) return;
     this.markCancelled();
-    this.completion.reject(new Error('Verification cancelled'));
+    const error = new Error('Verification cancelled');
+    this.completion.reject(error);
+    this.emit(VerifierEvent.Cancel, error);
   }
 
   abstract onChange(state: TState): void;
@@ -107,8 +112,17 @@ abstract class EngineVerifier<TState>
   abstract verify(): Promise<void>;
 
   cancel(error: Error): void {
+    this.finishCancelled(this.flow, error);
+  }
+
+  protected cancelWithCode(code: string, error: Error): void {
+    this.finishCancelled({ ...this.flow, code }, error);
+  }
+
+  private finishCancelled(flow: Record<string, unknown>, error: Error): void {
+    if (this.hasBeenCancelled) return;
     this.markCancelled();
-    void this.call(this.cancelMethod, this.flow);
+    void this.call(this.cancelMethod, flow);
     this.completion.reject(error);
     this.emit(VerifierEvent.Cancel, error);
   }
@@ -146,8 +160,7 @@ export class EngineSasVerifier extends EngineVerifier<SasState> {
     this.state = state;
 
     if (state.isCancelled) {
-      this.markCancelled();
-      this.completion.reject(new Error('Verification cancelled'));
+      this.settle(false);
       return;
     }
 
@@ -169,12 +182,10 @@ export class EngineSasVerifier extends EngineVerifier<SasState> {
         await this.call('sas.confirm', this.flow);
       },
       mismatch: () => {
-        this.markCancelled();
-        void this.call('sas.cancel', { ...this.flow, code: 'm.mismatched_sas' });
+        this.cancelWithCode('m.mismatched_sas', new Error('The codes did not match'));
       },
       cancel: () => {
-        this.markCancelled();
-        void this.call('sas.cancel', { ...this.flow, code: 'm.user' });
+        this.cancelWithCode('m.user', new Error('Verification cancelled'));
       },
     };
   }
@@ -218,8 +229,7 @@ export class EngineQrVerifier extends EngineVerifier<QrState> {
     this.state = state;
 
     if (state.isCancelled) {
-      this.markCancelled();
-      this.completion.reject(new Error('Verification cancelled'));
+      this.settle(false);
       return;
     }
 
@@ -229,8 +239,7 @@ export class EngineQrVerifier extends EngineVerifier<QrState> {
           void this.call('qr.confirm', this.flow);
         },
         cancel: () => {
-          this.markCancelled();
-          void this.call('qr.cancel', { ...this.flow, code: 'm.user' });
+          this.cancelWithCode('m.user', new Error('Verification cancelled'));
         },
       };
       this.emit(VerifierEvent.ShowReciprocateQr, this.#callbacks);

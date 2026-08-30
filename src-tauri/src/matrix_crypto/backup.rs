@@ -66,10 +66,11 @@ fn exportable_keys(sessions: Vec<BackedUpSession>) -> (Vec<ExportedRoomKey>, usi
     (exported, skipped)
 }
 
-fn import_result(result: RoomKeyImportResult) -> Value {
+fn import_result(result: RoomKeyImportResult, skipped: usize) -> Value {
     json!({
         "importedCount": result.imported_count,
         "totalCount": result.total_count,
+        "skippedCount": skipped,
         "keys": result.keys,
     })
 }
@@ -185,7 +186,7 @@ async fn handle(machine: &OlmMachine, method: &str, args: &Value) -> Result<Opti
                 .import_room_keys(exported, Some(&backup_version), ignore_progress)
                 .await
                 .map_err(|e| format!("importBackedUpRoomKeys failed: {e}"))?;
-            import_result(result)
+            import_result(result, skipped)
         }
         "importExportedRoomKeys" => {
             let keys: Vec<ExportedRoomKey> = serde_json::from_str(&str_arg(args, method, "keys")?)
@@ -195,7 +196,7 @@ async fn handle(machine: &OlmMachine, method: &str, args: &Value) -> Result<Opti
                 .import_exported_room_keys(keys, ignore_progress)
                 .await
                 .map_err(|e| format!("importExportedRoomKeys failed: {e}"))?;
-            import_result(result)
+            import_result(result, 0)
         }
         "exportRoomKeys" => {
             let keys = machine
@@ -217,6 +218,7 @@ async fn handle(machine: &OlmMachine, method: &str, args: &Value) -> Result<Opti
 
 #[cfg(test)]
 mod tests {
+    use matrix_sdk_crypto::store::types::BackupDecryptionKey;
     use serde_json::json;
 
     use super::*;
@@ -268,6 +270,111 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].room_id, "!room:example.org");
         assert_eq!(parsed[0].session_id, "session-1");
+    }
+
+    async fn machine() -> OlmMachine {
+        let user: &matrix_sdk::ruma::UserId = "@backup:example.org".try_into().unwrap();
+        OlmMachine::new(user, "BACKUPDEV".into()).await
+    }
+
+    #[tokio::test]
+    async fn a_saved_decryption_key_reads_back_in_the_wasm_shape() {
+        let machine = machine().await;
+        let key = BackupDecryptionKey::new().to_base64();
+
+        let saved = invoke(
+            &machine,
+            "saveBackupDecryptionKey",
+            &json!({ "decryptionKey": key, "version": "7" }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(saved, Value::Null);
+
+        let keys = invoke(&machine, "getBackupKeys", &json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(keys["className"], "BackupKeys");
+        assert_eq!(keys["backupVersion"], "7");
+        assert_eq!(keys["decryptionKeyBase64"], key);
+    }
+
+    #[tokio::test]
+    async fn an_empty_store_reports_nulls_rather_than_erroring() {
+        let machine = machine().await;
+
+        let keys = invoke(&machine, "getBackupKeys", &json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(keys["backupVersion"].is_null());
+        assert!(keys["decryptionKeyBase64"].is_null());
+
+        assert_eq!(
+            invoke(&machine, "isBackupEnabled", &json!({}))
+                .await
+                .unwrap()
+                .unwrap(),
+            json!(false)
+        );
+        assert_eq!(
+            invoke(&machine, "backupVersion", &json!({}))
+                .await
+                .unwrap()
+                .unwrap(),
+            Value::Null
+        );
+    }
+
+    #[tokio::test]
+    async fn enabling_a_backup_makes_its_version_readable() {
+        let machine = machine().await;
+        let public = BackupDecryptionKey::new()
+            .megolm_v1_public_key()
+            .to_base64();
+
+        invoke(
+            &machine,
+            "enableBackupV1",
+            &json!({ "publicKeyBase64": public, "version": "3" }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            invoke(&machine, "isBackupEnabled", &json!({}))
+                .await
+                .unwrap()
+                .unwrap(),
+            json!(true)
+        );
+        assert_eq!(
+            invoke(&machine, "backupVersion", &json!({}))
+                .await
+                .unwrap()
+                .unwrap(),
+            json!("3")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_decryption_key_is_an_error_that_does_not_leak_it() {
+        let machine = machine().await;
+
+        let result = invoke(
+            &machine,
+            "saveBackupDecryptionKey",
+            &json!({ "decryptionKey": "notBase64", "version": "1" }),
+        )
+        .await;
+
+        let Some(Err(message)) = result else {
+            panic!("expected an error");
+        };
+        assert!(!message.contains("notBase64"), "{message}");
     }
 
     const VALID_CURVE_KEY: &str = "KyHFkVuB9MFbEkiCw+idNHKbiM8r3cWpNNPdyHkFeHY";

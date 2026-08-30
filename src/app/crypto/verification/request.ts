@@ -42,6 +42,8 @@ export class EngineVerificationRequest
 
   #declining = false;
 
+  #sasAccepted = false;
+
   constructor(call: EngineCall, state: EngineVerificationState) {
     super();
     this.#call = call;
@@ -72,7 +74,11 @@ export class EngineVerificationRequest
           ? 'Qr'
           : undefined;
 
-    if (current !== wanted) {
+    const accepted = (verification as SasState).hasBeenAccepted === true;
+    const lostTieBreak = wanted === 'Sas' && current === 'Sas' && this.#sasAccepted && !accepted;
+    this.#sasAccepted = wanted === 'Sas' ? accepted : false;
+
+    if (current !== wanted || lostTieBreak) {
       if (wanted === 'Sas') {
         this.#verifier = new EngineSasVerifier(
           this.#call,
@@ -80,7 +86,7 @@ export class EngineVerificationRequest
           verification as SasState,
           this.#state.otherUserId
         );
-        if (current !== undefined) void this.#reaccept();
+        if (current !== undefined || lostTieBreak) void this.#reaccept();
       } else if (wanted === 'Qr') {
         this.#verifier = new EngineQrVerifier(
           this.#call,
@@ -247,7 +253,11 @@ export class EngineVerificationRequest
     await this.#call('verificationRequest.startSas', this.#flow);
     await this.refresh();
 
-    if (!this.#verifier) throw new Error(`Starting ${method} produced no verifier`);
+    if (!this.#verifier) {
+      throw new Error(
+        `Could not start ${method}: the other device is no longer available for verification`
+      );
+    }
     return this.#verifier;
   }
 
